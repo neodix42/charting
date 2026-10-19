@@ -1,0 +1,97 @@
+{
+  "synthetic": true,
+  "cases": [
+    {
+      "id": "fresh",
+      "given": "Workspace store absent",
+      "when": "Start app",
+      "expect": {
+        "tabs": 1,
+        "chartsInFirstTab": 1,
+        "rows": 1,
+        "columns": 1
+      }
+    },
+    {
+      "id": "grid-is-not-charts",
+      "given": "One tab and one chart",
+      "when": "Select 3x3 grid",
+      "expect": {
+        "tabs": 1,
+        "actualCharts": 1,
+        "chartInstances": 1,
+        "emptyCells": 8
+      }
+    },
+    {
+      "id": "new-tab",
+      "given": "Current tab has 9 charts",
+      "when": "Add Tab",
+      "expect": {
+        "newTabActualCharts": 1,
+        "newTabRows": 1,
+        "newTabColumns": 1
+      }
+    },
+    {
+      "id": "caps",
+      "given": "20 tabs and 9 charts in selected tab",
+      "when": "Try Add Tab/Add Chart or invalid import",
+      "expect": "Reject and preserve workspace"
+    },
+    {
+      "id": "restore-small",
+      "given": "Saved 2 tabs with 3 and 1 charts",
+      "when": "Restart",
+      "expect": {
+        "tabs": 2,
+        "chartCounts": [
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "id": "overlap",
+      "given": "REST current volume 10 with unknown trade cutoff, buffered volumes 2 and 3",
+      "when": "Merge current bucket",
+      "expect": "Do NOT assert volume 15; keep provisional until reconciled"
+    },
+    {
+      "id": "stale-selection",
+      "given": "Generation 7 BTC request in flight; switch to generation 8 ETH",
+      "when": "BTC result arrives",
+      "expect": "Ignore stale result; ETH remains selected"
+    },
+    {
+      "id": "unsubscribe-race",
+      "given": "Last lease released with 2 second grace",
+      "when": "Reattach same feed before grace expires",
+      "expect": "Cancel pending unsubscribe; keep one upstream feed"
+    },
+    {
+      "id": "event-handover",
+      "given": "Listener buffered revisions 11,12 while attach snapshot is revision 11",
+      "when": "Apply attach result",
+      "expect": "Apply snapshot 11 then event 12 once; ignore buffered 11"
+    },
+    {
+      "id": "old-save",
+      "given": "Committed edit sequence 12",
+      "when": "Late request from sequence 11 arrives",
+      "expect": "Reject stale write; do not revert layout"
+    },
+    {
+      "id": "quiet-market",
+      "given": "Heartbeat healthy; no new trades",
+      "when": "Check chart status",
+      "expect": "Keep connection healthy; show time since last trade without inventing candles"
+    },
+    {
+      "id": "bad-store",
+      "given": "Existing corrupt database",
+      "when": "Restart",
+      "expect": "Preserve source and show recovery; do not overwrite with first-run default"
+    }
+  ]
+}

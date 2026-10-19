@@ -1,0 +1,372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cryptodesk:workspace:v1",
+  "title": "CryptoDesk portable workspace v1",
+  "description": "First launch is one tab and one chart. Maxima are 20 tabs and 9 charts per tab.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "app": {
+      "const": "cryptodesk"
+    },
+    "id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "theme": {
+      "enum": [
+        "dark",
+        "light"
+      ]
+    },
+    "displayTimezone": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "activeTabId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 16384
+        },
+        "maximized": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "maximized"
+      ]
+    },
+    "tabs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/tab"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "app",
+    "id",
+    "theme",
+    "displayTimezone",
+    "activeTabId",
+    "window",
+    "tabs"
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "tracks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "maximum": 1
+      }
+    },
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "rowFractions": {
+          "$ref": "#/$defs/tracks"
+        },
+        "columnFractions": {
+          "$ref": "#/$defs/tracks"
+        }
+      },
+      "required": [
+        "rows",
+        "columns",
+        "rowFractions",
+        "columnFractions"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "rows": {
+              "const": 1
+            },
+            "columns": {
+              "const": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "rows": {
+              "const": 1
+            },
+            "columns": {
+              "const": 2
+            }
+          }
+        },
+        {
+          "properties": {
+            "rows": {
+              "const": 2
+            },
+            "columns": {
+              "const": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "rows": {
+              "const": 2
+            },
+            "columns": {
+              "const": 2
+            }
+          }
+        },
+        {
+          "properties": {
+            "rows": {
+              "const": 2
+            },
+            "columns": {
+              "const": 3
+            }
+          }
+        },
+        {
+          "properties": {
+            "rows": {
+              "const": 3
+            },
+            "columns": {
+              "const": 2
+            }
+          }
+        },
+        {
+          "properties": {
+            "rows": {
+              "const": 3
+            },
+            "columns": {
+              "const": 3
+            }
+          }
+        }
+      ]
+    },
+    "priceRange": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ]
+        }
+      ]
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "live",
+            "historical"
+          ]
+        },
+        "fromSec": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 32503680000
+        },
+        "toSec": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 32503680000
+        },
+        "barSpacing": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "rightOffset": {
+          "type": "number",
+          "minimum": -5000,
+          "maximum": 5000
+        }
+      },
+      "required": [
+        "mode",
+        "fromSec",
+        "toSec",
+        "barSpacing",
+        "rightOffset"
+      ]
+    },
+    "chart": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "exchange": {
+          "enum": [
+            "binance",
+            "bybit",
+            "coinbase"
+          ]
+        },
+        "market": {
+          "const": "spot"
+        },
+        "instrument": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "timeframe": {
+          "enum": [
+            "1m",
+            "5m",
+            "15m",
+            "1h",
+            "4h",
+            "1d"
+          ]
+        },
+        "chartType": {
+          "enum": [
+            "candlestick",
+            "line"
+          ]
+        },
+        "showVolume": {
+          "type": "boolean"
+        },
+        "priceScale": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "linear",
+                "log"
+              ]
+            },
+            "autoScale": {
+              "type": "boolean"
+            },
+            "manualRange": {
+              "$ref": "#/$defs/priceRange"
+            }
+          },
+          "required": [
+            "mode",
+            "autoScale",
+            "manualRange"
+          ]
+        },
+        "view": {
+          "$ref": "#/$defs/view"
+        }
+      },
+      "required": [
+        "id",
+        "exchange",
+        "market",
+        "instrument",
+        "timeframe",
+        "chartType",
+        "showVolume",
+        "priceScale",
+        "view"
+      ]
+    },
+    "tab": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "grid": {
+          "$ref": "#/$defs/grid"
+        },
+        "charts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 9,
+          "items": {
+            "$ref": "#/$defs/chart"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "grid",
+        "charts"
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+Read codex-cryptodesk/START_HERE.md and the specification documents it references.
+Implement the CryptoDesk Ubuntu desktop application in this Git repository, not merely
+another plan, mock interface, or browser-only demo.
+
+Required: Go + Wails v2 + React/TypeScript + TradingView Lightweight Charts + SQLite;
+FIRST LAUNCH: exactly 1 tab and 1 chart. Users can add up to 20 tabs total and
+up to 9 charts per tab. These are maximum limits, NOT the initial layout. Subsequent
+launches restore the saved counts/layout, not a default or capacity fixture.
+Binance, Bybit, and Coinbase public spot
+market data; automatic layout/settings/viewport saving and restoration.
+
+Follow IMPLEMENTATION_PLAN.md in order and TEST_PLAN.md as the acceptance contract.
+Preserve existing files and uncommitted work. Respect existing AGENTS.md instructions.
+Merge the provided AGENTS.template.md guidance only where appropriate; do not replace
+existing instructions. Recheck the official API references and pin compatible dependencies.
+
+Implement and test each stage, then continue to the next stage without asking for approval
+between ordinary implementation steps. Use the documented defaults for unspecified details.
+Respect tool permission prompts and do not install system packages or change system settings
+without permission. If a system dependency or unavailable network blocks a step, complete
+all unblocked work and record the precise blocker and command needed.
+
+Use real exchange adapters in normal operation. Keep fixture mode explicitly labelled and
+separate. Never substitute synthetic prices or claim a live integration passed without
+observing it. Update codex-cryptodesk/STATUS.md with actual completed work, test results,
+remaining work, and exact resume steps. Deliver source code, build scripts, an Ubuntu desktop
+launcher, README, and an honest implementation/test report.

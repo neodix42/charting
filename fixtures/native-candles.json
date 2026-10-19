@@ -1,0 +1,89 @@
+{
+  "synthetic": true,
+  "format": "normalized cumulative snapshots; sourceRevision is TEST metadata, not a universal wire field",
+  "intervalSeconds": 60,
+  "events": [
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "102",
+      "low": "99",
+      "close": "101",
+      "baseVolume": "3",
+      "closed": false,
+      "sourceRevision": 1
+    },
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "103",
+      "low": "99",
+      "close": "102",
+      "baseVolume": "5",
+      "closed": false,
+      "sourceRevision": 2
+    },
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "103",
+      "low": "99",
+      "close": "102",
+      "baseVolume": "5",
+      "closed": false,
+      "sourceRevision": 2
+    },
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "102",
+      "low": "99",
+      "close": "101",
+      "baseVolume": "3",
+      "closed": false,
+      "sourceRevision": 1
+    },
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "103",
+      "low": "99",
+      "close": "102",
+      "baseVolume": "5",
+      "closed": true,
+      "sourceRevision": 3
+    },
+    {
+      "startUnixSec": 1792368060,
+      "open": "104",
+      "high": "104",
+      "low": "104",
+      "close": "104",
+      "baseVolume": "1",
+      "closed": false,
+      "sourceRevision": 4
+    }
+  ],
+  "expected": [
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "103",
+      "low": "99",
+      "close": "102",
+      "baseVolume": "5",
+      "closed": true,
+      "sourceRevision": 3
+    },
+    {
+      "startUnixSec": 1792368060,
+      "open": "104",
+      "high": "104",
+      "low": "104",
+      "close": "104",
+      "baseVolume": "1",
+      "closed": false,
+      "sourceRevision": 4
+    }
+  ]
+}

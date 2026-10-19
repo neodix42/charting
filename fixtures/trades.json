@@ -1,0 +1,94 @@
+{
+  "synthetic": true,
+  "format": "normalized trades, NOT exchange wire payloads",
+  "intervalSeconds": 60,
+  "product": "TEST-USD",
+  "events": [
+    {
+      "id": "1001",
+      "timeSec": 1792368005,
+      "price": "100",
+      "size": "1"
+    },
+    {
+      "id": "1002",
+      "timeSec": 1792368045,
+      "price": "102",
+      "size": "2"
+    },
+    {
+      "id": "1003",
+      "timeSec": 1792368030,
+      "price": "99",
+      "size": "0.5"
+    },
+    {
+      "id": "1002",
+      "timeSec": 1792368045,
+      "price": "102",
+      "size": "2"
+    },
+    {
+      "id": "1004",
+      "timeSec": 1792368060,
+      "price": "103",
+      "size": "1.25"
+    },
+    {
+      "id": "1005",
+      "timeSec": 1792368119,
+      "price": "101",
+      "size": "0.75"
+    }
+  ],
+  "expectedBeforeLate": [
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "102",
+      "low": "99",
+      "close": "102",
+      "baseVolume": "3.5"
+    },
+    {
+      "startUnixSec": 1792368060,
+      "open": "103",
+      "high": "103",
+      "low": "101",
+      "close": "101",
+      "baseVolume": "2"
+    }
+  ],
+  "lateEvent": {
+    "id": "1006",
+    "timeSec": 1792368050,
+    "price": "98",
+    "size": "0.25"
+  },
+  "expectedAfterLate": [
+    {
+      "startUnixSec": 1792368000,
+      "open": "100",
+      "high": "102",
+      "low": "98",
+      "close": "98",
+      "baseVolume": "3.75"
+    },
+    {
+      "startUnixSec": 1792368060,
+      "open": "103",
+      "high": "103",
+      "low": "101",
+      "close": "101",
+      "baseVolume": "2"
+    }
+  ],
+  "expectedFiveMinuteAfterLate": {
+    "startUnixSec": 1792368000,
+    "open": "100",
+    "high": "103",
+    "low": "98",
+    "close": "101",
+    "baseVolume": "5.75"
+  }
+}

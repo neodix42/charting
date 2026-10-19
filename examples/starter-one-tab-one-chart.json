@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "app": "cryptodesk",
+  "id": "1dc7f6eb-1400-5d0c-a93d-672e7fb8668d",
+  "theme": "dark",
+  "displayTimezone": "UTC",
+  "activeTabId": "245e1cc4-8b76-5e4c-a37e-1123a94b3133",
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "maximized": false
+  },
+  "tabs": [
+    {
+      "id": "245e1cc4-8b76-5e4c-a37e-1123a94b3133",
+      "name": "Tab 1",
+      "grid": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1.0
+        ],
+        "columnFractions": [
+          1.0
+        ]
+      },
+      "charts": [
+        {
+          "id": "13489420-9c4d-5418-878a-6594e151967f",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    }
+  ]
+}

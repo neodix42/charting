@@ -1,0 +1,4195 @@
+{
+  "schemaVersion": 1,
+  "app": "cryptodesk",
+  "id": "ba67a618-3adb-59fe-b12b-09bd262d6997",
+  "theme": "dark",
+  "displayTimezone": "UTC",
+  "activeTabId": "793a9690-06cd-5c82-bf95-3ad2cf388625",
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "maximized": false
+  },
+  "tabs": [
+    {
+      "id": "a6cd9e30-8b1a-5e19-a327-bfaa34a08db7",
+      "name": "Capacity test 01",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "f1892995-d1e8-561d-9b72-7c3776c7c027",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "37a99d1f-cd42-538f-be89-d10e30670809",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d8fbf0a1-b118-5578-a1d2-9c57e137f803",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "736db8b3-532c-5d75-b4d6-89d6603f9e4a",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d800626d-46a4-5616-ad76-cb327816a810",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e9f7a5fe-f414-5169-946d-add0ae11e112",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "09f2ed0d-7d4b-5558-b675-2f52dec63ddd",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "4ca67d58-742b-5a38-b92e-a5aa35a842a8",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ae103088-72d5-560c-a491-506fe7e3f281",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "5640b2b3-43b1-5a9e-9418-476463e33e8d",
+      "name": "Capacity test 02",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "c8facce2-11c4-5189-92ba-258cc23d41d7",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "2db3336d-9c47-5f54-bdbf-03a283dbe197",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "53483334-a142-597f-a9fd-a6b017e7f9f5",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "377e4fe2-e3f5-5c60-ba67-5591eadec538",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "330d9ed6-f0a6-56ca-8720-936dcb6a13c1",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "81d4d103-1357-5b85-a7da-41153af325af",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "304c9845-98b9-5bfd-b883-5d7e14be4228",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "31126d9e-ec6e-513b-82c3-584c91b7c1ca",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "69151c18-6df4-5c75-a227-beae4b6ac7a1",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "b198d127-8127-53c4-8a63-e70cf3027a16",
+      "name": "Capacity test 03",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "b20b4f19-3c2b-52cd-8448-b11a0d3147b4",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "dedf69dd-f46d-5d79-8ce0-0779b7ffc1f5",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "c31e63f6-90eb-543e-a571-f57022c4eb9f",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "437f2d76-f1c4-593b-869a-009f95ed708b",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e9aa5faa-783b-525c-a4b1-281b83510412",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "764af6d7-5110-5616-aff7-5df920ceb538",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "8bc83053-ac6a-5e46-89f0-38dfe895b514",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e1880cf6-e412-58d8-8eb4-70b2a0e11a57",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "5fe5ff23-4eb3-5aab-9611-02b857d689c4",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "5c935dab-b827-5a1b-8b6c-eff808157945",
+      "name": "Capacity test 04",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "84455dcc-faf6-53b6-85b1-28e947e5ba7d",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "db4c384e-5a20-55c7-a61b-7716961cae7d",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d761ece5-7fc7-5abc-9e66-cd52a30e02f7",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "3bc0a549-a3aa-5848-9791-9b4b000b3fab",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "79c81561-83ac-5b0a-a0d1-7a2c12bcb18c",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "aa6a5ed8-99a7-50a7-ae52-a9adadf6c805",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "edb88bf8-4d14-5324-9e26-58a842a318f6",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "a4e6be98-78b3-5315-9217-7fe1116885f8",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "35d7ce0f-c934-50c8-a07f-a1351a50d56b",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "84022ad1-107f-518d-96e7-2d0ae46cd983",
+      "name": "Capacity test 05",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "bdd3a16a-0d49-56ae-8396-1b75ca6dc0aa",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "057aaee8-baac-5101-a522-03764311af00",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "22eab753-54b1-54f2-a2cd-f4d5b348f5f3",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "2204d832-910c-5f14-86f8-0c62d3753864",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "269e04e4-0b37-50c6-b15c-c2fc1fff760a",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "8037814c-7d2f-530b-af8b-4921547b2ee9",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "7b3b7c18-4b19-5196-8695-cbaf687dc687",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "4d70c8f0-1dc1-5200-9451-3ed135139b66",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "7c462f1c-7396-5bee-b719-c8757d49a2bb",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "0cece9f6-59ba-5731-97b6-89076439f456",
+      "name": "Capacity test 06",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "6bff3b18-8233-598f-9be0-ed434ae77e8e",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "1d5641c4-6915-5083-a081-b2835abd6c52",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d2b00518-46ae-569a-86ff-01a279d2cad0",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "1a0f6148-35b7-571a-ac07-fbb0d7ed8fc2",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "8cc368bc-ae53-531b-b327-20a3863609b5",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "83b4f327-b0ca-5663-a26d-614abd8ef12b",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "32c748cd-98f7-5559-bd8a-b9c8a7076d85",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "6ff48ee3-dfd4-51e8-b74f-5baf1c7827da",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "abaed34a-0caf-532b-9221-696c433a3fe7",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "13bef03a-70bb-5bcc-8f09-b8df0cc15fd4",
+      "name": "Capacity test 07",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "92c1b8c0-43ff-54c5-a3ee-a021b6f71889",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ad484ca9-1676-5da8-91c9-999943758139",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ef3709a4-37d8-5169-96d7-98ddc9b9573e",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d6528d4b-9bb0-529b-8817-29ef069f7617",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "26f2213f-ee35-5ffe-9e3e-50e73af0c771",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "117f62a2-fa2b-5774-9eb6-ffbaec0c8bac",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e25a7fd2-1411-50b1-b223-3ef11726201c",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ca2b9f74-300d-5b58-bcde-71cb5e648686",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "af82d026-42b5-557b-83b1-e57d6fcbfa80",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "793a9690-06cd-5c82-bf95-3ad2cf388625",
+      "name": "Capacity test 08",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "3a20be30-79fe-57f3-95af-1e0dfca2b53d",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "64acc7c6-531d-5465-8c37-a7cd2cec96da",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "c9ad6e62-14dc-50bb-ab07-5c819ce893b0",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "89bd4afd-b417-51a8-bfd9-6334ed1c2e45",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d399c90a-85f8-5838-acfa-52d5232608b9",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "5d69f5f5-6e12-55c1-889e-7a2a5cbdfe91",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "1622d06c-194c-5a88-85f2-610ea84b2913",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "1ab63d8c-e333-5332-b824-6bbb41222c9c",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "2b0c8246-16c5-5b3d-94fb-5468d485f0c4",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "c1f737b8-4a57-5f09-aa3d-28bbf463671f",
+      "name": "Capacity test 09",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "e9329824-4c79-59b6-8fa4-1298aa202eb1",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e8109948-2c8c-5acc-814c-808d4cbd3ef0",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "00c0a5a8-7491-534d-bbbe-95fb13df3698",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e74d08a4-3ff3-5193-bcbe-d4fe1cda75e1",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "da76e8af-e0f8-51b4-a089-cf4192c63252",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "72e1a8a6-32c5-5454-b34c-70e1b8734b4f",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "87bd6e13-381f-5fc4-b9f4-d52a54d5166b",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "7e91fb2b-25f9-59fd-9638-029bfaee96d2",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "a0b96b2b-95fc-50b3-987c-86ecd84c8a5e",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "aefe5fe1-22a2-58d9-9b81-cc33c007716a",
+      "name": "Capacity test 10",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "7fbb701f-2c28-5da1-b2e8-7603e21a020f",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "c5b5d315-d38d-5d3c-ae83-8a40ad9fd599",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "cb5a079d-e802-5a6d-aa1e-e0fcc497f01c",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "eaacdb2c-b411-5b58-9582-7567823d49cc",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ddff3734-dc11-579c-8440-3e2a75c83651",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "b3eb1cf5-d54d-5cf7-bcf4-73007b65b78f",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "02269e2b-e607-5930-8cc6-650e497dd29d",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d095abff-f08f-5776-a055-208356afd7c2",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "3f58d64d-21f7-5723-ad33-4379e77a8d64",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "97c1f699-190d-5d2f-be09-23c19dc12ae4",
+      "name": "Capacity test 11",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "30773858-8a41-59c9-8de9-53a617f7948a",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "9d1c4a95-6f31-58ef-8f99-c0263ddc94c9",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "822bcb37-e369-52dd-aebf-e6a1796513a9",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "b7af6720-1a87-5f09-b802-caf89007ab51",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "152605b7-2e2e-5243-a84d-3c60a7131408",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "b51eb163-571d-52e2-9c92-1ada70ab8b1b",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "07edb384-7382-51fa-b401-52749f90c543",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "44007331-00a2-5b91-9d9b-0bcb952e200d",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "1e774a52-b294-57c8-8bf8-6b1c1de93f57",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "c3dede54-e570-5682-adb2-3f0d9ea44d20",
+      "name": "Capacity test 12",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "589cb4f3-6068-58e6-bb10-aa8a9ae425a8",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d4dd62aa-3af4-509a-b905-525cbe2bfdf5",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "4573c3c6-8e74-5faa-af5e-4102807c2a44",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d3943e13-36c1-5107-aed0-72731f0115ff",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "f0cb265b-28ad-5797-b0b5-5acc04b7f257",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "a2b0df6a-9109-5337-9840-935fb55adab3",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "bfff86b5-a8a2-5f05-9db9-f3e490450df0",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "6faefd6e-c22a-5add-8231-97ad94dbb89a",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "63e94040-c7dd-55a5-8aa3-eab515ded84e",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "fe62f5d7-573a-54cf-b9e2-0141f34ecb34",
+      "name": "Capacity test 13",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "01c5266b-60f8-512a-8e2d-8e9b80b76512",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "20493ced-b7cc-5e74-92d3-653f859306f4",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "8f3cb5a1-c279-5954-86f7-4b8ae4ba1d1a",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "af26213d-25fd-533f-b54b-230f6f86e748",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ba378830-3733-5c46-996e-0f35f5fe451b",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "415ff161-3749-5f2d-bfe5-6745f73b9389",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "13ffc884-53ae-5f20-a4d4-d50167e30364",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "983394d9-3179-59ca-96cb-e9cffd95edf0",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "f3169fad-4b21-5162-bf6e-7825e19b078c",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "7a9d13b7-e609-5879-8bb7-4ce8f185aa6f",
+      "name": "Capacity test 14",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "7345d151-0c32-5981-97b8-61c35bd5dfa3",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "9c83c951-f5ac-5af6-8632-12548357346d",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "a77bc0fc-f062-5847-a881-141710e9e3bb",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "667a0513-1927-52a4-a2b3-8e6ebc398624",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "71003c98-e1db-51ce-80e2-4c21a96fdfc9",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "bc25cc0b-cfb4-57d2-864f-302864ca7f13",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e315544a-e750-5f3a-b057-d2a21bf5be06",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "9ca4998e-bc0f-56cc-9a43-f61c446fa2e3",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "aabc21f0-edbe-5889-bf4e-85db8c3d847b",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "89c263ec-0460-5c43-aaeb-ec84875bfe12",
+      "name": "Capacity test 15",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "e2d033c9-43dd-50a6-b83c-1dc5ddba5ca7",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "9f5c8c58-8058-5977-a9db-9b46098e371b",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ffb7bf43-9b05-52fe-bd04-86d3680ab354",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "957878fc-5fd2-5e13-aa3b-aae0c8e253f7",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "978fddb5-68c2-5920-a2a3-ed099b9cf826",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "36ea96d9-033b-5d6e-98b1-9b7af6b436d5",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "e7fd4d29-5ff6-5a53-b29f-a2d5cdd6d09a",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "58d90f46-132e-5068-9e42-eb1f2cd5525f",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "838c93d3-4959-5131-bfae-50dc95e7bc0b",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "08056ae8-b2f2-5e92-9e42-f1e830a7b892",
+      "name": "Capacity test 16",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "de5aaba8-bf5f-5a63-878e-be29091db252",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "6aa8b189-5879-550c-859c-57586ca977a2",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "aa3fe6e0-5de7-5434-a431-78b5c104f9e1",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "9c4ecd56-e7c2-5826-a53d-2323c22fbabd",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "05c45015-d710-5ce8-9416-02097a3ffddb",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "42ad5952-6e91-5e55-8a81-fad0701087c7",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "905c4ac0-b719-5ee1-9d55-84c9de93a482",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "20d1bc3c-5928-5ea4-a375-913f5ec4a688",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "15e6f371-c7ab-5de5-a0ce-26f1c25be632",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "7857282a-45dc-5c69-8bc4-cbe8ab40c646",
+      "name": "Capacity test 17",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "1d1b1aaa-cc7c-5950-848f-01aa78824955",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "84df6418-7c14-5393-a125-10cefa6a23a2",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ca2636ee-4c62-5d4c-b1d5-766d6d7d464e",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "fc3079af-b3c1-584e-852d-d9a4410d8bf0",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d65d5450-7f58-5839-a613-cfc1f76bfc71",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "2a06bd9a-a0bd-5a94-9b77-37d54d2f7e46",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "6bdb3ced-9418-5580-b840-80500ec5d83a",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "8edcc7ff-072c-5339-bb7c-3d04f098a9ff",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "0a954d6c-6213-5adb-b918-8b6eab8bdfbf",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "88d69272-a4a2-5516-9ed0-58ca1b0678bc",
+      "name": "Capacity test 18",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "9c4a06b8-c77e-5efc-8227-ff79a1174cf0",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "6d21eb81-f468-53a8-8ccf-15e7f933ac19",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ffc6d9f7-35e4-5c8d-af78-a6906f010bd3",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "83a21829-2902-5094-ba45-98d458921390",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d30ee2ea-f083-5087-8067-2aa0aae67332",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "5c302a48-d43e-5afd-b022-8e3a1079773a",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "aa98d615-6396-5ce3-9df4-02f9307d7bdf",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "554e3a19-0ff9-575d-b27f-46b57a3a8fcf",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "b61ac798-acd1-5c23-8831-983bc6aa8d56",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "98b7703f-10a2-54d1-b5b4-b79f80fa07db",
+      "name": "Capacity test 19",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "6c536237-209b-5600-9b54-a1e24de208f0",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "03d71000-3966-5103-bf2e-2e5ddf89f3f6",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "53674fa3-cec8-597a-b7e7-680f4a12a2b6",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "bc0bcf2f-2cc2-5c6c-811b-36b59cbebf38",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "eab66042-39be-58d1-8345-a9d9087d4e5b",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "ff2fcf4c-8656-5ecb-8d7c-fe1a2cca6b01",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "db8f5d48-ba99-5226-b513-a5900f3d69c7",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "eb6895f9-2cc1-579d-b408-0c2bc7cd375b",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "20d473dd-328c-555e-a80b-03ec58ab9730",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "17811545-887d-52f6-9841-f304ed544344",
+      "name": "Capacity test 20",
+      "grid": {
+        "rows": 3,
+        "columns": 3,
+        "rowFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ],
+        "columnFractions": [
+          0.3333333333333333,
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      },
+      "charts": [
+        {
+          "id": "1942c025-16d2-5dd4-9ef5-68907e7d03ff",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "8d45ac5a-46c0-5d8c-aa24-8108df840f03",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "36e7f737-38cf-5947-8fe6-5466dcadeda2",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "7e325ebf-be85-573d-a046-d7327a243548",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "a692b9d8-9119-57c9-bd9b-6e0205e307e3",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "5m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "9376ac45-379a-5a34-b665-29fa0c14bf48",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "0f3ac736-c36c-527d-b77a-55abac1adf28",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "42d16ae5-6b4e-5182-bbf9-7bab7ca7fc53",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "df73ffbb-eb38-5e27-a89f-e7a56ca72fb6",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    }
+  ]
+}

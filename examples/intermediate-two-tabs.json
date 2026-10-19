@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "app": "cryptodesk",
+  "id": "1b93a49c-d5d9-50a1-af15-4d51112650d4",
+  "theme": "dark",
+  "displayTimezone": "UTC",
+  "activeTabId": "3335b1fa-1e94-5461-8f44-49fc2c863528",
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "maximized": false
+  },
+  "tabs": [
+    {
+      "id": "3335b1fa-1e94-5461-8f44-49fc2c863528",
+      "name": "Main",
+      "grid": {
+        "rows": 2,
+        "columns": 2,
+        "rowFractions": [
+          0.5,
+          0.5
+        ],
+        "columnFractions": [
+          0.6,
+          0.4
+        ]
+      },
+      "charts": [
+        {
+          "id": "6b853ce7-feac-55af-9698-15747790ffa0",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "d1b0f872-758b-5717-bd08-09391ef12d25",
+          "exchange": "bybit",
+          "market": "spot",
+          "instrument": "ETHUSDT",
+          "timeframe": "15m",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "historical",
+            "fromSec": 1791763200,
+            "toSec": 1791849600,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        },
+        {
+          "id": "592426ae-0291-58c1-8fcb-de3262d46a77",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "BTC-USD",
+          "timeframe": "4h",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "b18cbef4-606c-54b4-b4d7-75e4f7600269",
+      "name": "Longer term",
+      "grid": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1.0
+        ],
+        "columnFractions": [
+          1.0
+        ]
+      },
+      "charts": [
+        {
+          "id": "def238fa-ee67-509c-a14a-5a8d064bc7ba",
+          "exchange": "coinbase",
+          "market": "spot",
+          "instrument": "ETH-USD",
+          "timeframe": "1d",
+          "chartType": "candlestick",
+          "showVolume": true,
+          "priceScale": {
+            "mode": "linear",
+            "autoScale": true,
+            "manualRange": null
+          },
+          "view": {
+            "mode": "live",
+            "fromSec": null,
+            "toSec": null,
+            "barSpacing": 6,
+            "rightOffset": 5
+          }
+        }
+      ]
+    }
+  ]
+}
