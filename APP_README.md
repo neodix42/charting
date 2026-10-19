@@ -58,6 +58,8 @@ Use Add Tab or Ctrl+T to create a single-chart tab; Add Chart or Ctrl+Shift+N ad
 
 Each chart has its own exchange, searchable native instrument, horizontal period buttons (`1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`), volume, candlestick/line style and linear/log scale. The buttons stay in the chart header row; small chart headers scroll horizontally. Drag/pan/zoom the chart; scrolling left loads older history. Return to live follows current bars. Manual price scaling and time viewports are saved. Settings provides theme, IANA/system timezone, JSON import/export/reset and diagnostics. Candle boundaries remain UTC regardless of display timezone.
 
+Centered below the tabs, shared period buttons and an **Indicators** dropdown apply to every existing chart in the current tab, including charts hidden by maximization. A period click updates all those charts immediately and returns them to live view. The shared period is highlighted only when every chart agrees; individual chart controls can still override it. For an indicator, configure its parameters once and press **OK** to add an independent instance to every chart in the tab. Existing indicators are retained, other tabs stay unchanged, and all changes are saved. If any chart already has 12 indicators, the shared dropdown is disabled until an indicator is removed from that chart.
+
 Weekly candles start Monday at 00:00 UTC. Binance and Bybit provide native weekly candles. Coinbase weekly history is derived from actual daily candles, with live updates from its public trades; incomplete weekly coverage remains provisional.
 
 ### Indicators

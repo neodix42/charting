@@ -135,10 +135,12 @@ const desktopSmokeJavaScript = `async function(phase) {
  const q=selector=>document.querySelector(selector),qa=selector=>Array.from(document.querySelectorAll(selector));
  const click=async(selector)=>{const element=await wait(()=>q(selector),selector);if(element.disabled)throw Error('Disabled control: '+selector);element.click();await sleep(100);};
  const select=async(selector,value)=>{const element=await wait(()=>q(selector),selector);Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(element,value);element.dispatchEvent(new Event('change',{bubbles:true}));await sleep(100);};
+ const input=async(selector,value)=>{const element=await wait(()=>q(selector),selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,String(value));element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));await sleep(100);};
  const flush=async()=>{await click('.save-indicator');await wait(()=>q('.save-indicator')?.textContent.includes('All changes saved'),'acknowledged save');};
  const indicatorDefaults={sma:{period:20},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
  const indicatorNames={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
  const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
+ const verifySharedIndicators=(workspace,label)=>{const charts=workspace.tabs[0].charts,ids=charts.flatMap(chart=>(chart.indicators||[]).map(indicator=>indicator.id));check(charts.map(chart=>chart.indicators?.length||0).join(',')==='5,1,1'&&charts.every(chart=>{const indicator=chart.indicators.at(-1);return indicator.type==='ema'&&indicator.parameters.period===34&&Object.keys(indicator.parameters).length===1&&/^#[0-9a-f]{6}$/i.test(indicator.color);})&&new Set(ids).size===ids.length,label,charts.map(chart=>chart.indicators));verifyIndicators({...charts[0],indicators:charts[0].indicators.slice(0,4)},'shared action preserves the first chart original four indicators');check(workspace.tabs[1].charts[0].timeframe==='1h'&&!workspace.tabs[1].charts[0].indicators?.length,'shared action leaves the hidden tab unchanged',workspace.tabs[1].charts[0]);};
  const chartShape=element=>{const host=element.querySelector('[data-testid="chart-canvas"]'),table=host?.querySelector('.tv-lightweight-charts > table');return {canvases:host?.querySelectorAll('canvas').length||0,canvasRows:table?Array.from(table.rows).filter(row=>row.querySelector('canvas')).length:0};};
  let api;
  try {
@@ -189,14 +191,35 @@ const desktopSmokeJavaScript = `async function(phase) {
    verifyIndicators(saved.workspace.tabs[0].charts[0],'indicator settings survive chart and tab additions');
    check(saved.workspace.tabs[0].charts.slice(1).every(chart=>!chart.indicators?.length)&&!saved.workspace.tabs[1].charts[0].indicators?.length,'new chart indicators remain independent',saved.workspace.tabs.map(tab=>tab.charts.map(chart=>chart.indicators?.length||0)));
    report.savedRevision=saved.revision;
+   const shared=await wait(()=>q('[data-testid="tab-chart-controls"]'),'shared current tab controls'),sharedRect=shared.getBoundingClientRect(),tabsRect=q('.tab-row').getBoundingClientRect(),chartsRect=q('.workspace-content').getBoundingClientRect();
+   report.sharedToolbarGeometry={left:sharedRect.left,right:sharedRect.right,top:sharedRect.top,bottom:sharedRect.bottom,tabBottom:tabsRect.bottom,chartTop:chartsRect.top,windowWidth:window.innerWidth};
+   check(shared.getAttribute('role')==='toolbar'&&shared.getAttribute('aria-label')==='Current tab chart controls'&&sharedRect.top>=tabsRect.bottom&&sharedRect.bottom<=chartsRect.top&&Math.abs((sharedRect.left+sharedRect.right)/2-window.innerWidth/2)<=3,'shared toolbar is centered between the tabs and chart area',report.sharedToolbarGeometry);
+   await click('[data-testid="chart-cell"] [aria-label="Maximize chart"]');
+   await click('[data-testid="tab-chart-controls"] [aria-label="Apply 1w to current tab"]');
+   await wait(()=>qa('[data-testid="chart-cell"] [aria-label="Timeframe 1w"][aria-pressed="true"]').length===3,'shared weekly timeframe reaches all three charts while maximized');
+   await flush();
+   const sharedPeriodSaved=await api.LoadWorkspace();
+   check(sharedPeriodSaved.workspace.tabs[0].charts.every(chart=>chart.timeframe==='1w')&&sharedPeriodSaved.workspace.tabs[1].charts[0].timeframe==='1h','shared weekly timeframe persists for the active tab only while maximized',sharedPeriodSaved.workspace.tabs.map(tab=>tab.charts.map(chart=>chart.timeframe)));
+   await select('[data-testid="tab-chart-controls"] [aria-label="Indicators for current tab"]','ema');
+   await wait(()=>q('[role="dialog"][aria-label="EMA parameters"]'),'shared EMA parameter dialog');
+   check(qa('[role="dialog"]').length===1&&qa('[data-testid="chart-cell"] .indicator-chip').length===4,'shared indicator opens one dialog and waits for OK',qa('[role="dialog"]').length);
+   await input('[role="dialog"] [aria-label="Period"]',34);
+   await click('[role="dialog"] button[type="submit"]');
+   await wait(()=>!q('[role="dialog"]')&&qa('[data-testid="chart-cell"] .indicator-chip').length===7,'shared EMA applies to all three charts');
+   await click('[data-testid="chart-cell"] [aria-label="Restore chart"]');
+   await flush();
+   const sharedSaved=await api.LoadWorkspace();
+   verifySharedIndicators(sharedSaved.workspace,'shared EMA custom parameters persist with a distinct ID on every active chart');
+   report.sharedRevision=sharedSaved.revision;
   } else if(phase==='restore') {
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);
    check(qa('[data-testid="chart-cell"]').length===3&&qa('[data-testid="chart-placeholder"]').length===6,'only selected tab is mounted after restart',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});
    check(initial.workspace.tabs[0].charts[0].timeframe==='4h'&&!initial.workspace.tabs[0].charts[0].showVolume,'native close flushed the final immediate edit',initial.workspace.tabs[0].charts[0]);
-   verifyIndicators(initial.workspace.tabs[0].charts[0],'restart restores all four indicator types and parameters from SQLite');
+   verifySharedIndicators(initial.workspace,'restart restores shared indicators and custom parameters from SQLite');
+   check(initial.workspace.tabs[0].charts.slice(1).every(chart=>chart.timeframe==='1w'),'restart restores shared weekly timeframes on the other active charts',initial.workspace.tabs[0].charts.map(chart=>chart.timeframe));
    check(q('[data-testid="chart-cell"] [aria-label="Timeframe 4h"]').getAttribute('aria-pressed')==='true','restart restores the selected horizontal timeframe');
-   check(qa('[data-testid="chart-cell"]')[0].querySelectorAll('.indicator-chip').length===4&&qa('[data-testid="chart-cell"]')[1].querySelectorAll('.indicator-chip').length===0,'restart renders indicator chips only on the configured chart');
+   check(qa('[data-testid="chart-cell"]').map(chart=>chart.querySelectorAll('.indicator-chip').length).join(',')==='5,1,1','restart renders every chart own indicator configuration',qa('[data-testid="chart-cell"]').map(chart=>chart.querySelectorAll('.indicator-chip').length));
    await wait(()=>{const cells=qa('[data-testid="chart-cell"]'),first=chartShape(cells[0]),second=chartShape(cells[1]);return second.canvases>0&&first.canvases>second.canvases&&first.canvasRows===second.canvasRows+1;},'restart renders the separate MACD pane');
    report.restoredIndicatorChart=chartShape(qa('[data-testid="chart-cell"]')[0]);
   }

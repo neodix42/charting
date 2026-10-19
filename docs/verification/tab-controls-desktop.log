@@ -1,0 +1,19 @@
+Using Node v24.19.0 and npm 11.17.0
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 36 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.74 kB │ gzip:   0.42 kB
+dist/assets/index-DLbdapCh.css   14.45 kB │ gzip:   3.82 kB
+dist/assets/index-DPmpyZRl.js   447.32 kB │ gzip: 141.35 kB
+
+✓ built in 161ms
+fresh: PASS (25 actual desktop assertions)
+restore: PASS (11 actual desktop assertions)
+capacity: PASS (5 actual desktop assertions)
+Desktop evidence: /home/neodix/gitProjects/charting/docs/verification/desktop-20261019T173409Z

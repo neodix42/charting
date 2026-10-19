@@ -1,0 +1,59 @@
+.Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/tmpi502zsgx/.tools/node-test
+.....Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/cryptodesk install tools gal3e8ws/.tools/node-test
+.
+----------------------------------------------------------------------
+Ran 7 tests in 0.033s
+
+OK
+Using Node v24.19.0 and npm 11.17.0
+ok  	cryptodesk/internal/domain	(cached)
+ok  	cryptodesk/internal/exchange	(cached)
+ok  	cryptodesk/internal/market	(cached)
+ok  	cryptodesk/internal/storage	(cached)
+?   	cryptodesk/cmd/smoke	[no test files]
+ok  	cryptodesk	(cached)
+
+added 137 packages, and audited 138 packages in 1s
+
+39 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> cryptodesk-frontend@1.0.0 typecheck
+> tsc --noEmit
+
+
+> cryptodesk-frontend@1.0.0 lint
+> eslint src vite.config.ts
+
+
+> cryptodesk-frontend@1.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/neodix/gitProjects/charting/frontend
+
+
+ Test Files  6 passed (6)
+      Tests  46 passed (46)
+   Start at  21:31:51
+   Duration  233ms (transform 57%, import 20%, tests 19%, worker 4%)
+
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 36 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.74 kB │ gzip:   0.42 kB
+dist/assets/index-DLbdapCh.css   14.45 kB │ gzip:   3.82 kB
+dist/assets/index-DPmpyZRl.js   447.32 kB │ gzip: 141.35 kB
+
+✓ built in 169ms
+Deterministic tests complete. Browser E2E: cd frontend && npm run test:e2e
+Live provider smoke is separate: go run ./cmd/smoke
+Desktop smoke steps: docs/DESKTOP_SMOKE.md

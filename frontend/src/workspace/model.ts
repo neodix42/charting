@@ -1,5 +1,5 @@
-import type {ChartConfig, Grid, Tab, Workspace} from '../types';
-export const MAX_TABS=20, MAX_CHARTS=9;
+import type {ChartConfig, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
+export const MAX_TABS=20, MAX_CHARTS=9, MAX_INDICATORS=12;
 export const presets = [[1,1],[1,2],[2,1],[2,2],[2,3],[3,2],[3,3]] as const;
 export const uuid=()=>crypto.randomUUID();
 export const equalTracks=(n:number)=>Array.from({length:n},()=>1/n);
@@ -10,7 +10,7 @@ export const newChart=(source?:ChartConfig):ChartConfig=>source?{...structuredCl
 export const newTab=(name:string):Tab=>({id:uuid(),name,grid:grid(),charts:[newChart()]});
 // Called only by explicit fixture mode or a confirmed reset. Production startup belongs to Go.
 export function firstWorkspace():Workspace {const tab=newTab('Tab 1');return {schemaVersion:1,app:'cryptodesk',id:uuid(),theme:'dark',displayTimezone:'UTC',activeTabId:tab.id,window:{width:1600,height:1000,maximized:false},tabs:[tab]};}
-export type Action = {type:'addTab'}|{type:'duplicateTab';id:string}|{type:'selectTab';id:string}|{type:'renameTab';id:string;name:string}|{type:'removeTab';id:string}|{type:'reorderTab';from:string;to:string}|{type:'grid';rows:number;columns:number}|{type:'tracks';axis:'rowFractions'|'columnFractions';values:number[]}|{type:'addChart';sourceId?:string}|{type:'removeChart';id:string}|{type:'reorderChart';from:string;to:string}|{type:'chart';id:string;patch:Partial<ChartConfig>}|{type:'settings';theme?:Workspace['theme'];displayTimezone?:string};
+export type Action = {type:'addTab'}|{type:'duplicateTab';id:string}|{type:'selectTab';id:string}|{type:'renameTab';id:string;name:string}|{type:'removeTab';id:string}|{type:'reorderTab';from:string;to:string}|{type:'grid';rows:number;columns:number}|{type:'tracks';axis:'rowFractions'|'columnFractions';values:number[]}|{type:'addChart';sourceId?:string}|{type:'removeChart';id:string}|{type:'reorderChart';from:string;to:string}|{type:'chart';id:string;patch:Partial<ChartConfig>}|{type:'tabTimeframe';tabId:string;timeframe:Interval}|{type:'tabIndicator';tabId:string;indicator:IndicatorConfig}|{type:'settings';theme?:Workspace['theme'];displayTimezone?:string};
 function reorder<T extends {id:string}>(items:T[],from:string,to:string) {const a=items.findIndex(x=>x.id===from),b=items.findIndex(x=>x.id===to);if(a<0||b<0)return items;const result=[...items];result.splice(b,0,result.splice(a,1)[0]);return result;}
 function generatedName(w:Workspace){let n=1;while(w.tabs.some(t=>t.name===`Tab ${n}`))n++;return `Tab ${n}`;}
 export function reduceWorkspace(w:Workspace,a:Action):Workspace {
@@ -29,6 +29,15 @@ export function reduceWorkspace(w:Workspace,a:Action):Workspace {
  case 'removeChart':if(current.charts.length===1)throw Error('Keep at least one chart');return change({...current,charts:current.charts.filter(c=>c.id!==a.id)});
  case 'reorderChart':return change({...current,charts:reorder(current.charts,a.from,a.to)});
  case 'chart':return change({...current,charts:current.charts.map(c=>c.id===a.id?{...c,...a.patch,id:c.id}:c)});
+ case 'tabTimeframe':{
+  if(a.tabId!==w.activeTabId||!current)throw Error('The target tab is no longer active');
+  return change({...current,charts:current.charts.map(chart=>({...chart,timeframe:a.timeframe,view:liveView()}))});
+ }
+ case 'tabIndicator':{
+  if(a.tabId!==w.activeTabId||!current)throw Error('The target tab is no longer active');
+  if(current.charts.some(chart=>(chart.indicators?.length??0)>=MAX_INDICATORS))throw Error('Maximum 12 indicators per chart; remove an indicator before applying to the whole tab');
+  return change({...current,charts:current.charts.map(chart=>({...chart,indicators:[...(chart.indicators??[]),{...structuredClone(a.indicator),id:uuid()}]}))});
+ }
  case 'settings':return {...w,...(a.theme?{theme:a.theme}:{}),...(a.displayTimezone?{displayTimezone:a.displayTimezone}:{})};
  }
 }

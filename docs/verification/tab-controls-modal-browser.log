@@ -1,0 +1,18 @@
+
+> cryptodesk-frontend@1.0.0 test:e2e
+> playwright test e2e/tab-controls.spec.ts -g one tab indicator dialog
+
+[WebServer] (node:1608591) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1608746) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1608830) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:1608945) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/tab-controls.spec.ts:25:1 › one tab indicator dialog applies custom settings independently to visible and maximized sibling charts (4.3s)
+
+  1 passed (8.2s)
