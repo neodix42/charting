@@ -585,6 +585,12 @@
             "color": {
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "paneStretchFactor": {
+              "description": "MACD pane height relative to the main chart pane. Omit to use the default layout.",
+              "type": "number",
+              "minimum": 0.001,
+              "maximum": 1000
             }
           },
           "required": [

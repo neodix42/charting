@@ -12,6 +12,9 @@ type Indicator struct {
 	Type       string         `json:"type"`
 	Parameters map[string]int `json:"parameters"`
 	Color      *string        `json:"color,omitempty"`
+	// PaneStretchFactor is a MACD pane's height relative to the main chart pane.
+	// Omission keeps the default layout and the original shape of legacy exports.
+	PaneStretchFactor *float64 `json:"paneStretchFactor,omitempty"`
 }
 
 var indicatorColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -30,6 +33,14 @@ func validateIndicator(i Indicator) error {
 	}
 	if i.Color != nil && !indicatorColor.MatchString(*i.Color) {
 		return fmt.Errorf("indicator color must be a six-digit hex color")
+	}
+	if factor := i.PaneStretchFactor; factor != nil {
+		if i.Type != "macd" {
+			return fmt.Errorf("pane stretch factor is only supported for MACD")
+		}
+		if !finite(*factor) || *factor < 0.001 || *factor > 1000 {
+			return fmt.Errorf("MACD pane stretch factor must be 0.001–1000")
+		}
 	}
 	if len(i.Parameters) != len(names) {
 		return fmt.Errorf("invalid %s parameter fields", i.Type)

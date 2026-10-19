@@ -142,6 +142,16 @@ const desktopSmokeJavaScript = `async function(phase) {
  const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
  const verifySharedIndicators=(workspace,label)=>{const charts=workspace.tabs[0].charts,ids=charts.flatMap(chart=>(chart.indicators||[]).map(indicator=>indicator.id));check(charts.map(chart=>chart.indicators?.length||0).join(',')==='5,1,1'&&charts.every(chart=>{const indicator=chart.indicators.at(-1);return indicator.type==='ema'&&indicator.parameters.period===34&&Object.keys(indicator.parameters).length===1&&/^#[0-9a-f]{6}$/i.test(indicator.color);})&&new Set(ids).size===ids.length,label,charts.map(chart=>chart.indicators));verifyIndicators({...charts[0],indicators:charts[0].indicators.slice(0,4)},'shared action preserves the first chart original four indicators');check(workspace.tabs[1].charts[0].timeframe==='1h'&&!workspace.tabs[1].charts[0].indicators?.length,'shared action leaves the hidden tab unchanged',workspace.tabs[1].charts[0]);};
  const chartShape=element=>{const host=element.querySelector('[data-testid="chart-canvas"]'),table=host?.querySelector('.tv-lightweight-charts > table');return {canvases:host?.querySelectorAll('canvas').length||0,canvasRows:table?Array.from(table.rows).filter(row=>row.querySelector('canvas')).length:0};};
+ const paneHeights=element=>{const table=element.querySelector('.tv-lightweight-charts > table');return table?Array.from(table.rows).filter(row=>row.querySelector('canvas')).slice(0,-1).map(row=>row.getBoundingClientRect().height):[];};
+ const resizeMACD=async(element,delta)=>{
+  const handle=await wait(()=>element.querySelector('.tv-lightweight-charts > table > tr > td[colspan="3"] > div[style*="position: absolute"][style*="row-resize"]'),'real MACD separator'),rect=handle.getBoundingClientRect(),x=rect.left+rect.width/2,y=rect.top+rect.height/2;
+  const options={bubbles:true,cancelable:true,view:window,button:0,buttons:1,clientX:x,clientY:y};
+  handle.dispatchEvent(new MouseEvent('mousedown',options));
+  for(let step=1;step<=10;step++){document.documentElement.dispatchEvent(new MouseEvent('mousemove',{...options,clientY:y+delta*step/10}));await sleep(20);}
+  document.documentElement.dispatchEvent(new MouseEvent('mouseup',{...options,buttons:0,clientY:y+delta}));
+  document.documentElement.dispatchEvent(new PointerEvent('pointerup',{...options,buttons:0,clientY:y+delta,pointerId:1,pointerType:'mouse'}));
+  await sleep(200);
+ };
  let api;
  try {
   await wait(()=>window.go?.main?.App&&q('[data-testid="chart-cell"]'),'native bridge and chart');api=window.go.main.App;
@@ -170,10 +180,15 @@ const desktopSmokeJavaScript = `async function(phase) {
    await wait(()=>chartShape(q('[data-testid="chart-cell"]')).canvasRows===report.beforeIndicators.canvasRows+1,'MACD separate native pane');
    report.afterIndicators=chartShape(q('[data-testid="chart-cell"]'));
    check(report.afterIndicators.canvases>report.beforeIndicators.canvases,'MACD creates additional pane canvases',report.afterIndicators);
+   const beforeResize=paneHeights(q('[data-testid="chart-cell"]'));
+   await resizeMACD(q('[data-testid="chart-cell"]'),-85);
    await flush();
    const weeklySaved=await api.LoadWorkspace();
    check(weeklySaved.workspace.tabs[0].charts[0].timeframe==='1w','weekly timeframe persisted through Wails to SQLite',weeklySaved.workspace.tabs[0].charts[0].timeframe);
    verifyIndicators(weeklySaved.workspace.tabs[0].charts[0],'all four indicator defaults persisted through Wails to SQLite');
+   const macdSaved=weeklySaved.workspace.tabs[0].charts[0].indicators.find(indicator=>indicator.type==='macd'),resizedHeights=paneHeights(q('[data-testid="chart-cell"]'));
+   report.macdPane={before:beforeResize,after:resizedHeights,paneStretchFactor:macdSaved.paneStretchFactor};
+   check(Number.isFinite(macdSaved.paneStretchFactor)&&resizedHeights[1]>beforeResize[1]+50&&Math.abs(resizedHeights[1]/resizedHeights[0]-macdSaved.paneStretchFactor)<.025,'resized MACD height persists through Wails to SQLite',report.macdPane);
    report.indicatorRevision=weeklySaved.revision;
    await select('[aria-label="Grid layout"]','3x3');
    check(qa('[data-testid="chart-cell"]').length===1&&qa('[data-testid="chart-placeholder"]').length===8,'3×3 adds eight placeholders only',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});
@@ -240,6 +255,10 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(qa('[data-testid="chart-cell"]').map(chart=>chart.querySelectorAll('.indicator-chip').length).join(',')==='5,1,1','restart renders every chart own indicator configuration',qa('[data-testid="chart-cell"]').map(chart=>chart.querySelectorAll('.indicator-chip').length));
    await wait(()=>{const cells=qa('[data-testid="chart-cell"]'),first=chartShape(cells[0]),second=chartShape(cells[1]);return second.canvases>0&&first.canvases>second.canvases&&first.canvasRows===second.canvasRows+1;},'restart renders the separate MACD pane');
    report.restoredIndicatorChart=chartShape(qa('[data-testid="chart-cell"]')[0]);
+   const restoredMACD=initial.workspace.tabs[0].charts[0].indicators.find(indicator=>indicator.type==='macd');
+   await wait(()=>{const heights=paneHeights(qa('[data-testid="chart-cell"]')[0]);return heights.length===2&&Math.abs(heights[1]/heights[0]-restoredMACD.paneStretchFactor)<.04;},'restored MACD pane height ratio');
+   report.restoredMACDPane={heights:paneHeights(qa('[data-testid="chart-cell"]')[0]),paneStretchFactor:restoredMACD.paneStretchFactor};
+   check(Number.isFinite(restoredMACD.paneStretchFactor)&&restoredMACD.paneStretchFactor>.2,'restart restores the resized MACD pane from SQLite',report.restoredMACDPane);
    check(initial.workspace.chartRightGap?.unit==='pixels'&&initial.workspace.chartRightGap.value===79,'restart restores the saved pixel gap from SQLite',initial.workspace.chartRightGap);
    await click('[aria-label="Open settings"]');
    check(q('[aria-label="Chart right gap"]').value==='79'&&q('[aria-label="Chart right gap unit"]').value==='pixels','native Settings restores the saved value and unit');

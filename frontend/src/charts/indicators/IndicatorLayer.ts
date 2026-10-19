@@ -1,9 +1,10 @@
-import {HistogramSeries,LineSeries,LineStyle,type IChartApi,type ISeriesApi,type PriceFormatCustom,type UTCTimestamp} from 'lightweight-charts';
+import {HistogramSeries,LineSeries,LineStyle,type IChartApi,type IPaneApi,type ISeriesApi,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
 import {CloudPrimitive} from './CloudPrimitive';
 import {ema,ichimoku,macd,sma,type IndicatorPoint,type MACDValues} from './math';
 
-interface Layer {type:IndicatorConfig['type'];lines:ISeriesApi<'Line'>[];histogram?:ISeriesApi<'Histogram'>;cloud?:CloudPrimitive}
+interface Layer {type:IndicatorConfig['type'];lines:ISeriesApi<'Line'>[];histogram?:ISeriesApi<'Histogram'>;cloud?:CloudPrimitive;pane?:IPaneApi<Time>}
+const defaultPaneRatio=.15; // LWC starts the main pane at factor 2; the original MACD factor was .3.
 const colors={sma:'#e9af55',ema:'#48a9f8',ichimoku:'#4387ef',macd:'#48a9f8'};
 const lineData=(points:readonly IndicatorPoint[])=>points.map(point=>({time:point.time as UTCTimestamp,value:point.value}));
 function macdFormat(values:MACDValues):PriceFormatCustom{
@@ -19,7 +20,38 @@ export class IndicatorLayer {
  private readonly layers=new Map<string,Layer>();
  private configKey='';
  private disposed=false;
- constructor(private readonly chart:IChartApi,_mainSeries:ISeriesApi<'Candlestick'>){}
+ private previousBars:readonly Candle[]|null=null;
+ private previousTimeframe:Interval|null=null;
+ private observer:ResizeObserver|null=null;
+ private observeFrame:number|undefined;
+ private resizeTimer:ReturnType<typeof setTimeout>|undefined;
+ constructor(private readonly chart:IChartApi,_mainSeries:ISeriesApi<'Candlestick'>,private readonly onPaneResize?:()=>void){
+  if(onPaneResize&&typeof ResizeObserver!=='undefined')this.observer=new ResizeObserver(()=>{
+   if(this.resizeTimer!==undefined)return;
+   this.resizeTimer=setTimeout(()=>{this.resizeTimer=undefined;if(!this.disposed)this.onPaneResize?.();},100);
+  });
+ }
+ private observePanes(){
+  if(!this.observer||this.observeFrame!==undefined)return;
+  this.observeFrame=requestAnimationFrame(()=>{
+   this.observeFrame=undefined;if(this.disposed)return;
+   this.observer!.disconnect();
+   for(const pane of this.chart.panes()){const element=pane.getHTMLElement();if(element)this.observer!.observe(element);}
+  });
+ }
+ /** Read live factors rather than rounded heights so window resizing cannot change the saved preference. */
+ capturePaneLayout(configs:readonly IndicatorConfig[]):IndicatorConfig[]|null{
+  if(this.disposed||!configs.some(config=>config.type==='macd'))return null;
+  const main=this.chart.panes()[0]?.getStretchFactor();if(!main||!Number.isFinite(main))return null;
+  let changed=false;
+  const result=configs.map(config=>{
+   const pane=this.layers.get(config.id)?.pane;if(config.type!=='macd'||!pane)return config;
+   const ratio=Math.max(.001,Math.min(1000,Number((pane.getStretchFactor()/main).toFixed(8))));
+   if(!Number.isFinite(ratio)||Math.abs(ratio-(config.paneStretchFactor??defaultPaneRatio))<.00000001)return config;
+   changed=true;return {...config,paneStretchFactor:ratio};
+  });
+  return changed?result:null;
+ }
  private addLine(color:string,title:string,paneIndex=0){return this.chart.addSeries(LineSeries,{color,title,lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false},paneIndex);}
  private create(config:IndicatorConfig):Layer{
   const color=config.color||colors[config.type];
@@ -29,12 +61,12 @@ export class IndicatorLayer {
    const cloud=new CloudPrimitive();lines[2].attachPrimitive(cloud);return {type:config.type,lines,cloud};
   }
   // Each MACD owns a distinct pane; its scale stays linear and independent of the chart price scale.
-  const pane=this.chart.addPane(),index=pane.paneIndex();pane.setStretchFactor(.3);
+  const pane=this.chart.addPane(),index=pane.paneIndex();pane.setStretchFactor(this.chart.panes()[0].getStretchFactor()*(config.paneStretchFactor??defaultPaneRatio));
   const histogram=this.chart.addSeries(HistogramSeries,{title:'MACD histogram',base:0,priceLineVisible:false,lastValueVisible:false,priceFormat:macdFormat({macd:[],signal:[],histogram:[]})},index);
   const lines=[this.addLine(color,'MACD',index),this.addLine('#e9af55','MACD signal',index)];
   lines[0].createPriceLine({price:0,color:'#81909e',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
   histogram.priceScale().applyOptions({mode:0,autoScale:true,scaleMargins:{top:.12,bottom:.12}});
-  return {type:config.type,lines,histogram};
+  return {type:config.type,lines,histogram,pane};
  }
  private remove(id:string){
   const layer=this.layers.get(id);if(!layer)return;
@@ -45,7 +77,8 @@ export class IndicatorLayer {
  }
  update(bars:readonly Candle[],configs:readonly IndicatorConfig[],timeframe:Interval,preserveViewport=true):void{
   if(this.disposed)return;
-  const nextKey=JSON.stringify(configs),changed=nextKey!==this.configKey;
+  const nextKey=JSON.stringify(configs.map(config=>({id:config.id,type:config.type,parameters:config.parameters,color:config.color}))),changed=nextKey!==this.configKey;
+  if(!changed&&bars===this.previousBars&&timeframe===this.previousTimeframe)return;
   // Historical charts preserve their absolute time window. Live charts keep their zoom and re-anchor the workspace gap.
   const range=changed&&preserveViewport?this.chart.timeScale().getVisibleRange():null;
   const expected=new Map(configs.map(config=>[config.id,config]));
@@ -71,7 +104,9 @@ export class IndicatorLayer {
    }
   }
   this.configKey=nextKey;
+  this.previousBars=bars;this.previousTimeframe=timeframe;
+  if(changed)this.observePanes();
   if(range&&changed)this.chart.timeScale().setVisibleRange(range);
  }
- dispose():void{if(this.disposed)return;for(const id of [...this.layers.keys()])this.remove(id);this.disposed=true;}
+ dispose():void{if(this.disposed)return;this.disposed=true;if(this.observeFrame!==undefined)cancelAnimationFrame(this.observeFrame);if(this.resizeTimer!==undefined)clearTimeout(this.resizeTimer);this.observer?.disconnect();for(const id of [...this.layers.keys()])this.remove(id);}
 }

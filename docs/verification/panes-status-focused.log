@@ -1,0 +1,21 @@
+
+> cryptodesk-frontend@1.0.0 test:e2e
+> playwright test panes-status.spec.ts
+
+[WebServer] (node:1797754) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1797885) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1797987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:1798095) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/panes-status.spec.ts:31:1 › healthy public-data details stay in the footer while the crosshair is over future cloud space (944ms)
+  ✓  2 e2e/panes-status.spec.ts:54:1 › loading and failed feeds keep their central connection and retry messages (551ms)
+  ✓  3 e2e/panes-status.spec.ts:67:1 › a dragged MACD height survives edits, tab switches, viewport resize and restart without new feed leases (4.5s)
+  ✓  4 e2e/panes-status.spec.ts:93:1 › multiple MACD panes retain their own sizes when an earlier pane is removed (4.0s)
+
+  4 passed (13.9s)

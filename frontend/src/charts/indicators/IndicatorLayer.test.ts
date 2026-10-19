@@ -5,20 +5,39 @@ import {IndicatorLayer} from './IndicatorLayer';
 
 function chartHarness(){
  type FakeSeries={data:{time:number;value:number;color?:string}[];options:Record<string,unknown>;setData:ReturnType<typeof vi.fn>;applyOptions:ReturnType<typeof vi.fn>;createPriceLine:ReturnType<typeof vi.fn>;priceScale:()=>{applyOptions:ReturnType<typeof vi.fn>};attachPrimitive:ReturnType<typeof vi.fn>;detachPrimitive:ReturnType<typeof vi.fn>;priceToCoordinate:(price:number)=>number};
- type Pane={series:Set<FakeSeries>;paneIndex:()=>number;setStretchFactor:ReturnType<typeof vi.fn>};
+ type Pane={series:Set<FakeSeries>;factor:number;paneIndex:()=>number;setStretchFactor:ReturnType<typeof vi.fn>;getStretchFactor:()=>number;getHTMLElement:()=>null};
  const panes:Pane[]=[],removed:unknown[]=[],range={from:1000,to:4500},restore=vi.fn(),scale={getVisibleRange:()=>range,setVisibleRange:restore,timeToCoordinate:(time:number)=>time};
- function makePane():Pane{const pane:Pane={series:new Set(),paneIndex:()=>panes.indexOf(pane),setStretchFactor:vi.fn()};panes.push(pane);return pane;}
+ function makePane():Pane{const pane:Pane={series:new Set(),factor:panes.length?1:2,paneIndex:()=>panes.indexOf(pane),setStretchFactor:vi.fn((factor:number)=>{pane.factor=factor;}),getStretchFactor:()=>pane.factor,getHTMLElement:()=>null};panes.push(pane);return pane;}
  function makeSeries(options:unknown,pane:Pane):FakeSeries{
   const series:FakeSeries={data:[],options:options as Record<string,unknown>,setData:vi.fn((data:{time:number;value:number;color?:string}[])=>{series.data=data;}),applyOptions:vi.fn(),createPriceLine:vi.fn(),priceScale:()=>({applyOptions:vi.fn()}),attachPrimitive:vi.fn((primitive:{attached:(value:unknown)=>void})=>primitive.attached({chart,series,requestUpdate:vi.fn()})),detachPrimitive:vi.fn((primitive:{detached:()=>void})=>primitive.detached()),priceToCoordinate:(price:number)=>price};pane.series.add(series);return series;
  }
  const first=makePane(),main=makeSeries({},first);
- const chart={timeScale:()=>scale,addPane:makePane,addSeries:vi.fn((_definition:unknown,options:unknown,index=0)=>makeSeries(options,panes[index])),removeSeries:vi.fn((series:ReturnType<typeof makeSeries>)=>{removed.push(series);const index=panes.findIndex(pane=>pane.series.has(series));if(index<0)throw Error('Removing an already removed series');panes[index].series.delete(series);if(index>0&&!panes[index].series.size)panes.splice(index,1);})};
+ const chart={timeScale:()=>scale,panes:()=>panes,addPane:makePane,addSeries:vi.fn((_definition:unknown,options:unknown,index=0)=>makeSeries(options,panes[index])),removeSeries:vi.fn((series:ReturnType<typeof makeSeries>)=>{removed.push(series);const index=panes.findIndex(pane=>pane.series.has(series));if(index<0)throw Error('Removing an already removed series');panes[index].series.delete(series);if(index>0&&!panes[index].series.size)panes.splice(index,1);})};
  return {chart:chart as unknown as IChartApi,main:main as unknown as ISeriesApi<'Candlestick'>,panes,removed,restore};
 }
 const candles:Candle[]=Array.from({length:80},(_,i)=>({time:1000+i*60,open:i+10,high:i+12,low:i+9,close:i+11,volume:5,closed:true,quality:'authoritative',sourceRevision:1}));
 const config=(id:string,type:IndicatorConfig['type'],parameters:IndicatorConfig['parameters']={}):IndicatorConfig=>({id,type,parameters});
 
 describe('indicator series ownership',()=>{
+ it('captures every resized MACD ratio without resetting it on ticks, parameter edits or persistence echoes',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('one','macd'),config('two','macd')];
+  layer.update(candles,configs,'1m');expect(h.panes.map(pane=>pane.factor)).toEqual([2,.3,.3]);expect(layer.capturePaneLayout(configs)).toBeNull();
+  h.panes[0].factor=1.2;h.panes[1].factor=1.1;
+  const resized=layer.capturePaneLayout(configs)!;expect(resized[0].paneStretchFactor).toBeCloseTo(1.1/1.2,8);expect(resized[1].paneStretchFactor).toBe(.25);expect(configs[0].paneStretchFactor).toBeUndefined();
+  const firstSeries=[...h.panes[1].series][1],writes=firstSeries.setData.mock.calls.length;
+  layer.update(candles,resized,'1m');expect(firstSeries.setData).toHaveBeenCalledTimes(writes);expect(h.restore).toHaveBeenCalledTimes(1);
+  // A newer pointer movement can precede the React render acknowledging an earlier capture.
+  h.panes[1].factor=1.3;layer.update(candles,resized,'1m');expect(h.panes[1].factor).toBe(1.3);
+  layer.update([...candles.slice(0,-1),{...candles.at(-1)!,close:200}],resized,'1m');expect(h.panes[1].factor).toBe(1.3);
+  layer.update(candles,[{...resized[0],parameters:{fast:5,slow:20,signal:4}},resized[1]],'1m');expect(h.panes[1].factor).toBe(1.3);
+ });
+ it('restores ratios by indicator identity and keeps the surviving pane after an earlier MACD is removed',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[{...config('one','macd'),paneStretchFactor:.8},{...config('two','macd'),paneStretchFactor:1.2}];
+  layer.update(candles,configs,'1m');expect(h.panes.map(pane=>pane.factor)).toEqual([2,1.6,2.4]);expect(layer.capturePaneLayout(configs)).toBeNull();
+  const survivor=h.panes[2];layer.update(candles,[configs[1]],'1m');expect(h.panes[1]).toBe(survivor);expect(survivor.factor).toBe(2.4);
+  h.panes[0].factor=1;const capture=layer.capturePaneLayout([configs[1]])!;expect(capture[0]).toMatchObject({id:'two',paneStretchFactor:2.4});
+  layer.dispose();expect(layer.capturePaneLayout(configs)).toBeNull();
+ });
  it('keeps separate MACD panes and price overlays, reuses series on updates, and removes exactly its own resources',()=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('average','sma',{period:5}),config('cloud','ichimoku'),config('momentum-1','macd'),config('momentum-2','macd',{fast:3,slow:6,signal:2})];
   layer.update(candles,configs,'1m');expect(h.panes.map(pane=>pane.series.size)).toEqual([7,3,3]);expect(h.restore).toHaveBeenCalledWith({from:1000,to:4500});

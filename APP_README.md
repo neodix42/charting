@@ -80,11 +80,15 @@ Each chart has an **Indicators** dropdown. Select SMA, EMA, Ichimoku Cloud or MA
 | Ichimoku Cloud | Conversion 9, base 26, leading span B 52, displacement 26 | Conversion/base/leading/lagging lines and green/red cloud between the leading spans |
 | MACD | Fast 12, slow 26, signal 9 | Separate pane with MACD/signal lines, histogram and zero baseline |
 
+Drag the separator above a MACD pane to resize it. Each MACD instance saves its own height relative to the main price pane, restoring the same proportions after tab switches, parameter edits, restart and JSON export/import. The proportions adapt when the chart or window is resized.
+
 Periods count chart candles, from 1 to 2,000; Ichimoku displacement is 0–500 bars. MACD fast must be smaller than slow. Color controls the indicator's primary line. Long periods request older candles automatically, with a visible warm-up/history status when available data is insufficient. Calculations use the loaded candle window, including the current provisional candle, and update after candle corrections. EMA seeds from a full SMA window before applying `2 / (period + 1)`; MACD's signal uses the same EMA convention. Ichimoku displaces leading spans forward and the close backward by the configured number of bars, extrapolating future timestamps only for the projected cloud. The cloud contains derived values, never invented future prices. Earlier history can change an EMA's seed, so results can differ slightly from chart services with a different seed/history window.
 
 Existing workspaces without an `indicators` field continue to load unchanged. Indicator calculations are local; no additional account, data feed or subscription is required. Indicator changes reuse the existing chart and feed.
 
 Only the active tab mounts charts and requests leases. Identical feeds share data and provider sockets; hidden tab leases release after a cancellable two-second grace. Cached data and chart settings remain. A larger grid never creates hidden subscriptions.
+
+Live status and public-data details stay in the chart’s bottom-left footer, including when the cursor is over blank space or a future cloud span. Connection progress and feed failures retain their visible messages and retry controls.
 
 Provider failures remain visible in their chart. Retry or reselect without losing configuration. Prices are never synthesized as a fallback. Coinbase live intervals derive from deduplicated trades, rather than relabelling its five-minute candle channel. An initial/reconnected partial bucket has provisional volume: the last REST snapshot or explicitly observed-only trades, never REST plus all buffered trade volume. Public Coinbase aliased USDC products are labelled/rejected; choose the actual USD product explicitly.
 
