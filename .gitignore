@@ -47,3 +47,4 @@ release/
 *.sqlite-wal
 *.sqlite-shm
 *.lockfile
+__pycache__/

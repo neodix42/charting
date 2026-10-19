@@ -10,7 +10,8 @@ if [[ $# -gt 0 ]]; then
     printf '%s\n' \
       'Usage: ./build.sh' \
       'Builds the production Linux desktop app, archive and checksums at repo root.' \
-      'Requires Go, Node/npm and GTK3/WebKitGTK 4.1 build dependencies.' \
+      'Requires Go, Python 3.12+ and GTK3/WebKitGTK 4.1 build dependencies.' \
+      'Node/npm are checked and downloaded into .tools/ if needed.' \
       'See APP_README.md for the optional project-local native SDK.'
     exit 0
   fi

@@ -43,3 +43,11 @@ Run the normal release with an isolated --data-dir and complete the remaining ma
 Added executable `build.sh`. It delegates to the pinned production build, preserves existing Wails binding contents/permissions, and publishes `cryptodesk`, `cryptodesk-0.1.0-linux-amd64.tar.gz` and `cryptodesk-SHA256SUMS` in the repository root. `APP_README.md` documents direct launch and compatible GTK/WebKit runtime requirements.
 
 Verified the script from `/tmp`, shell syntax/help/invalid arguments, root checksums, extracted archive contents, executable `--help` and linked-library resolution. Existing uncommitted binding permission changes were preserved. The build passed; this build-script change did not rerun the full GUI/manual application matrix.
+
+## Terminal Node/npm fix — 2026-10-19
+
+The regular terminal had `/usr/bin/node` but no npm; previous builds inherited npm from the IDE environment. Build/dev/test/smoke scripts now check both tools and, when needed, install the official pinned Node 24.19.0 bundle with npm under ignored `.tools/`, verifying the archive against a SHA-256 pinned from nodejs.org. The selected toolchain PATH reaches Wails and the version manifest. No system package or shell configuration changes are required. Cached tools work without another download.
+
+The sanitized-PATH build also exposed binding generation opening the live workspace. A separate `bindings` entry point now reflects the facade without opening storage or starting services; production startup is unchanged.
+
+Verified: `env PATH=/usr/bin:/bin ./build.sh` succeeds through production packaging and root checksum verification. `env PATH=/usr/bin:/bin scripts/test.sh` passes seven toolchain regressions, Go race/vet checks, the binding-generation regression (fresh and locked isolated profiles, all 15 exported API methods), frontend typecheck/lint/23 unit tests and production build. Cached Node/npm selection also passed with unreachable HTTP/HTTPS proxies. Existing binding contents and permissions were preserved. Full manual GUI behavior was not retested for this build-tooling fix.

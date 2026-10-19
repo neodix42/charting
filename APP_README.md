@@ -23,7 +23,9 @@ This writes the binary under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local
 
 Pinned versions: Go module/CLI Wails 2.17.0; React 19.3.1; Lightweight Charts 5.2.1; SQLite Go driver modernc.org/sqlite 1.60.1. This checkout was built with Go 1.26.8, Node 24.19.0 and npm 11.17.0. Frontend and Go lockfiles are included.
 
-Install Go, Node LTS, a C compiler and pkg-config. Linux native builds also require GTK3 and WebKitGTK 4.1 development packages; the standard Ubuntu package names are `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`. Installing OS packages is a separate user/admin action.
+Install Go, Python 3.12+, a C compiler and pkg-config. Build/dev/test scripts check that both Node and npm run. If either is missing or incompatible, they download the official Node 24.19.0 bundle (including npm), verify its pinned SHA-256, and reuse it under `.tools/` on later runs. The selected `bin` directory is exported to Wails and its child processes. No shell-profile edits, global npm installation or IDE runtime paths are needed. Initial download requires access to `nodejs.org`; alternatively provide Node 24 LTS with npm on your terminal's PATH.
+
+Linux native builds also require GTK3 and WebKitGTK 4.1 development packages; the standard Ubuntu package names are `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`. Installing OS packages is a separate user/admin action.
 
 On an Ubuntu machine which already has the corresponding runtime libraries, `scripts/bootstrap-native-sdk.sh` is an optional unprivileged alternative: it downloads exact currently resolved Ubuntu development-package archives and extracts them under ignored `.tools/native`; it does not install packages or change the OS. `scripts/native-env.sh` scopes those headers/linker paths to the invoking process. This SDK path was used in the test environment. Repositories/network access are needed for bootstrap; package versions are recorded in `.tools/native/package-versions.txt`.
 
@@ -36,6 +38,8 @@ cd frontend && npm run test:e2e
 ```
 
 `./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-0.1.0-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
+
+Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
 
 The underlying `scripts/build-linux.sh` also retains `build/bin/cryptodesk` and the distribution under `release/`, including checksums, licenses and a version manifest. Build scripts never use sudo or a system package installation. The CLI is installed into project-local `.tools/` if absent. Normal builds contain local assets and no fixture bridge.
 

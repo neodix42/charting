@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+python3 -m unittest discover -s scripts -p 'test_node_toolchain.py'
+require_node
 go test -race ./internal/... ./cmd/...
+go test -tags bindings .
 go vet ./internal/... ./cmd/...
 cd "$APP_ROOT/frontend"
 npm ci

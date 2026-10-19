@@ -2,6 +2,7 @@
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 require_native
+require_node
 require_wails
 "$APP_ROOT/.tools/wails" build -tags webkit2_41 -trimpath "$@"
 ARTIFACT_DIR="$APP_ROOT/release/cryptodesk-0.1.0-linux-amd64"

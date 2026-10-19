@@ -4,11 +4,12 @@
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
-source scripts/native-env.sh
+source scripts/common.sh
 if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
  echo 'Desktop smoke blocked: DISPLAY and WAYLAND_DISPLAY are absent.' >&2
  exit 2
 fi
+require_node
 artifact_dir="${CRYPTODESK_DESKTOP_EVIDENCE:-$repo_root/docs/verification/desktop-$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$artifact_dir" build/bin
 artifact_dir="$(cd "$artifact_dir" && pwd)"
