@@ -1,0 +1,17 @@
+# Period controls and indicators — 2026-10-19
+
+The chart header uses horizontal `1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w` buttons. Each chart has independent SMA, EMA, Ichimoku Cloud and MACD settings, edited through a dialog before applying. SMA/EMA and Ichimoku overlay price; MACD has an independent linear pane. Configurations survive SQLite restart and JSON export/import. Original workspace fixtures remain valid without an indicators field; first launch remains one tab and one chart.
+
+## Evidence
+
+- `env PATH=/usr/bin:/bin scripts/test.sh`: PASS seven toolchain tests, Go race/vet and binding checks, TypeScript/ESLint, 41 frontend unit tests and production asset build. [Log](indicators-deterministic.log).
+- `cd frontend && npm run test:e2e`: PASS 14/14, no skipped or flaky tests; [results](indicators-browser/results.json), [log](indicators-browser.log), [all four indicators](indicators-browser/indicators-all.png). This includes parameter cancel/validation/edit/removal, independent chart settings, 1w restart, long-period warm-up, insufficient history and stale response rejection. One earlier run was interrupted by a source-change reload during the capacity test ([log](indicators-browser-interrupted.log)); the complete rerun used frozen source and passed.
+- `scripts/smoke-desktop.sh`: PASS actual Wails/WebKit/Go/SQLite on this Ubuntu Wayland desktop; [fresh](desktop-20261019T172326Z/fresh.json), [restore](desktop-20261019T172326Z/restore.json), [capacity](desktop-20261019T172326Z/capacity.json). Fresh verifies seven buttons on one row, weekly selection, all four dialogs and separate MACD pane; restore verifies exact defaults/colors/IDs and independent per-chart settings. Capacity verifies 20 tabs, 180 configurations, nine mounted charts and 200 switches with cleanup. Profiles are isolated from user data.
+- `go run ./cmd/smoke -duration 15s -stream-interval 1w`: PASS discovery, all seven historical intervals and live weekly updates for Binance, Bybit and Coinbase. [Live log](weekly-live.jsonl). Observed weekly updates: 8/12/33 respectively; no weekly boundary occurred during the run.
+- Formula/renderer tests exercise full-window SMA/EMA seeds, corrections, Ichimoku displacement without future price input, cloud crossings/clipping, MACD histogram/signals, tiny-price precision and pane disposal. History tests cover period 2,000 pagination, insufficient provider data and rejection of stale timeframe responses.
+- `source scripts/native-env.sh; go test -race -tags webkit2_41 ./...; go vet -tags webkit2_41 ./...`: PASS. JSON Schema draft 2020-12 validation and all three original workspace examples: PASS.
+- `env PATH=/usr/bin:/bin ./build.sh`: PASS production Wails build and root portable packaging; [log](indicators-build.log). Root checksums pass, the archive executable matches the root executable, `./cryptodesk --help` runs, and all six existing generated binding files retain their exact contents and permissions.
+
+## Verification limits
+
+Browser tests use the explicit test bridge; native smoke uses real feeds and the real Wails bridge. Automated tests do not establish the complete manual high-DPI, suspend/reconnect or other-distribution matrix. Weekly rollover is tested deterministically but was not observed live. Indicators use the loaded bounded candle history, including provisional candles; EMA seeds can differ from providers with longer historical windows.

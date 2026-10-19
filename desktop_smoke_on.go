@@ -136,6 +136,10 @@ const desktopSmokeJavaScript = `async function(phase) {
  const click=async(selector)=>{const element=await wait(()=>q(selector),selector);if(element.disabled)throw Error('Disabled control: '+selector);element.click();await sleep(100);};
  const select=async(selector,value)=>{const element=await wait(()=>q(selector),selector);Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(element,value);element.dispatchEvent(new Event('change',{bubbles:true}));await sleep(100);};
  const flush=async()=>{await click('.save-indicator');await wait(()=>q('.save-indicator')?.textContent.includes('All changes saved'),'acknowledged save');};
+ const indicatorDefaults={sma:{period:20},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
+ const indicatorNames={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
+ const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
+ const chartShape=element=>{const host=element.querySelector('[data-testid="chart-canvas"]'),table=host?.querySelector('.tv-lightweight-charts > table');return {canvases:host?.querySelectorAll('canvas').length||0,canvasRows:table?Array.from(table.rows).filter(row=>row.querySelector('canvas')).length:0};};
  let api;
  try {
   await wait(()=>window.go?.main?.App&&q('[data-testid="chart-cell"]'),'native bridge and chart');api=window.go.main.App;
@@ -146,11 +150,33 @@ const desktopSmokeJavaScript = `async function(phase) {
   if(phase==='fresh'){
    check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
+   await wait(()=>chartShape(q('[data-testid="chart-cell"]')).canvases>0,'initial native chart canvases');
+   report.beforeIndicators=chartShape(q('[data-testid="chart-cell"]'));
+   const periods=qa('[data-testid="chart-cell"] [aria-label="Timeframe"] button'),tops=periods.map(button=>button.getBoundingClientRect().top);
+   check(periods.length===7&&Math.max(...tops)-Math.min(...tops)<1&&!q('select[aria-label="Timeframe"]'),'seven horizontal timeframe buttons replace the dropdown',periods.map(button=>button.textContent));
+   await click('[data-testid="chart-cell"] [aria-label="Timeframe 1w"]');
+   check(q('[data-testid="chart-cell"] [aria-label="Timeframe 1w"]').getAttribute('aria-pressed')==='true','weekly timeframe selection is visible');
+   for(const [type,name] of Object.entries(indicatorNames)){
+    const before=qa('[data-testid="chart-cell"] .indicator-chip').length;
+    await select('[data-testid="chart-cell"] [aria-label="Indicators"]',type);
+    await wait(()=>q('[role="dialog"][aria-label="'+name+' parameters"]'),'native '+name+' parameter dialog');
+    check(qa('[data-testid="chart-cell"] .indicator-chip').length===before,name+' waits for parameter confirmation',before);
+    await click('[role="dialog"] button[type="submit"]');
+    await wait(()=>!q('[role="dialog"]')&&qa('[data-testid="chart-cell"] .indicator-chip').length===before+1,'apply '+name+' to chart');
+   }
+   await wait(()=>chartShape(q('[data-testid="chart-cell"]')).canvasRows===report.beforeIndicators.canvasRows+1,'MACD separate native pane');
+   report.afterIndicators=chartShape(q('[data-testid="chart-cell"]'));
+   check(report.afterIndicators.canvases>report.beforeIndicators.canvases,'MACD creates additional pane canvases',report.afterIndicators);
+   await flush();
+   const weeklySaved=await api.LoadWorkspace();
+   check(weeklySaved.workspace.tabs[0].charts[0].timeframe==='1w','weekly timeframe persisted through Wails to SQLite',weeklySaved.workspace.tabs[0].charts[0].timeframe);
+   verifyIndicators(weeklySaved.workspace.tabs[0].charts[0],'all four indicator defaults persisted through Wails to SQLite');
+   report.indicatorRevision=weeklySaved.revision;
    await select('[aria-label="Grid layout"]','3x3');
    check(qa('[data-testid="chart-cell"]').length===1&&qa('[data-testid="chart-placeholder"]').length===8,'3×3 adds eight placeholders only',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});
    await click('[aria-label="Add chart"]');await click('[aria-label="Add chart"]');
    check(qa('[data-testid="chart-cell"]').length===3,'each Add chart creates exactly one chart',qa('[data-testid="chart-cell"]').length);
-   await select('[data-testid="chart-cell"] [aria-label="Timeframe"]','15m');
+   await click('[data-testid="chart-cell"] [aria-label="Timeframe 15m"]');
    await click('[data-testid="chart-cell"] [aria-label="Toggle volume"]');
    await click('[aria-label="Add tab"]');
    await wait(()=>qa('[role="tab"]').length===2,'second tab');
@@ -160,12 +186,19 @@ const desktopSmokeJavaScript = `async function(phase) {
    const saved=await api.LoadWorkspace();
    check(saved.workspace.tabs.length===2&&saved.workspace.tabs[0].charts.length===3&&saved.workspace.tabs[1].charts.length===1,'small workspace saved with exact counts',saved.workspace.tabs.map(tab=>tab.charts.length));
    check(saved.workspace.tabs[0].charts[0].timeframe==='15m'&&!saved.workspace.tabs[0].charts[0].showVolume,'independent chart settings saved',saved.workspace.tabs[0].charts[0]);
+   verifyIndicators(saved.workspace.tabs[0].charts[0],'indicator settings survive chart and tab additions');
+   check(saved.workspace.tabs[0].charts.slice(1).every(chart=>!chart.indicators?.length)&&!saved.workspace.tabs[1].charts[0].indicators?.length,'new chart indicators remain independent',saved.workspace.tabs.map(tab=>tab.charts.map(chart=>chart.indicators?.length||0)));
    report.savedRevision=saved.revision;
   } else if(phase==='restore') {
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);
    check(qa('[data-testid="chart-cell"]').length===3&&qa('[data-testid="chart-placeholder"]').length===6,'only selected tab is mounted after restart',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});
    check(initial.workspace.tabs[0].charts[0].timeframe==='4h'&&!initial.workspace.tabs[0].charts[0].showVolume,'native close flushed the final immediate edit',initial.workspace.tabs[0].charts[0]);
+   verifyIndicators(initial.workspace.tabs[0].charts[0],'restart restores all four indicator types and parameters from SQLite');
+   check(q('[data-testid="chart-cell"] [aria-label="Timeframe 4h"]').getAttribute('aria-pressed')==='true','restart restores the selected horizontal timeframe');
+   check(qa('[data-testid="chart-cell"]')[0].querySelectorAll('.indicator-chip').length===4&&qa('[data-testid="chart-cell"]')[1].querySelectorAll('.indicator-chip').length===0,'restart renders indicator chips only on the configured chart');
+   await wait(()=>{const cells=qa('[data-testid="chart-cell"]'),first=chartShape(cells[0]),second=chartShape(cells[1]);return second.canvases>0&&first.canvases>second.canvases&&first.canvasRows===second.canvasRows+1;},'restart renders the separate MACD pane');
+   report.restoredIndicatorChart=chartShape(qa('[data-testid="chart-cell"]')[0]);
   }
   else if(phase==='capacity') {
    check(initial.workspace.tabs.length===20&&initial.workspace.tabs.every(tab=>tab.charts.length===9),'explicit imported maximum restores20tabs180charts',report.initialCounts);
@@ -198,7 +231,7 @@ const desktopSmokeJavaScript = `async function(phase) {
   if(phase==='fresh'&&report.passed){
    // Deliberately omit an explicit save: native prepare-close must capture and
    // acknowledge this last edit, which the restart phase verifies.
-   await select('[data-testid="chart-cell"] [aria-label="Timeframe"]','4h');
+   await click('[data-testid="chart-cell"] [aria-label="Timeframe 4h"]');
   }
   await api.DesktopSmokeClose();
  }

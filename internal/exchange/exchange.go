@@ -55,10 +55,28 @@ func RetryAt(err error) int64 {
 	return 0
 }
 func TimeframeSeconds(v string) int64 {
-	return map[string]int64{"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}[v]
+	return map[string]int64{"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800}[v]
 }
 
-var bybitIntervals = map[string]string{"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
+// BucketStart returns the UTC candle boundary containing timestamp. Exchange
+// weeks begin on Monday, whereas Unix-epoch division would begin on Thursday.
+// A nonpositive duration is invalid and returns timestamp unchanged.
+func BucketStart(timestamp, duration int64) int64 {
+	if duration <= 0 {
+		return timestamp
+	}
+	offset := int64(0)
+	if duration == 604800 {
+		offset = 345600 // Monday, 1970-01-05 00:00:00 UTC.
+	}
+	remainder := (timestamp - offset) % duration
+	if remainder < 0 {
+		remainder += duration
+	}
+	return timestamp - remainder
+}
+
+var bybitIntervals = map[string]string{"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D", "1w": "W"}
 var coinbaseIntervals = map[string]string{"1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE", "1h": "ONE_HOUR", "4h": "FOUR_HOUR", "1d": "ONE_DAY"}
 
 type publicAdapter struct {

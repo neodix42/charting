@@ -200,10 +200,10 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 		initial = false
 		from := repairFrom
 		if first {
-			from = (lastFetch.Unix()/duration - 499) * duration
+			from = BucketStart(lastFetch.Unix(), duration) - 499*duration
 		}
 		if from == 0 {
-			from = (lastFetch.Unix()/duration - 3) * duration
+			from = BucketStart(lastFetch.Unix(), duration) - 3*duration
 		}
 		go func() {
 			bars, clipped, err := a.reconcileHistory(ctx, k, from, time.Now().Unix()+1)
@@ -316,7 +316,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 				if message.state == "reconciling" || message.state == "offline" || message.state == "disconnected" {
 					trades.Discontinuity(now.Unix())
 					if repairFrom == 0 {
-						repairFrom = (now.Unix()/duration - 2) * duration
+						repairFrom = BucketStart(now.Unix(), duration) - 2*duration
 					}
 					if message.state == "reconciling" && now.Sub(lastFetch) > 2*time.Second {
 						fetch()

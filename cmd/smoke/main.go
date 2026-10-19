@@ -16,7 +16,13 @@ import (
 func main() {
 	providers := flag.String("providers", "binance,bybit,coinbase", "comma-separated public spot providers")
 	duration := flag.Duration("duration", 15*time.Second, "live observation duration per reachable provider")
+	streamInterval := flag.String("stream-interval", "1m", "live candle interval (including Monday-based 1w)")
 	flag.Parse()
+	liveStep := exchange.TimeframeSeconds(*streamInterval)
+	if liveStep <= 0 {
+		fmt.Fprintf(os.Stderr, "unsupported stream interval %q\n", *streamInterval)
+		os.Exit(2)
+	}
 	encoder := json.NewEncoder(os.Stdout)
 	failed := false
 	for _, provider := range strings.Split(*providers, ",") {
@@ -62,7 +68,7 @@ func main() {
 				k := domain.FeedKey{Exchange: provider, Market: "spot", Instrument: instrument, Timeframe: interval}
 				now := time.Now().Unix()
 				d := exchange.TimeframeSeconds(interval)
-				bars, err := a.History(ctx, k, (now/d-3)*d, now+1, 4)
+				bars, err := a.History(ctx, k, exchange.BucketStart(now, d)-3*d, now+1, 4)
 				if err != nil {
 					log("history/"+interval, map[string]any{"status": "blocked", "kind": exchange.ErrorKind(err), "error": err.Error()})
 					failed = true
@@ -76,8 +82,8 @@ func main() {
 			transitions := 0
 			first, last := int64(0), int64(0)
 			lastHealth := ""
-			startBucket := time.Now().Unix() / 60 * 60
-			err = a.Stream(liveCtx, domain.FeedKey{Exchange: provider, Market: "spot", Instrument: instrument, Timeframe: "1m"}, func(b []domain.Candle, h domain.Health) {
+			startBucket := exchange.BucketStart(time.Now().Unix(), liveStep)
+			err = a.Stream(liveCtx, domain.FeedKey{Exchange: provider, Market: "spot", Instrument: instrument, Timeframe: *streamInterval}, func(b []domain.Candle, h domain.Health) {
 				if h.State != lastHealth {
 					log("health", h)
 					lastHealth = h.State
@@ -100,7 +106,7 @@ func main() {
 				status = "unverified"
 				failed = true
 			}
-			log("stream", map[string]any{"status": status, "liveOrProvisionalUpdates": count, "observedBucketTransitions": transitions, "duration": duration.String(), "stop": fmt.Sprint(err)})
+			log("stream", map[string]any{"status": status, "interval": *streamInterval, "liveOrProvisionalUpdates": count, "observedBucketTransitions": transitions, "duration": duration.String(), "stop": fmt.Sprint(err)})
 		}()
 	}
 	if failed {

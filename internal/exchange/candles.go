@@ -60,7 +60,7 @@ func Normalize(candles []domain.Candle, duration int64) ([]domain.Candle, error)
 		if err := c.Validate(); err != nil {
 			return nil, err
 		}
-		if c.Time%duration != 0 {
+		if BucketStart(c.Time, duration) != c.Time {
 			return nil, fmt.Errorf("candle is not on UTC interval boundary")
 		}
 		prev, ok := m[c.Time]
@@ -156,7 +156,7 @@ type TradeAggregator struct {
 }
 
 func NewTradeAggregator(duration, attachedAt int64) *TradeAggregator {
-	return &TradeAggregator{Duration: duration, completeAfter: (attachedAt/duration + 1) * duration, buckets: map[int64]*tradeBucket{}, seen: map[string]int64{}, baselines: map[int64]domain.Candle{}, MaxTrades: 100000, MaxBuckets: 512}
+	return &TradeAggregator{Duration: duration, completeAfter: BucketStart(attachedAt, duration) + duration, buckets: map[int64]*tradeBucket{}, seen: map[string]int64{}, baselines: map[int64]domain.Candle{}, MaxTrades: 100000, MaxBuckets: 512}
 }
 func tradeBefore(a, b Trade) bool {
 	if !a.Time.Equal(b.Time) {
@@ -170,7 +170,7 @@ func tradeBefore(a, b Trade) bool {
 	return a.ID < b.ID
 }
 func (a *TradeAggregator) Discontinuity(at int64) {
-	a.completeAfter = (at/a.Duration + 1) * a.Duration
+	a.completeAfter = BucketStart(at, a.Duration) + a.Duration
 	a.Incomplete = true
 	for _, c := range a.baselines {
 		c.Quality = "provisional"
@@ -181,7 +181,10 @@ func (a *TradeAggregator) Apply(t Trade) (domain.Candle, bool, error) {
 	if t.ID == "" || len(t.ID) > 128 || t.Time.Unix() < 1230768000 || !t.Price.IsPositive() || t.Size.IsNegative() {
 		return domain.Candle{}, false, fmt.Errorf("invalid trade")
 	}
-	bucket := t.Time.Unix() / a.Duration * a.Duration
+	if a.Duration <= 0 {
+		return domain.Candle{}, false, fmt.Errorf("invalid trade interval")
+	}
+	bucket := BucketStart(t.Time.Unix(), a.Duration)
 	if _, exists := a.seen[t.ID]; exists {
 		return domain.Candle{}, false, nil
 	}

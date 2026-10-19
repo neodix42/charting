@@ -167,7 +167,7 @@ func TestAllIntervalUTCBoundaries(t *testing.T) {
 				t.Fatalf("boundary did not create 2 buckets: %#v", a.buckets)
 			}
 			for b := range a.buckets {
-				if b%d != 0 {
+				if BucketStart(b, d) != b {
 					t.Fatal("not UTC")
 				}
 			}

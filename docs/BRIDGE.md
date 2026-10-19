@@ -10,6 +10,8 @@ Listen to `market:update` before attaching. Each update contains `leaseId,chartI
 
 `feedKey` is `{exchange,market:"spot",instrument,timeframe}`; `bars` contain `{time,open,high,low,close,volume,closed,quality,sourceRevision}`. `health` is `{state,reason,lastMessageAt,lastTradeAt}`, timestamps in seconds. Imported JSON never controls request URLs. Errors are safe readable strings prefixed with their classification where applicable.
 
+Timeframes include `1w` (UTC Monday boundaries). Chart configuration optionally carries `indicators:[{id,type,parameters,color?}]`; the backend validates it with the workspace and persists it without opening additional feeds. Frontend calculations/rendering use the existing chart's candles. Weekly Coinbase history aggregates genuine daily candles rather than requesting an unsupported weekly granularity.
+
 Import/export use native file dialogs; import validation and confirmation precede a transaction with a bounded backup. Import/reset/recovery return a LoadWorkspace-shaped result. `GetBackups` lists safe recovery choices. `OpenTradingView` opens only the fixed HTTPS creator URL.
 
 A `prepare-close` event includes a one-use token. Frontend captures viewports, awaits autosave and calls `ConfirmClose(token,false)`; a failed save keeps the app open and supports retry or explicit discard. A ten-second timeout is failure, never success. `window:state` reports sampled changes in normal size/maximized state. Diagnostics describe actual adapter sockets, shared leases, queues, cache counts, revisions and frontend chart instances.

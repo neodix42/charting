@@ -8,7 +8,7 @@ Normative cardinality: tabs minItems=1/maxItems=20; charts minItems=1/maxItems=9
 are constructed in application code as one tab and one chart, not by JSON Schema `default`.
 
 Additional semantic validation:
-- UUIDs are valid and globally unique across workspace, tabs and charts.
+- UUIDs are valid and globally unique across workspace, tabs, charts and indicators.
 - activeTabId refers to an existing tab.
 - Actual charts fit the selected grid; only documented grid presets are accepted.
 - Row/column fraction array lengths match rows/columns; each sum is 1 within 1e-6.
@@ -27,3 +27,5 @@ not required for candlestick-based v1 completion.
 `tools/verify_bundle.py` checks shipped documents, checksums and important example invariants
 without installing anything. When Python jsonschema is already available, it also runs full
 Draft 2020-12 validation. It does not test the future Go implementation or live exchanges.
+
+The v1 shape now accepts `1w` and an optional per-chart `indicators` array. Its omission preserves legacy saved workspaces and exports. Each indicator has a UUID, type, exact integer parameter object, and optional six-digit hex color. Maximum 12 per chart; periods 1–2,000, displacement 0–500. MACD `fast < slow` is an additional semantic check. Unknown or irrelevant parameter names, null fields and malformed values are rejected. Only configuration is saved; computed indicator series remain runtime data. These additive fields need no SQLite table migration because the store already validates and commits complete workspace JSON snapshots.

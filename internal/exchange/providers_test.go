@@ -23,6 +23,9 @@ import (
 func TestProviderHistoriesAllIntervals(t *testing.T) {
 	for _, provider := range []string{"binance", "bybit", "coinbase"} {
 		for _, interval := range domain.Intervals {
+			if provider == "coinbase" && interval == "1w" {
+				continue // Derived daily-to-weekly history has separate coverage.
+			}
 			t.Run(provider+"/"+interval, func(t *testing.T) {
 				d := TimeframeSeconds(interval)
 				start := int64(1792368000)

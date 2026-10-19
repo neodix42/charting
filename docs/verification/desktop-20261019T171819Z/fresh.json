@@ -1,0 +1,343 @@
+{
+  "phase": "fresh",
+  "startedAt": "2026-10-19T17:18:22.785Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "first launch exactly one tab and chart",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "initial 1×1 grid",
+      "passed": true,
+      "actual": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1
+        ],
+        "columnFractions": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "seven horizontal timeframe buttons replace the dropdown",
+      "passed": true,
+      "actual": [
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1d",
+        "1w"
+      ]
+    },
+    {
+      "name": "weekly timeframe selection is visible",
+      "passed": true
+    },
+    {
+      "name": "SMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 0
+    },
+    {
+      "name": "EMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 1
+    },
+    {
+      "name": "Ichimoku Cloud waits for parameter confirmation",
+      "passed": true,
+      "actual": 2
+    },
+    {
+      "name": "MACD waits for parameter confirmation",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "MACD creates additional pane canvases",
+      "passed": true,
+      "actual": {
+        "canvases": 11,
+        "canvasRows": 3
+      }
+    },
+    {
+      "name": "weekly timeframe persisted through Wails to SQLite",
+      "passed": true,
+      "actual": "1w"
+    },
+    {
+      "name": "all four indicator defaults persisted through Wails to SQLite",
+      "passed": true,
+      "actual": [
+        {
+          "id": "050b9206-b621-4104-89b1-7bd80656aa7e",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51"
+        },
+        {
+          "id": "458c14de-dd9e-4cd3-b890-7b9ea1bc936d",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef"
+        },
+        {
+          "id": "194dca5c-a4a0-4604-a8c7-636e42ab2611",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "dacc3d71-c364-4b08-bb73-b67c926277f3",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef"
+        }
+      ]
+    },
+    {
+      "name": "3×3 adds eight placeholders only",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "placeholders": 8
+      }
+    },
+    {
+      "name": "each Add chart creates exactly one chart",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "new tab has exactly one chart and 1×1 grid",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "grid": "1x1"
+      }
+    },
+    {
+      "name": "small workspace saved with exact counts",
+      "passed": true,
+      "actual": [
+        3,
+        1
+      ]
+    },
+    {
+      "name": "independent chart settings saved",
+      "passed": true,
+      "actual": {
+        "id": "1d6b0909-c529-4bf9-80ff-294ce1a48327",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "15m",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": null,
+          "toSec": null,
+          "barSpacing": 6,
+          "rightOffset": 5
+        },
+        "indicators": [
+          {
+            "id": "050b9206-b621-4104-89b1-7bd80656aa7e",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51"
+          },
+          {
+            "id": "458c14de-dd9e-4cd3-b890-7b9ea1bc936d",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef"
+          },
+          {
+            "id": "194dca5c-a4a0-4604-a8c7-636e42ab2611",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "dacc3d71-c364-4b08-bb73-b67c926277f3",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef"
+          }
+        ]
+      }
+    },
+    {
+      "name": "indicator settings survive chart and tab additions",
+      "passed": true,
+      "actual": [
+        {
+          "id": "050b9206-b621-4104-89b1-7bd80656aa7e",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51"
+        },
+        {
+          "id": "458c14de-dd9e-4cd3-b890-7b9ea1bc936d",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef"
+        },
+        {
+          "id": "194dca5c-a4a0-4604-a8c7-636e42ab2611",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "dacc3d71-c364-4b08-bb73-b67c926277f3",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef"
+        }
+      ]
+    },
+    {
+      "name": "new chart indicators remain independent",
+      "passed": true,
+      "actual": [
+        [
+          4,
+          0,
+          0
+        ],
+        [
+          0
+        ]
+      ]
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-19T17:18:23.252382217Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 2877960,
+    "goHeapInUseBytes": 4456448,
+    "goVersion": "go1.26.8",
+    "goroutines": 17,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.89,
+    "processTreeRSSBytes": 519663616,
+    "processes": 3,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "beforeIndicators": {
+    "canvases": 7,
+    "canvasRows": 2
+  },
+  "afterIndicators": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "indicatorRevision": 2,
+  "savedRevision": 5,
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 5
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 2,
+      "cachedFeeds": 3,
+      "cachedCandles": 1480,
+      "historyRequests": 3,
+      "queueDepth": 0,
+      "resyncs": 3,
+      "sockets": 1,
+      "reconnects": 1,
+      "restRequests": 7
+    },
+    "mode": "public live data",
+    "persistedRevision": 5,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed no messages · trade unknownUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 1s ago · trade unknownUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 1s ago · trade unknownUTC"
+  ],
+  "finishedAt": "2026-10-19T17:18:25.170Z"
+}

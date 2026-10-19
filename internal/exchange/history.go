@@ -19,20 +19,23 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 	if limit <= 0 || limit > 1000 {
 		limit = 300
 	}
-	if a.provider == "coinbase" && limit > 350 {
+	if a.provider == "coinbase" && k.Timeframe != "1w" && limit > 350 {
 		limit = 350
 	}
 	if to <= 0 {
 		to = time.Now().Unix() + 1
 	}
 	if from <= 0 {
-		from = (to/d - int64(limit)) * d
+		from = BucketStart(to, d) - int64(limit)*d
 	}
 	if from >= to {
 		return []domain.Candle{}, nil
 	}
 	if to-from > d*int64(limit) {
 		from = to - d*int64(limit)
+	}
+	if a.provider == "coinbase" && k.Timeframe == "1w" {
+		return a.coinbaseWeeklyHistory(ctx, k, from, to, time.Now().Unix())
 	}
 	q := url.Values{}
 	var result []domain.Candle
@@ -316,7 +319,7 @@ func (a *publicAdapter) reconcileHistory(ctx context.Context, k domain.FeedKey, 
 	}
 	clipped := false
 	if to-from > 10000*d {
-		from = (to/d - 9999) * d
+		from = BucketStart(to, d) - 9999*d
 		clipped = true
 	}
 	var out []domain.Candle

@@ -181,7 +181,7 @@ func (s *Service) restoreLocked(f *feed, from, to int64) {
 	if len(f.bars) > 0 && to >= s.opts.Now().Unix()-2*step {
 		return
 	}
-	r := historyRange{from / step * step, to / step * step}
+	r := historyRange{exchange.BucketStart(from, step), exchange.BucketStart(to, step)}
 	if f.loading == nil {
 		f.loading = map[historyRange]context.Context{}
 		f.loaded = map[historyRange]bool{}

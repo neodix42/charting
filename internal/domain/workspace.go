@@ -21,6 +21,7 @@ const (
 	SchemaVersion  = 1
 	MaxTabs        = 20
 	MaxCharts      = 9
+	MaxIndicators  = 12
 	MaxImportBytes = 5 * 1024 * 1024
 )
 
@@ -52,15 +53,16 @@ type Grid struct {
 	ColumnFractions []float64 `json:"columnFractions"`
 }
 type Chart struct {
-	ID         string     `json:"id"`
-	Exchange   string     `json:"exchange"`
-	Market     string     `json:"market"`
-	Instrument string     `json:"instrument"`
-	Timeframe  string     `json:"timeframe"`
-	ChartType  string     `json:"chartType"`
-	ShowVolume bool       `json:"showVolume"`
-	PriceScale PriceScale `json:"priceScale"`
-	View       View       `json:"view"`
+	ID         string      `json:"id"`
+	Exchange   string      `json:"exchange"`
+	Market     string      `json:"market"`
+	Instrument string      `json:"instrument"`
+	Timeframe  string      `json:"timeframe"`
+	ChartType  string      `json:"chartType"`
+	ShowVolume bool        `json:"showVolume"`
+	PriceScale PriceScale  `json:"priceScale"`
+	View       View        `json:"view"`
+	Indicators []Indicator `json:"indicators,omitempty"`
 }
 type PriceScale struct {
 	Mode        string      `json:"mode"`
@@ -189,6 +191,17 @@ func Validate(w Workspace) error {
 			if !addID(chart.ID) {
 				return bad("chart UUID is invalid or duplicated")
 			}
+			if len(chart.Indicators) > MaxIndicators {
+				return bad("maximum %d indicators per chart", MaxIndicators)
+			}
+			for _, indicator := range chart.Indicators {
+				if !addID(indicator.ID) {
+					return bad("indicator UUID is invalid or duplicated")
+				}
+				if err := validateIndicator(indicator); err != nil {
+					return bad("%s", err)
+				}
+			}
 			if !member(chart.Exchange, "binance", "bybit", "coinbase") || chart.Market != "spot" {
 				return bad("unsupported exchange or market")
 			}
@@ -198,7 +211,7 @@ func Validate(w Workspace) error {
 			if strings.Contains(chart.Instrument, "://") {
 				return bad("instrument cannot be an endpoint URL")
 			}
-			if !member(chart.Timeframe, "1m", "5m", "15m", "1h", "4h", "1d") || !member(chart.ChartType, "candlestick", "line") {
+			if !member(chart.Timeframe, "1m", "5m", "15m", "1h", "4h", "1d", "1w") || !member(chart.ChartType, "candlestick", "line") {
 				return bad("unsupported timeframe or chart type")
 			}
 			p := chart.PriceScale
@@ -279,7 +292,7 @@ func requiredFields(raw json.RawMessage, t reflect.Type, path string) error {
 		}
 		allowed := make(map[string]bool, t.NumField())
 		for i := 0; i < t.NumField(); i++ {
-			allowed[t.Field(i).Tag.Get("json")] = true
+			allowed[strings.Split(t.Field(i).Tag.Get("json"), ",")[0]] = true
 		}
 		for key := range obj {
 			if !allowed[key] {
@@ -288,10 +301,17 @@ func requiredFields(raw json.RawMessage, t reflect.Type, path string) error {
 		}
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
-			name := f.Tag.Get("json")
+			tag := strings.Split(f.Tag.Get("json"), ",")
+			name := tag[0]
 			v, ok := obj[name]
 			if !ok {
+				if len(tag) > 1 && tag[1] == "omitempty" {
+					continue
+				}
 				return fmt.Errorf("invalidWorkspace: missing %s.%s", path, name)
+			}
+			if len(tag) > 1 && tag[1] == "omitempty" && bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+				return fmt.Errorf("invalidWorkspace: optional %s.%s must be omitted rather than null", path, name)
 			}
 			if err := requiredFields(v, f.Type, path+"."+name); err != nil {
 				return err
@@ -304,6 +324,16 @@ func requiredFields(raw json.RawMessage, t reflect.Type, path string) error {
 		}
 		for i, v := range values {
 			if err := requiredFields(v, t.Elem(), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		var values map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &values); err != nil {
+			return err
+		}
+		for name, value := range values {
+			if err := requiredFields(value, t.Elem(), path+"."+name); err != nil {
 				return err
 			}
 		}

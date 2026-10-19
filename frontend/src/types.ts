@@ -1,10 +1,13 @@
 export type Exchange = 'binance'|'bybit'|'coinbase';
-export type Interval = '1m'|'5m'|'15m'|'1h'|'4h'|'1d';
-export const intervals: Interval[] = ['1m','5m','15m','1h','4h','1d'];
-export const intervalSeconds: Record<Interval,number> = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400};
+export type Interval = '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'1w';
+export const intervals: Interval[] = ['1m','5m','15m','1h','4h','1d','1w'];
+export const intervalSeconds: Record<Interval,number> = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400,'1w':604800};
+export type IndicatorType = 'sma'|'ema'|'ichimoku'|'macd';
+export interface IndicatorParameters {period?:number;conversion?:number;base?:number;spanB?:number;displacement?:number;fast?:number;slow?:number;signal?:number}
+export interface IndicatorConfig {id:string;type:IndicatorType;parameters:IndicatorParameters;color?:string}
 export interface FeedKey {exchange:Exchange; market:'spot'; instrument:string; timeframe:Interval}
 export interface View {mode:'live'|'historical'; fromSec:number|null; toSec:number|null; barSpacing:number; rightOffset:number}
-export interface ChartConfig extends FeedKey {id:string; chartType:'candlestick'|'line'; showVolume:boolean; priceScale:{mode:'linear'|'log'; autoScale:boolean; manualRange:{min:number;max:number}|null}; view:View}
+export interface ChartConfig extends FeedKey {id:string; chartType:'candlestick'|'line'; showVolume:boolean; priceScale:{mode:'linear'|'log'; autoScale:boolean; manualRange:{min:number;max:number}|null}; view:View; indicators?:IndicatorConfig[]}
 export interface Grid {rows:number;columns:number;rowFractions:number[];columnFractions:number[]}
 export interface Tab {id:string;name:string;grid:Grid;charts:ChartConfig[]}
 export interface Workspace {schemaVersion:1;app:'cryptodesk';id:string;theme:'dark'|'light';displayTimezone:string;activeTabId:string;window:{width:number;height:number;maximized:boolean};tabs:Tab[]}

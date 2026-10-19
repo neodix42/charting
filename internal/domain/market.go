@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var Intervals = []string{"1m", "5m", "15m", "1h", "4h", "1d"}
+var Intervals = []string{"1m", "5m", "15m", "1h", "4h", "1d", "1w"}
 var nativeSymbol = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N}._-]{0,79}$`)
 
 type FeedKey struct {
