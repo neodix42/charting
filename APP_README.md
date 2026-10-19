@@ -8,7 +8,7 @@ The original specification bundle is retained at the repository root. [STATUS.md
 
 ## Run the built release
 
-Extract `release/cryptodesk-0.1.0-linux-amd64.tar.gz`, then run `./cryptodesk`. It requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. The archive does not bundle a browser or claim cross-distribution portability. Tested build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
+Run the root `./cryptodesk` produced by `./build.sh`, or extract `cryptodesk-0.1.0-linux-amd64.tar.gz` and run `./cryptodesk` inside its directory. No installation is needed. It requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. The archive does not bundle a browser or claim cross-distribution portability. Tested build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
 
 Optional user-local installation:
 
@@ -28,13 +28,16 @@ Install Go, Node LTS, a C compiler and pkg-config. Linux native builds also requ
 On an Ubuntu machine which already has the corresponding runtime libraries, `scripts/bootstrap-native-sdk.sh` is an optional unprivileged alternative: it downloads exact currently resolved Ubuntu development-package archives and extracts them under ignored `.tools/native`; it does not install packages or change the OS. `scripts/native-env.sh` scopes those headers/linker paths to the invoking process. This SDK path was used in the test environment. Repositories/network access are needed for bootstrap; package versions are recorded in `.tools/native/package-versions.txt`.
 
 ```bash
+./build.sh                   # ready-to-run app + portable archive + checksums in repo root
 scripts/build-linux.sh       # pinned local CLI, production frontend + desktop + archive
 scripts/dev.sh               # desktop development
 scripts/test.sh              # deterministic Go race/vet + frontend checks/build
 cd frontend && npm run test:e2e
 ```
 
-`scripts/build-linux.sh` emits `build/bin/cryptodesk`, a release archive, checksums, licenses and a version manifest. Build scripts never use sudo or a system package installation. The CLI is installed into project-local `.tools/` if absent. Normal builds contain local assets and no fixture bridge.
+`./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-0.1.0-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
+
+The underlying `scripts/build-linux.sh` also retains `build/bin/cryptodesk` and the distribution under `release/`, including checksums, licenses and a version manifest. Build scripts never use sudo or a system package installation. The CLI is installed into project-local `.tools/` if absent. Normal builds contain local assets and no fixture bridge.
 
 Optional live and native verification:
 

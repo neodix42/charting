@@ -37,3 +37,9 @@ No current build or provider blocker on this host. Full native manual dialogs/DP
 ## Exact resume task
 
 Run the normal release with an isolated --data-dir and complete the remaining manual matrix in docs/DESKTOP_SMOKE.md; record native dialogs, historical/manual-price restore, resize/maximize, suspend/reconnect and high-DPI results. No implementation stage remains a scaffold or fixture-only adapter. Do not use live user data for verification.
+
+## Root build entry point — 2026-10-19
+
+Added executable `build.sh`. It delegates to the pinned production build, preserves existing Wails binding contents/permissions, and publishes `cryptodesk`, `cryptodesk-0.1.0-linux-amd64.tar.gz` and `cryptodesk-SHA256SUMS` in the repository root. `APP_README.md` documents direct launch and compatible GTK/WebKit runtime requirements.
+
+Verified the script from `/tmp`, shell syntax/help/invalid arguments, root checksums, extracted archive contents, executable `--help` and linked-library resolution. Existing uncommitted binding permission changes were preserved. The build passed; this build-script change did not rerun the full GUI/manual application matrix.

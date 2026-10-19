@@ -40,6 +40,9 @@ frontend/playwright-report/
 .tools/
 build/bin/
 release/
+/cryptodesk
+/cryptodesk-*-linux-*.tar.gz
+/cryptodesk-SHA256SUMS
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
