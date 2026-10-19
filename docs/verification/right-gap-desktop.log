@@ -1,0 +1,19 @@
+Using Node v24.19.0 and npm 11.17.0
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 38 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.74 kB │ gzip:   0.42 kB
+dist/assets/index-DOPA78zL.css   14.71 kB │ gzip:   3.86 kB
+dist/assets/index-C5i2vAqW.js   451.77 kB │ gzip: 142.64 kB
+
+✓ built in 169ms
+fresh: PASS (29 actual desktop assertions)
+restore: PASS (13 actual desktop assertions)
+capacity: PASS (5 actual desktop assertions)
+Desktop evidence: /home/neodix/gitProjects/charting/docs/verification/right-gap-desktop

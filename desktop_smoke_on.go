@@ -152,6 +152,7 @@ const desktopSmokeJavaScript = `async function(phase) {
   if(phase==='fresh'){
    check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
+   check(initial.workspace.chartRightGap?.unit==='bars'&&initial.workspace.chartRightGap.value===10,'first launch defaults to a ten-bar right gap',initial.workspace.chartRightGap);
    await wait(()=>chartShape(q('[data-testid="chart-cell"]')).canvases>0,'initial native chart canvases');
    report.beforeIndicators=chartShape(q('[data-testid="chart-cell"]'));
    const periods=qa('[data-testid="chart-cell"] [aria-label="Timeframe"] button'),tops=periods.map(button=>button.getBoundingClientRect().top);
@@ -211,6 +212,23 @@ const desktopSmokeJavaScript = `async function(phase) {
    const sharedSaved=await api.LoadWorkspace();
    verifySharedIndicators(sharedSaved.workspace,'shared EMA custom parameters persist with a distinct ID on every active chart');
    report.sharedRevision=sharedSaved.revision;
+   await click('[aria-label="Open settings"]');
+   check(q('[aria-label="Chart right gap"]').value==='10'&&q('[aria-label="Chart right gap unit"]').value==='bars','native Settings shows the default ten-bar gap');
+   await input('[aria-label="Chart right gap"]',29);
+   await click('[aria-label="Apply chart gap"]');
+   await click('[aria-label="Close settings"]');
+   await flush();
+   const barGapSaved=await api.LoadWorkspace();
+   check(barGapSaved.workspace.chartRightGap?.unit==='bars'&&barGapSaved.workspace.chartRightGap.value===29&&barGapSaved.workspace.tabs.every(tab=>tab.charts.every(chart=>chart.view.mode==='live')),'bar gap applies to every chart and persists through Wails to SQLite',barGapSaved.workspace.chartRightGap);
+   await click('[aria-label="Open settings"]');
+   await select('[aria-label="Chart right gap unit"]','pixels');
+   await input('[aria-label="Chart right gap"]',79);
+   await click('[aria-label="Apply chart gap"]');
+   await click('[aria-label="Close settings"]');
+   await flush();
+   const pixelGapSaved=await api.LoadWorkspace();
+   check(pixelGapSaved.workspace.chartRightGap?.unit==='pixels'&&pixelGapSaved.workspace.chartRightGap.value===79&&qa('[data-testid="chart-cell"]').length===3,'pixel gap persists without replacing chart instances or layout',pixelGapSaved.workspace.chartRightGap);
+   report.gapRevision=pixelGapSaved.revision;
   } else if(phase==='restore') {
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);
@@ -222,6 +240,10 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(qa('[data-testid="chart-cell"]').map(chart=>chart.querySelectorAll('.indicator-chip').length).join(',')==='5,1,1','restart renders every chart own indicator configuration',qa('[data-testid="chart-cell"]').map(chart=>chart.querySelectorAll('.indicator-chip').length));
    await wait(()=>{const cells=qa('[data-testid="chart-cell"]'),first=chartShape(cells[0]),second=chartShape(cells[1]);return second.canvases>0&&first.canvases>second.canvases&&first.canvasRows===second.canvasRows+1;},'restart renders the separate MACD pane');
    report.restoredIndicatorChart=chartShape(qa('[data-testid="chart-cell"]')[0]);
+   check(initial.workspace.chartRightGap?.unit==='pixels'&&initial.workspace.chartRightGap.value===79,'restart restores the saved pixel gap from SQLite',initial.workspace.chartRightGap);
+   await click('[aria-label="Open settings"]');
+   check(q('[aria-label="Chart right gap"]').value==='79'&&q('[aria-label="Chart right gap unit"]').value==='pixels','native Settings restores the saved value and unit');
+   await click('[aria-label="Close settings"]');
   }
   else if(phase==='capacity') {
    check(initial.workspace.tabs.length===20&&initial.workspace.tabs.every(tab=>tab.charts.length===9),'explicit imported maximum restores20tabs180charts',report.initialCounts);

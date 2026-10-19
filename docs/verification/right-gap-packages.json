@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-19",
+  "setting": {
+    "field": "chartRightGap",
+    "default": {
+      "unit": "bars",
+      "value": 10
+    },
+    "barsMax": 500,
+    "pixelsMax": 5000
+  },
+  "checks": {
+    "pythonTests": 34,
+    "frontendUnitTests": 66,
+    "browserTests": 23,
+    "nativeDesktopAssertions": {
+      "fresh": 29,
+      "restore": 13,
+      "capacity": 5
+    },
+    "windowsPackagedFilesVerified": 187,
+    "windowsEnglishLocalePacks": 4
+  },
+  "artifacts": [
+    {
+      "path": "cryptodesk",
+      "bytes": 15518792,
+      "sha256": "29e7a2405f32fff744f5354fab00bf48af1f3d782f4a2d97918460cea1cbe32d"
+    },
+    {
+      "path": "cryptodesk-0.1.0-linux-amd64.tar.gz",
+      "bytes": 8186205,
+      "sha256": "eee14744067c28c45b7cd9afb045cfd1e580613433457ae72bf9c5a29d3188d7"
+    },
+    {
+      "path": "cryptodesk-0.1.0-windows-amd64.zip",
+      "bytes": 284444578,
+      "sha256": "2c56be4162ae78886e4ba225884096b65af064157f4cc7ef5f88c531751e4cfe"
+    }
+  ],
+  "nativeWindowsGuiVerified": false
+}

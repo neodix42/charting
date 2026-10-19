@@ -1,0 +1,57 @@
+Using Node v24.19.0 and npm 11.17.0
+[0;92mWails CLI[0m [0;31mv2.17.0[0m
+
+
+# Build Options
+
+Platform(s)        | windows/amd64
+Compiler           | /tmp/cryptodesk-windows-build-wsgkgl8i/go-windows-english
+Skip Bindings      | true
+Build Mode         | production
+Devtools           | false
+Frontend Directory | /tmp/cryptodesk-windows-build-wsgkgl8i/source/frontend
+Obfuscated         | false
+Install Scope      | machine
+Skip Frontend      | false
+Compress           | false
+Package            | true
+Clean Bin Dir      | false
+LDFlags            |
+Tags               | []
+Race Detector      | false
+Output File        | cryptodesk.exe
+
+
+# Building target: windows/amd64
+
+  • Installing frontend dependencies: Done.
+  • Compiling frontend: Done.
+  • Generating application assets: Done.
+  • Compiling application: Done.
+ INFO  Wails is now using the new Go WebView2Loader. If you encounter any issues with it, please report them to https://github.com/wailsapp/wails/issues/2004. You could also use the old legacy loader with `-tags native_webview2loader`, but keep in mind this will be deprecated in the near future.
+Built '/tmp/cryptodesk-windows-build-wsgkgl8i/source/build/bin/cryptodesk.exe' in 4.225s.
+
+ ♥   If Wails is useful to you or your company, please consider sponsoring the project:
+https://github.com/sponsors/leaanthony
+Copying verified WebView2 155.0.4283.62 x64 to /tmp/cryptodesk-windows-build-wsgkgl8i/cryptodesk-0.1.0-windows-amd64/WebView2
+{
+  "version": "155.0.4283.62",
+  "architecture": "x64",
+  "archive": "Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64.cab",
+  "archive_sha256": "cf54aa717a0ebd05b40e87620724583cb6eb0a5b8b64764cc11e42822f68bf6c",
+  "archive_bytes": 310492238,
+  "file_count": 257,
+  "uncompressed_bytes": 705204732,
+  "inventory_sha256": "65550893b7c5e0d3c04ccc912e690398a31d94efc8d569382d5a8148a134fe11",
+  "source_url": "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/232cf50b-3980-4531-afbb-779f446d7de1/Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64.cab",
+  "license_url": "https://developer.microsoft.com/microsoft-edge/api/eula/webview2?locale=en-us&fixed=true",
+  "distribution_url": "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution#the-fixed-version-runtime-distribution-mode",
+  "release_notes_url": "https://learn.microsoft.com/en-us/microsoft-edge/webview2/release-notes/runtime/155",
+  "destination": "/tmp/cryptodesk-windows-build-wsgkgl8i/cryptodesk-0.1.0-windows-amd64/WebView2"
+}
+English locales: kept 4, removed 164 packs (126.92 MiB unpacked)
+
+Portable Windows ZIP: /home/neodix/gitProjects/charting/cryptodesk-0.1.0-windows-amd64.zip
+Size: 271.3 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.

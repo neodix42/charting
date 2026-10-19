@@ -1,0 +1,555 @@
+{
+  "phase": "fresh",
+  "startedAt": "2026-10-19T18:36:19.469Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "first launch exactly one tab and chart",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "initial 1×1 grid",
+      "passed": true,
+      "actual": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1
+        ],
+        "columnFractions": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "first launch defaults to a ten-bar right gap",
+      "passed": true,
+      "actual": {
+        "unit": "bars",
+        "value": 10
+      }
+    },
+    {
+      "name": "seven horizontal timeframe buttons replace the dropdown",
+      "passed": true,
+      "actual": [
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1d",
+        "1w"
+      ]
+    },
+    {
+      "name": "weekly timeframe selection is visible",
+      "passed": true
+    },
+    {
+      "name": "SMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 0
+    },
+    {
+      "name": "EMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 1
+    },
+    {
+      "name": "Ichimoku Cloud waits for parameter confirmation",
+      "passed": true,
+      "actual": 2
+    },
+    {
+      "name": "MACD waits for parameter confirmation",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "MACD creates additional pane canvases",
+      "passed": true,
+      "actual": {
+        "canvases": 11,
+        "canvasRows": 3
+      }
+    },
+    {
+      "name": "weekly timeframe persisted through Wails to SQLite",
+      "passed": true,
+      "actual": "1w"
+    },
+    {
+      "name": "all four indicator defaults persisted through Wails to SQLite",
+      "passed": true,
+      "actual": [
+        {
+          "id": "4b2e6ba8-8b81-4321-b8d3-8171cda75eb1",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51"
+        },
+        {
+          "id": "70397943-f86e-45ce-a984-d49a95a5f06c",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef"
+        },
+        {
+          "id": "502b7801-aaa5-4813-9ffe-1d6ffd679791",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "2801e8c4-3281-4171-8a13-657703a51e78",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef"
+        }
+      ]
+    },
+    {
+      "name": "3×3 adds eight placeholders only",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "placeholders": 8
+      }
+    },
+    {
+      "name": "each Add chart creates exactly one chart",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "new tab has exactly one chart and 1×1 grid",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "grid": "1x1"
+      }
+    },
+    {
+      "name": "small workspace saved with exact counts",
+      "passed": true,
+      "actual": [
+        3,
+        1
+      ]
+    },
+    {
+      "name": "independent chart settings saved",
+      "passed": true,
+      "actual": {
+        "id": "1162e80d-b423-4dc1-b14d-6052a9ec96ec",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "15m",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1792377000,
+          "toSec": 1792443600,
+          "barSpacing": 6,
+          "rightOffset": -16
+        },
+        "indicators": [
+          {
+            "id": "4b2e6ba8-8b81-4321-b8d3-8171cda75eb1",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51"
+          },
+          {
+            "id": "70397943-f86e-45ce-a984-d49a95a5f06c",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef"
+          },
+          {
+            "id": "502b7801-aaa5-4813-9ffe-1d6ffd679791",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "2801e8c4-3281-4171-8a13-657703a51e78",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef"
+          }
+        ]
+      }
+    },
+    {
+      "name": "indicator settings survive chart and tab additions",
+      "passed": true,
+      "actual": [
+        {
+          "id": "4b2e6ba8-8b81-4321-b8d3-8171cda75eb1",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51"
+        },
+        {
+          "id": "70397943-f86e-45ce-a984-d49a95a5f06c",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef"
+        },
+        {
+          "id": "502b7801-aaa5-4813-9ffe-1d6ffd679791",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "2801e8c4-3281-4171-8a13-657703a51e78",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef"
+        }
+      ]
+    },
+    {
+      "name": "new chart indicators remain independent",
+      "passed": true,
+      "actual": [
+        [
+          4,
+          0,
+          0
+        ],
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "name": "shared toolbar is centered between the tabs and chart area",
+      "passed": true,
+      "actual": {
+        "left": 0,
+        "right": 1600,
+        "top": 109,
+        "bottom": 156,
+        "tabBottom": 109,
+        "chartTop": 223,
+        "windowWidth": 1600
+      }
+    },
+    {
+      "name": "shared weekly timeframe persists for the active tab only while maximized",
+      "passed": true,
+      "actual": [
+        [
+          "1w",
+          "1w",
+          "1w"
+        ],
+        [
+          "1h"
+        ]
+      ]
+    },
+    {
+      "name": "shared indicator opens one dialog and waits for OK",
+      "passed": true,
+      "actual": 1
+    },
+    {
+      "name": "shared EMA custom parameters persist with a distinct ID on every active chart",
+      "passed": true,
+      "actual": [
+        [
+          {
+            "id": "4b2e6ba8-8b81-4321-b8d3-8171cda75eb1",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51"
+          },
+          {
+            "id": "70397943-f86e-45ce-a984-d49a95a5f06c",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef"
+          },
+          {
+            "id": "502b7801-aaa5-4813-9ffe-1d6ffd679791",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "2801e8c4-3281-4171-8a13-657703a51e78",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef"
+          },
+          {
+            "id": "6973aa37-63bc-4a06-9510-fee6834e814b",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ],
+        [
+          {
+            "id": "41d8bb09-d2e1-4cc3-9d1a-c45c9baa7f78",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ],
+        [
+          {
+            "id": "bd883fe4-9f09-4bd4-b61b-3d5e017e4d75",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "shared action preserves the first chart original four indicators",
+      "passed": true,
+      "actual": [
+        {
+          "id": "4b2e6ba8-8b81-4321-b8d3-8171cda75eb1",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51"
+        },
+        {
+          "id": "70397943-f86e-45ce-a984-d49a95a5f06c",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef"
+        },
+        {
+          "id": "502b7801-aaa5-4813-9ffe-1d6ffd679791",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "2801e8c4-3281-4171-8a13-657703a51e78",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef"
+        }
+      ]
+    },
+    {
+      "name": "shared action leaves the hidden tab unchanged",
+      "passed": true,
+      "actual": {
+        "id": "296da816-f6c3-42ea-a226-6c17d59aca49",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "1h",
+        "chartType": "candlestick",
+        "showVolume": true,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1791572400,
+          "toSec": 1792432800,
+          "barSpacing": 6,
+          "rightOffset": 10
+        }
+      }
+    },
+    {
+      "name": "native Settings shows the default ten-bar gap",
+      "passed": true
+    },
+    {
+      "name": "bar gap applies to every chart and persists through Wails to SQLite",
+      "passed": true,
+      "actual": {
+        "unit": "bars",
+        "value": 29
+      }
+    },
+    {
+      "name": "pixel gap persists without replacing chart instances or layout",
+      "passed": true,
+      "actual": {
+        "unit": "pixels",
+        "value": 79
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-19T18:36:19.977422124Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 2875072,
+    "goHeapInUseBytes": 4702208,
+    "goVersion": "go1.26.8",
+    "goroutines": 16,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.99,
+    "processTreeRSSBytes": 525148160,
+    "processes": 3,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "beforeIndicators": {
+    "canvases": 7,
+    "canvasRows": 2
+  },
+  "afterIndicators": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "indicatorRevision": 2,
+  "savedRevision": 6,
+  "sharedToolbarGeometry": {
+    "left": 0,
+    "right": 1600,
+    "top": 109,
+    "bottom": 156,
+    "tabBottom": 109,
+    "chartTop": 223,
+    "windowWidth": 1600
+  },
+  "sharedRevision": 10,
+  "gapRevision": 12,
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 12
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 1,
+      "cachedFeeds": 3,
+      "cachedCandles": 1480,
+      "historyRequests": 3,
+      "queueDepth": 0,
+      "resyncs": 3,
+      "sockets": 1,
+      "reconnects": 1,
+      "restRequests": 7
+    },
+    "mode": "public live data",
+    "persistedRevision": 12,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 1s ago · trade 1s agoUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 1s ago · trade 1s agoUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 1s ago · trade 1s agoUTC"
+  ],
+  "finishedAt": "2026-10-19T18:36:25.205Z"
+}

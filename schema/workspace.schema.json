@@ -26,6 +26,9 @@
       "minLength": 1,
       "maxLength": 80
     },
+    "chartRightGap": {
+      "$ref": "#/$defs/chartRightGap"
+    },
     "activeTabId": {
       "$ref": "#/$defs/uuid"
     },
@@ -73,6 +76,47 @@
     "tabs"
   ],
   "$defs": {
+    "chartRightGap": {
+      "description": "Global space after the most recent candle. Omission in legacy documents means ten bars; zero is allowed. Values are whole bars or CSS pixels.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unit": {
+              "const": "bars"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 500
+            }
+          },
+          "required": [
+            "unit",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unit": {
+              "const": "pixels"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            }
+          },
+          "required": [
+            "unit",
+            "value"
+          ]
+        }
+      ]
+    },
     "uuid": {
       "type": "string",
       "format": "uuid"

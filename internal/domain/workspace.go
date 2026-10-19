@@ -26,15 +26,24 @@ const (
 )
 
 type Workspace struct {
-	SchemaVersion   int    `json:"schemaVersion"`
-	App             string `json:"app"`
-	ID              string `json:"id"`
-	Theme           string `json:"theme"`
-	DisplayTimezone string `json:"displayTimezone"`
-	ActiveTabID     string `json:"activeTabId"`
-	Window          Window `json:"window"`
-	Tabs            []Tab  `json:"tabs"`
+	SchemaVersion   int            `json:"schemaVersion"`
+	App             string         `json:"app"`
+	ID              string         `json:"id"`
+	Theme           string         `json:"theme"`
+	DisplayTimezone string         `json:"displayTimezone"`
+	ChartRightGap   *ChartRightGap `json:"chartRightGap,omitempty"`
+	ActiveTabID     string         `json:"activeTabId"`
+	Window          Window         `json:"window"`
+	Tabs            []Tab          `json:"tabs"`
 }
+
+// ChartRightGap applies to all charts. Omission in a legacy workspace means the
+// default ten bars, and remains omitted when that document is exported again.
+type ChartRightGap struct {
+	Unit  string `json:"unit"`
+	Value int    `json:"value"`
+}
+
 type Window struct {
 	Width     int  `json:"width"`
 	Height    int  `json:"height"`
@@ -92,7 +101,7 @@ func ID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 func NewChart() Chart {
-	return Chart{ID: ID(), Exchange: "binance", Market: "spot", Instrument: "BTCUSDT", Timeframe: "1h", ChartType: "candlestick", ShowVolume: true, PriceScale: PriceScale{Mode: "linear", AutoScale: true}, View: View{Mode: "live", BarSpacing: 6, RightOffset: 5}}
+	return Chart{ID: ID(), Exchange: "binance", Market: "spot", Instrument: "BTCUSDT", Timeframe: "1h", ChartType: "candlestick", ShowVolume: true, PriceScale: PriceScale{Mode: "linear", AutoScale: true}, View: View{Mode: "live", BarSpacing: 6, RightOffset: 10}}
 }
 func NewTab(name string) Tab {
 	return Tab{ID: ID(), Name: name, Grid: Grid{Rows: 1, Columns: 1, RowFractions: []float64{1}, ColumnFractions: []float64{1}}, Charts: []Chart{NewChart()}}
@@ -101,7 +110,7 @@ func NewTab(name string) Tab {
 // NewWorkspace is used only when no workspace has ever been saved, or on explicit reset.
 func NewWorkspace() Workspace {
 	tab := NewTab("Tab 1")
-	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "dark", DisplayTimezone: "UTC", ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
+	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "dark", DisplayTimezone: "UTC", ChartRightGap: &ChartRightGap{Unit: "bars", Value: 10}, ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
 }
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -147,6 +156,18 @@ func Validate(w Workspace) error {
 	}
 	if _, err := time.LoadLocation(w.DisplayTimezone); err != nil {
 		return bad("unknown display timezone %q", w.DisplayTimezone)
+	}
+	if gap := w.ChartRightGap; gap != nil {
+		if !member(gap.Unit, "bars", "pixels") {
+			return bad("chart right gap unit must be bars or pixels")
+		}
+		limit := 500
+		if gap.Unit == "pixels" {
+			limit = 5000
+		}
+		if gap.Value < 0 || gap.Value > limit {
+			return bad("chart right gap must be between 0 and %d %s", limit, gap.Unit)
+		}
 	}
 	if w.Window.Width < 400 || w.Window.Width > 16384 || w.Window.Height < 300 || w.Window.Height > 16384 {
 		return bad("invalid window dimensions")

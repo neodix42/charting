@@ -43,11 +43,11 @@ export class IndicatorLayer {
   if(layer.histogram)this.chart.removeSeries(layer.histogram);
   this.layers.delete(id);
  }
- update(bars:readonly Candle[],configs:readonly IndicatorConfig[],timeframe:Interval):void{
+ update(bars:readonly Candle[],configs:readonly IndicatorConfig[],timeframe:Interval,preserveViewport=true):void{
   if(this.disposed)return;
   const nextKey=JSON.stringify(configs),changed=nextKey!==this.configKey;
-  // Adding future cloud spans must not move the user's current time window.
-  const range=changed?this.chart.timeScale().getVisibleRange():null;
+  // Historical charts preserve their absolute time window. Live charts keep their zoom and re-anchor the workspace gap.
+  const range=changed&&preserveViewport?this.chart.timeScale().getVisibleRange():null;
   const expected=new Map(configs.map(config=>[config.id,config]));
   for(const [id,layer] of this.layers)if(!expected.has(id)||expected.get(id)!.type!==layer.type)this.remove(id);
   for(const config of configs){

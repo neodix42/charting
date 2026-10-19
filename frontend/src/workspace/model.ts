@@ -1,16 +1,17 @@
-import type {ChartConfig, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
+import type {ChartConfig, ChartRightGap, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
 export const MAX_TABS=20, MAX_CHARTS=9, MAX_INDICATORS=12;
+export const DEFAULT_CHART_RIGHT_GAP:ChartRightGap={unit:'bars',value:10};
 export const presets = [[1,1],[1,2],[2,1],[2,2],[2,3],[3,2],[3,3]] as const;
 export const uuid=()=>crypto.randomUUID();
 export const equalTracks=(n:number)=>Array.from({length:n},()=>1/n);
 export const grid=(rows=1,columns=1):Grid=>({rows,columns,rowFractions:equalTracks(rows),columnFractions:equalTracks(columns)});
-export const liveView=()=>({mode:'live' as const,fromSec:null,toSec:null,barSpacing:6,rightOffset:5});
+export const liveView=()=>({mode:'live' as const,fromSec:null,toSec:null,barSpacing:6,rightOffset:10});
 const copyIndicators=(chart:ChartConfig)=>chart.indicators?.map(indicator=>({...structuredClone(indicator),id:uuid()}))??[];
 export const newChart=(source?:ChartConfig):ChartConfig=>source?{...structuredClone(source),id:uuid(),view:liveView(),indicators:copyIndicators(source)}:{id:uuid(),exchange:'binance',market:'spot',instrument:'BTCUSDT',timeframe:'1h',chartType:'candlestick',showVolume:true,priceScale:{mode:'linear',autoScale:true,manualRange:null},view:liveView(),indicators:[]};
 export const newTab=(name:string):Tab=>({id:uuid(),name,grid:grid(),charts:[newChart()]});
 // Called only by explicit fixture mode or a confirmed reset. Production startup belongs to Go.
-export function firstWorkspace():Workspace {const tab=newTab('Tab 1');return {schemaVersion:1,app:'cryptodesk',id:uuid(),theme:'dark',displayTimezone:'UTC',activeTabId:tab.id,window:{width:1600,height:1000,maximized:false},tabs:[tab]};}
-export type Action = {type:'addTab'}|{type:'duplicateTab';id:string}|{type:'selectTab';id:string}|{type:'renameTab';id:string;name:string}|{type:'removeTab';id:string}|{type:'reorderTab';from:string;to:string}|{type:'grid';rows:number;columns:number}|{type:'tracks';axis:'rowFractions'|'columnFractions';values:number[]}|{type:'addChart';sourceId?:string}|{type:'removeChart';id:string}|{type:'reorderChart';from:string;to:string}|{type:'chart';id:string;patch:Partial<ChartConfig>}|{type:'tabTimeframe';tabId:string;timeframe:Interval}|{type:'tabIndicator';tabId:string;indicator:IndicatorConfig}|{type:'settings';theme?:Workspace['theme'];displayTimezone?:string};
+export function firstWorkspace():Workspace {const tab=newTab('Tab 1');return {schemaVersion:1,app:'cryptodesk',id:uuid(),theme:'dark',displayTimezone:'UTC',chartRightGap:{...DEFAULT_CHART_RIGHT_GAP},activeTabId:tab.id,window:{width:1600,height:1000,maximized:false},tabs:[tab]};}
+export type Action = {type:'addTab'}|{type:'duplicateTab';id:string}|{type:'selectTab';id:string}|{type:'renameTab';id:string;name:string}|{type:'removeTab';id:string}|{type:'reorderTab';from:string;to:string}|{type:'grid';rows:number;columns:number}|{type:'tracks';axis:'rowFractions'|'columnFractions';values:number[]}|{type:'addChart';sourceId?:string}|{type:'removeChart';id:string}|{type:'reorderChart';from:string;to:string}|{type:'chart';id:string;patch:Partial<ChartConfig>}|{type:'tabTimeframe';tabId:string;timeframe:Interval}|{type:'tabIndicator';tabId:string;indicator:IndicatorConfig}|{type:'settings';theme?:Workspace['theme'];displayTimezone?:string;chartRightGap?:ChartRightGap};
 function reorder<T extends {id:string}>(items:T[],from:string,to:string) {const a=items.findIndex(x=>x.id===from),b=items.findIndex(x=>x.id===to);if(a<0||b<0)return items;const result=[...items];result.splice(b,0,result.splice(a,1)[0]);return result;}
 function generatedName(w:Workspace){let n=1;while(w.tabs.some(t=>t.name===`Tab ${n}`))n++;return `Tab ${n}`;}
 export function reduceWorkspace(w:Workspace,a:Action):Workspace {
@@ -38,6 +39,12 @@ export function reduceWorkspace(w:Workspace,a:Action):Workspace {
   if(current.charts.some(chart=>(chart.indicators?.length??0)>=MAX_INDICATORS))throw Error('Maximum 12 indicators per chart; remove an indicator before applying to the whole tab');
   return change({...current,charts:current.charts.map(chart=>({...chart,indicators:[...(chart.indicators??[]),{...structuredClone(a.indicator),id:uuid()}]}))});
  }
- case 'settings':return {...w,...(a.theme?{theme:a.theme}:{}),...(a.displayTimezone?{displayTimezone:a.displayTimezone}:{})};
+ case 'settings':{
+  const gap=a.chartRightGap,previous=w.chartRightGap??DEFAULT_CHART_RIGHT_GAP;
+  if(gap&&(!['bars','pixels'].includes(gap.unit)||!Number.isSafeInteger(gap.value)||gap.value<0||gap.value>(gap.unit==='bars'?500:5000)))throw Error('Chart right gap must be a whole number from 0 to 500 bars or 0 to 5,000 pixels');
+  const changed=gap&&(gap.unit!==previous.unit||gap.value!==previous.value);
+  return {...w,...(a.theme?{theme:a.theme}:{}),...(a.displayTimezone?{displayTimezone:a.displayTimezone}:{}),...(gap?{chartRightGap:{...gap}}:{}),...(changed?{tabs:w.tabs.map(tab=>({...tab,charts:tab.charts.map(chart=>({...chart,view:{...chart.view,mode:'live',fromSec:null,toSec:null}}))}))}:{})};
+ }
+
  }
 }

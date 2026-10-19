@@ -29,3 +29,12 @@ without installing anything. When Python jsonschema is already available, it als
 Draft 2020-12 validation. It does not test the future Go implementation or live exchanges.
 
 The v1 shape now accepts `1w` and an optional per-chart `indicators` array. Its omission preserves legacy saved workspaces and exports. Each indicator has a UUID, type, exact integer parameter object, and optional six-digit hex color. Maximum 12 per chart; periods 1–2,000, displacement 0–500. MACD `fast < slow` is an additional semantic check. Unknown or irrelevant parameter names, null fields and malformed values are rejected. Only configuration is saved; computed indicator series remain runtime data. These additive fields need no SQLite table migration because the store already validates and commits complete workspace JSON snapshots.
+
+The optional workspace-level `chartRightGap` object saves the shared chart setting as
+`{"unit":"bars","value":10}` or `{"unit":"pixels","value":120}`. Both properties
+are required when the object is present. Values must be whole numbers from 0–500 bars
+or 0–5,000 CSS pixels; null, extra properties and unsupported units are rejected.
+New workspaces explicitly use ten bars. Legacy documents may omit the setting, in
+which case charts use ten bars while the exported JSON retains the original omitted
+field. Each chart's existing `view.rightOffset` remains a viewport value, separate from
+this global preference. No schema-version or SQLite table migration is required.

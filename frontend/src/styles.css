@@ -6,3 +6,5 @@
 .indicator-warmup{color:var(--muted)}.indicator-history-retry{font-size:10px;flex-shrink:0;color:var(--accent)}
 
 .tab-chart-controls{display:flex;align-items:center;justify-content:center;gap:12px;flex-shrink:0;padding:9px 20px 0}.tab-chart-controls .timeframe-buttons{gap:2px;padding:3px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}.tab-chart-controls .timeframe-buttons button{min-width:36px;border-color:transparent;background:transparent}.tab-chart-controls .timeframe-buttons button[aria-pressed=true]{color:var(--accent);background:#e7ad5111;border-color:#e7ad5144;font-weight:650}.tab-chart-controls select{min-width:132px}
+
+.chart-gap-setting{flex-wrap:wrap}.chart-gap-fields{max-width:100%}.chart-gap-controls{display:flex;align-items:center;gap:6px}.chart-gap-controls input{width:85px}.chart-gap-fields>small{display:block;margin-top:6px}.chart-gap-fields .danger{color:var(--danger)}
