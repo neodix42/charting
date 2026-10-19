@@ -66,3 +66,7 @@ Codex must discover instruments dynamically and validate actual endpoint behavio
 External API notes are dated reference observations. They are not a promise of future
 availability. Sources are catalogued in SOURCES.md; Codex must recheck versions and schemas
 before implementation and record any differences in DECISIONS.md.
+
+---
+
+The runnable application has been implemented at this repository root. See [APP_README.md](APP_README.md) for build/run/use and recovery instructions, [STATUS.md](STATUS.md) for actual test evidence, and [docs/verification](docs/verification) for reports. The original bundle documents above are retained.

@@ -1,0 +1,26 @@
+{
+  "osRelease": "PRETTY_NAME=\"Ubuntu 26.04.1 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"26.04\"\nVERSION=\"26.04.1 LTS (Resolute Raccoon)\"\nVERSION_CODENAME=resolute\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=resolute\nLOGO=ubuntu-logo\n",
+  "architecture": "x86_64",
+  "session": "wayland",
+  "displayAvailable": true,
+  "go": {
+    "exitCode": 0,
+    "output": "go version go1.26.8 linux/amd64"
+  },
+  "node": {
+    "exitCode": 0,
+    "output": "v24.19.0"
+  },
+  "npm": {
+    "exitCode": 0,
+    "output": "11.17.0"
+  },
+  "desktopRuntime": {
+    "exitCode": 0,
+    "output": "libgtk-3-0t64 3.24.52-0ubuntu1\nlibjavascriptcoregtk-4.1-0 2.52.6-0ubuntu0.26.04.1\nlibsoup-3.0-0 3.6.6-1ubuntu0.1\nlibwebkit2gtk-4.1-0 2.52.6-0ubuntu0.26.04.1"
+  },
+  "gpu": {
+    "exitCode": 0,
+    "output": "2e:00.0 VGA compatible controller: NVIDIA Corporation AD104 [GeForce RTX 4070 SUPER] (rev a1)"
+  }
+}

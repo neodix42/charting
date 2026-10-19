@@ -1,39 +1,39 @@
-# Implementation status
+# Implementation status — 2026-10-19
 
-**Bundle version 1.1.0, prepared 2026-10-19.**
+CryptoDesk is implemented at this repository root. The bundle was unpacked directly here. Existing files were retained; original working tree was clean. Runnable source, tests, build tooling, native launcher/icon, release packaging and user documentation are included.
 
-This package contains instructions, schemas, examples and synthetic test fixtures only.
-The application has NOT been implemented, built, or live-tested by preparing this bundle.
+**First launch: exactly one tab / one chart /1×1. New tabs: one chart. Maxima:20tabs/9charts per tab. Larger grids only add placeholders. Subsequent launches restore the actual saved workspace.**
 
-## User clarification (normative)
+| Stage | Status/evidence |
+|---|---|
+|0Repository/contracts | Implemented; pinned Go/Wails/React/LWC/SQLite; strict schema/default/capacity tests pass |
+|1Single Binance chart | Implemented and real live tested; actual Wails/WebKit one-chart smoke passes |
+|2Dynamic workspace/persistence | Implemented; caps/placeholders/deepcopy/grids/SQLite/small3+1restart pass |
+|3Market lifecycle/history | Implemented; allintervals, bounded moving history windows, shared leases, revisions, stale guards, reconnect/overflow/cancellation/retry race tests pass |
+|4Bybit/Coinbase | Implemented; all3×6REST/parser tests and real discovery/history/streams pass; observed1m transition/provider |
+|5Restore/recovery/shutdown | Implemented; exact example roundtrips, ordered autosave, native final-close flush, transactional backups/import/recovery/migrations, busy failures, process lock and killed-child durability pass |
+|6Integration/delivery | Production Ubuntu26.04Wails build and automated native/browser smoke pass; release scripts/artifacts delivered. Full manual desktop/other-platform matrix remains unverified |
 
-First launch: exactly 1 tab and 1 chart. User adds up to 20 tabs total and up to 9 charts
-per tab. New tabs have one chart. Larger grid presets do not auto-create charts. Subsequent
-launches restore the actual saved workspace. The 20×9 example is capacity-test-only.
+## Actual commands/results
 
-## Stages
+- `bash tools/preflight.sh`: Ubuntu26.04.1x86_64, Wayland; Go1.26.8, Node24.19.0, npm11.17.0. Native headers initially absent.
+- `scripts/bootstrap-native-sdk.sh`: unprivileged package download/extraction into ignored .tools/native, no OS/package installation/settings changes. GTK3.24.52/WebKitGTK2.52.6 resolved against installed runtime.
+- `scripts/test.sh`: PASS Go race/vet, frontend typecheck/ESLint/23unit tests/production build; docs/verification/deterministic-final.log.
+- `source scripts/native-env.sh; go test -race -tags webkit2_41 ./...` and `go vet -tags webkit2_41 ./...`: PASS.
+- `cd frontend && npm run test:e2e`: PASS8/8; docs/verification/browser-final/results.json.
+- `scripts/smoke-desktop.sh`: PASS actual native production Wails/WebKit, isolated first launch/restored3+1/capacity20×9/200switches; docs/verification/desktop-20261019T164147Z.
+- Separate live65s/provider observations: all3discovery/sixinterval REST/live updates/minute transitions passed after fixing observed Binance metadata/wire issues. Final8sall-provider smoke also passed. Logs in docs/verification/live-*.jsonl retain the initial failure and successful reruns.
+- Actual native `.tools/wails build -tags webkit2_41 -trimpath` production build passes; `scripts/build-linux.sh` emits release binary/archive, notices, version manifest and SHA256SUMS.
+- Original-bundle verifier passes from isolated original HEAD archive. Working-tree checksum verifier flags intentional DECISIONS/STATUS/README edits; original HASHES.json retained. Production Go schema/fixture tests pass.
 
-| Stage | Status | Evidence / blocker |
-|---|---|---|
-| 0 Repository/toolchains/contracts | Not started | Codex must inspect repository and environment |
-| 1 Single live Binance chart | Not started | |
-| 2 Dynamic workspace and persistence | Not started | |
-| 3 Market lifecycle and history | Not started | |
-| 4 Bybit and Coinbase | Not started | |
-| 5 Restore and recovery | Not started | |
-| 6 Tests and Ubuntu delivery | Not started | |
+## Artifacts and limits
 
-## Actual commands and outcomes
+Build output: build/bin/cryptodesk. Distribution: release/cryptodesk-0.1.0-linux-amd64.tar.gz; checksums and version manifest alongside. Usage/storage/recovery/build details: APP_README.md. Full evidence and acceptance mapping: docs/verification/REPORT.md.
 
-Codex: replace this placeholder with commands actually executed, return codes and results.
-Do not list proposed commands as passed tests.
+Actual native capacity test mounts9charts, with9leases/9frontendconsumers/0buffered events after200switches; three provider sockets. Latest measured median switch 144 ms / p95 176 ms. Metrics are observed baselines, not resource promises; process-tree RSS has shared/reparented-WebKit sampling limits.
 
-## Current blockers
+No current build or provider blocker on this host. Full native manual dialogs/DPI/window/viewport/copy-paste matrix, real suspend/disconnect, daily rollover, X11/other Ubuntu releases and long-duration memory validation remain UNRUN. The final native run includes the final historical-cache, persistent-error and volume-format fixes. Full manual verification remains separate from that automated smoke.
 
-None observed for app implementation: the user's repository/environment has not been inspected.
-No live exchange connectivity or Ubuntu GUI result is asserted.
+## Exact resume task
 
-## Resume entry point
-
-Read START_HERE.md, inspect existing repository instructions and status, run the preflight,
-then execute stage 0. Maintain this file with the next concrete task after each work session.
+Run the normal release with an isolated --data-dir and complete the remaining manual matrix in docs/DESKTOP_SMOKE.md; record native dialogs, historical/manual-price restore, resize/maximize, suspend/reconnect and high-DPI results. No implementation stage remains a scaffold or fixture-only adapter. Do not use live user data for verification.

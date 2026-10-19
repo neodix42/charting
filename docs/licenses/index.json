@@ -1,0 +1,470 @@
+[
+  {
+    "package": "git.sr.ht/~jackmordaunt/go-toast/v2",
+    "version": "v2.0.3",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/bep/debounce",
+    "version": "v1.2.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/davecgh/go-spew",
+    "version": "v1.1.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/dustin/go-humanize",
+    "version": "v1.0.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/gabriel-vasile/mimetype",
+    "version": "v1.4.16",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/go-ole/go-ole",
+    "version": "v1.3.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/godbus/dbus/v5",
+    "version": "v5.1.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/google/pprof",
+    "version": "v0.0.0-20260802141513-ef3492d7dac3",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "github.com/google/uuid",
+    "version": "v1.6.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/gorilla/websocket",
+    "version": "v1.5.3",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "github.com/hashicorp/golang-lru/v2",
+    "version": "v2.0.7",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/jchv/go-winloader",
+    "version": "v0.0.0-20210711035445-715c2860da7e",
+    "files": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "package": "github.com/labstack/echo/v4",
+    "version": "v4.15.3",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/labstack/gommon",
+    "version": "v0.5.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/leaanthony/debme",
+    "version": "v1.2.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/leaanthony/go-ansi-parser",
+    "version": "v1.6.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/leaanthony/gosod",
+    "version": "v1.0.4",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/leaanthony/slicer",
+    "version": "v1.6.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/leaanthony/u",
+    "version": "v1.1.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/matryer/is",
+    "version": "v1.4.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/mattn/go-colorable",
+    "version": "v0.1.14",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/mattn/go-isatty",
+    "version": "v0.0.24",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/ncruces/go-strftime",
+    "version": "v1.0.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/pkg/browser",
+    "version": "v0.0.0-20240102092130-5ac0b6a4141c",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/pkg/errors",
+    "version": "v0.9.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/pmezard/go-difflib",
+    "version": "v1.0.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/remyoudompheng/bigfft",
+    "version": "v0.0.0-20230129092748-24d4a6f8daec",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/rivo/uniseg",
+    "version": "v0.4.7",
+    "files": [
+      "LICENSE.txt"
+    ]
+  },
+  {
+    "package": "github.com/samber/lo",
+    "version": "v1.49.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/shopspring/decimal",
+    "version": "v1.4.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/stretchr/testify",
+    "version": "v1.11.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/tkrajina/go-reflector",
+    "version": "v0.5.8",
+    "files": [
+      "LICENSE.txt"
+    ]
+  },
+  {
+    "package": "github.com/valyala/bytebufferpool",
+    "version": "v1.0.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/valyala/fasttemplate",
+    "version": "v1.2.2",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/wailsapp/go-webview2",
+    "version": "v1.0.22",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "github.com/wailsapp/wails/v2",
+    "version": "v2.17.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/crypto",
+    "version": "v0.53.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/mod",
+    "version": "v0.41.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/net",
+    "version": "v0.56.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/sync",
+    "version": "v0.23.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/sys",
+    "version": "v0.48.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/text",
+    "version": "v0.39.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "golang.org/x/tools",
+    "version": "v0.50.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "gopkg.in/yaml.v3",
+    "version": "v3.0.1",
+    "files": [
+      "NOTICE",
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "modernc.org/cc/v4",
+    "version": "v4.29.7",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "modernc.org/ccgo/v4",
+    "version": "v4.36.1",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "modernc.org/fileutil",
+    "version": "v1.4.0",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/gc/v2",
+    "version": "v2.6.5",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "modernc.org/gc/v3",
+    "version": "v3.1.5",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "modernc.org/goabi0",
+    "version": "v0.2.0",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/libc",
+    "version": "v1.77.1",
+    "files": [
+      "LICENSE",
+      "LICENSE-3RD-PARTY.md",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/mathutil",
+    "version": "v1.7.1",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/memory",
+    "version": "v1.12.1",
+    "files": [
+      "LICENSE-GO",
+      "LICENSE",
+      "LICENSE-MMAP-GO",
+      "AUTHORS",
+      "LICENSE-LOGO"
+    ]
+  },
+  {
+    "package": "modernc.org/opt",
+    "version": "v0.2.0",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/sortutil",
+    "version": "v1.2.1",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/sqlite",
+    "version": "v1.60.1",
+    "files": [
+      "LICENSE",
+      "LICENSE-3RD-PARTY.md",
+      "AUTHORS",
+      "LICENSE-SQLITE_VEC",
+      "LICENSE-SQLITE"
+    ]
+  },
+  {
+    "package": "modernc.org/strutil",
+    "version": "v1.2.1",
+    "files": [
+      "LICENSE",
+      "AUTHORS"
+    ]
+  },
+  {
+    "package": "modernc.org/token",
+    "version": "v1.1.0",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "node_modules/fancy-canvas",
+    "version": "2.1.0",
+    "license": "MIT",
+    "files": [
+      "LICENSE"
+    ],
+    "licenseSource": "https://github.com/tradingview/fancy-canvas/blob/master/LICENSE"
+  },
+  {
+    "package": "node_modules/lightweight-charts",
+    "version": "5.2.1",
+    "license": "Apache-2.0",
+    "files": [
+      "LICENSE",
+      "NOTICE"
+    ],
+    "noticeSource": "https://raw.githubusercontent.com/tradingview/lightweight-charts/v5.2.1/NOTICE"
+  },
+  {
+    "package": "node_modules/react",
+    "version": "19.3.1",
+    "license": "MIT",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "node_modules/react-dom",
+    "version": "19.3.1",
+    "license": "MIT",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "package": "node_modules/scheduler",
+    "version": "0.28.0",
+    "license": "MIT",
+    "files": [
+      "LICENSE"
+    ]
+  }
+]

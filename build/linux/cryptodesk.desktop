@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CryptoDesk
+Comment=Independent public spot-market charts
+Exec=cryptodesk
+Icon=cryptodesk
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=cryptodesk

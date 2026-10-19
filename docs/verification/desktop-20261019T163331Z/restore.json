@@ -1,0 +1,114 @@
+{
+  "phase": "restore",
+  "startedAt": "2026-10-19T16:33:37.539Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "restart restores actual 3+1 chart workspace",
+      "passed": true,
+      "actual": {
+        "tabs": 2,
+        "charts": [
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "name": "active tab restored",
+      "passed": true,
+      "actual": "875397f6-ea83-48bc-8363-38592ae7a671"
+    },
+    {
+      "name": "only selected tab is mounted after restart",
+      "passed": true,
+      "actual": {
+        "charts": 3,
+        "placeholders": 6
+      }
+    },
+    {
+      "name": "native close flushed the final immediate edit",
+      "passed": true,
+      "actual": {
+        "id": "96d29a7a-0710-4400-a310-b7ce0948a542",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "4h",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": null,
+          "toSec": null,
+          "barSpacing": 6,
+          "rightOffset": 5
+        }
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 2,
+    "charts": [
+      3,
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-19T16:33:38.155305759Z",
+    "display": ":0",
+    "goHeapBytes": 1535104,
+    "goHeapInUseBytes": 3522560,
+    "goVersion": "go1.26.8",
+    "goroutines": 20,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 1.19,
+    "processTreeRSSBytes": 511909888,
+    "processes": 3,
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 5
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 2,
+      "cachedFeeds": 2,
+      "cachedCandles": 0,
+      "historyRequests": 2,
+      "queueDepth": 0,
+      "resyncs": 0,
+      "sockets": 0,
+      "reconnects": 0,
+      "restRequests": 3
+    },
+    "mode": "public live data",
+    "persistedRevision": 5,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "connectingFollowing live · no messagesUTC",
+    "connectingFollowing live · no messagesUTC",
+    "connectingFollowing live · no messagesUTC"
+  ],
+  "finishedAt": "2026-10-19T16:33:38.180Z"
+}

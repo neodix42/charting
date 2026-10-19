@@ -19,3 +19,15 @@ runtime testing, provider schema differences, supported public chart APIs, and j
 architecture adjustments. Do not use this file to silently relax the user's explicit limits
 or remove required exchanges. The default settings above are design choices, not measured
 performance results or assertions of current exchange availability.
+
+| D012 | 2026-10-19: bundle is unpacked at project root, application built at root | No unrelated app or uncommitted work existed; preserve instruction files and add APP_README.md for running the app |
+| D013 | Go module/CLI Wails v2.17.0; Go 1.26.8; React 19.3.1; Lightweight Charts 5.2.1; Vite 8.3.4; Vitest 5.0.5 | Versions verified against official docs/release registry and installed public APIs; exact lockfiles retained |
+| D014 | modernc.org/sqlite v1.60.1; gorilla/websocket v1.5.3; shopspring/decimal v1.4.0 | GUI-independent SQLite and exact decimal aggregation; WAL synchronous FULL, serialized commits and transaction backups |
+| D015 | Local extracted Ubuntu SDK under ignored .tools/native | Runtime GTK/WebKit was installed but development headers absent. Unprivileged download/extraction enables build without changing OS packages/settings |
+| D016 | Lightweight Charts public getVisibleRange/setVisibleRange/setAutoScale | Pinned v5.2.1 supports manual price range restoration without private APIs; documented since v5.0.7 |
+| D017 | Multiplex provider sockets and Coinbase product trades, chart leases per feed | One provider socket can serve several independent visible charts; partial Coinbase buckets stay provisional and REST never adds buffered trade volume |
+| D018 | Current official source review | Wails v2 options/events/install/build and current LWC price-scale docs reviewed; provider wire schemas reviewed against SOURCES.md. Coinbase channel URL now redirects to websocket-endpoints; concrete parser fixtures use synthetic documentation-shaped envelopes |
+| D019 | 2026-10-19: actual native build and automated smoke on Ubuntu26.04.1/Wayland | Project-local SDK links installed GTK3.24.52/WebKitGTK2.52.6; no system installation performed. Wails doctor package checks alone do not recognize the local SDK; production build is the evidence |
+| D020 | Provider limits/current observed wire details | Binance SPOT discovery suppresses permissionSets and caps32MiB; explicit case-distinct wire fields avoid encoding/json e/E,v/V collisions. Coinbase cursor pagination, aliases and trade-derived all-interval feeds verified against current public docs/live calls |
+| D021 | Bounded moving historical windows and paginated repair |10k/frontendseries and10k/feed cache; older loads evict newer rendering bars while preserving viewport; Returnlive reloads newest. Reconnect repair paginates up to10k with explicit older-outage omission reason |
+| D022 | Release verification boundary | Actual native automated20/180+200switch test and all-provider65sminute observations passed; complete manual dialogs/DPI/suspend/daily/other-release coverage remains unverified, documented in docs/verification/REPORT.md |

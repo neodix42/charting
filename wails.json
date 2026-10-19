@@ -1,0 +1,11 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "CryptoDesk",
+  "outputfilename": "cryptodesk",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {"name": "CryptoDesk contributors"},
+  "info": {"companyName": "CryptoDesk", "productName": "CryptoDesk", "productVersion": "0.1.0", "copyright": "CryptoDesk contributors", "comments": "Public spot market chart workspace"}
+}

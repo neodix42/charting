@@ -1,0 +1,2 @@
+import {test,expect} from '@playwright/test';
+test('production browser preview visibly rejects missing Wails bridge without fixtures',async({page})=>{await page.goto('http://127.0.0.1:4174');await expect(page.getByText('Unable to open workspace')).toBeVisible();await expect(page.getByText(/The Wails desktop bridge is unavailable/)).toBeVisible();await expect(page.getByTestId('chart-cell')).toHaveCount(0);await expect(page.getByText('EXPLICIT TEST FIXTURE MODE')).toHaveCount(0);expect(await page.evaluate(()=>window.__CRYPTO_TEST__)).toBeUndefined();});

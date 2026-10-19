@@ -31,3 +31,16 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# CryptoDesk generated dependencies, outputs and private state
+node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+.tools/
+build/bin/
+release/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.lockfile

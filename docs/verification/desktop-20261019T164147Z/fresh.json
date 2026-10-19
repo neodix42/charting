@@ -1,0 +1,145 @@
+{
+  "phase": "fresh",
+  "startedAt": "2026-10-19T16:41:51.056Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "first launch exactly one tab and chart",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "initial 1×1 grid",
+      "passed": true,
+      "actual": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1
+        ],
+        "columnFractions": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "3×3 adds eight placeholders only",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "placeholders": 8
+      }
+    },
+    {
+      "name": "each Add chart creates exactly one chart",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "new tab has exactly one chart and 1×1 grid",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "grid": "1x1"
+      }
+    },
+    {
+      "name": "small workspace saved with exact counts",
+      "passed": true,
+      "actual": [
+        3,
+        1
+      ]
+    },
+    {
+      "name": "independent chart settings saved",
+      "passed": true,
+      "actual": {
+        "id": "c4707e2e-cebf-42c6-bd96-3666a103051d",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "15m",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": null,
+          "toSec": null,
+          "barSpacing": 6,
+          "rightOffset": 5
+        }
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-19T16:41:51.563085569Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3200488,
+    "goHeapInUseBytes": 5070848,
+    "goVersion": "go1.26.8",
+    "goroutines": 16,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.98,
+    "processTreeRSSBytes": 522649600,
+    "processes": 3,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "savedRevision": 4,
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 4
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 2,
+      "cachedFeeds": 2,
+      "cachedCandles": 1000,
+      "historyRequests": 2,
+      "queueDepth": 0,
+      "resyncs": 2,
+      "sockets": 1,
+      "reconnects": 1,
+      "restRequests": 5
+    },
+    "mode": "public live data",
+    "persistedRevision": 4,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "reconciling · Subscribed; loading overlapping public historyFollowing live · Feed no messages · trade unknownUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed no messages · trade unknownUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed no messages · trade unknownUTC"
+  ],
+  "finishedAt": "2026-10-19T16:41:52.366Z"
+}
