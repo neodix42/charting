@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
-python3 -m unittest discover -s scripts -p 'test_node_toolchain.py'
+python3 -m unittest discover -s scripts -p 'test_*.py'
 require_node
 go test -race ./internal/... ./cmd/...
 go test -tags bindings .

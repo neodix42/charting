@@ -43,6 +43,9 @@ release/
 /cryptodesk
 /cryptodesk-*-linux-*.tar.gz
 /cryptodesk-SHA256SUMS
+/cryptodesk-*-windows-*.zip
+/cryptodesk-*-windows-*.zip.tmp
+/cryptodesk-Windows-SHA256SUMS
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

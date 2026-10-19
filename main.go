@@ -8,7 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
+	"runtime"
 
 	"cryptodesk/internal/storage"
 	"github.com/wailsapp/wails/v2"
@@ -21,16 +21,25 @@ import (
 var assets embed.FS
 
 func main() {
-	dataDir := flag.String("data-dir", "", "isolated workspace directory (default: XDG data home/cryptodesk)")
+	dataDir := flag.String("data-dir", "", "workspace directory (portable Windows default: executable directory/data)")
 	flag.Parse()
-	path, err := storage.DefaultPath()
-	if *dataDir != "" {
-		path = filepath.Join(*dataDir, "workspace.sqlite")
+	var executable string
+	if runtime.GOOS == "windows" {
+		var err error
+		executable, err = os.Executable()
+		if err != nil {
+			fatal(fmt.Errorf("locate executable: %w", err))
+		}
 	}
+	paths, err := resolveStartupPaths(runtime.GOOS, executable, *dataDir, storage.DefaultPath)
 	if err != nil {
 		fatal(err)
 	}
-	store, err := storage.Open(path)
+	windowsOptions, err := preparePlatformStartup(paths)
+	if err != nil {
+		fatal(err)
+	}
+	store, err := storage.Open(paths.workspacePath)
 	if err != nil {
 		fatal(err)
 	}
@@ -45,9 +54,9 @@ func main() {
 	}
 	a := newApp(store, loaded)
 	width, height := a.window.Width, a.window.Height
-	err = wails.Run(&options.App{Title: "CryptoDesk", Width: width, Height: height, MinWidth: 1100, MinHeight: 720, BackgroundColour: &options.RGBA{R: 14, G: 18, B: 25, A: 255}, AssetServer: &assetserver.Options{Assets: assets}, OnStartup: a.startup, OnDomReady: a.domready, OnBeforeClose: a.beforeClose, OnShutdown: a.shutdown, Bind: []interface{}{a}, Linux: &linux.Options{ProgramName: "cryptodesk", WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand}})
+	err = wails.Run(&options.App{Title: "CryptoDesk", Width: width, Height: height, MinWidth: 1100, MinHeight: 720, BackgroundColour: &options.RGBA{R: 14, G: 18, B: 25, A: 255}, AssetServer: &assetserver.Options{Assets: assets}, OnStartup: a.startup, OnDomReady: a.domready, OnBeforeClose: a.beforeClose, OnShutdown: a.shutdown, Bind: []interface{}{a}, Linux: &linux.Options{ProgramName: "cryptodesk", WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand}, Windows: windowsOptions})
 	if err != nil {
 		fatal(err)
 	}
 }
-func fatal(err error) { fmt.Fprintln(os.Stderr, "CryptoDesk:", err); os.Exit(1) }
+func fatal(err error) { fmt.Fprintln(os.Stderr, "CryptoDesk:", err); platformFatal(err); os.Exit(1) }

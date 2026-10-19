@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"syscall"
 	"testing"
+
+	"cryptodesk/internal/storage"
 )
 
 // Run the real bindings entry point in a subprocess so its command-line parsing
@@ -41,22 +42,17 @@ func TestBindingsGenerationLeavesWorkspaceUntouched(t *testing.T) {
 			dataDir := filepath.Join(root, "data")
 			workspaceDir := filepath.Join(dataDir, "cryptodesk")
 			workspacePath := filepath.Join(workspaceDir, "workspace.sqlite")
-			sentinel := []byte("existing workspace must remain untouched")
+			var originals map[string][]byte
 			if locked {
-				if err := os.MkdirAll(workspaceDir, 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(workspacePath, sentinel, 0600); err != nil {
-					t.Fatal(err)
-				}
-				lock, err := os.OpenFile(workspacePath+".lock", os.O_CREATE|os.O_RDWR, 0600)
+				store, err := storage.Open(workspacePath)
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Cleanup(func() { _ = lock.Close() })
-				if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+				t.Cleanup(func() { _ = store.Close() })
+				if _, err := store.Load(); err != nil {
 					t.Fatal(err)
 				}
+				originals = readWorkspaceFiles(t, workspaceDir)
 			}
 			executable, err := os.Executable()
 			if err != nil {
@@ -64,18 +60,19 @@ func TestBindingsGenerationLeavesWorkspaceUntouched(t *testing.T) {
 			}
 			cmd := exec.Command(executable, "-test.run=^TestBindingsMainProcess$")
 			cmd.Dir = projectDir
-			cmd.Env = append(os.Environ(), "CRYPTODESK_TEST_BINDINGS_PROCESS=1", "XDG_DATA_HOME="+dataDir)
+			cmd.Env = append(os.Environ(), "CRYPTODESK_TEST_BINDINGS_PROCESS=1", "XDG_DATA_HOME="+dataDir, "LOCALAPPDATA="+dataDir, "APPDATA="+dataDir)
 			if output, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("bindings entry point failed: %v\n%s", err, output)
 			}
 			if locked {
-				actual, err := os.ReadFile(workspacePath)
-				if err != nil || !bytes.Equal(actual, sentinel) {
-					t.Fatalf("workspace changed: %q, %v", actual, err)
+				actual := readWorkspaceFiles(t, workspaceDir)
+				if len(actual) != len(originals) {
+					t.Fatalf("workspace directory changed: %v", actual)
 				}
-				entries, err := os.ReadDir(workspaceDir)
-				if err != nil || len(entries) != 2 {
-					t.Fatalf("workspace directory changed: %v, %v", entries, err)
+				for name, before := range originals {
+					if after, ok := actual[name]; !ok || !bytes.Equal(before, after) {
+						t.Fatalf("workspace file changed: %s", name)
+					}
 				}
 			} else if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 				t.Fatalf("bindings created a data directory: %v", err)
@@ -104,4 +101,21 @@ func TestBindingsGenerationLeavesWorkspaceUntouched(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readWorkspaceFiles(t *testing.T, directory string) map[string][]byte {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(directory, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[entry.Name()] = data
+	}
+	return files
 }

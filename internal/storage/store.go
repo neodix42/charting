@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"cryptodesk/internal/domain"
@@ -60,18 +59,6 @@ type Store struct {
 	closed bool
 }
 
-func DefaultPath() (string, error) {
-	base := os.Getenv("XDG_DATA_HOME")
-	if !filepath.IsAbs(base) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		base = filepath.Join(home, ".local", "share")
-	}
-	return filepath.Join(base, "cryptodesk", "workspace.sqlite"), nil
-}
-
 func Open(path string) (*Store, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -84,12 +71,12 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err = lockWorkspaceFile(lock); err != nil {
 		lock.Close()
-		return nil, ErrLocked
+		return nil, err
 	}
 	fail := func(e error) (*Store, error) {
-		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		_ = unlockWorkspaceFile(lock)
 		_ = lock.Close()
 		return nil, e
 	}
@@ -104,7 +91,7 @@ func Open(path string) (*Store, error) {
 	if err = f.Close(); err != nil {
 		return fail(err)
 	}
-	source := (&url.URL{Scheme: "file", Path: abs}).String()
+	source := sqliteURI(abs)
 	db, err := sql.Open("sqlite", source)
 	if err != nil {
 		return fail(err)
@@ -128,6 +115,16 @@ func Open(path string) (*Store, error) {
 	s := &Store{db: db, lock: lock, path: abs}
 	s.privateFiles()
 	return s, nil
+}
+
+// sqliteURI escapes filenames rather than allowing #, %, or ? to become URI
+// syntax. SQLite expects forward slashes and a leading slash on Windows drives.
+func sqliteURI(path string) string {
+	normalized := filepath.ToSlash(path)
+	if filepath.VolumeName(path) != "" && !strings.HasPrefix(normalized, "/") {
+		normalized = "/" + normalized
+	}
+	return (&url.URL{Scheme: "file", Path: normalized}).String()
 }
 
 const migrationOne = `
@@ -427,7 +424,7 @@ func (s *Store) Close() error {
 	}
 	s.closed = true
 	err := s.db.Close()
-	unlockErr := syscall.Flock(int(s.lock.Fd()), syscall.LOCK_UN)
+	unlockErr := unlockWorkspaceFile(s.lock)
 	closeErr := s.lock.Close()
 	return errors.Join(err, unlockErr, closeErr)
 }

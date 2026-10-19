@@ -1,0 +1,443 @@
+RECOVERY VERIFICATION: Windows test executables rebuilt from restored sources; original raw log was deleted.
+Testing domain.test.exe
+wine: created the configuration directory '/tmp/cryptodesk-recovered-windows-tests-gnhj2qra/wine'
+libEGL warning: pci id for fd 41: 10de:2783, driver (null)
+
+pci id for fd 42: 10de:2783, driver (null)
+pci id for fd 43: 10de:2783, driver (null)
+libEGL warning: egl: failed to create dri2 screen
+libEGL warning: pci id for fd 41: 10de:2783, driver (null)
+
+pci id for fd 42: 10de:2783, driver (null)
+pci id for fd 43: 10de:2783, driver (null)
+libEGL warning: egl: failed to create dri2 screen
+libEGL warning: pci id for fd 41: 10de:2783, driver (null)
+
+=== RUN   TestIndicatorConfigurationRoundTripAndLegacyCompatibility
+--- PASS: TestIndicatorConfigurationRoundTripAndLegacyCompatibility (0.00s)
+=== RUN   TestInvalidIndicatorConfigurationsRejected
+=== RUN   TestInvalidIndicatorConfigurationsRejected/duplicate_global_ID
+=== RUN   TestInvalidIndicatorConfigurationsRejected/unsafe_color
+=== RUN   TestInvalidIndicatorConfigurationsRejected/empty_color
+=== RUN   TestInvalidIndicatorConfigurationsRejected/MACD_reversed
+=== RUN   TestInvalidIndicatorConfigurationsRejected/negative_displacement
+=== RUN   TestInvalidIndicatorConfigurationsRejected/zero_period
+=== RUN   TestInvalidIndicatorConfigurationsRejected/missing_parameters
+=== RUN   TestInvalidIndicatorConfigurationsRejected/duplicate_indicator
+=== RUN   TestInvalidIndicatorConfigurationsRejected/too_many
+=== RUN   TestInvalidIndicatorConfigurationsRejected/unknown_kind
+=== RUN   TestInvalidIndicatorConfigurationsRejected/huge_period
+=== RUN   TestInvalidIndicatorConfigurationsRejected/irrelevant_parameter
+--- PASS: TestInvalidIndicatorConfigurationsRejected (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/duplicate_global_ID (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/unsafe_color (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/empty_color (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/MACD_reversed (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/negative_displacement (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/zero_period (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/missing_parameters (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/duplicate_indicator (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/too_many (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/unknown_kind (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/huge_period (0.00s)
+    --- PASS: TestInvalidIndicatorConfigurationsRejected/irrelevant_parameter (0.00s)
+=== RUN   TestIndicatorJSONStrictness
+=== RUN   TestIndicatorJSONStrictness/null_period
+=== RUN   TestIndicatorJSONStrictness/fractional_period
+=== RUN   TestIndicatorJSONStrictness/string_period
+=== RUN   TestIndicatorJSONStrictness/case_alias
+=== RUN   TestIndicatorJSONStrictness/extra_properties
+=== RUN   TestIndicatorJSONStrictness/missing_parameters
+=== RUN   TestIndicatorJSONStrictness/null_indicators
+=== RUN   TestIndicatorJSONStrictness/null_color
+--- PASS: TestIndicatorJSONStrictness (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/null_period (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/fractional_period (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/string_period (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/case_alias (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/extra_properties (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/missing_parameters (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/null_indicators (0.00s)
+    --- PASS: TestIndicatorJSONStrictness/null_color (0.00s)
+=== RUN   TestNativeInstrumentValidationKeepsProviderIdentity
+--- PASS: TestNativeInstrumentValidationKeepsProviderIdentity (0.00s)
+=== RUN   TestFirstLaunchAndNewTab
+--- PASS: TestFirstLaunchAndNewTab (0.00s)
+=== RUN   TestEveryExampleExactRoundTrip
+=== RUN   TestEveryExampleExactRoundTrip/capacity-20-tabs-180-charts.json
+=== RUN   TestEveryExampleExactRoundTrip/intermediate-two-tabs.json
+=== RUN   TestEveryExampleExactRoundTrip/starter-one-tab-one-chart.json
+--- PASS: TestEveryExampleExactRoundTrip (0.02s)
+    --- PASS: TestEveryExampleExactRoundTrip/capacity-20-tabs-180-charts.json (0.02s)
+    --- PASS: TestEveryExampleExactRoundTrip/intermediate-two-tabs.json (0.00s)
+    --- PASS: TestEveryExampleExactRoundTrip/starter-one-tab-one-chart.json (0.00s)
+=== RUN   TestInvalidWorkspaceSemantics
+=== RUN   TestInvalidWorkspaceSemantics/manual_without_range
+=== RUN   TestInvalidWorkspaceSemantics/ten_charts
+=== RUN   TestInvalidWorkspaceSemantics/zero_tabs
+=== RUN   TestInvalidWorkspaceSemantics/zero_charts
+=== RUN   TestInvalidWorkspaceSemantics/charts_exceed_grid
+=== RUN   TestInvalidWorkspaceSemantics/missing_active
+=== RUN   TestInvalidWorkspaceSemantics/wrong_app
+=== RUN   TestInvalidWorkspaceSemantics/unsupported_exchange
+=== RUN   TestInvalidWorkspaceSemantics/executable_name
+=== RUN   TestInvalidWorkspaceSemantics/twenty_one_tabs
+=== RUN   TestInvalidWorkspaceSemantics/invalid_uuid
+=== RUN   TestInvalidWorkspaceSemantics/future_schema
+=== RUN   TestInvalidWorkspaceSemantics/unknown_theme
+=== RUN   TestInvalidWorkspaceSemantics/unsupported_grid
+=== RUN   TestInvalidWorkspaceSemantics/wrong_fraction_length
+=== RUN   TestInvalidWorkspaceSemantics/endpoint_instrument
+=== RUN   TestInvalidWorkspaceSemantics/reversed_price_range
+=== RUN   TestInvalidWorkspaceSemantics/unknown_timezone
+=== RUN   TestInvalidWorkspaceSemantics/wrong_fractions
+=== RUN   TestInvalidWorkspaceSemantics/unsupported_market
+=== RUN   TestInvalidWorkspaceSemantics/unknown_scale
+=== RUN   TestInvalidWorkspaceSemantics/long_name
+=== RUN   TestInvalidWorkspaceSemantics/unsupported_interval
+=== RUN   TestInvalidWorkspaceSemantics/nonfinite_viewport
+=== RUN   TestInvalidWorkspaceSemantics/offscreen_offset
+=== RUN   TestInvalidWorkspaceSemantics/case-insensitive_uuid_uniqueness
+=== RUN   TestInvalidWorkspaceSemantics/empty_name
+=== RUN   TestInvalidWorkspaceSemantics/unknown_type
+=== RUN   TestInvalidWorkspaceSemantics/historical_without_anchors
+=== RUN   TestInvalidWorkspaceSemantics/reversed_time_anchors
+=== RUN   TestInvalidWorkspaceSemantics/negative_anchor
+=== RUN   TestInvalidWorkspaceSemantics/duplicate_chart_id
+=== RUN   TestInvalidWorkspaceSemantics/control_name
+=== RUN   TestInvalidWorkspaceSemantics/window_too_small
+=== RUN   TestInvalidWorkspaceSemantics/nonfinite_fractions
+--- PASS: TestInvalidWorkspaceSemantics (0.01s)
+    --- PASS: TestInvalidWorkspaceSemantics/manual_without_range (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/ten_charts (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/zero_tabs (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/zero_charts (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/charts_exceed_grid (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/missing_active (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/wrong_app (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unsupported_exchange (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/executable_name (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/twenty_one_tabs (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/invalid_uuid (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/future_schema (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unknown_theme (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unsupported_grid (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/wrong_fraction_length (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/endpoint_instrument (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/reversed_price_range (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unknown_timezone (0.01s)
+    --- PASS: TestInvalidWorkspaceSemantics/wrong_fractions (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unsupported_market (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unknown_scale (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/long_name (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unsupported_interval (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/nonfinite_viewport (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/offscreen_offset (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/case-insensitive_uuid_uniqueness (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/empty_name (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/unknown_type (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/historical_without_anchors (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/reversed_time_anchors (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/negative_anchor (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/duplicate_chart_id (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/control_name (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/window_too_small (0.00s)
+    --- PASS: TestInvalidWorkspaceSemantics/nonfinite_fractions (0.00s)
+=== RUN   TestStrictJSONShape
+=== RUN   TestStrictJSONShape/case_alias_property
+=== RUN   TestStrictJSONShape/missing_boolean
+=== RUN   TestStrictJSONShape/trailing_document
+=== RUN   TestStrictJSONShape/invalid_utf8
+=== RUN   TestStrictJSONShape/duplicate_property
+=== RUN   TestStrictJSONShape/unknown_endpoint
+=== RUN   TestStrictJSONShape/null_boolean
+=== RUN   TestStrictJSONShape/null_object
+=== RUN   TestStrictJSONShape/too_large
+--- PASS: TestStrictJSONShape (0.01s)
+    --- PASS: TestStrictJSONShape/case_alias_property (0.00s)
+    --- PASS: TestStrictJSONShape/missing_boolean (0.00s)
+    --- PASS: TestStrictJSONShape/trailing_document (0.00s)
+    --- PASS: TestStrictJSONShape/invalid_utf8 (0.00s)
+    --- PASS: TestStrictJSONShape/duplicate_property (0.00s)
+    --- PASS: TestStrictJSONShape/unknown_endpoint (0.00s)
+    --- PASS: TestStrictJSONShape/null_boolean (0.00s)
+    --- PASS: TestStrictJSONShape/null_object (0.00s)
+    --- PASS: TestStrictJSONShape/too_large (0.00s)
+PASS
+Testing exchange.test.exe
+=== RUN   TestNativeFixtureCumulativeOrdering
+--- PASS: TestNativeFixtureCumulativeOrdering (0.00s)
+=== RUN   TestHistoryFixtureReversedOverlap
+--- PASS: TestHistoryFixtureReversedOverlap (0.00s)
+=== RUN   TestTradeFixtureExactDedupOutOfOrderLate
+--- PASS: TestTradeFixtureExactDedupOutOfOrderLate (0.00s)
+=== RUN   TestAllIntervalUTCBoundaries
+=== RUN   TestAllIntervalUTCBoundaries/1m
+=== RUN   TestAllIntervalUTCBoundaries/5m
+=== RUN   TestAllIntervalUTCBoundaries/15m
+=== RUN   TestAllIntervalUTCBoundaries/1h
+=== RUN   TestAllIntervalUTCBoundaries/4h
+=== RUN   TestAllIntervalUTCBoundaries/1d
+=== RUN   TestAllIntervalUTCBoundaries/1w
+--- PASS: TestAllIntervalUTCBoundaries (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/1m (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/5m (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/15m (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/1h (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/4h (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/1d (0.00s)
+    --- PASS: TestAllIntervalUTCBoundaries/1w (0.00s)
+=== RUN   TestOverlapAndGapNeverSumRESTVolume
+--- PASS: TestOverlapAndGapNeverSumRESTVolume (0.00s)
+=== RUN   TestInvalidCandlesRejected
+--- PASS: TestInvalidCandlesRejected (0.00s)
+=== RUN   TestProviderHistoriesAllIntervals
+=== RUN   TestProviderHistoriesAllIntervals/binance/1m
+=== RUN   TestProviderHistoriesAllIntervals/binance/5m
+=== RUN   TestProviderHistoriesAllIntervals/binance/15m
+=== RUN   TestProviderHistoriesAllIntervals/binance/1h
+=== RUN   TestProviderHistoriesAllIntervals/binance/4h
+=== RUN   TestProviderHistoriesAllIntervals/binance/1d
+=== RUN   TestProviderHistoriesAllIntervals/binance/1w
+=== RUN   TestProviderHistoriesAllIntervals/bybit/1m
+=== RUN   TestProviderHistoriesAllIntervals/bybit/5m
+=== RUN   TestProviderHistoriesAllIntervals/bybit/15m
+=== RUN   TestProviderHistoriesAllIntervals/bybit/1h
+=== RUN   TestProviderHistoriesAllIntervals/bybit/4h
+=== RUN   TestProviderHistoriesAllIntervals/bybit/1d
+=== RUN   TestProviderHistoriesAllIntervals/bybit/1w
+=== RUN   TestProviderHistoriesAllIntervals/coinbase/1m
+=== RUN   TestProviderHistoriesAllIntervals/coinbase/5m
+=== RUN   TestProviderHistoriesAllIntervals/coinbase/15m
+=== RUN   TestProviderHistoriesAllIntervals/coinbase/1h
+=== RUN   TestProviderHistoriesAllIntervals/coinbase/4h
+=== RUN   TestProviderHistoriesAllIntervals/coinbase/1d
+--- PASS: TestProviderHistoriesAllIntervals (0.23s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/1m (0.02s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/5m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/15m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/1h (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/4h (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/1d (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/binance/1w (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/1m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/5m (0.02s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/15m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/1h (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/4h (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/1d (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/bybit/1w (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/coinbase/1m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/coinbase/5m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/coinbase/15m (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/coinbase/1h (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/coinbase/4h (0.01s)
+    --- PASS: TestProviderHistoriesAllIntervals/coinbase/1d (0.01s)
+=== RUN   TestNativeEnvelopesAllIntervals
+=== RUN   TestNativeEnvelopesAllIntervals/binance/1m
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/1m
+=== RUN   TestNativeEnvelopesAllIntervals/binance/5m
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/5m
+=== RUN   TestNativeEnvelopesAllIntervals/binance/15m
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/15m
+=== RUN   TestNativeEnvelopesAllIntervals/binance/1h
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/1h
+=== RUN   TestNativeEnvelopesAllIntervals/binance/4h
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/4h
+=== RUN   TestNativeEnvelopesAllIntervals/binance/1d
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/1d
+=== RUN   TestNativeEnvelopesAllIntervals/binance/1w
+=== RUN   TestNativeEnvelopesAllIntervals/bybit/1w
+--- PASS: TestNativeEnvelopesAllIntervals (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/1m (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/1m (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/5m (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/5m (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/15m (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/15m (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/1h (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/1h (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/4h (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/4h (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/1d (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/1d (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/binance/1w (0.00s)
+    --- PASS: TestNativeEnvelopesAllIntervals/bybit/1w (0.00s)
+=== RUN   TestCoinbaseTradeEnvelopeAllIntervals
+--- PASS: TestCoinbaseTradeEnvelopeAllIntervals (0.00s)
+=== RUN   TestErrorBodiesAndRetryCancellation
+=== RUN   TestErrorBodiesAndRetryCancellation/restricted
+=== RUN   TestErrorBodiesAndRetryCancellation/rate
+=== RUN   TestErrorBodiesAndRetryCancellation/bybit
+=== RUN   TestErrorBodiesAndRetryCancellation/binance
+=== RUN   TestErrorBodiesAndRetryCancellation/coinbase
+--- PASS: TestErrorBodiesAndRetryCancellation (0.05s)
+    --- PASS: TestErrorBodiesAndRetryCancellation/restricted (0.01s)
+    --- PASS: TestErrorBodiesAndRetryCancellation/rate (0.01s)
+    --- PASS: TestErrorBodiesAndRetryCancellation/bybit (0.01s)
+    --- PASS: TestErrorBodiesAndRetryCancellation/binance (0.01s)
+    --- PASS: TestErrorBodiesAndRetryCancellation/coinbase (0.01s)
+=== RUN   TestCoinbaseAliasRejectedAndExceptions
+--- PASS: TestCoinbaseAliasRejectedAndExceptions (0.00s)
+=== RUN   TestInstrumentDiscoveryMetadataCacheAndCopies
+=== RUN   TestInstrumentDiscoveryMetadataCacheAndCopies/binance
+=== RUN   TestInstrumentDiscoveryMetadataCacheAndCopies/bybit
+=== RUN   TestInstrumentDiscoveryMetadataCacheAndCopies/coinbase
+--- PASS: TestInstrumentDiscoveryMetadataCacheAndCopies (0.03s)
+    --- PASS: TestInstrumentDiscoveryMetadataCacheAndCopies/binance (0.01s)
+    --- PASS: TestInstrumentDiscoveryMetadataCacheAndCopies/bybit (0.01s)
+    --- PASS: TestInstrumentDiscoveryMetadataCacheAndCopies/coinbase (0.01s)
+=== RUN   TestCoinbaseCursorPaginationAndNoProgress
+=== RUN   TestCoinbaseCursorPaginationAndNoProgress/false
+=== RUN   TestCoinbaseCursorPaginationAndNoProgress/true
+--- PASS: TestCoinbaseCursorPaginationAndNoProgress (0.31s)
+    --- PASS: TestCoinbaseCursorPaginationAndNoProgress/false (0.16s)
+    --- PASS: TestCoinbaseCursorPaginationAndNoProgress/true (0.16s)
+=== RUN   TestRateLimitRetryAfterSuppressesFurtherRequests
+--- PASS: TestRateLimitRetryAfterSuppressesFurtherRequests (0.01s)
+=== RUN   TestReconnectHistoryPaginationOver350Buckets
+--- PASS: TestReconnectHistoryPaginationOver350Buckets (0.31s)
+=== RUN   TestHubSequenceCheckedBeforeProductRoutingAndOverflow
+--- PASS: TestHubSequenceCheckedBeforeProductRoutingAndOverflow (0.00s)
+=== RUN   TestSharedProviderSocketAndSubscribeFirstHandover
+--- PASS: TestSharedProviderSocketAndSubscribeFirstHandover (0.17s)
+=== RUN   TestSharedExistingCoinbaseTopicStartsHistoryForNewInterval
+--- PASS: TestSharedExistingCoinbaseTopicStartsHistoryForNewInterval (0.46s)
+=== RUN   TestOverflowConcurrentConsumerCannotDeadlock
+--- PASS: TestOverflowConcurrentConsumerCannotDeadlock (0.00s)
+=== RUN   TestReconnectRepairsTwoMissingBuckets
+--- PASS: TestReconnectRepairsTwoMissingBuckets (1.05s)
+=== RUN   TestBinanceHubAcceptsCaseSensitiveEventTimestamp
+--- PASS: TestBinanceHubAcceptsCaseSensitiveEventTimestamp (0.00s)
+=== RUN   TestWeeklyBoundariesMondayAndYearRollover
+--- PASS: TestWeeklyBoundariesMondayAndYearRollover (0.00s)
+=== RUN   TestCoinbaseWeeklyDerivedDailyOHLCVAndPartialCoverage
+--- PASS: TestCoinbaseWeeklyDerivedDailyOHLCVAndPartialCoverage (0.01s)
+=== RUN   TestCoinbaseWeeklyDailyPaginationAndHistoricalMidweekEnd
+--- PASS: TestCoinbaseWeeklyDailyPaginationAndHistoricalMidweekEnd (0.16s)
+=== RUN   TestWeeklyTradesBoundaryDedupAndRESTReconciliation
+--- PASS: TestWeeklyTradesBoundaryDedupAndRESTReconciliation (0.00s)
+PASS
+Testing market.test.exe
+=== RUN   TestImmediateRetryRestartsTerminalStreamInsideGrace
+=== RUN   TestImmediateRetryRestartsTerminalStreamInsideGrace/unexpected_clean_end
+=== RUN   TestImmediateRetryRestartsTerminalStreamInsideGrace/failure
+--- PASS: TestImmediateRetryRestartsTerminalStreamInsideGrace (0.01s)
+    --- PASS: TestImmediateRetryRestartsTerminalStreamInsideGrace/unexpected_clean_end (0.00s)
+    --- PASS: TestImmediateRetryRestartsTerminalStreamInsideGrace/failure (0.00s)
+=== RUN   TestPaginationCancellationFollowsLastSharedLease
+--- PASS: TestPaginationCancellationFollowsLastSharedLease (0.05s)
+=== RUN   TestPendingHistoryBoundAndCloseCancellation
+--- PASS: TestPendingHistoryBoundAndCloseCancellation (0.00s)
+=== RUN   TestResyncDiagnosticsCountTransitionsNotHeartbeats
+--- PASS: TestResyncDiagnosticsCountTransitionsNotHeartbeats (0.00s)
+=== RUN   TestEvictedHistoricalRangeCanBeRestoredAgain
+--- PASS: TestEvictedHistoricalRangeCanBeRestoredAgain (0.01s)
+=== RUN   TestDisjointCachedBarsDoNotSuppressMissingHistoricalWindow
+--- PASS: TestDisjointCachedBarsDoNotSuppressMissingHistoricalWindow (0.00s)
+=== RUN   TestLeaseSharingGraceAndSnapshotHandover
+--- PASS: TestLeaseSharingGraceAndSnapshotHandover (0.02s)
+=== RUN   TestCumulativeDuplicateStaleAndBoundaryBars
+--- PASS: TestCumulativeDuplicateStaleAndBoundaryBars (0.00s)
+=== RUN   TestInFlightHistoryCannotOverwriteNewLiveRevision
+--- PASS: TestInFlightHistoryCannotOverwriteNewLiveRevision (0.00s)
+=== RUN   TestTwoHundredTabSwitchesReleaseAllLeases
+--- PASS: TestTwoHundredTabSwitchesReleaseAllLeases (0.02s)
+=== RUN   TestSharedRestoreOnlyStartsOneRequestBeforeSemaphore
+--- PASS: TestSharedRestoreOnlyStartsOneRequestBeforeSemaphore (0.00s)
+PASS
+Testing startup.test.exe
+=== RUN   TestStartupPortablePackageUsesExecutableDirectoryWithoutWriting
+--- PASS: TestStartupPortablePackageUsesExecutableDirectoryWithoutWriting (0.01s)
+=== RUN   TestStartupDataOverrideBypassesUnavailableDefault
+=== RUN   TestStartupDataOverrideBypassesUnavailableDefault/linux
+=== RUN   TestStartupDataOverrideBypassesUnavailableDefault/windows
+--- PASS: TestStartupDataOverrideBypassesUnavailableDefault (0.01s)
+    --- PASS: TestStartupDataOverrideBypassesUnavailableDefault/linux (0.00s)
+    --- PASS: TestStartupDataOverrideBypassesUnavailableDefault/windows (0.00s)
+=== RUN   TestStartupStandaloneUsesDefaultAndOptionalLocalRuntime
+--- PASS: TestStartupStandaloneUsesDefaultAndOptionalLocalRuntime (0.01s)
+=== RUN   TestStartupIncompletePortablePackageNeverFallsBack
+=== RUN   TestStartupIncompletePortablePackageNeverFallsBack/missing-runtime
+=== RUN   TestStartupIncompletePortablePackageNeverFallsBack/missing-browser
+=== RUN   TestStartupIncompletePortablePackageNeverFallsBack/runtime-is-file
+=== RUN   TestStartupIncompletePortablePackageNeverFallsBack/browser-is-directory
+=== RUN   TestStartupIncompletePortablePackageNeverFallsBack/marker-is-directory
+--- PASS: TestStartupIncompletePortablePackageNeverFallsBack (0.02s)
+    --- PASS: TestStartupIncompletePortablePackageNeverFallsBack/missing-runtime (0.00s)
+    --- PASS: TestStartupIncompletePortablePackageNeverFallsBack/missing-browser (0.00s)
+    --- PASS: TestStartupIncompletePortablePackageNeverFallsBack/runtime-is-file (0.00s)
+    --- PASS: TestStartupIncompletePortablePackageNeverFallsBack/browser-is-directory (0.01s)
+    --- PASS: TestStartupIncompletePortablePackageNeverFallsBack/marker-is-directory (0.00s)
+=== RUN   TestStartupRejectsNetworkRuntimeLocations
+--- PASS: TestStartupRejectsNetworkRuntimeLocations (0.00s)
+=== RUN   TestStartupRuntimeACLsAreScopedToWindows10Package
+--- PASS: TestStartupRuntimeACLsAreScopedToWindows10Package (0.00s)
+=== RUN   TestWindowsStartupCreatesOnlyRequestedProfile
+--- PASS: TestWindowsStartupCreatesOnlyRequestedProfile (0.00s)
+=== RUN   TestWindowsEmbedsTimezoneDatabase
+--- PASS: TestWindowsEmbedsTimezoneDatabase (0.00s)
+PASS
+Testing storage.test.exe
+=== RUN   TestWeeklyIndicatorsPersistRestoreExportAndRejectInvalidImport
+--- PASS: TestWeeklyIndicatorsPersistRestoreExportAndRejectInvalidImport (0.01s)
+=== RUN   TestWindowsDefaultPathUsesLocalProfileAndIgnoresXDG
+--- PASS: TestWindowsDefaultPathUsesLocalProfileAndIgnoresXDG (0.00s)
+=== RUN   TestWindowsDefaultPathFallsBackToUserConfigDirectory
+--- PASS: TestWindowsDefaultPathFallsBackToUserConfigDirectory (0.00s)
+=== RUN   TestWindowsDriveSQLiteURI
+--- PASS: TestWindowsDriveSQLiteURI (0.00s)
+=== RUN   TestEscapedDatabaseFilenameTargetsTheOriginalFile
+--- PASS: TestEscapedDatabaseFilenameTargetsTheOriginalFile (0.01s)
+=== RUN   TestWorkspaceLockExcludesAnotherProcessWithoutWaiting
+--- PASS: TestWorkspaceLockExcludesAnotherProcessWithoutWaiting (0.05s)
+=== RUN   TestFirstRunAndExistingSmallWorkspace
+--- PASS: TestFirstRunAndExistingSmallWorkspace (0.02s)
+=== RUN   TestAllExamplesDatabaseRoundtrip
+=== RUN   TestAllExamplesDatabaseRoundtrip/starter-one-tab-one-chart.json
+=== RUN   TestAllExamplesDatabaseRoundtrip/intermediate-two-tabs.json
+=== RUN   TestAllExamplesDatabaseRoundtrip/capacity-20-tabs-180-charts.json
+--- PASS: TestAllExamplesDatabaseRoundtrip (0.11s)
+    --- PASS: TestAllExamplesDatabaseRoundtrip/starter-one-tab-one-chart.json (0.01s)
+    --- PASS: TestAllExamplesDatabaseRoundtrip/intermediate-two-tabs.json (0.01s)
+    --- PASS: TestAllExamplesDatabaseRoundtrip/capacity-20-tabs-180-charts.json (0.08s)
+=== RUN   TestOrderingConflictsAndConcurrentSaves
+--- PASS: TestOrderingConflictsAndConcurrentSaves (0.01s)
+=== RUN   TestInvalidImportsPreserveCurrentDocument
+=== RUN   TestInvalidImportsPreserveCurrentDocument/zero_tabs
+=== RUN   TestInvalidImportsPreserveCurrentDocument/21_tabs
+=== RUN   TestInvalidImportsPreserveCurrentDocument/zero_charts
+=== RUN   TestInvalidImportsPreserveCurrentDocument/10_charts
+=== RUN   TestInvalidImportsPreserveCurrentDocument/duplicate_ids
+=== RUN   TestInvalidImportsPreserveCurrentDocument/future_version
+--- PASS: TestInvalidImportsPreserveCurrentDocument (0.01s)
+    --- PASS: TestInvalidImportsPreserveCurrentDocument/zero_tabs (0.00s)
+    --- PASS: TestInvalidImportsPreserveCurrentDocument/21_tabs (0.00s)
+    --- PASS: TestInvalidImportsPreserveCurrentDocument/zero_charts (0.00s)
+    --- PASS: TestInvalidImportsPreserveCurrentDocument/10_charts (0.00s)
+    --- PASS: TestInvalidImportsPreserveCurrentDocument/duplicate_ids (0.00s)
+    --- PASS: TestInvalidImportsPreserveCurrentDocument/future_version (0.00s)
+=== RUN   TestBackupsResetRecoveryAndBounds
+--- PASS: TestBackupsResetRecoveryAndBounds (0.02s)
+=== RUN   TestCorruptAndFutureDocumentsAreNeverDefaulted
+=== RUN   TestCorruptAndFutureDocumentsAreNeverDefaulted/corrupt
+=== RUN   TestCorruptAndFutureDocumentsAreNeverDefaulted/future
+--- PASS: TestCorruptAndFutureDocumentsAreNeverDefaulted (0.02s)
+    --- PASS: TestCorruptAndFutureDocumentsAreNeverDefaulted/corrupt (0.01s)
+    --- PASS: TestCorruptAndFutureDocumentsAreNeverDefaulted/future (0.01s)
+=== RUN   TestPhysicalCorruptionAndFutureDatabasePreserved
+--- PASS: TestPhysicalCorruptionAndFutureDatabasePreserved (0.01s)
+=== RUN   TestSingleInstanceAndPrivateDurableConfiguration
+--- PASS: TestSingleInstanceAndPrivateDurableConfiguration (0.01s)
+=== RUN   TestFailedMigrationRollsBackDDLAndVersion
+--- PASS: TestFailedMigrationRollsBackDDLAndVersion (0.01s)
+=== RUN   TestBusyWriteFailsWithoutAcknowledgingOrChangingData
+--- PASS: TestBusyWriteFailsWithoutAcknowledgingOrChangingData (0.01s)
+=== RUN   TestDefaultPath
+--- PASS: TestDefaultPath (0.00s)
+=== RUN   TestAcknowledgedCommitSurvivesKill
+--- PASS: TestAcknowledgedCommitSurvivesKill (0.05s)
+=== RUN   TestPreVersionedWorkspaceBackedUpDuringMigration
+--- PASS: TestPreVersionedWorkspaceBackedUpDuringMigration (0.01s)
+PASS
+PASS all recovered Windows test executables under isolated Wine.

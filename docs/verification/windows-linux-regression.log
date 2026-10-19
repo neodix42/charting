@@ -1,0 +1,9 @@
+RECOVERY RERUN: original raw log was deleted; verification rerun against restored files. Log whitespace normalized.
+
+ok      cryptodesk  1.038s
+?       cryptodesk/cmd/smoke    [no test files]
+?       cryptodesk/frontend/node_modules/flatted/golang/pkg/flatted [no test files]
+ok      cryptodesk/internal/domain  (cached)
+ok      cryptodesk/internal/exchange    (cached)
+ok      cryptodesk/internal/market  (cached)
+ok      cryptodesk/internal/storage (cached)

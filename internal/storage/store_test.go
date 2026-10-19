@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -334,7 +335,9 @@ func TestSingleInstanceAndPrivateDurableConfiguration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm()&0077 != 0 {
+		// Windows reports mode bits differently; user access there is governed
+		// by the profile directory ACL, not POSIX permissions.
+		if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
 			t.Fatal("workspace file readable by other users", name, info.Mode())
 		}
 	}
@@ -401,6 +404,14 @@ func TestBusyWriteFailsWithoutAcknowledgingOrChangingData(t *testing.T) {
 	}
 }
 func TestDefaultPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", t.TempDir())
+		path, err := DefaultPath()
+		if err != nil || path != filepath.Join(os.Getenv("LOCALAPPDATA"), "cryptodesk", "workspace.sqlite") {
+			t.Fatal(path, err)
+		}
+		return
+	}
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	path, err := DefaultPath()
 	if err != nil || path != filepath.Join(os.Getenv("XDG_DATA_HOME"), "cryptodesk", "workspace.sqlite") {

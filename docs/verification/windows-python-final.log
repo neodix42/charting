@@ -1,0 +1,23 @@
+RECOVERY RERUN: original raw log was deleted; verification rerun against restored files. Log whitespace normalized.
+
+.Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/tmpmcjwq32g/.tools/node-test
+.....Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/cryptodesk install tools c22ui3fo/.tools/node-test
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpy10futyk/first
+...Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmp6c9xk4ga/first
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Extracting all pinned WebView2 1.2.3.4 runtime files
+.Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpyhb9mawi/first
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpyhb9mawi/second
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/cryptodesk runtime path xz82a_x9/portable package/WebView2
+......Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+.....
+----------------------------------------------------------------------
+Ran 25 tests in 0.508s
+
+OK

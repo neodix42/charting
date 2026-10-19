@@ -31,6 +31,7 @@ On an Ubuntu machine which already has the corresponding runtime libraries, `scr
 
 ```bash
 ./build.sh                   # ready-to-run app + portable archive + checksums in repo root
+./win-build.sh               # cross-build Windows x64 ZIP with the full WebView2 runtime
 scripts/build-linux.sh       # pinned local CLI, production frontend + desktop + archive
 scripts/dev.sh               # desktop development
 scripts/test.sh              # deterministic Go race/vet + frontend checks/build
@@ -40,6 +41,10 @@ cd frontend && npm run test:e2e
 `./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-0.1.0-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
 
 Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
+
+For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-0.1.0-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The larger ZIP includes the official Microsoft Fixed Version WebView2 runtime, pinned by version and SHA-256. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Initial runtime download is about 300 MB; verified downloads are cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
+
+On Windows, extract the **whole ZIP** to a local writable folder and launch `cryptodesk.exe`. Keep `WebView2` and `portable.marker` beside it; the workspace and browser profile live in its `data` directory. This needs no separate WebView2 installation. Windows 10 startup applies Microsoft's required read/execute grants to the bundled runtime directory; Windows 11 needs no grants. Fixed runtime updates require a new reviewed runtime pin and rebuild. The executable is unsigned, and cross-compilation on Ubuntu does not replace Windows runtime testing. Full details: [Windows portable build and usage](docs/WINDOWS_PORTABLE.md).
 
 The underlying `scripts/build-linux.sh` also retains `build/bin/cryptodesk` and the distribution under `release/`, including checksums, licenses and a version manifest. Build scripts never use sudo or a system package installation. The CLI is installed into project-local `.tools/` if absent. Normal builds contain local assets and no fixture bridge.
 

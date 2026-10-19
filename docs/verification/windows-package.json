@@ -1,0 +1,16 @@
+{
+  "archive": "cryptodesk-0.1.0-windows-amd64.zip",
+  "archiveBytes": 318527501,
+  "entries": 352,
+  "checksummedFilesVerified": 351,
+  "executableBytes": 16870912,
+  "machine": "AMD64",
+  "subsystem": "Windows GUI",
+  "webview2Version": "155.0.4283.62",
+  "runtimeIncluded": true,
+  "licenseIncluded": true,
+  "userDataIncluded": false,
+  "preservedLinuxOutputsAndBindingFiles": 9,
+  "testBridgeExcluded": true,
+  "cachedLocalCABBuildPassed": true
+}
