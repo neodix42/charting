@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cross-build a portable Windows x64 ZIP, including the fixed WebView2 runtime.
+# Cross-build a portable Windows x64 ZIP with English WebView2 locale packs.
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if [[ $# -eq 1 && ( "$1" == --help || "$1" == -h ) ]]; then
@@ -7,6 +7,7 @@ if [[ $# -eq 1 && ( "$1" == --help || "$1" == -h ) ]]; then
     'Builds cryptodesk-0.1.0-windows-amd64.zip and cryptodesk-Windows-SHA256SUMS at repo root.' \
     'Requires Go, Python 3.12+ and 7z (Ubuntu package: 7zip); bootstraps local Node/npm and Wails.' \
     'Downloads and caches the pinned official Microsoft Fixed Version WebView2 runtime.' \
+    'Packages US/UK English locale packs only; shared runtime resources and licenses remain.' \
     'No Windows installation, MinGW, system installation or administrator access is used.' \
     'Extract the complete ZIP on Windows and run cryptodesk.exe; see APP_README.md.'
   exit 0

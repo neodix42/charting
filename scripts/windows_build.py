@@ -14,6 +14,7 @@ import tempfile
 import zipfile
 
 NAME = "cryptodesk-0.1.0-windows-amd64"
+ENGLISH_LOCALE_PAKS = frozenset({"en-US.pak", "en-GB.pak", "copilot_overlay_strings_en-US.pak", "copilot_overlay_strings_en-GB.pak"})
 
 
 def sha256(path):
@@ -61,6 +62,57 @@ def package_zip(directory, archive):
                 output.write(path, f"{directory.name}/{path.relative_to(directory).as_posix()}")
 
 
+def keep_english_locales(runtime):
+    """Reduce only the verified staging copy; never edit the source cache or CAB."""
+    runtime = Path(runtime)
+    locales = runtime / "Locales"
+    if locales.is_symlink() or not locales.is_dir():
+        raise ValueError("The staged runtime is missing its regular Locales directory")
+    packs = sorted(path for path in locales.iterdir() if path.suffix.lower() == ".pak")
+    if any(path.is_symlink() or not path.is_file() for path in packs):
+        raise ValueError("Locale packs must be regular files")
+    for name in ENGLISH_LOCALE_PAKS:
+        if not (locales / name).is_file() or not (locales / name).stat().st_size:
+            raise ValueError(f"The staged runtime is missing the English locale pack {name}")
+    source = json.loads((runtime / "WEBVIEW2-PROVENANCE.json").read_text())
+    removed = [{"name": path.name, "bytes": path.stat().st_size} for path in packs if path.name not in ENGLISH_LOCALE_PAKS]
+    for item in removed:
+        (locales / item["name"]).unlink()
+    inventory = hashlib.sha256()
+    count, total = 0, 0
+    files = sorted((path.relative_to(runtime).as_posix(), path) for path in runtime.rglob("*") if path.is_file() and path.name != "WEBVIEW2-PROVENANCE.json")
+    for name, path in files:
+        size = path.stat().st_size
+        inventory.update(f"{name}\0{size}\0{sha256(path)}\n".encode("utf-8"))
+        count += 1
+        total += size
+    profile = {
+        "profile": "english-only", "languages": ["en-US", "en-GB"],
+        "browserUILanguage": "en-US", "keptLocalePaks": sorted(ENGLISH_LOCALE_PAKS),
+        "removedLocalePaks": removed, "removedBytes": sum(item["bytes"] for item in removed),
+        "file_count": count, "uncompressed_bytes": total, "inventory_sha256": inventory.hexdigest(),
+    }
+    (runtime / "WEBVIEW2-PROVENANCE.json").write_text(json.dumps({"sourceRuntime": source, "packagedRuntime": profile}, indent=2) + "\n")
+    print(f"English locales: kept {len(ENGLISH_LOCALE_PAKS)}, removed {len(removed)} packs ({profile['removedBytes'] / 1024**2:.2f} MiB unpacked)")
+    return profile
+
+
+def language_compiler(directory, go_flag):
+    """Scope module flags to compilation; Wails' version probes disable modules."""
+    compiler = Path(directory) / "go-windows-english"
+    go = shutil.which("go")
+    if not go:
+        raise RuntimeError("Go is required to build the Windows application")
+    compiler.write_text("#!/usr/bin/env python3\n"
+                        "import os, subprocess, sys\n"
+                        "environment = os.environ.copy()\n"
+                        "if sys.argv[1:2] == ['build']:\n"
+                        f"    environment['GOFLAGS'] = ' '.join(part for part in (environment.get('GOFLAGS', ''), {go_flag!r}) if part)\n"
+                        f"raise SystemExit(subprocess.call([{go!r}, *sys.argv[1:]], env=environment))\n")
+    compiler.chmod(0o755)
+    return compiler
+
+
 def run(root, cab=None):
     root = root.resolve()
     if not (shutil.which("7z") or shutil.which("7zz")):
@@ -72,9 +124,15 @@ def run(root, cab=None):
         package = temporary / NAME
         source_snapshot(root, source)
         env = dict(os.environ, CGO_ENABLED="0", VITE_EXPLICIT_TEST_BRIDGE="0")
+        # Wails does not expose the browser language option. A build-local overlay
+        # adds the supported WebView2 Language API call to the exact pinned loader.
+        from windows_webview_language import prepare_language_overlay
+        language = prepare_language_overlay(temporary / "webview-language")
+        compiler = language_compiler(temporary, language["goFlag"])
         # Frontend accesses the reflected Wails bridge directly. Existing JS wrappers
         # need no regeneration; cross-builds must not execute a Windows bindings binary.
         subprocess.run([str(root / ".tools/wails"), "build", "-platform", "windows/amd64",
+                        "-compiler", str(compiler),
                         "-skipbindings", "-webview2", "error", "-m", "-nosyncgomod",
                         "-trimpath", "-o", "cryptodesk.exe"], cwd=source, env=env, check=True)
         executable = source / "build/bin/cryptodesk.exe"
@@ -87,6 +145,7 @@ def run(root, cab=None):
         if cab:
             command.extend(["--cab", str(cab)])
         subprocess.run(command, check=True)
+        locale_profile = keep_english_locales(package / "WebView2")
         for name in ["APP_README.md", "LICENSE", "STATUS.md"]:
             shutil.copy2(root / name, package / name)
         shutil.copy2(root / "docs/WINDOWS_PORTABLE.md", package / "README-WINDOWS.md")
@@ -101,6 +160,7 @@ def run(root, cab=None):
             "node": subprocess.check_output(["node", "--version"], text=True).strip(),
             "npm": subprocess.check_output(["npm", "--version"], text=True).strip(),
             "wails": "v2.17.0", "webview2": pin,
+            "webview2Packaging": locale_profile, "webview2LanguageOverride": language["manifest"],
             "executableSHA256": sha256(package / "cryptodesk.exe"),
             "gitRevision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
             "workingTreeModified": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True).strip()),

@@ -1,0 +1,21 @@
+{
+  "oldZipBytes": 318527501,
+  "newZipBytes": 284440716,
+  "zipSavedBytes": 34086785,
+  "removedLocalePaks": 164,
+  "unpackedSavedBytes": 133088128,
+  "keptLocalePaks": [
+    "copilot_overlay_strings_en-GB.pak",
+    "copilot_overlay_strings_en-US.pak",
+    "en-GB.pak",
+    "en-US.pak"
+  ],
+  "packageChecksumsVerified": 187,
+  "packagedRuntimeInventorySHA256": "e9e983596458ef9c7fb47598759d8ef46be3cec1b498c401ddf0b798b373442a",
+  "fullSourceInventorySHA256": "65550893b7c5e0d3c04ccc912e690398a31d94efc8d569382d5a8148a134fe11",
+  "fullCachePaksRetained": 168,
+  "sharedRuntimeFilesUnchanged": 89,
+  "preservedLinuxAndBindingFiles": 9,
+  "windowsUILanguage": "en-US",
+  "nativeWindowsGUIVerified": false
+}
