@@ -8,9 +8,11 @@ The original specification bundle is retained at the repository root. [STATUS.md
 
 ## Run the built release
 
-Run the root `./cryptodesk` produced by `./build.sh`, or extract the downloaded `cryptodesk-linux-amd64.tar.gz` (or versioned `cryptodesk-X.Y.Z-linux-amd64.tar.gz`) and run `./cryptodesk` inside its directory. No installation is needed. It requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. The archive does not bundle a browser or claim cross-distribution portability. Tested build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
+Run the root `./cryptodesk` produced by `./build.sh`, or extract `cryptodesk-X.Y.Z-linux-amd64.tar.gz` and run `./cryptodesk` inside its directory. This small archive requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. Tested local build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
 
-Optional user-local installation:
+For a machine without GTK/WebKit, choose **`cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz`**, extract the whole directory and run its **`./cryptodesk` launcher**. It includes GTK/WebKit, their helper processes and runtime dependencies, licenses and matching source archives. Keep its `runtime` directory beside the launcher. No installation or FUSE is needed. The host still supplies compatible glibc, graphics drivers, desktop session and fonts; CI builds use Ubuntu 24.04, while local packages require the glibc version of their build host or newer. Workspace storage remains in the normal user profile unless `--data-dir` is supplied. [Portable Linux details](docs/LINUX_PORTABLE.md).
+
+Optional user-local installation for the **small native archive** (the bundled runtime archive runs directly from its extracted directory):
 
 ```bash
 ./install-user.sh --dry-run
@@ -21,7 +23,7 @@ This writes the binary under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local
 
 ## Downloads and release versions
 
-The main [README](https://github.com/neodix42/charting#download) links to the latest Linux and Windows portable downloads. Links become available after the first successful GitHub release. Pushing commits to `main` runs the release workflow: check and build both targets, assign `v0.1.0` initially and increment subsequent patch tags, then publish both packages together. Stable asset names are `cryptodesk-linux-amd64.tar.gz` and `cryptodesk-windows-amd64.zip`; `SHA256SUMS` verifies all downloadable archives and `release.json` records their version, source commit and hashes. The workflow assumes `main` is the default branch. Superseded queued commits or older workflow contents are skipped in favor of the newer push; a workflow change during a build stops publication before remote writes.
+The main [README](https://github.com/neodix42/charting#download) links to the [latest release](https://github.com/neodix42/charting/releases/latest). Pushing commits to `main` runs the release workflow: check and build both Linux variants and Windows, assign `v0.1.0` initially and increment subsequent patch tags, then publish all three versioned packages together. Unversioned duplicate archives are no longer published. `SHA256SUMS` verifies the archives and `release.json` records their version, source commit and hashes. Historical completed releases are preserved. The workflow assumes `main` is the default branch. Superseded queued commits or older workflow contents are skipped in favor of the newer push; a workflow change during a build stops publication before remote writes.
 
 Local builds use the baseline in `VERSION` (currently `0.1.0`). Set `CRYPTODESK_VERSION=X.Y.Z` to override it for either build script; the output filename, package manifest and Windows product version follow this value. Release CI passes its selected version without making source-version bump commits. Hosted execution and Windows GUI checks are recorded separately in [STATUS.md](STATUS.md).
 
@@ -37,6 +39,7 @@ On an Ubuntu machine which already has the corresponding runtime libraries, `scr
 
 ```bash
 ./build.sh                   # ready-to-run app + portable archive + checksums in repo root
+./portable-build.sh          # larger Linux archive with GTK/WebKit runtime, licenses and sources
 ./win-build.sh               # cross-build Windows x64 ZIP with English WebView2 locale packs
 scripts/build-linux.sh       # pinned local CLI, production frontend + desktop + archive
 scripts/dev.sh               # desktop development
@@ -47,6 +50,8 @@ cd frontend && npm run test:e2e
 `./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-X.Y.Z-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
 
 Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
+
+`./portable-build.sh` first builds the normal Linux executable, then creates `cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz` and `cryptodesk-Portable-SHA256SUMS` at the root. Use `--skip-build` only immediately after a matching `./build.sh`. This Ubuntu-only bundler copies installed runtime files and downloads their exact source versions through authenticated Ubuntu source indexes into a project-local cache. It does not modify APT configuration or install packages. Build on the oldest Ubuntu release you intend to support; the package records its build OS/glibc, host-library requirements and complete runtime file hashes.
 
 For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-X.Y.Z-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The ZIP includes Microsoft Fixed Version WebView2 with English (`en-US` and `en-GB`) locale packs; other locale PAKs are omitted. The complete source runtime is verified against its pinned version, SHA-256 and inventory before reducing only the staged package. Shared resources and all licenses are retained. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Fresh machines download the pinned Windows-only Go WebView2 module before preparing the English-language overlay; a prefilled Go module cache is not required, and normal Go checksum/source verification remains enabled. Initial runtime download is about 300 MB; the complete verified runtime remains cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
 
@@ -77,12 +82,12 @@ Weekly candles start Monday at 00:00 UTC. Binance and Bybit provide native weekl
 
 ### Indicators
 
-Each chart has an **Indicators** dropdown. Select SMA, EMA, Ichimoku Cloud or MACD, adjust its parameters, then press **OK** to add it. Cancel leaves the chart unchanged. Click an applied indicator's label to edit it, or its × to remove it. Multiple instances can use different periods and colors; settings are independent per chart and survive restart and JSON export/import. There are at most 12 indicators per chart to bound rendering work.
+Each chart has an **Indicators** dropdown. Select SMA, EMA, Ichimoku Cloud or MACD, adjust its parameters, then press **OK** to add it. SMA and EMA also offer **Line width** from **1–4 px**, default **2 px**, in both individual and shared dialogs. Cancel leaves the chart unchanged. Click an applied indicator's label to edit it, or its × to remove it. Multiple instances can use different periods, colors and line widths; settings are independent per chart and survive restart and JSON export/import. There are at most 12 indicators per chart to bound rendering work. Existing SMA/EMA instances without a width retain their two-pixel appearance.
 
 | Indicator | Default parameters | Display |
 |---|---|---|
-| SMA | Close-price period 20 | Price overlay |
-| EMA | Close-price period 20 | Price overlay |
+| SMA | Close-price period 20, line width 2 px | Price overlay |
+| EMA | Close-price period 20, line width 2 px | Price overlay |
 | Ichimoku Cloud | Conversion 9, base 26, leading span B 52, displacement 26 | Conversion/base/leading/lagging lines and green/red cloud between the leading spans |
 | MACD | Fast 12, slow 26, signal 9 | Separate pane with MACD/signal lines, histogram and zero baseline |
 

@@ -8,23 +8,24 @@ A desktop workspace for public cryptocurrency spot charts on Ubuntu and Windows.
 
 ## Download
 
-| Platform | Latest portable package | Run |
+| Platform | Package in the [latest release](https://github.com/neodix42/charting/releases/latest) | Run |
 |---|---|---|
-| Ubuntu x64 | [Download Linux archive](https://github.com/neodix42/charting/releases/latest/download/cryptodesk-linux-amd64.tar.gz) | Extract, then run `./cryptodesk` |
-| Windows x64 | [Download Windows ZIP](https://github.com/neodix42/charting/releases/latest/download/cryptodesk-windows-amd64.zip) | Extract the whole ZIP, then run `cryptodesk.exe` |
+| Ubuntu x64, system GTK/WebKit | `cryptodesk-X.Y.Z-linux-amd64.tar.gz` | Extract, then run `./cryptodesk` |
+| Ubuntu x64, bundled GTK/WebKit | `cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz` | Extract the whole archive, then run its `./cryptodesk` launcher |
+| Windows x64 | `cryptodesk-X.Y.Z-windows-amd64.zip` | Extract the whole ZIP, then run `cryptodesk.exe` |
 
 [All releases and version history](https://github.com/neodix42/charting/releases) · [Latest SHA-256 checksums](https://github.com/neodix42/charting/releases/latest/download/SHA256SUMS)
 
-The download links become available after the first successful release workflow on `main`. Each release includes versioned archives, the stable filenames linked above, and checksums.
+Open the latest release and select its versioned filename. Releases contain one archive of each kind, plus checksums and `release.json`; unversioned duplicate archives are no longer published. Historical releases are retained.
 
-The Linux archive requires GTK3, WebKitGTK 4.1 and libsoup3 runtime libraries. CI builds target Ubuntu 24.04 x64; local native verification is recorded for Ubuntu 26.04.1/Wayland in [STATUS.md](STATUS.md). The archive includes a user-local desktop/icon installer and does not bundle a Linux browser runtime. See [Linux usage and build instructions](APP_README.md).
+The small Linux archive requires GTK3, WebKitGTK 4.1 and libsoup3 runtime libraries. The larger **`-portable` archive bundles these libraries, matching WebKit helper processes, modules, licenses and corresponding runtime sources**. It needs no GTK/WebKit installation, package installation or FUSE. It still uses the host's glibc, desktop session, fonts and graphics drivers. CI builds on Ubuntu 24.04 x64; local builds inherit their build host's glibc minimum. Other distributions and older Ubuntu releases require separate verification. See [Linux portable details](docs/LINUX_PORTABLE.md), [usage instructions](APP_README.md) and actual results in [STATUS.md](STATUS.md).
 
 The larger Windows ZIP includes its pinned Fixed Version WebView2 runtime with English locale packs, so a separate browser installation is unnecessary. Extract into a writable local folder, keeping `WebView2` and `portable.marker` beside the executable. Workspace and browser data remain in the portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md).
 
 ## Features
 
 - Independent exchange, instrument and period per chart: **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Search current spot instruments, pan/zoom, load older history, and return to live data. Connection failures and provisional candles remain visible.
-- **SMA, EMA, Ichimoku Cloud and MACD**, with parameter dialogs, multiple instances, editable colors and saved settings. MACD uses separate resizable panes and remembers their proportions.
+- **SMA, EMA, Ichimoku Cloud and MACD**, with parameter dialogs, multiple instances, editable colors and saved settings. SMA/EMA line widths are adjustable from **1–4 px**. MACD uses separate resizable panes and remembers their proportions.
 - Shared period buttons and an Indicators menu in the top header apply to every chart in the current tab. Individual chart controls remain independent.
 - Configurable grids with empty slots, draggable tabs/charts, resizable tracks, and chart maximization. Rename or duplicate a tab; **middle-click a tab** to close it and all its charts without confirmation. Each chart’s enlarged **×** button also closes it without confirmation. The final tab and final chart in each tab stay protected.
 - Theme and display timezone settings, volume, candlestick/line rendering, linear/log price scales, and saved viewports. Set the global right-side chart gap in **bars or pixels**, defaulting to **10 bars**.
@@ -40,14 +41,15 @@ Requires Go, Python 3.12+, and a C compiler/pkg-config for Linux. Linux builds n
 
 ```bash
 ./build.sh                 # Linux executable, portable archive and checksums in the root
+./portable-build.sh        # Larger Linux archive with bundled GTK/WebKit runtime and sources
 ./win-build.sh             # Windows x64 portable ZIP, including English WebView2
 ```
 
-`VERSION` provides the source baseline. Release builds pass `CRYPTODESK_VERSION=X.Y.Z` so both packages and their manifests carry the automatic release version. Full prerequisites, installation, storage and recovery instructions are in [APP_README.md](APP_README.md).
+`VERSION` provides the source baseline. Release builds pass `CRYPTODESK_VERSION=X.Y.Z` so all packages and their manifests carry the automatic release version. Full prerequisites, installation, storage and recovery instructions are in [APP_README.md](APP_README.md).
 
 ## Automatic releases
 
-The [release workflow](.github/workflows/release.yml) runs when commits are pushed to `main`. It runs checks, builds both x64 packages, and publishes a GitHub release only after both builds succeed. The first release uses `v0.1.0`; later releases increment the highest release tag's patch version (`v0.1.1`, `v0.1.2`, …). Builds do not create source-version bump commits.
+The [release workflow](.github/workflows/release.yml) runs when commits are pushed to `main`. It runs checks, builds the two Linux variants and Windows ZIP, and publishes a GitHub release only after all three packages pass verification. The first release uses `v0.1.0`; later releases increment the highest release tag's patch version (`v0.1.1`, `v0.1.2`, …). Builds do not create source-version bump commits.
 
 The workflow assumes `main` is the repository's default branch. Release jobs are serialized, and reruns recognize an already published commit. Superseded commits and queued commits whose workflow files have since changed on `main` are skipped; the newer push includes those changes. If workflow files change during a build, publication stops before creating a tag or release. GitHub-hosted execution and the first published download require committing and pushing this workflow; local verification results and remaining platform checks are documented in [STATUS.md](STATUS.md).
 

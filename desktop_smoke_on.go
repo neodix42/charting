@@ -190,8 +190,8 @@ const desktopSmokeJavaScript = `async function(phase) {
  const middleTab=async(element)=>{const rect=element.getBoundingClientRect();element.dispatchEvent(new MouseEvent('auxclick',{bubbles:true,cancelable:true,button:1,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));await sleep(100);};
  const indicatorDefaults={sma:{period:20},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
  const indicatorNames={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
- const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
- const verifySharedIndicators=(workspace,label)=>{const charts=workspace.tabs[0].charts,ids=charts.flatMap(chart=>(chart.indicators||[]).map(indicator=>indicator.id));check(charts.map(chart=>chart.indicators?.length||0).join(',')==='5,1,1'&&charts.every(chart=>{const indicator=chart.indicators.at(-1);return indicator.type==='ema'&&indicator.parameters.period===34&&Object.keys(indicator.parameters).length===1&&/^#[0-9a-f]{6}$/i.test(indicator.color);})&&new Set(ids).size===ids.length,label,charts.map(chart=>chart.indicators));verifyIndicators({...charts[0],indicators:charts[0].indicators.slice(0,4)},'shared action preserves the first chart original four indicators');check(workspace.tabs[1].charts[0].timeframe==='1h'&&!workspace.tabs[1].charts[0].indicators?.length,'shared action leaves the hidden tab unchanged',workspace.tabs[1].charts[0]);};
+ const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color)&&(indicator.type==='sma'?indicator.lineWidth===3:indicator.type==='ema'?indicator.lineWidth===1:indicator.lineWidth===undefined))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
+ const verifySharedIndicators=(workspace,label)=>{const charts=workspace.tabs[0].charts,ids=charts.flatMap(chart=>(chart.indicators||[]).map(indicator=>indicator.id));check(charts.map(chart=>chart.indicators?.length||0).join(',')==='5,1,1'&&charts.every(chart=>{const indicator=chart.indicators.at(-1);return indicator.type==='ema'&&indicator.parameters.period===34&&indicator.lineWidth===4&&Object.keys(indicator.parameters).length===1&&/^#[0-9a-f]{6}$/i.test(indicator.color);})&&new Set(ids).size===ids.length,label,charts.map(chart=>chart.indicators));verifyIndicators({...charts[0],indicators:charts[0].indicators.slice(0,4)},'shared action preserves the first chart original four indicators');check(workspace.tabs[1].charts[0].timeframe==='1h'&&!workspace.tabs[1].charts[0].indicators?.length,'shared action leaves the hidden tab unchanged',workspace.tabs[1].charts[0]);};
  const chartShape=element=>{const host=element.querySelector('[data-testid="chart-canvas"]'),table=host?.querySelector('.tv-lightweight-charts > table');return {canvases:host?.querySelectorAll('canvas').length||0,canvasRows:table?Array.from(table.rows).filter(row=>row.querySelector('canvas')).length:0};};
  const paneHeights=element=>{const table=element.querySelector('.tv-lightweight-charts > table');return table?Array.from(table.rows).filter(row=>row.querySelector('canvas')).slice(0,-1).map(row=>row.getBoundingClientRect().height):[];};
  const resizeMACD=async(element,delta)=>{
@@ -269,6 +269,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     await select('[data-testid="chart-cell"] [aria-label="Indicators"]',type);
     await wait(()=>q('[role="dialog"][aria-label="'+name+' parameters"]'),'native '+name+' parameter dialog');
     check(qa('[data-testid="chart-cell"] .indicator-chip').length===before,name+' waits for parameter confirmation',before);
+    if(type==='sma'||type==='ema'){check(q('[role="dialog"] [aria-label="Line width"]').value==='2',name+' native default width is two pixels');await select('[role="dialog"] [aria-label="Line width"]',type==='sma'?'3':'1');}
     await click('[role="dialog"] button[type="submit"]');
     await wait(()=>!q('[role="dialog"]')&&qa('[data-testid="chart-cell"] .indicator-chip').length===before+1,'apply '+name+' to chart');
    }
@@ -280,7 +281,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    await flush();
    const weeklySaved=await api.LoadWorkspace();
    check(weeklySaved.workspace.tabs[0].charts[0].timeframe==='1w','weekly timeframe persisted through Wails to SQLite',weeklySaved.workspace.tabs[0].charts[0].timeframe);
-   verifyIndicators(weeklySaved.workspace.tabs[0].charts[0],'all four indicator defaults persisted through Wails to SQLite');
+   verifyIndicators(weeklySaved.workspace.tabs[0].charts[0],'all four indicators and custom SMA/EMA widths persisted through Wails to SQLite');
    const macdSaved=weeklySaved.workspace.tabs[0].charts[0].indicators.find(indicator=>indicator.type==='macd'),resizedHeights=paneHeights(q('[data-testid="chart-cell"]'));
    report.macdPane={before:beforeResize,after:resizedHeights,paneStretchFactor:macdSaved.paneStretchFactor};
    check(Number.isFinite(macdSaved.paneStretchFactor)&&resizedHeights[1]>beforeResize[1]+50&&Math.abs(resizedHeights[1]/resizedHeights[0]-macdSaved.paneStretchFactor)<.025,'resized MACD height persists through Wails to SQLite',report.macdPane);
@@ -318,6 +319,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    await wait(()=>q('[role="dialog"][aria-label="EMA parameters"]'),'shared EMA parameter dialog');
    check(qa('[role="dialog"]').length===1&&qa('[data-testid="chart-cell"] .indicator-chip').length===4,'shared indicator opens one dialog and waits for OK',qa('[role="dialog"]').length);
    await input('[role="dialog"] [aria-label="Period"]',34);
+   await select('[role="dialog"] [aria-label="Line width"]','4');
    await click('[role="dialog"] button[type="submit"]');
    await wait(()=>!q('[role="dialog"]')&&qa('[data-testid="chart-cell"] .indicator-chip').length===7,'shared EMA applies to all three charts');
    await click('[data-testid="chart-cell"] [aria-label="Restore chart"]');

@@ -1,5 +1,6 @@
 """Exercise release ordering, integrity and resumability without remote writes."""
 import copy
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -18,8 +19,8 @@ COMMIT = "a" * 40
 OTHER = "b" * 40
 
 
-def published(tag="v0.1.0", commit=COMMIT, draft=False):
-    names = [*release.archive_names(tag[1:]), "release.json", "SHA256SUMS"]
+def published(tag="v0.1.0", commit=COMMIT, draft=False, legacy=False):
+    names = [*(release.legacy_archive_names(tag[1:]) if legacy else release.archive_names(tag[1:])), "release.json", "SHA256SUMS"]
     integrity = {name: {"bytes": 20, "sha256": "1" * 64} for name in names}
     return {"id": 7, "tag_name": tag, "target_commitish": commit, "draft": draft,
             "body": release.marker(tag, commit) + "\n" + release.integrity_marker(integrity),
@@ -32,15 +33,30 @@ def portable_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
     """Small structurally real archives, without WebView2 or external toolchains."""
     for target, suffix in release.TARGETS.items():
         prefix = f"cryptodesk-{version}-{target}/"
-        manifest = {"app": "CryptoDesk", "version": version, "target": target.replace("-", "/"),
+        manifest = {"app": "CryptoDesk", "version": version, "target": "linux/amd64" if target.startswith("linux-") else "windows/amd64",
                     "gitRevision": commit, "workingTreeModified": modified}
         versioned = directory / f"cryptodesk-{version}-{target}{suffix}"
-        if target == "linux-amd64":
+        if target.startswith("linux-"):
             binary = bytearray(64)
             binary[:6] = b"\x7fELF\x02\x01"
             struct.pack_into("<H", binary, 18, 62)
+            entries = [("cryptodesk", bytes(binary), 0o755)]
+            if target == "linux-amd64-portable":
+                manifest["packageVariant"] = "portable"
+                entries = [("cryptodesk", b"#!/usr/bin/env bash\nexec runtime/usr/bin/cryptodesk\n", 0o755),
+                           ("runtime/usr/bin/cryptodesk", bytes(binary), 0o755),
+                           ("runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0", bytes(binary), 0o644),
+                           ("runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0", bytes(binary), 0o644),
+                           ("runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess", bytes(binary), 0o755),
+                           ("runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess", bytes(binary), 0o755),
+                           ("runtime/sources/packages.json", b'{"fixture":true}', 0o644),
+                           ("runtime/licenses/copyright", b"Runtime licenses fixture", 0o644)]
+                inventory = {name: {"bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+                             for name, content, _ in entries if name.startswith("runtime/")}
+                entries.append(("runtime-manifest.json", json.dumps(inventory).encode(), 0o644))
+            entries.append(("version.json", json.dumps(manifest).encode(), 0o644))
             with tarfile.open(versioned, "w:gz") as archive:
-                for name, content, mode in [("cryptodesk", bytes(binary), 0o755), ("version.json", json.dumps(manifest).encode(), 0o644)]:
+                for name, content, mode in entries:
                     entry = tarfile.TarInfo(prefix + name)
                     entry.size, entry.mode = len(content), mode
                     archive.addfile(entry, io.BytesIO(content))
@@ -57,7 +73,20 @@ def portable_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
                     archive.writestr(prefix + name, "portable runtime fixture")
                 archive.writestr(prefix + "cryptodesk.exe", binary)
                 archive.writestr(prefix + "version.json", json.dumps(manifest))
-        (directory / f"cryptodesk-{target}{suffix}").write_bytes(versioned.read_bytes())
+
+
+def rewrite_tar(path, mutate):
+    with tarfile.open(path, "r:gz") as source:
+        entries = [(entry, source.extractfile(entry).read() if entry.isfile() else None) for entry in source.getmembers()]
+    with tarfile.open(path, "w:gz") as output:
+        for entry, content in entries:
+            replacement = mutate(entry, content)
+            if replacement is None:
+                continue
+            entry, content = replacement
+            if entry.isfile():
+                entry.size = len(content)
+            output.addfile(entry, None if content is None else io.BytesIO(content))
 
 
 class FakeGitHub:
@@ -143,6 +172,16 @@ class VersionSelectionTests(unittest.TestCase):
         self.assertTrue(release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])["published"])
         value["assets"].pop()
         with self.assertRaisesRegex(ValueError, "incomplete"):
+            release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])
+
+    def test_completed_legacy_alias_release_is_preserved_and_still_skipped(self):
+        value = published(legacy=True)
+        before = copy.deepcopy(value)
+        result = release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])
+        self.assertTrue(result["published"])
+        self.assertEqual(value, before)
+        value["assets"][0]["digest"] = "sha256:" + "9" * 64
+        with self.assertRaisesRegex(ValueError, "checksums differ"):
             release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])
 
     def test_published_assets_without_commit_marker_are_not_overwritten(self):
@@ -235,7 +274,8 @@ class BundleTests(unittest.TestCase):
             for line in (root / "SHA256SUMS").read_text().splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(release.sha256(root / name), digest)
-            self.assertEqual(len((root / "SHA256SUMS").read_text().splitlines()), 5)
+            self.assertEqual(len((root / "SHA256SUMS").read_text().splitlines()), 4)
+            self.assertEqual(set(result["assets"]), {"cryptodesk-1.2.3-linux-amd64.tar.gz", "cryptodesk-1.2.3-linux-amd64-portable.tar.gz", "cryptodesk-1.2.3-windows-amd64.zip"})
             self.assertEqual(release.bundle(root, "1.2.3", COMMIT), result)
 
     def test_wrong_source_commit_version_and_modified_checkout_are_rejected(self):
@@ -246,16 +286,15 @@ class BundleTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     release.bundle(root, "0.1.0", expected_commit)
 
-    def test_missing_or_mismatched_alias_and_extra_files_are_rejected(self):
-        for mutation in ("missing", "different", "extra"):
+    def test_missing_archive_unversioned_alias_and_extra_files_are_rejected(self):
+        for mutation in ("missing-portable", "alias", "extra"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 portable_inputs(root)
-                alias = root / "cryptodesk-windows-amd64.zip"
-                if mutation == "missing":
-                    alias.unlink()
-                elif mutation == "different":
-                    alias.write_bytes(b"wrong archive")
+                if mutation == "missing-portable":
+                    (root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz").unlink()
+                elif mutation == "alias":
+                    (root / "cryptodesk-windows-amd64.zip").write_bytes((root / "cryptodesk-0.1.0-windows-amd64.zip").read_bytes())
                 else:
                     (root / "private-workspace.sqlite").write_bytes(b"private")
                 with self.assertRaises(ValueError):
@@ -279,22 +318,75 @@ class BundleTests(unittest.TestCase):
                                 struct.pack_into("<H", data, 18, 183)
                                 content = bytes(data)
                         target.addfile(entry, io.BytesIO(content))
-                (root / "cryptodesk-linux-amd64.tar.gz").write_bytes(archive.read_bytes())
                 with self.assertRaises(ValueError):
                     release.bundle(root, "0.1.0", COMMIT)
 
-    def test_stage_retains_versioned_archive_and_creates_exact_alias(self):
+    def test_stage_copies_exactly_three_versioned_archives_without_aliases(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             portable_inputs(root, "2.1.9")
             output = root / "staged"
-            release.stage(root, "windows-amd64", "2.1.9", output)
-            self.assertEqual(sorted(path.name for path in output.iterdir()), ["cryptodesk-2.1.9-windows-amd64.zip", "cryptodesk-windows-amd64.zip"])
-            self.assertEqual((output / "cryptodesk-windows-amd64.zip").read_bytes(), (root / "cryptodesk-2.1.9-windows-amd64.zip").read_bytes())
+            for target in release.TARGETS:
+                release.stage(root, target, "2.1.9", output)
+            self.assertEqual(sorted(path.name for path in output.iterdir()), sorted(release.archive_names("2.1.9")))
+            for path in output.iterdir():
+                self.assertEqual(path.read_bytes(), (root / path.name).read_bytes())
+
+    def test_portable_variant_requires_launcher_elf_runtime_helpers_sources_and_licenses(self):
+        mutations = ["missing-library", "missing-helper", "arm64-helper", "missing-sources", "missing-licenses", "invalid-launcher", "nonexecutable-launcher", "missing-variant", "wrong-target", "corrupt-library", "empty-inventory"]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                portable_inputs(root)
+                archive = root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz"
+                def mutate(entry, content):
+                    name = entry.name.removeprefix("cryptodesk-0.1.0-linux-amd64-portable/")
+                    if (mutation == "missing-library" and name.endswith("libwebkit2gtk-4.1.so.0")
+                        or mutation == "missing-helper" and name.endswith("WebKitNetworkProcess")
+                        or mutation == "missing-sources" and name.startswith("runtime/sources/")
+                        or mutation == "missing-licenses" and name.startswith("runtime/licenses/")):
+                        return None
+                    if mutation == "arm64-helper" and name.endswith("WebKitWebProcess"):
+                        content = bytearray(content)
+                        struct.pack_into("<H", content, 18, 183)
+                        content = bytes(content)
+                    if mutation == "invalid-launcher" and name == "cryptodesk":
+                        content = b"Not an executable shell launcher\n"
+                    if mutation == "nonexecutable-launcher" and name == "cryptodesk":
+                        entry.mode = 0o644
+                    if mutation == "corrupt-library" and name.endswith("libgtk-3.so.0"):
+                        content += b"unexpected bytes"
+                    if mutation == "empty-inventory" and name == "runtime-manifest.json":
+                        content = b"{}"
+                    if name == "version.json" and mutation in ("missing-variant", "wrong-target"):
+                        manifest = json.loads(content)
+                        if mutation == "missing-variant":
+                            manifest.pop("packageVariant")
+                        else:
+                            manifest["target"] = "linux/arm64"
+                        content = json.dumps(manifest).encode()
+                    return entry, content
+                rewrite_tar(archive, mutate)
+                with self.assertRaises(ValueError):
+                    release.bundle(root, "0.1.0", COMMIT)
+
+    def test_standard_linux_archive_cannot_claim_the_portable_variant(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            portable_inputs(root)
+            def mutate(entry, content):
+                if entry.name.endswith("version.json"):
+                    manifest = json.loads(content)
+                    manifest["packageVariant"] = "portable"
+                    content = json.dumps(manifest).encode()
+                return entry, content
+            rewrite_tar(root / "cryptodesk-0.1.0-linux-amd64.tar.gz", mutate)
+            with self.assertRaisesRegex(ValueError, "manifest"):
+                release.bundle(root, "0.1.0", COMMIT)
 
 
 class PublicationTests(unittest.TestCase):
-    def test_fresh_release_uploads_both_platforms_then_publishes_once(self):
+    def test_fresh_release_uploads_three_versioned_archives_then_publishes_once(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             portable_inputs(root)
@@ -302,11 +394,20 @@ class PublicationTests(unittest.TestCase):
             release.publish(api, root, "0.1.0", COMMIT)
             self.assertEqual(api.tags, {"v0.1.0": COMMIT})
             self.assertFalse(api.releases[0]["draft"])
-            self.assertEqual(len(api.releases[0]["assets"]), 6)
+            self.assertEqual(len(api.releases[0]["assets"]), 5)
             self.assertEqual(api.writes[-1][:2], ("PATCH", "releases/7"))
             writes = copy.deepcopy(api.writes)
             release.publish(api, root, "0.1.0", COMMIT)
             self.assertEqual(api.writes, writes, "Reruns must not replace published assets")
+
+    def test_legacy_completed_release_is_not_mutated_or_forced_to_add_new_archives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            original = published(legacy=True)
+            api = FakeGitHub([original], tags={"v0.1.0": COMMIT})
+            release.publish(api, Path(temporary), "0.1.0", COMMIT)
+            self.assertEqual(api.releases, [original])
+            self.assertEqual(api.writes, [])
+            self.assertEqual(list(Path(temporary).iterdir()), [])
 
     def test_tag_collision_and_unowned_draft_are_rejected_without_writes(self):
         for api in (FakeGitHub(tags={"v0.1.0": OTHER}), FakeGitHub([published(commit=OTHER, draft=True)])):
@@ -356,7 +457,6 @@ class PublicationTests(unittest.TestCase):
             versioned = root / "cryptodesk-0.1.0-windows-amd64.zip"
             with zipfile.ZipFile(versioned, "a") as archive:
                 archive.writestr("cryptodesk-0.1.0-windows-amd64/rebuilt.txt", "new build timestamp")
-            (root / "cryptodesk-windows-amd64.zip").write_bytes(versioned.read_bytes())
             api.corrupt_upload = False
             release.publish(api, root, "0.1.0", COMMIT)
             value = api.releases[0]
@@ -379,7 +479,7 @@ class PublicationTests(unittest.TestCase):
             before = len(api.writes)
             api.corrupt_upload = False
             release.publish(api, root, "0.1.0", COMMIT)
-            self.assertEqual(sum(upload is not None for _, _, _, upload in api.writes[before:]), 5)
+            self.assertEqual(sum(upload is not None for _, _, _, upload in api.writes[before:]), 4)
             self.assertFalse(any(method == "DELETE" for method, *_ in api.writes))
 
     def test_newer_published_release_prevents_older_build_from_becoming_latest(self):

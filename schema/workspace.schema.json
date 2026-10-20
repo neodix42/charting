@@ -450,6 +450,12 @@
             "color": {
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "lineWidth": {
+              "description": "Line stroke width in CSS pixels. Omit to use two pixels.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
             }
           },
           "required": [
@@ -485,6 +491,12 @@
             "color": {
               "type": "string",
               "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "lineWidth": {
+              "description": "Line stroke width in CSS pixels. Omit to use two pixels.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
             }
           },
           "required": [

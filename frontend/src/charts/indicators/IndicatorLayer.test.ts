@@ -19,6 +19,23 @@ const candles:Candle[]=Array.from({length:80},(_,i)=>({time:1000+i*60,open:i+10,
 const config=(id:string,type:IndicatorConfig['type'],parameters:IndicatorConfig['parameters']={}):IndicatorConfig=>({id,type,parameters});
 
 describe('indicator series ownership',()=>{
+ it.each(['sma','ema'] as const)('defaults legacy %s to width 2 and applies all supported widths to the same series',type=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),legacy=config('average',type,{period:3});
+  layer.update(candles,[legacy],'1m');const average=[...h.panes[0].series][1];
+  expect(average.options.lineWidth).toBe(2);expect(average.applyOptions).toHaveBeenLastCalledWith(expect.objectContaining({lineWidth:2}));expect(legacy).not.toHaveProperty('lineWidth');
+  const writes=average.setData.mock.calls.length;layer.update(candles,[{...legacy,lineWidth:2}],'1m');expect(average.setData).toHaveBeenCalledTimes(writes);
+  for(const lineWidth of [1,2,3,4] as const){layer.update(candles,[{...legacy,lineWidth}],'1m');expect(average.applyOptions).toHaveBeenLastCalledWith(expect.objectContaining({lineWidth}));expect([...h.panes[0].series][1]).toBe(average);}
+  expect(h.chart.addSeries).toHaveBeenCalledTimes(1);expect(h.removed).toHaveLength(0);
+  const resized={...legacy,lineWidth:4 as const,parameters:{period:8}};layer.update(candles,[resized],'1m');expect(average.applyOptions).toHaveBeenLastCalledWith(expect.objectContaining({lineWidth:4}));
+  layer.update(candles,[legacy],'1m');expect(average.applyOptions).toHaveBeenLastCalledWith(expect.objectContaining({lineWidth:2}));expect(legacy).not.toHaveProperty('lineWidth');layer.dispose();
+ });
+ it('editing an average width leaves other overlay settings and resized MACD panes intact',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),average={...config('average','sma',{period:5}),lineWidth:1 as const},momentum={...config('momentum','macd'),paneStretchFactor:.8},cloud=config('cloud','ichimoku');
+  layer.update(candles,[average,momentum,cloud],'1m');const allSeries=h.panes.flatMap(pane=>[...pane.series]),macdPane=h.panes[1];macdPane.factor=2.5;
+  layer.update(candles,[{...average,lineWidth:4},momentum,cloud],'1m');expect(h.panes.flatMap(pane=>[...pane.series])).toEqual(allSeries);expect(h.panes[1]).toBe(macdPane);expect(macdPane.factor).toBe(2.5);
+  expect(allSeries[1].applyOptions).toHaveBeenLastCalledWith(expect.objectContaining({lineWidth:4}));expect(allSeries.filter(series=>series!==allSeries[0]&&series!==allSeries[1]).every(series=>series.options.lineWidth===undefined||series.options.lineWidth===1)).toBe(true);expect(h.removed).toHaveLength(0);layer.dispose();
+ });
+
  it('captures every resized MACD ratio without resetting it on ticks, parameter edits or persistence echoes',()=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('one','macd'),config('two','macd')];
   layer.update(candles,configs,'1m');expect(h.panes.map(pane=>pane.factor)).toEqual([2,.3,.3]);expect(layer.capturePaneLayout(configs)).toBeNull();
@@ -70,8 +87,8 @@ describe('indicator series ownership',()=>{
  it.each(['sma','ema'] as const)('shows the first valid %s average as a point and switches to a line when another bar arrives',type=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('average',type,{period:3})];
   layer.update(candles.slice(0,2),configs,'1m');const average=[...h.panes[0].series][1];
-  expect(average.data).toEqual([]);expect(average.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:false,pointMarkersRadius:3});
-  layer.update(candles.slice(0,3),configs,'1m');expect(average.data).toEqual([{time:candles[2].time,value:12}]);expect(average.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:true,pointMarkersRadius:3});
-  layer.update(candles.slice(0,4),configs,'1m');expect(average.data).toEqual([{time:candles[2].time,value:12},{time:candles[3].time,value:13}]);expect(average.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:false,pointMarkersRadius:3});expect(h.panes[0].series.size).toBe(2);
+  expect(average.data).toEqual([]);expect(average.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:false,pointMarkersRadius:3,lineWidth:2});
+  layer.update(candles.slice(0,3),configs,'1m');expect(average.data).toEqual([{time:candles[2].time,value:12}]);expect(average.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:true,pointMarkersRadius:3,lineWidth:2});
+  layer.update(candles.slice(0,4),configs,'1m');expect(average.data).toEqual([{time:candles[2].time,value:12},{time:candles[3].time,value:13}]);expect(average.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:false,pointMarkersRadius:3,lineWidth:2});expect(h.panes[0].series.size).toBe(2);
  });
 });

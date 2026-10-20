@@ -43,6 +43,8 @@ release/
 /cryptodesk
 /cryptodesk-*-linux-*.tar.gz
 /cryptodesk-SHA256SUMS
+/cryptodesk-Portable-SHA256SUMS
+/cryptodesk-*-linux-amd64-portable.tar.gz.tmp
 /cryptodesk-*-windows-*.zip
 /cryptodesk-*-windows-*.zip.tmp
 /cryptodesk-Windows-SHA256SUMS

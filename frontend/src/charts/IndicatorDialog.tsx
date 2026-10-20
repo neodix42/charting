@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import type {IndicatorConfig,IndicatorParameters,IndicatorType} from '../types';
+import type {IndicatorConfig,IndicatorLineWidth,IndicatorParameters,IndicatorType} from '../types';
 import {uuid} from '../workspace/model';
 
 export const indicatorNames:Record<IndicatorType,string>={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
@@ -10,18 +10,20 @@ const fields:Record<IndicatorType,Array<[keyof IndicatorParameters,string]>>={sm
 export function indicatorLabel(config:IndicatorConfig){const p=config.parameters;return `${indicatorNames[config.type]} (${config.type==='sma'||config.type==='ema'?p.period:config.type==='macd'?`${p.fast}, ${p.slow}, ${p.signal}`:`${p.conversion}, ${p.base}, ${p.spanB}, ${p.displacement}`})`;}
 
 export function IndicatorDialog({type,existing,scopeLabel,onSave,onClose}:{type:IndicatorType;existing?:IndicatorConfig;scopeLabel?:string;onSave(value:IndicatorConfig):void;onClose():void}){
- const [values,setValues]=useState<IndicatorParameters>(()=>({...defaults[type],...existing?.parameters})),[color,setColor]=useState(existing?.color??colors[type]),[error,setError]=useState('');
+ const [values,setValues]=useState<IndicatorParameters>(()=>({...defaults[type],...existing?.parameters})),[color,setColor]=useState(existing?.color??colors[type]),[lineWidth,setLineWidth]=useState<IndicatorLineWidth>(existing?.lineWidth??2),[error,setError]=useState('');
+ const movingAverage=type==='sma'||type==='ema';
  const form=useRef<HTMLFormElement>(null),previousFocus=useRef<HTMLElement|null>(null);
  useEffect(()=>{previousFocus.current=document.activeElement as HTMLElement;form.current?.querySelector<HTMLInputElement>('input')?.focus();return ()=>{previousFocus.current?.focus();};},[]);
- const submit=()=>{for(const [key,label] of fields[type]){const value=values[key];const min=key==='displacement'?0:1,max=key==='displacement'?500:2000;if(value===undefined||!Number.isInteger(value)||value<min||value>max){setError(`${label} must be a whole number from ${min} to ${max}.`);return;}}if(type==='macd'&&values.fast!>=values.slow!){setError('Fast period must be smaller than slow period.');return;}if(!/^#[0-9a-f]{6}$/i.test(color)){setError('Choose a valid color.');return;}onSave({...existing,id:existing?.id??uuid(),type,parameters:values,color});};
+ const submit=()=>{for(const [key,label] of fields[type]){const value=values[key];const min=key==='displacement'?0:1,max=key==='displacement'?500:2000;if(value===undefined||!Number.isInteger(value)||value<min||value>max){setError(`${label} must be a whole number from ${min} to ${max}.`);return;}}if(type==='macd'&&values.fast!>=values.slow!){setError('Fast period must be smaller than slow period.');return;}if(!/^#[0-9a-f]{6}$/i.test(color)){setError('Choose a valid color.');return;}if(movingAverage&&![1,2,3,4].includes(lineWidth)){setError('Line width must be a whole number from 1 to 4.');return;}onSave({...existing,id:existing?.id??uuid(),type,parameters:values,color,...(movingAverage?{lineWidth}:{})});};
  return createPortal(<div className="modal-backdrop indicator-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}} onKeyDown={event=>{
-  event.stopPropagation();if(event.key==='Escape'){event.preventDefault();onClose();return;}if(event.key!=='Tab')return;const controls=form.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)');if(!controls?.length)return;const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  event.stopPropagation();if(event.key==='Escape'){event.preventDefault();onClose();return;}if(event.key!=='Tab')return;const controls=form.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled)');if(!controls?.length)return;const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
  }}><form ref={form} className="modal indicator-modal" role="dialog" aria-modal="true" aria-label={`${indicatorNames[type]} parameters`} onSubmit={event=>{event.preventDefault();submit();}}>
   <div className="modal-header"><h2>{indicatorNames[type]} parameters</h2><button type="button" aria-label="Close indicator parameters" onClick={onClose}>×</button></div>
   {scopeLabel&&<p className="indicator-description">{scopeLabel}</p>}
   <p className="indicator-description">{type==='ichimoku'?'Periods and displacement are measured in chart bars. The cloud projects forward by the displacement.':type==='macd'?'MACD uses the close price and appears in a separate pane. Periods are measured in chart bars.':'Calculated from candle close prices. The period is measured in chart bars.'}</p>
   {fields[type].map(([key,label])=><label className="indicator-field" key={key}><span>{label}</span><input aria-label={label} type="number" min={key==='displacement'?0:1} max={key==='displacement'?500:2000} step="1" required value={values[key]??''} onChange={event=>{setValues({...values,[key]:event.target.value===''?undefined:Number(event.target.value)});setError('');}}/></label>)}
   <label className="indicator-field"><span>Color</span><input aria-label="Indicator color" type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
+  {movingAverage&&<label className="indicator-field"><span>Line width</span><select aria-label="Line width" value={lineWidth} onChange={event=>{setLineWidth(Number(event.target.value) as IndicatorLineWidth);setError('');}}>{([1,2,3,4] as const).map(width=><option key={width} value={width}>{width} px</option>)}</select></label>}
   {error&&<p className="indicator-error" role="alert">{error}</p>}
   <div className="modal-actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" type="submit">OK</button></div>
  </form></div>,document.body);

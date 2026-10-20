@@ -12,6 +12,9 @@ type Indicator struct {
 	Type       string         `json:"type"`
 	Parameters map[string]int `json:"parameters"`
 	Color      *string        `json:"color,omitempty"`
+	// LineWidth controls SMA/EMA strokes. Omission uses two pixels and preserves
+	// the original JSON shape of saved indicators from earlier versions.
+	LineWidth *int `json:"lineWidth,omitempty"`
 	// PaneStretchFactor is a MACD pane's height relative to the main chart pane.
 	// Omission keeps the default layout and the original shape of legacy exports.
 	PaneStretchFactor *float64 `json:"paneStretchFactor,omitempty"`
@@ -33,6 +36,14 @@ func validateIndicator(i Indicator) error {
 	}
 	if i.Color != nil && !indicatorColor.MatchString(*i.Color) {
 		return fmt.Errorf("indicator color must be a six-digit hex color")
+	}
+	if width := i.LineWidth; width != nil {
+		if i.Type != "sma" && i.Type != "ema" {
+			return fmt.Errorf("indicator line width is only supported for SMA and EMA")
+		}
+		if *width < 1 || *width > 4 {
+			return fmt.Errorf("indicator line width must be 1–4 pixels")
+		}
 	}
 	if factor := i.PaneStretchFactor; factor != nil {
 		if i.Type != "macd" {

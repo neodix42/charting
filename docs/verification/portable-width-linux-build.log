@@ -1,0 +1,43 @@
+Using Node v24.19.0 and npm 11.17.0
+[0;92mWails CLI[0m [0;31mv2.17.0[0m
+
+
+# Build Options
+
+Platform(s)        | linux/amd64
+Compiler           | /usr/bin/go
+Skip Bindings      | false
+Build Mode         | production
+Devtools           | false
+Frontend Directory | /home/neodix/gitProjects/charting/frontend
+Obfuscated         | false
+Install Scope      | machine
+Skip Frontend      | false
+Compress           | false
+Package            | true
+Clean Bin Dir      | false
+LDFlags            |
+Tags               | [webkit2_41]
+Race Detector      | false
+
+
+# Building target: linux/amd64
+
+  • Generating bindings: Done.
+  • Installing frontend dependencies: Done.
+  • Compiling frontend: Done.
+  • Compiling application: Done.
+  • Packaging application: Done.
+Built '/home/neodix/gitProjects/charting/build/bin/cryptodesk' in 5.919s.
+
+ ♥   If Wails is useful to you or your company, please consider sponsoring the project:
+https://github.com/sponsors/leaanthony
+/home/neodix/gitProjects/charting/release/cryptodesk-0.1.0-linux-amd64.tar.gz
+
+Ready to run: /home/neodix/gitProjects/charting/cryptodesk
+
+Portable archive: /home/neodix/gitProjects/charting/cryptodesk-0.1.0-linux-amd64.tar.gz
+
+Checksums: /home/neodix/gitProjects/charting/cryptodesk-SHA256SUMS
+
+Runtime requirements: compatible Linux with GTK3 and WebKitGTK 4.1 (APP_README.md).

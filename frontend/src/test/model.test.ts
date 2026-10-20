@@ -49,3 +49,18 @@ describe('active tab controls',()=>{
 });
 
 describe('price tick metadata',()=>{it('preserves decimal increment precision without forcing two places',()=>{expect(tickPrecision('0.25')).toBe(2);expect(tickPrecision('0.00000001')).toBe(8);expect(tickPrecision('1e-8')).toBe(8);expect(tickPrecision('0.01000')).toBe(2);expect(tickPrecision('1')).toBe(0);});});
+
+
+describe('moving average line width persistence',()=>{
+ it('copies a selected width independently through tab controls, chart and tab duplication without populating absent legacy widths',()=>{
+  let w=firstWorkspace();const first=w.tabs[0].charts[0];
+  const legacy:IndicatorConfig={id:crypto.randomUUID(),type:'sma',parameters:{period:20}};
+  w=reduceWorkspace(w,{type:'chart',id:first.id,patch:{indicators:[legacy]}});w=reduceWorkspace(w,{type:'addChart',sourceId:first.id});
+  const template:IndicatorConfig={id:crypto.randomUUID(),type:'ema',parameters:{period:8},lineWidth:4,color:'#61b6ef'};
+  w=reduceWorkspace(w,{type:'tabIndicator',tabId:w.activeTabId,indicator:template});
+  expect(w.tabs[0].charts.map(chart=>chart.indicators?.[1].lineWidth)).toEqual([4,4]);expect(w.tabs[0].charts.every(chart=>!Object.hasOwn(chart.indicators![0],'lineWidth'))).toBe(true);
+  const original=structuredClone(w.tabs[0]);w=reduceWorkspace(w,{type:'duplicateTab',id:w.activeTabId});const duplicate=w.tabs[1];expect(duplicate.charts.map(chart=>chart.indicators?.[1].lineWidth)).toEqual([4,4]);
+  const indicators=structuredClone(duplicate.charts[0].indicators!);indicators[1].lineWidth=1;w=reduceWorkspace(w,{type:'chart',id:duplicate.charts[0].id,patch:{indicators}});expect(w.tabs[0]).toEqual(original);expect(w.tabs[1].charts[1].indicators![1].lineWidth).toBe(4);expect(template.lineWidth).toBe(4);
+  const restored=JSON.parse(JSON.stringify(w)) as Workspace;expect(restored).toEqual(w);expect(restored.tabs[0].charts[0].indicators![0]).not.toHaveProperty('lineWidth');
+ });
+});

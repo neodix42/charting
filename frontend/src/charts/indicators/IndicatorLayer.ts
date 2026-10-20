@@ -1,4 +1,4 @@
-import {HistogramSeries,LineSeries,LineStyle,type IChartApi,type IPaneApi,type ISeriesApi,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {HistogramSeries,LineSeries,LineStyle,type IChartApi,type IPaneApi,type ISeriesApi,type LineWidth,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
 import {CloudPrimitive} from './CloudPrimitive';
 import {ema,ichimoku,macd,sma,type IndicatorPoint,type MACDValues} from './math';
@@ -52,10 +52,10 @@ export class IndicatorLayer {
   });
   return changed?result:null;
  }
- private addLine(color:string,title:string,paneIndex=0){return this.chart.addSeries(LineSeries,{color,title,lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false},paneIndex);}
+ private addLine(color:string,title:string,paneIndex=0,lineWidth:LineWidth=1){return this.chart.addSeries(LineSeries,{color,title,lineWidth,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false},paneIndex);}
  private create(config:IndicatorConfig):Layer{
   const color=config.color||colors[config.type];
-  if(config.type==='sma'||config.type==='ema')return {type:config.type,lines:[this.addLine(color,config.type.toUpperCase())]};
+  if(config.type==='sma'||config.type==='ema')return {type:config.type,lines:[this.addLine(color,config.type.toUpperCase(),0,config.lineWidth??2)]};
   if(config.type==='ichimoku'){
    const lines=[this.addLine(color,'Ichimoku conversion'),this.addLine('#d85f68','Ichimoku base'),this.addLine('#26a69a','Ichimoku span A'),this.addLine('#ef5350','Ichimoku span B'),this.addLine('#ab78d2','Ichimoku lagging')];
    const cloud=new CloudPrimitive();lines[2].attachPrimitive(cloud);return {type:config.type,lines,cloud};
@@ -77,7 +77,7 @@ export class IndicatorLayer {
  }
  update(bars:readonly Candle[],configs:readonly IndicatorConfig[],timeframe:Interval,preserveViewport=true):void{
   if(this.disposed)return;
-  const nextKey=JSON.stringify(configs.map(config=>({id:config.id,type:config.type,parameters:config.parameters,color:config.color}))),changed=nextKey!==this.configKey;
+  const nextKey=JSON.stringify(configs.map(config=>({id:config.id,type:config.type,parameters:config.parameters,color:config.color,lineWidth:config.type==='sma'||config.type==='ema'?config.lineWidth??2:undefined}))),changed=nextKey!==this.configKey;
   if(!changed&&bars===this.previousBars&&timeframe===this.previousTimeframe)return;
   // Historical charts preserve their absolute time window. Live charts keep their zoom and re-anchor the workspace gap.
   const range=changed&&preserveViewport?this.chart.timeScale().getVisibleRange():null;
@@ -90,7 +90,7 @@ export class IndicatorLayer {
     case 'sma':case 'ema':{
      const values=(config.type==='sma'?sma:ema)(bars,params.period??20);
      // At exactly one complete window there is one valid average, so no line segment exists yet.
-     layer.lines[0].applyOptions({pointMarkersVisible:values.length===1,pointMarkersRadius:3});layer.lines[0].setData(lineData(values));break;
+     layer.lines[0].applyOptions({pointMarkersVisible:values.length===1,pointMarkersRadius:3,lineWidth:config.lineWidth??2});layer.lines[0].setData(lineData(values));break;
     }
     case 'ichimoku':{
      const values=ichimoku(bars,params.conversion??9,params.base??26,params.spanB??52,params.displacement??26,intervalSeconds[timeframe]);

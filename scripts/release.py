@@ -23,7 +23,7 @@ import zipfile
 
 from app_version import app_version, parse_version
 
-TARGETS = {"linux-amd64": ".tar.gz", "windows-amd64": ".zip"}
+TARGETS = {"linux-amd64": ".tar.gz", "linux-amd64-portable": ".tar.gz", "windows-amd64": ".zip"}
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 INTEGRITY_PATTERN = re.compile(r"<!-- cryptodesk-assets: (.+?) -->")
@@ -49,8 +49,14 @@ def tag_version(tag):
 
 def archive_names(version):
     parse_version(version)
-    return [name for target, suffix in TARGETS.items()
-            for name in (f"cryptodesk-{version}-{target}{suffix}", f"cryptodesk-{target}{suffix}")]
+    return [f"cryptodesk-{version}-{target}{suffix}" for target, suffix in TARGETS.items()]
+
+
+def legacy_archive_names(version):
+    """Recognize completed older releases without rewriting their assets."""
+    parse_version(version)
+    return [name for target in ("linux-amd64", "windows-amd64")
+            for name in (f"cryptodesk-{version}-{target}{TARGETS[target]}", f"cryptodesk-{target}{TARGETS[target]}")]
 
 
 def marker(tag, commit):
@@ -70,10 +76,12 @@ def validate_published(release, tag, commit):
         raise ValueError("Existing release is a prerelease and cannot provide stable latest downloads")
     if release["tag_name"] != tag or marker(tag, commit) not in (release.get("body") or ""):
         raise ValueError("Existing release was not created for this version and exact commit; refusing to replace it")
-    expected = set(archive_names(tag[1:])) | {"SHA256SUMS", "release.json"}
     assets = {asset["name"]: asset for asset in release.get("assets", [])}
-    if set(assets) != expected or any(asset.get("state") != "uploaded" or asset.get("size", 0) <= 0 for asset in assets.values()):
+    supported = [set(names) | {"SHA256SUMS", "release.json"}
+                 for names in (archive_names(tag[1:]), legacy_archive_names(tag[1:]))]
+    if set(assets) not in supported or len(assets) != len(release.get("assets", [])) or any(asset.get("state") != "uploaded" or asset.get("size", 0) <= 0 for asset in assets.values()):
         raise ValueError("Published release has incomplete or unexpected assets; refusing to modify a published release")
+    expected = set(assets)
     matches = INTEGRITY_PATTERN.findall(release.get("body") or "")
     integrity = json.loads(matches[0]) if len(matches) == 1 else {}
     if set(integrity) != expected or any(not isinstance(integrity[name], dict)
@@ -243,27 +251,68 @@ def stage(root, target, version, directory):
     source = root / versioned
     if not source.is_file() or source.is_symlink():
         raise ValueError(f"Missing portable archive: {source}")
-    for name in (versioned, f"cryptodesk-{target}{TARGETS[target]}"):
-        shutil.copyfile(source, directory / name)
+    shutil.copyfile(source, directory / versioned)
 
 
 def archive_manifest(path, target, version):
     prefix = f"cryptodesk-{version}-{target}/"
-    if target == "linux-amd64":
+    if target.startswith("linux-amd64"):
         with tarfile.open(path, "r:gz") as archive:
             names = archive.getnames()
             if any(not (name == prefix[:-1] or name.startswith(prefix)) or ".." in Path(name).parts for name in names):
                 raise ValueError("Unsafe Linux archive paths")
+            if len(names) != len(set(names)):
+                raise ValueError("Duplicate Linux archive paths")
             if any(not (entry.isdir() or entry.isfile()) for entry in archive.getmembers()):
                 raise ValueError("Linux release archive must contain regular files/directories only")
-            binary = archive.getmember(prefix + "cryptodesk")
-            if not binary.isfile() or not binary.mode & 0o111:
-                raise ValueError("Linux portable binary is missing or not executable")
-            with archive.extractfile(binary) as stream:
-                header = stream.read(20)
+            def regular(name, executable=False):
+                try:
+                    entry = archive.getmember(prefix + name)
+                except KeyError as error:
+                    raise ValueError(f"Linux release file is missing: {name}") from error
+                if not entry.isfile() or entry.size <= 0 or (executable and not entry.mode & 0o111):
+                    raise ValueError(f"Linux release file is missing, empty or not executable: {name}")
+                return entry
+
+            def executable(name):
+                with archive.extractfile(regular(name, executable=True)) as stream:
+                    header = stream.read(20)
                 if len(header) != 20 or header[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", header, 18)[0] != 62:
-                    raise ValueError("Expected an x64 Linux ELF binary")
-            with archive.extractfile(prefix + "version.json") as stream:
+                    raise ValueError(f"Expected an x64 Linux ELF binary: {name}")
+
+            if target == "linux-amd64-portable":
+                with archive.extractfile(regular("cryptodesk", executable=True)) as stream:
+                    launcher = stream.readline(256)
+                if not launcher.startswith(b"#!") or b"bash" not in launcher:
+                    raise ValueError("Bundled Linux portable launcher must be an executable Bash script")
+                executable("runtime/usr/bin/cryptodesk")
+                for helper in ("WebKitNetworkProcess", "WebKitWebProcess"):
+                    executable(f"runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/{helper}")
+                for library in ("libwebkit2gtk-4.1.so.0", "libgtk-3.so.0"):
+                    regular(f"runtime/usr/lib/x86_64-linux-gnu/{library}")
+                with archive.extractfile(regular("runtime-manifest.json")) as stream:
+                    inventory = json.load(stream)
+                runtime_files = {entry.name.removeprefix(prefix): entry for entry in archive.getmembers()
+                                 if entry.name.startswith(prefix + "runtime/") and entry.isfile()}
+                if not isinstance(inventory, dict) or set(inventory) != set(runtime_files):
+                    raise ValueError("Bundled Linux runtime inventory does not match the archived files")
+                # Tar offsets keep gzip reads forward through the potentially
+                # large corresponding-source archives rather than restarting
+                # decompression for each filename.
+                for name, entry in sorted(runtime_files.items(), key=lambda item: item[1].offset_data):
+                    record = inventory[name]
+                    if not isinstance(record, dict) or record.get("bytes") != entry.size:
+                        raise ValueError(f"Bundled Linux runtime inventory size mismatch: {name}")
+                    with archive.extractfile(entry) as stream:
+                        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                    if digest != record.get("sha256"):
+                        raise ValueError(f"Bundled Linux runtime inventory checksum mismatch: {name}")
+                for directory in ("runtime/sources/", "runtime/licenses/"):
+                    if not any(entry.name.startswith(prefix + directory) and entry.isfile() and entry.size > 0 for entry in archive.getmembers()):
+                        raise ValueError(f"Bundled Linux runtime is missing {directory}")
+            else:
+                executable("cryptodesk")
+            with archive.extractfile(regular("version.json")) as stream:
                 return json.load(stream)
     with zipfile.ZipFile(path) as archive:
         if archive.testzip():
@@ -291,14 +340,15 @@ def bundle(directory, version, commit):
     names = archive_names(version)
     actual = {path.name for path in directory.iterdir() if path.name not in {"SHA256SUMS", "release.json"}}
     if actual != set(names):
-        raise ValueError("Release inputs must contain exactly both portable archives and their stable aliases")
+        raise ValueError("Release inputs must contain exactly three versioned archives: Linux, Linux portable and Windows")
     for target, suffix in TARGETS.items():
         original = directory / f"cryptodesk-{version}-{target}{suffix}"
-        alias = directory / f"cryptodesk-{target}{suffix}"
-        if original.is_symlink() or alias.is_symlink() or sha256(original) != sha256(alias):
-            raise ValueError(f"Stable download alias differs from its versioned archive: {target}")
+        if original.is_symlink() or not original.is_file():
+            raise ValueError(f"Release archive must be a regular file: {target}")
         manifest = archive_manifest(original, target, version)
-        if manifest.get("app") != "CryptoDesk" or manifest.get("version") != version or manifest.get("gitRevision") != commit or manifest.get("target") != target.replace("-", "/"):
+        expected_target = "linux/amd64" if target.startswith("linux-") else "windows/amd64"
+        variant_matches = manifest.get("packageVariant") == "portable" if target == "linux-amd64-portable" else manifest.get("packageVariant") in (None, "standard")
+        if manifest.get("app") != "CryptoDesk" or manifest.get("version") != version or manifest.get("gitRevision") != commit or manifest.get("target") != expected_target or not variant_matches:
             raise ValueError(f"Archive manifest does not match the requested release: {target}")
         if manifest.get("workingTreeModified") is not False:
             raise ValueError("CI releases must be built from an unmodified checkout")
@@ -310,8 +360,10 @@ def bundle(directory, version, commit):
 
 
 def publish(api, directory, version, commit):
-    metadata = bundle(directory, version, commit)
-    tag = metadata["tag"]
+    parse_version(version)
+    if not COMMIT_PATTERN.fullmatch(commit):
+        raise ValueError("Release commit must be a full SHA")
+    tag = f"v{version}"
     resolved = api.tag_commit(tag)
     if resolved is not None and resolved != commit:
         raise ValueError(f"Tag {tag} already belongs to another commit; it will not be moved")
@@ -329,6 +381,7 @@ def publish(api, directory, version, commit):
         validate_published(release, tag, commit)
         print(f"{tag} already published for {commit}; existing assets preserved")
         return
+    bundle(directory, version, commit)
     if release and (release.get("target_commitish") != commit or marker(tag, commit) not in (release.get("body") or "")):
         raise ValueError("Existing draft belongs to another commit or author; refusing to replace it")
     if main_workflows_differ(api, commit):
@@ -341,7 +394,8 @@ def publish(api, directory, version, commit):
     integrity = asset_integrity(paths)
     if release is None:
         body = (f"Portable CryptoDesk builds from commit `{commit}`.\n\n"
-                "- Ubuntu x64: extract the tar.gz and run `./cryptodesk`. Requires GTK3 and WebKitGTK 4.1 runtime libraries.\n"
+                "- Linux x64: extract the standard tar.gz and run `./cryptodesk`; GTK3 and WebKitGTK 4.1 runtime libraries are required.\n"
+                "- Linux x64 portable: extract the `-linux-amd64-portable.tar.gz` for the bundled desktop runtime and run `./cryptodesk`.\n"
                 "- Windows x64: extract the complete ZIP and run `cryptodesk.exe`. The English WebView2 runtime is included.\n"
                 "- Verify downloads with `SHA256SUMS`; `release.json` records the source commit and archive hashes.\n\n"
                 f"{marker(tag, commit)}\n{integrity_marker(integrity)}")

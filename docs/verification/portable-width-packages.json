@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "version": "0.1.0",
+  "rootChecksumsVerified": true,
+  "packages": {
+    "linux-amd64": {
+      "name": "cryptodesk-0.1.0-linux-amd64.tar.gz",
+      "bytes": 8535082,
+      "sha256": "f01e947c47b243ec259292e9bf257ebba87441f63d535ba048c27e3734a2da13",
+      "binarySHA256": "2d95b770b7590fdef1fde2e16024430f70c427d4de7379daf01be3380a1b4f81",
+      "target": "linux/amd64",
+      "gitRevision": "9ea7900c9c14a4510bb886061d0770915ae367cd",
+      "workingTreeModified": true
+    },
+    "linux-amd64-portable": {
+      "name": "cryptodesk-0.1.0-linux-amd64-portable.tar.gz",
+      "bytes": 615856383,
+      "sha256": "c11a1665b0ae12e81b3a5d377b20f46c8479560c97c5c3e32344f5828d206260",
+      "runtimeInventoryVerifiedByNativeSmoke": true,
+      "sourceBinaryPackages": 111,
+      "sourcePackages": 85,
+      "sourceArchiveBytes": 495171225,
+      "sourceBundleBytes": 572202310,
+      "buildGlibc": "glibc 2.43",
+      "nativeHostMaskedSmokePassed": true,
+      "target": "linux/amd64",
+      "gitRevision": "9ea7900c9c14a4510bb886061d0770915ae367cd",
+      "workingTreeModified": true
+    },
+    "windows-amd64": {
+      "name": "cryptodesk-0.1.0-windows-amd64.zip",
+      "bytes": 284446395,
+      "sha256": "c782153f1085299af1f808a756b47793432f62bc1fd1d4a25bbc9d1f8e7033b4",
+      "verifiedPackagedFileChecksums": 187,
+      "localePaks": [
+        "copilot_overlay_strings_en-GB.pak",
+        "copilot_overlay_strings_en-US.pak",
+        "en-GB.pak",
+        "en-US.pak"
+      ],
+      "nativeExecution": "unverified on Ubuntu",
+      "target": "windows/amd64",
+      "gitRevision": "9ea7900c9c14a4510bb886061d0770915ae367cd",
+      "workingTreeModified": true
+    }
+  },
+  "stagedApplicationAssets": [
+    "cryptodesk-0.1.0-linux-amd64-portable.tar.gz",
+    "cryptodesk-0.1.0-linux-amd64.tar.gz",
+    "cryptodesk-0.1.0-windows-amd64.zip"
+  ],
+  "unversionedApplicationDuplicates": false
+}
