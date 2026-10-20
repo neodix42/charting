@@ -27,6 +27,8 @@ The main [README](https://github.com/neodix42/charting#download) links to the [l
 
 Local builds use the baseline in `VERSION` (currently `0.1.0`). Set `CRYPTODESK_VERSION=X.Y.Z` to override it for either build script; the output filename, package manifest and Windows product version follow this value. Release CI passes its selected version without making source-version bump commits. Hosted execution and Windows GUI checks are recorded separately in [STATUS.md](STATUS.md).
 
+Ubuntu release CI checks unprivileged Bubblewrap namespace setup before building. Only a restricted GitHub-hosted Ubuntu 24.04 runner can load the pinned upstream Bubblewrap AppArmor profile when the initial probe fails; existing policy and global namespace settings are preserved. Portable startup failures print their exit code/log tail and retain `namespace.json`, `portable.json` and application logs in the **diagnostics-portable-linux-amd64** workflow artifact. Diagnostics are kept separate from published application archives. Local build scripts do not load AppArmor policy.
+
 ## Build and develop
 
 Pinned versions: Go module/CLI Wails 2.17.0; React 19.3.1; Lightweight Charts 5.2.1; SQLite Go driver modernc.org/sqlite 1.60.1. This checkout was built with Go 1.26.8, Node 24.19.0 and npm 11.17.0. Frontend and Go lockfiles are included.

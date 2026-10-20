@@ -1,0 +1,31 @@
+{
+  "passed": true,
+  "package": {
+    "package": "apparmor",
+    "version": "4.0.1really4.0.1-0ubuntu0.24.04.9",
+    "sha256": "59af23f557d666039708ec176aa056d2fd85125dabd452accf6d86f5c608fb74",
+    "filename": "pool/main/a/apparmor/apparmor_4.0.1really4.0.1-0ubuntu0.24.04.9_amd64.deb"
+  },
+  "parserVersion": "AppArmor parser version 4.0.1\nCopyright (C) 1999-2008 Novell Inc.\nCopyright 2009-2018 Canonical Ltd.",
+  "policy": {
+    "path": "scripts/apparmor/bwrap-userns-restrict",
+    "sha256": "a964037f6cf0df1099f14226b037eaedde6237c86e715188e93eb460b30be859",
+    "upstreamCommit": "72229df83059480f4e9fb1488624201bdbd61755"
+  },
+  "compile": {
+    "command": [
+      ".tools/ci-apparmor-parser/sbin/apparmor_parser",
+      "--skip-kernel-load",
+      "--skip-cache",
+      "--Include",
+      ".tools/ci-apparmor-parser/etc/apparmor.d",
+      "--warn=rule-not-enforced",
+      "scripts/apparmor/bwrap-userns-restrict"
+    ],
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": "Warning from profile bwrap (scripts/apparmor/bwrap-userns-restrict): io_uring rules not enforced\nWarning from profile unpriv_bwrap (scripts/apparmor/bwrap-userns-restrict): io_uring rules not enforced\n"
+  },
+  "privilege": "Unprivileged syntax/ABI compilation only; skip-kernel-load and skip-cache; no policy loaded, no host configuration/cache changed",
+  "limitations": "The ABI4 upstream profile allows io_uring but Noble ABI4 does not mediate it; parser reports this optional allowance for both profiles. The capability-denying stacked child policy and user namespace rules compile unchanged. Actual privileged policy addition to an Ubuntu24 GitHub runner is unverified until CI executes."
+}

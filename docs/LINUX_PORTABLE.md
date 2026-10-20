@@ -53,3 +53,7 @@ python3 scripts/smoke-portable.py cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz -
 ```
 
 This separately tests real GUI/browser launches with host GTK/WebKit/modules hidden, isolated profiles, Ctrl+C, SQLite integrity, lock release, saved restart and natural process cleanup. Release CI runs it under Xvfb after packaging; local results and platform limitations are recorded in STATUS.md.
+
+CI first runs `scripts/ci-portable-namespace.sh` as the ordinary runner user. On a GitHub-hosted Ubuntu 24.04 runner with an AppArmor namespace denial, it may add the pinned upstream ABI 4.0 Bubblewrap profile to that disposable runner's kernel, then repeat the unprivileged probe. It refuses existing policy conflicts, leaves sysctls unchanged and does not disable WebKit sandboxing. The policy grants setup to `/usr/bin/bwrap` and strips capabilities from its children; [Canonical describes this approach](https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007). Source, license and scope are retained in [scripts/apparmor/README.md](../scripts/apparmor/README.md). This CI helper is not a local policy installer.
+
+If startup or shutdown fails, the smoke script exits unsuccessfully, records a failed report, and prints the process exit code and a bounded log tail. The workflow retains the **diagnostics-portable-linux-amd64** artifact even after an earlier setup/build failure. It includes the namespace probe and any application report/logs that were created. The diagnostic name is excluded from the publisher's application-archive selection.

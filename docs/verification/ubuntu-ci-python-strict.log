@@ -1,0 +1,59 @@
+......................................Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/tmpzkxtcpzu/.tools/node-test
+.....Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/cryptodesk install tools tlmoapit/.tools/node-test
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+....Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+................................................Extracting all pinned WebView2 1.2.3.4 runtime files
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpnals7gqr/first
+...Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmp_4c38p55/first
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Extracting all pinned WebView2 1.2.3.4 runtime files
+.Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmprgr40ocd/first
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmprgr40ocd/second
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/cryptodesk runtime path 0w58zci7/portable package/WebView2
+......Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+...................
+----------------------------------------------------------------------
+Ran 136 tests in 3.747s
+
+OK
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+English locales: kept 4, removed 1 packs (0.00 MiB unpacked)
+
+Portable Windows ZIP: /tmp/tmpvp9pohg1/cryptodesk-2.3.4-windows-amd64.zip
+Size: 0.0 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.
+English locales: kept 4, removed 2 packs (0.00 MiB unpacked)

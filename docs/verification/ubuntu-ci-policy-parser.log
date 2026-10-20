@@ -1,0 +1,10 @@
+AppArmor parser version 4.0.1
+Copyright (C) 1999-2008 Novell Inc.
+Copyright 2009-2018 Canonical Ltd.
+
+Command: .tools/ci-apparmor-parser/sbin/apparmor_parser --skip-kernel-load --skip-cache --Include .tools/ci-apparmor-parser/etc/apparmor.d --warn=rule-not-enforced scripts/apparmor/bwrap-userns-restrict
+Exit: 0
+Warning from profile bwrap (scripts/apparmor/bwrap-userns-restrict): io_uring rules not enforced
+Warning from profile unpriv_bwrap (scripts/apparmor/bwrap-userns-restrict): io_uring rules not enforced
+
+No kernel policy loaded; no cache written; no sudo invoked.

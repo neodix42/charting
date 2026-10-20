@@ -1,0 +1,46 @@
+{
+  "passed": true,
+  "profileLoaded": false,
+  "probes": [
+    {
+      "command": [
+        "/usr/bin/bwrap",
+        "--ro-bind",
+        "/",
+        "/",
+        "--",
+        "/usr/bin/true"
+      ],
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "upstreamCommit": "72229df83059480f4e9fb1488624201bdbd61755",
+  "policySHA256": "a964037f6cf0df1099f14226b037eaedde6237c86e715188e93eb460b30be859",
+  "system": {
+    "uid": 1000,
+    "distribution": {
+      "NAME": "Ubuntu",
+      "ID": "ubuntu",
+      "PRETTY_NAME": "Ubuntu 26.04.1 LTS",
+      "VERSION_ID": "26.04",
+      "VERSION": "26.04.1 LTS (Resolute Raccoon)",
+      "VERSION_CODENAME": "resolute",
+      "ID_LIKE": "debian",
+      "HOME_URL": "https://www.ubuntu.com/",
+      "SUPPORT_URL": "https://help.ubuntu.com/",
+      "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+      "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+      "UBUNTU_CODENAME": "resolute",
+      "LOGO": "ubuntu-logo"
+    },
+    "apparmorEnabled": "Y",
+    "restrictUnprivilegedUserns": "1",
+    "processProfile": "unconfined",
+    "githubActions": null,
+    "runnerOS": null,
+    "runnerEnvironment": null
+  },
+  "result": "Unprivileged Bubblewrap already works; no policy changed"
+}
