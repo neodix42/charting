@@ -26,6 +26,7 @@ var appIcon []byte
 func main() {
 	dataDir := flag.String("data-dir", "", "workspace directory (portable Windows default: executable directory/data)")
 	flag.Parse()
+	configureWebKitSignal()
 	var executable string
 	if runtime.GOOS == "windows" {
 		var err error

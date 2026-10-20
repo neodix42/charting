@@ -9,6 +9,10 @@
 
 .chart-gap-setting{flex-wrap:wrap}.chart-gap-fields{max-width:100%}.chart-gap-controls{display:flex;align-items:center;gap:6px}.chart-gap-controls input{width:85px}.chart-gap-fields>small{display:block;margin-top:6px}.chart-gap-fields .danger{color:var(--danger)}
 
+.tab-context-menu{position:fixed;z-index:50;min-width:170px;max-width:calc(100vw - 16px);padding:5px;border:1px solid var(--border);border-radius:6px;background:var(--elevated);box-shadow:var(--shadow)}
+.tab-context-menu button{display:block;width:100%;border:0;background:none;border-radius:3px;text-align:left;padding:8px 10px;font-size:12px}
+.tab-context-menu button:focus-visible{outline-offset:-2px;background:var(--hover)}
+
 .app-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);height:62px;min-height:62px;gap:12px;padding:0 16px}
 .app-header .brand{justify-self:start;font-size:20px;gap:8px;white-space:nowrap}
 .app-header .brand-icon{width:29px;height:29px;object-fit:contain;flex-shrink:0}

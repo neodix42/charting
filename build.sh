@@ -3,7 +3,9 @@
 set -euo pipefail
 
 APP_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-RELEASE_NAME="cryptodesk-0.1.0-linux-amd64"
+CRYPTODESK_VERSION="$(python3 "$APP_ROOT/scripts/app_version.py")"
+export CRYPTODESK_VERSION
+RELEASE_NAME="cryptodesk-$CRYPTODESK_VERSION-linux-amd64"
 
 if [[ $# -gt 0 ]]; then
   if [[ $# -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
@@ -12,6 +14,7 @@ if [[ $# -gt 0 ]]; then
       'Builds the production Linux desktop app, archive and checksums at repo root.' \
       'Requires Go, Python 3.12+ and GTK3/WebKitGTK 4.1 build dependencies.' \
       'Node/npm are checked and downloaded into .tools/ if needed.' \
+      'Version defaults to VERSION; CRYPTODESK_VERSION=X.Y.Z overrides it.' \
       'See APP_README.md for the optional project-local native SDK.'
     exit 0
   fi

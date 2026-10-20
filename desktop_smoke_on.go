@@ -137,6 +137,7 @@ const desktopSmokeJavaScript = `async function(phase) {
  const select=async(selector,value)=>{const element=await wait(()=>q(selector),selector);Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(element,value);element.dispatchEvent(new Event('change',{bubbles:true}));await sleep(100);};
  const input=async(selector,value)=>{const element=await wait(()=>q(selector),selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,String(value));element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));await sleep(100);};
  const flush=async()=>{await click('.save-indicator');await wait(()=>q('.save-indicator')?.textContent.includes('All changes saved'),'acknowledged save');};
+ const contextTab=async(element)=>{const rect=element.getBoundingClientRect();element.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:rect.left+rect.width/2,clientY:rect.bottom-2}));await wait(()=>q('[role="menu"]'),'tab context menu');};
  const indicatorDefaults={sma:{period:20},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
  const indicatorNames={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
  const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
@@ -163,6 +164,10 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
    check(initial.workspace.chartRightGap?.unit==='bars'&&initial.workspace.chartRightGap.value===10,'first launch defaults to a ten-bar right gap',initial.workspace.chartRightGap);
+   await contextTab(q('[role="tab"]'));
+   check(q('[role="menuitem"]').disabled,'tab context menu protects the final tab');
+   q('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+   await wait(()=>!q('[role="menu"]')&&document.activeElement===q('[role="tab"]'),'Escape restores focus to the tab');
    await wait(()=>chartShape(q('[data-testid="chart-cell"]')).canvases>0,'initial native chart canvases');
    report.beforeIndicators=chartShape(q('[data-testid="chart-cell"]'));
    const periods=qa('[data-testid="chart-cell"] [aria-label="Timeframe"] button'),tops=periods.map(button=>button.getBoundingClientRect().top);
@@ -247,6 +252,18 @@ const desktopSmokeJavaScript = `async function(phase) {
    const pixelGapSaved=await api.LoadWorkspace();
    check(pixelGapSaved.workspace.chartRightGap?.unit==='pixels'&&pixelGapSaved.workspace.chartRightGap.value===79&&qa('[data-testid="chart-cell"]').length===3,'pixel gap persists without replacing chart instances or layout',pixelGapSaved.workspace.chartRightGap);
    report.gapRevision=pixelGapSaved.revision;
+   await click('[aria-label="Duplicate tab"]');await wait(()=>qa('[role="tab"]').length===3&&qa('[data-testid="chart-cell"]').length===3,'temporary duplicate with all three charts');
+   const duplicateID=q('[role="tab"][aria-selected="true"]').dataset.tabId;
+   qa('[role="tab"]')[0].click();await wait(()=>q('[role="tab"][aria-selected="true"]').dataset.tabId===pixelGapSaved.workspace.tabs[0].id,'original active tab before inactive closure');
+   const mountedBeforeClose=qa('[data-testid="chart-cell"]').map(cell=>cell.dataset.chartId);
+   await contextTab(qa('[role="tab"]')[2]);await click('[role="menuitem"]');
+   check(q('[role="dialog"]').textContent.includes('all 3 charts'),'inactive tab closure confirms its exact chart count',q('[role="dialog"]').textContent);
+   await click('.confirmation button[type="button"]');
+   check(qa('[role="tab"]').length===3&&!q('[role="dialog"]'),'Cancel preserves the context target and all its charts');
+   await contextTab(qa('[role="tab"]')[2]);await click('[role="menuitem"]');await click('.confirmation button[type="submit"]');
+   await wait(()=>qa('[role="tab"]').length===2,'remove inactive context target');await flush();
+   const closedContext=await api.LoadWorkspace();
+   check(closedContext.workspace.tabs.length===2&&!closedContext.workspace.tabs.some(tab=>tab.id===duplicateID)&&closedContext.workspace.activeTabId===pixelGapSaved.workspace.activeTabId&&closedContext.workspace.tabs.map(tab=>tab.charts.length).join(',')==='3,1'&&JSON.stringify(qa('[data-testid="chart-cell"]').map(cell=>cell.dataset.chartId))===JSON.stringify(mountedBeforeClose),'inactive context closure removes its whole tab while preserving active charts and persists to SQLite',closedContext.workspace.tabs.map(tab=>({id:tab.id,charts:tab.charts.length})));
   } else if(phase==='restore') {
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);

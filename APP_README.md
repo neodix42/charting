@@ -1,6 +1,6 @@
 # CryptoDesk
 
-CryptoDesk is an Ubuntu desktop spot-market chart workspace built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. It fetches public Binance, Bybit and Coinbase data directly. No API keys, account or development server are required to run the release.
+CryptoDesk is an Ubuntu and Windows desktop spot-market chart workspace built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. It fetches public Binance, Bybit and Coinbase data directly. No API keys, account or development server are required to run the release.
 
 **First launch has exactly one tab and one chart in a 1×1 grid.** Add tabs and charts as needed, up to 20 tabs and 9 charts per tab. Selecting a larger grid adds empty controls, not chart configurations. New tabs start with one chart. Later launches restore your actual saved workspace.
 
@@ -8,7 +8,7 @@ The original specification bundle is retained at the repository root. [STATUS.md
 
 ## Run the built release
 
-Run the root `./cryptodesk` produced by `./build.sh`, or extract `cryptodesk-0.1.0-linux-amd64.tar.gz` and run `./cryptodesk` inside its directory. No installation is needed. It requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. The archive does not bundle a browser or claim cross-distribution portability. Tested build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
+Run the root `./cryptodesk` produced by `./build.sh`, or extract the downloaded `cryptodesk-linux-amd64.tar.gz` (or versioned `cryptodesk-X.Y.Z-linux-amd64.tar.gz`) and run `./cryptodesk` inside its directory. No installation is needed. It requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. The archive does not bundle a browser or claim cross-distribution portability. Tested build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
 
 Optional user-local installation:
 
@@ -18,6 +18,12 @@ Optional user-local installation:
 ```
 
 This writes the binary under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local/share/cryptodesk-app`), a launcher and the CryptoDesk diamond logo as its SVG icon. The matching `cryptodesk` desktop identity lets Ubuntu Wayland use this logo in the application menu and taskbar. The executable also embeds the logo for native window icons; Windows builds carry the same logo in their executable resources. Run the installer again after rebuilding to update the installed app and icon, then restart CryptoDesk. It does not start the application or replace workspace data. Source-checkout equivalent: `scripts/install-user.sh --dry-run` after building.
+
+## Downloads and release versions
+
+The main [README](https://github.com/neodix42/charting#download) links to the latest Linux and Windows portable downloads. Links become available after the first successful GitHub release. Pushing commits to `main` runs the release workflow: check and build both targets, assign `v0.1.0` initially and increment subsequent patch tags, then publish both packages together. Stable asset names are `cryptodesk-linux-amd64.tar.gz` and `cryptodesk-windows-amd64.zip`; `SHA256SUMS` verifies all downloadable archives and `release.json` records their version, source commit and hashes. The workflow assumes `main` is the default branch. Superseded queued commits or older workflow contents are skipped in favor of the newer push; a workflow change during a build stops publication before remote writes.
+
+Local builds use the baseline in `VERSION` (currently `0.1.0`). Set `CRYPTODESK_VERSION=X.Y.Z` to override it for either build script; the output filename, package manifest and Windows product version follow this value. Release CI passes its selected version without making source-version bump commits. Hosted execution and Windows GUI checks are recorded separately in [STATUS.md](STATUS.md).
 
 ## Build and develop
 
@@ -38,11 +44,11 @@ scripts/test.sh              # deterministic Go race/vet + frontend checks/build
 cd frontend && npm run test:e2e
 ```
 
-`./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-0.1.0-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
+`./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-X.Y.Z-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
 
 Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
 
-For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-0.1.0-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The ZIP includes Microsoft Fixed Version WebView2 with English (`en-US` and `en-GB`) locale packs; other locale PAKs are omitted. The complete source runtime is verified against its pinned version, SHA-256 and inventory before reducing only the staged package. Shared resources and all licenses are retained. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Initial runtime download is about 300 MB; the complete verified runtime remains cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
+For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-X.Y.Z-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The ZIP includes Microsoft Fixed Version WebView2 with English (`en-US` and `en-GB`) locale packs; other locale PAKs are omitted. The complete source runtime is verified against its pinned version, SHA-256 and inventory before reducing only the staged package. Shared resources and all licenses are retained. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Initial runtime download is about 300 MB; the complete verified runtime remains cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
 
 On Windows, extract the **whole ZIP** to a local writable folder and launch `cryptodesk.exe`. Keep `WebView2` and `portable.marker` beside it; the workspace and browser profile live in its `data` directory. This needs no separate WebView2 installation. Windows 10 startup applies Microsoft's required read/execute grants to the bundled runtime directory; Windows 11 needs no grants. Fixed runtime updates require a new reviewed runtime pin and rebuild. The executable is unsigned, and cross-compilation on Ubuntu does not replace Windows runtime testing. Full details: [Windows portable build and usage](docs/WINDOWS_PORTABLE.md).
 
@@ -59,7 +65,7 @@ Live smoke makes public requests and reports exact outcomes. Native smoke uses a
 
 ## Use
 
-Use Add Tab or Ctrl+T to create a single-chart tab; Add Chart or Ctrl+Shift+N adds one chart. Ctrl+Tab / Ctrl+Shift+Tab changes tab; Ctrl+W closes with confirmation. Shortcuts stay inactive in editors/selectors. Tabs scroll, and the All tabs menu reaches all 20. Rename, duplicate or drag tabs; drag chart headers to reorder. Row/column splitters resize tracks. Maximize chart temporarily and restore it without changing the saved grid.
+Use Add Tab or Ctrl+T to create a single-chart tab; Add Chart or Ctrl+Shift+N adds one chart. Ctrl+Tab / Ctrl+Shift+Tab changes tab; Ctrl+W closes the active tab with confirmation. Right-click any tab and choose **Close tab** to remove that specific tab and all its charts after confirmation; an inactive target stays inactive. Cancel preserves everything, and the final tab cannot be closed. The Menu key or Shift+F10 also opens the tab menu; Escape dismisses it. Shortcuts stay inactive in editors/selectors. Tabs scroll, and the All tabs menu reaches all 20. Rename, duplicate or drag tabs; drag chart headers to reorder. Row/column splitters resize tracks. Maximize chart temporarily and restore it without changing the saved grid.
 
 Each chart has its own exchange, searchable native instrument, horizontal period buttons (`1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`), volume, candlestick/line style and linear/log scale. The buttons stay in the chart header row; small chart headers scroll horizontally. Drag/pan/zoom the chart; scrolling left loads older history. Return to live follows current bars. Manual price scaling and time viewports are saved. Settings provides theme, IANA/system timezone, JSON import/export/reset and diagnostics. Candle boundaries remain UTC regardless of display timezone.
 

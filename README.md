@@ -1,72 +1,70 @@
-# CryptoDesk — Codex implementation bundle
+# CryptoDesk
 
-**Prepared: 2026-10-19 · Bundle version: 1.1.0**
+<img src="frontend/src/assets/cryptodesk.svg" width="64" height="64" alt="CryptoDesk diamond logo">
 
-This is a build specification and test-fixture bundle, not an implemented desktop app.
-The deliverable Codex must build is a read-only Ubuntu cryptocurrency charting terminal:
-Go + Wails v2 + React/TypeScript + TradingView Lightweight Charts + SQLite.
+A desktop workspace for public cryptocurrency spot charts on Ubuntu and Windows. CryptoDesk uses Go, Wails, React, Lightweight Charts and SQLite. Market data comes directly from Binance, Bybit and Coinbase; no account or API keys are needed.
 
-On first launch, create **exactly one tab containing exactly one chart**. The user can
-add and remove content, up to **20 tabs total and 9 independent charts per tab**, using
-Binance, Bybit, or Coinbase public spot data, with automatic workspace restoration.
-These numbers are upper limits, NOT the default layout or pre-created hidden objects.
+**First launch opens exactly one tab with one chart.** Add up to **20 tabs** and **9 charts per tab**. These are capacities, not a preloaded layout. Subsequent launches restore your actual saved workspace.
 
-## Start
+## Download
 
-Extract this archive in your Git project's root. It adds only `codex-cryptodesk/`;
-it does not include a root README, root AGENTS.md, go.mod, or package.json to overwrite.
-If this bundle directory already exists, extract to a temporary directory and compare it.
+| Platform | Latest portable package | Run |
+|---|---|---|
+| Ubuntu x64 | [Download Linux archive](https://github.com/neodix42/charting/releases/latest/download/cryptodesk-linux-amd64.tar.gz) | Extract, then run `./cryptodesk` |
+| Windows x64 | [Download Windows ZIP](https://github.com/neodix42/charting/releases/latest/download/cryptodesk-windows-amd64.zip) | Extract the whole ZIP, then run `cryptodesk.exe` |
 
-Open Codex with the repository as its working directory and paste the contents of
-[CODEX_PROMPT.txt](CODEX_PROMPT.txt). The entry point is [START_HERE.md](START_HERE.md).
-No bootstrap installation is needed to read the instructions.
+[All releases and version history](https://github.com/neodix42/charting/releases) · [Latest SHA-256 checksums](https://github.com/neodix42/charting/releases/latest/download/SHA256SUMS)
 
-Optional, read-only local checks:
+The download links become available after the first successful release workflow on `main`. Each release includes versioned archives, the stable filenames linked above, and checksums.
+
+The Linux archive requires GTK3, WebKitGTK 4.1 and libsoup3 runtime libraries. CI builds target Ubuntu 24.04 x64; local native verification is recorded for Ubuntu 26.04.1/Wayland in [STATUS.md](STATUS.md). The archive includes a user-local desktop/icon installer and does not bundle a Linux browser runtime. See [Linux usage and build instructions](APP_README.md).
+
+The larger Windows ZIP includes its pinned Fixed Version WebView2 runtime with English locale packs, so a separate browser installation is unnecessary. Extract into a writable local folder, keeping `WebView2` and `portable.marker` beside the executable. Workspace and browser data remain in the portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md).
+
+## Features
+
+- Independent exchange, instrument and period per chart: **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Search current spot instruments, pan/zoom, load older history, and return to live data. Connection failures and provisional candles remain visible.
+- **SMA, EMA, Ichimoku Cloud and MACD**, with parameter dialogs, multiple instances, editable colors and saved settings. MACD uses separate resizable panes and remembers their proportions.
+- Shared period buttons and an Indicators menu in the top header apply to every chart in the current tab. Individual chart controls remain independent.
+- Configurable grids with empty slots, draggable tabs/charts, resizable tracks, and chart maximization. Rename or duplicate a tab; **right-click a tab → Close tab** to confirm removal of that tab and all its charts. The final tab stays open.
+- Theme and display timezone settings, volume, candlestick/line rendering, linear/log price scales, and saved viewports. Set the global right-side chart gap in **bars or pixels**, defaulting to **10 bars**.
+- Automatic SQLite workspace saving and restoration, JSON import/export, recovery snapshots and a final-save handshake on close. Hidden tabs retain configuration without keeping all their charts rendered or subscribed.
+
+This is a read-only charting application. It does not place trades or connect to exchange accounts. Weekly candles start Monday at 00:00 UTC. Coinbase weekly history is aggregated from actual daily candles; incomplete coverage is marked provisional.
+
+Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. A tab's context menu also opens with the keyboard Menu key or **Shift+F10**.
+
+## Build from source
+
+Requires Go, Python 3.12+, and a C compiler/pkg-config for Linux. Linux builds need the GTK3 and WebKitGTK 4.1 development packages; Windows packaging on Ubuntu needs `7z`. Scripts use pinned project-local Wails and bootstrap a verified local Node/npm bundle if a usable toolchain is absent. They do not install OS packages or change your shell configuration.
 
 ```bash
-python3 codex-cryptodesk/tools/verify_bundle.py
-bash codex-cryptodesk/tools/preflight.sh
+./build.sh                 # Linux executable, portable archive and checksums in the root
+./win-build.sh             # Windows x64 portable ZIP, including English WebView2
 ```
 
-The first command checks the shipped bundle, not the future application's correctness.
-The second reports the development environment; it does not install or change anything.
+`VERSION` provides the source baseline. Release builds pass `CRYPTODESK_VERSION=X.Y.Z` so both packages and their manifests carry the automatic release version. Full prerequisites, installation, storage and recovery instructions are in [APP_README.md](APP_README.md).
 
-## Contents
+## Automatic releases
 
-| File | Purpose |
-|---|---|
-| START_HERE.md | Implementation mandate, reading order, repository precautions |
-| AGENTS.template.md | Small root-agent instruction template; merge, never overwrite |
-| SPEC.md / UI_UX.md | Required behavior, defaults, and interactions |
-| ARCHITECTURE.md / CONTRACTS.md | Component boundaries, lifecycle, bridge contracts |
-| EXCHANGES.md / CANDLE_CORRECTNESS.md | Public APIs, normalization, reconnect and overlap rules |
-| PERSISTENCE.md | Autosave, SQLite, versioning, import/export, crash recovery |
-| BUILD_LINUX.md | Ubuntu dependencies, build verification, packaging |
-| IMPLEMENTATION_PLAN.md | Ordered stages with working-code exit gates |
-| TEST_PLAN.md / DELIVERY_CHECKLIST.md | Concrete acceptance tests and release evidence |
-| SECURITY_LICENSES.md / SOURCES.md | Boundaries, attribution, primary references |
-| STATUS.md / DECISIONS.md | Agent handoff and implementation decision records |
-| schema/ | Versioned workspace exchange-format schema |
-| examples/ | One-tab/one-chart starter; a separate capacity-only 20-tab / 180-chart test |
-| fixtures/ | Synthetic candle and lifecycle regression cases |
-| tools/ | Read-only preflight and bundle verifier |
+The [release workflow](.github/workflows/release.yml) runs when commits are pushed to `main`. It runs checks, builds both x64 packages, and publishes a GitHub release only after both builds succeed. The first release uses `v0.1.0`; later releases increment the highest release tag's patch version (`v0.1.1`, `v0.1.2`, …). Builds do not create source-version bump commits.
 
-## Scope boundaries
+The workflow assumes `main` is the repository's default branch. Release jobs are serialized, and reruns recognize an already published commit. Superseded commits and queued commits whose workflow files have since changed on `main` are skipped; the newer push includes those changes. If workflow files change during a build, publication stops before creating a tag or release. GitHub-hosted execution and the first published download require committing and pushing this workflow; local verification results and remaining platform checks are documented in [STATUS.md](STATUS.md).
 
-Required: real charting, public exchange adapters, layout editing, automatic persistence,
-network recovery, repeatable tests, and an Ubuntu build.
-Not required: trading, API-key management, derivatives, Pine Script, drawing tools,
-indicators other than volume, account login, cloud sync, or TradingView account integration.
-The optional all-feeds-live mode must not delay the core deliverable.
+## Development and verification
 
-The supplied exchange symbols and numerical fixture prices are test inputs, not live
-market observations or claims that a particular product is currently available.
-Codex must discover instruments dynamically and validate actual endpoint behavior.
+```bash
+scripts/test.sh                         # Python, Go race/vet, frontend checks and build
+cd frontend && npm run test:e2e          # Browser tests with an explicit fixture bridge
+# From the repository root:
+scripts/smoke-desktop.sh                # Actual Wails/WebKit app, isolated test workspace
+go run ./cmd/smoke -duration 65s          # Separate public-exchange live checks
+```
 
-External API notes are dated reference observations. They are not a promise of future
-availability. Sources are catalogued in SOURCES.md; Codex must recheck versions and schemas
-before implementation and record any differences in DECISIONS.md.
+Normal builds contain no fixture bridge. Browser fixture tests, native desktop checks and live exchange checks are separate; see [verification evidence](docs/verification), [desktop smoke instructions](docs/DESKTOP_SMOKE.md) and [STATUS.md](STATUS.md) for what has actually passed.
 
----
+The original implementation specifications and fixtures remain in this repository: [START_HERE.md](START_HERE.md), [SPEC.md](SPEC.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) and [TEST_PLAN.md](TEST_PLAN.md). Design changes are recorded in [DECISIONS.md](DECISIONS.md).
 
-The runnable application has been implemented at this repository root. See [APP_README.md](APP_README.md) for build/run/use and recovery instructions, [STATUS.md](STATUS.md) for actual test evidence, and [docs/verification](docs/verification) for reports. The original bundle documents above are retained.
+## License and attribution
+
+CryptoDesk is licensed under [Apache 2.0](LICENSE). Charts use [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/). Dependency notices and redistributed licenses are included in [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) and the portable packages. Windows packages also include Microsoft's WebView2 redistribution terms.

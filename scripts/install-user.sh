@@ -4,7 +4,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SCRIPT_DIR/cryptodesk" ]]; then
   SOURCE_DIR="$SCRIPT_DIR"
 else
-  SOURCE_DIR="$SCRIPT_DIR/../release/cryptodesk-0.1.0-linux-amd64"
+  APP_VERSION="$(python3 "$SCRIPT_DIR/app_version.py")"
+  SOURCE_DIR="$SCRIPT_DIR/../release/cryptodesk-$APP_VERSION-linux-amd64"
 fi
 case "${1:-}" in
  --dry-run) DRY_RUN=1 ;;

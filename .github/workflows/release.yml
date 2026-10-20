@@ -1,0 +1,123 @@
+name: Portable release
+
+on:
+  push:
+    branches: [main]
+
+# Serialize version selection through publication. Keep queued main pushes instead
+# of canceling the previous pending run; the planner skips superseded events.
+concurrency:
+  group: cryptodesk-main-release
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      skip: ${{ steps.version.outputs.skip }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select the next patch version or resume this commit
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py plan --github-output "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-amd64, windows-amd64]
+    env:
+      CRYPTODESK_VERSION: ${{ needs.plan.outputs.version }}
+      VITE_EXPLICIT_TEST_BRIDGE: '0'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.8'
+          cache: true
+      # These packages provision only the disposable GitHub runner. Local build
+      # scripts remain unprivileged and never install system dependencies.
+      - name: Prepare Ubuntu desktop build dependencies
+        if: matrix.target == 'linux-amd64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Prepare Windows runtime extraction
+        if: matrix.target == 'windows-amd64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y 7zip
+      - name: Verify domain, storage, frontend and packaging
+        if: matrix.target == 'linux-amd64'
+        run: |
+          ./scripts/test.sh
+          go test -race -tags webkit2_41 ./...
+          go test -race -tags 'production webkit2_41' .
+          go vet -tags webkit2_41 ./...
+      - name: Verify browser interactions
+        if: matrix.target == 'linux-amd64'
+        run: |
+          source scripts/common.sh
+          require_node
+          cd frontend
+          npx --no-install playwright install --with-deps chromium
+          npm run test:e2e
+      - name: Build Ubuntu x64 portable archive
+        if: matrix.target == 'linux-amd64'
+        run: ./build.sh
+      - name: Build Windows x64 portable ZIP with WebView2
+        if: matrix.target == 'windows-amd64'
+        run: ./win-build.sh
+      - name: Stage versioned and stable download names
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: python3 scripts/release.py stage --version "$CRYPTODESK_VERSION" --target "$RELEASE_TARGET" --directory "$RUNNER_TEMP/release-assets"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: portable-${{ matrix.target }}
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+          overwrite: true
+
+  publish:
+    needs: [plan, build]
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Only this job can create a tag or modify a release. Build jobs get no write
+    # credentials, and checkout never persists credentials in any job.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: portable-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-assets
+      - name: Verify both builds and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+        run: python3 scripts/release.py publish --version "$RELEASE_VERSION" --directory "$RUNNER_TEMP/release-assets"

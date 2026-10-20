@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+import windows_webview_language
 
 spec = importlib.util.spec_from_file_location("windows_build", Path(__file__).with_name("windows_build.py"))
 build = importlib.util.module_from_spec(spec)
@@ -18,6 +19,57 @@ spec.loader.exec_module(build)
 
 
 class WindowsPackagingTests(unittest.TestCase):
+    def test_complete_producer_keeps_release_name_and_override_in_package_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {"VERSION": "0.1.0", "wails.json": json.dumps({"info": {"productVersion": "0.1.0"}}),
+                     "scripts/webview2-runtime.json": "{}", "APP_README.md": "readme", "LICENSE": "license", "STATUS.md": "status",
+                     "docs/WINDOWS_PORTABLE.md": "windows", "docs/THIRD_PARTY_NOTICES.md": "notices", "docs/licenses/example.txt": "license"}
+            for name, content in files.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            executable = bytearray(160)
+            executable[:2] = b"MZ"
+            struct.pack_into("<I", executable, 60, 64)
+            executable[64:68] = b"PE\0\0"
+            for offset, value in [(68, 0x8664), (88, 0x20B), (156, 2)]:
+                struct.pack_into("<H", executable, offset, value)
+
+            def run(command, **kwargs):
+                if "build" in command and "windows/amd64" in command:
+                    source = Path(kwargs["cwd"])
+                    self.assertEqual(json.loads((source / "wails.json").read_text())["info"]["productVersion"], "2.3.4")
+                    binary = source / "build/bin/cryptodesk.exe"
+                    binary.parent.mkdir(parents=True)
+                    binary.write_bytes(executable)
+                if any(str(value).endswith("webview2_runtime.py") for value in command):
+                    runtime = Path(command[command.index("--destination") + 1])
+                    (runtime / "Locales").mkdir(parents=True)
+                    for name in [*build.ENGLISH_LOCALE_PAKS, "fr.pak"]:
+                        (runtime / "Locales" / name).write_bytes(b"runtime")
+                    (runtime / "WEBVIEW2-PROVENANCE.json").write_text("{}")
+                    (runtime / "msedgewebview2.exe").write_bytes(executable)
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch.dict(os.environ, {"CRYPTODESK_VERSION": "2.3.4"}), \
+                 patch.object(build.shutil, "which", return_value="/fixture/tool"), \
+                 patch.object(build, "source_provenance", return_value={"gitRevision": "a" * 40, "workingTreeModified": False}), \
+                 patch.object(build.subprocess, "run", side_effect=run), \
+                 patch.object(build.subprocess, "check_output", return_value="tool version\n"), \
+                 patch.object(windows_webview_language, "prepare_language_overlay", return_value={"goFlag": "-overlay=fixture", "manifest": {}}):
+                build.run(root)
+            archive = root / "cryptodesk-2.3.4-windows-amd64.zip"
+            self.assertTrue(archive.is_file())
+            self.assertFalse((root / "STATUS.md.zip").exists())
+            with zipfile.ZipFile(archive) as result:
+                manifest = json.loads(result.read("cryptodesk-2.3.4-windows-amd64/version.json"))
+                self.assertEqual(manifest["version"], "2.3.4")
+                self.assertFalse(manifest["workingTreeModified"])
+                self.assertEqual(result.read("cryptodesk-2.3.4-windows-amd64/STATUS.md"), b"status")
+            self.assertEqual(json.loads((root / "wails.json").read_text())["info"]["productVersion"], "0.1.0")
+            self.assertIn(archive.name, (root / "cryptodesk-Windows-SHA256SUMS").read_text())
+
     def test_language_build_flags_do_not_leak_into_module_disabled_probes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

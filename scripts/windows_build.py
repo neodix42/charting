@@ -12,8 +12,9 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from app_version import app_version
+from build_metadata import source_provenance
 
-NAME = "cryptodesk-0.1.0-windows-amd64"
 ENGLISH_LOCALE_PAKS = frozenset({"en-US.pak", "en-GB.pak", "copilot_overlay_strings_en-US.pak", "copilot_overlay_strings_en-GB.pak"})
 
 
@@ -113,8 +114,19 @@ def language_compiler(directory, go_flag):
     return compiler
 
 
+def set_snapshot_version(source, version):
+    """Set Windows file/product version in an isolated source snapshot only."""
+    config_path = source / "wails.json"
+    config = json.loads(config_path.read_text())
+    config["info"]["productVersion"] = version
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+
+
 def run(root, cab=None):
     root = root.resolve()
+    version = app_version(root)
+    release_name = f"cryptodesk-{version}-windows-amd64"
+    provenance = source_provenance(root)
     subprocess.run([sys.executable, str(root / "scripts/app_icons.py"), "--check"], check=True)
     if not (shutil.which("7z") or shutil.which("7zz")):
         raise RuntimeError("7z is required to extract Microsoft's runtime CAB (Ubuntu package: 7zip). No packages were installed.")
@@ -122,8 +134,11 @@ def run(root, cab=None):
     with tempfile.TemporaryDirectory(prefix="cryptodesk-windows-build-") as temporary:
         temporary = Path(temporary)
         source = temporary / "source"
-        package = temporary / NAME
+        package = temporary / release_name
         source_snapshot(root, source)
+        # Wails embeds this version in the executable's Windows resource. Update
+        # only the temporary source snapshot, preserving the checkout's metadata.
+        set_snapshot_version(source, version)
         env = dict(os.environ, CGO_ENABLED="0", VITE_EXPLICIT_TEST_BRIDGE="0")
         # Wails does not expose the browser language option. A build-local overlay
         # adds the supported WebView2 Language API call to the exact pinned loader.
@@ -147,15 +162,15 @@ def run(root, cab=None):
             command.extend(["--cab", str(cab)])
         subprocess.run(command, check=True)
         locale_profile = keep_english_locales(package / "WebView2")
-        for name in ["APP_README.md", "LICENSE", "STATUS.md"]:
-            shutil.copy2(root / name, package / name)
+        for document_name in ["APP_README.md", "LICENSE", "STATUS.md"]:
+            shutil.copy2(root / document_name, package / document_name)
         shutil.copy2(root / "docs/WINDOWS_PORTABLE.md", package / "README-WINDOWS.md")
         (package / "docs").mkdir()
         shutil.copy2(root / "docs/THIRD_PARTY_NOTICES.md", package / "docs/THIRD_PARTY_NOTICES.md")
         shutil.copytree(root / "docs/licenses", package / "docs/licenses")
         shutil.copy2(root / "scripts/webview2-runtime.json", package / "webview2-runtime.json")
         manifest = {
-            "app": "CryptoDesk", "version": "0.1.0", "target": "windows/amd64", "subsystem": "windowsgui",
+            "app": "CryptoDesk", "version": version, "target": "windows/amd64", "subsystem": "windowsgui",
             "builtAtUTC": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "go": subprocess.check_output(["go", "version"], text=True).strip(),
             "node": subprocess.check_output(["node", "--version"], text=True).strip(),
@@ -163,8 +178,7 @@ def run(root, cab=None):
             "wails": "v2.17.0", "webview2": pin,
             "webview2Packaging": locale_profile, "webview2LanguageOverride": language["manifest"],
             "executableSHA256": sha256(package / "cryptodesk.exe"),
-            "gitRevision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
-            "workingTreeModified": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True).strip()),
+            **provenance,
             "runtimeVerification": "Cross-compiled and package-verified on Ubuntu; Windows execution not verified by this build.",
         }
         (package / "version.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -172,7 +186,7 @@ def run(root, cab=None):
             for path in sorted(package.rglob("*")):
                 if path.is_file() and path.name != "SHA256SUMS":
                     checksums.write(f"{sha256(path)}  {path.relative_to(package).as_posix()}\n")
-        archive = temporary / (NAME + ".zip")
+        archive = temporary / (release_name + ".zip")
         package_zip(package, archive)
         # Verify the complete ZIP before publishing, without overwriting Linux outputs.
         with zipfile.ZipFile(archive) as result:

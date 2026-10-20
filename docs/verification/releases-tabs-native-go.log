@@ -1,0 +1,7 @@
+ok  	cryptodesk	4.268s
+?   	cryptodesk/cmd/smoke	[no test files]
+?   	cryptodesk/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+ok  	cryptodesk/internal/domain	1.231s
+ok  	cryptodesk/internal/exchange	3.509s
+ok  	cryptodesk/internal/market	1.173s
+ok  	cryptodesk/internal/storage	2.837s
