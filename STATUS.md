@@ -236,3 +236,19 @@ Verification: **143 Python tests, Go race/vet/bindings, 74 frontend units, typec
 Removed header Rename/Close buttons, the All tabs dropdown and the Tabs x/y label. Double-click rename, middle-click closure and Ctrl+W confirmation remain available. Save status reserves a fixed 128px across all states, so neighboring actions stay put. The add-tab plus directly follows the last tab in the same horizontally scrolling, content-sized strip; selecting the last tab exposes the plus. Long names are bounded without losing their accessible names. First-launch defaults, actual workspace restoration and 20-tab/9-chart limits remain unchanged.
 
 Verification: deterministic checks pass (143 Python tests, Go race/vet/bindings, typecheck/lint, 74 frontend units/build); **all 53 browser tests pass**, including geometry at 1100/1600px and 20-tab overflow. Corrected native automation passes **51 fresh /15 restore /9 capacity** assertions, including exact save-status/control positions, trailing-plus geometry, rename/close behavior and 200 tab switches. The initial native-driver Window keyboard dispatch was corrected to originate at the focused tab; no product change was required. All three distribution builds are refreshed. Details, screenshots and platform limits: [header/tab verification](docs/verification/header-tabs.md).
+
+## Floating notifications and manual price-scale save repair — 2026-10-20
+
+Notifications now float above the workspace without changing chart/canvas positions or sizes. Ordinary messages and workspace-save errors close after seven seconds, can be dismissed immediately, and restart their timer when repeated. A dismissed/expired save error leaves unsaved changes and the header Retry indicator intact. Shutdown save/retry/discard choices also float and remain available until resolved.
+
+The save error `invalidWorkspace: manual price scale needs a range` came from capturing `autoScale=false` while discarding an unavailable/nonpositive chart range. Production capture now retains the previous valid setting when the installed Lightweight Charts 5.2.1 public API supplies null, nonfinite, nonpositive or unordered bounds. Positive manual ranges still save/restore exactly; Autoscale clears the range. Strict backend/schema validation and existing user data remain intact.
+
+Verification on Ubuntu 26.04.1 / Node 24.19.0 / Go 1.26.8:
+
+- `bash tools/preflight.sh`: read-only report completed; global Wails/native pkg-config entries are absent, while the existing project-local CLI/SDK remain available. No installations/settings changes.
+- `cd frontend && npm run typecheck && npm run lint && npm test && npm run build`: PASS, **87 unit tests** including 13 manual-scale cases, plus production assets.
+- `cd frontend && npm run test:e2e -- notifications.spec.ts`: PASS, **5 tests** covering exact seven-second expiry, identical/replacement messages, dismissal, retry and shutdown decisions; all chart/canvas rectangles stay identical at 1100/1600px. Screenshots: `frontend/test-results/floating-notification-{1100,1600}.png`.
+- `cd frontend && npm run test:e2e`: PASS, **all 59 tests** (2.9 minutes), including actual chart-library manual ranges/save/reload/Autoscale, the five notification regressions, existing save/close ordering, and 200 tab switches with nine remaining active leases. Report: `frontend/test-results/results.json`.
+- `go test ./internal/domain ./internal/storage`: PASS, including unchanged workspace validation/persistence coverage.
+
+Native desktop, public-provider smoke, distribution archive rebuilds and hosted release publication were not rerun for this focused frontend repair; prior platform/manual limits remain. Next verification beyond browser coverage is an isolated-profile native manual price-axis drag/save/restart and notification test using a rebuilt production binary.
