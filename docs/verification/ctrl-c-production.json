@@ -1,0 +1,36 @@
+{
+  "binary": "/home/neodix/gitProjects/charting/cryptodesk",
+  "binarySHA256": "185b76135d2953deccede901778c8b3eb306a3d4e3f6bb737843fbcadc58fa63",
+  "startedAtUTC": "2026-10-20T09:16:54.808999+00:00",
+  "untaggedProductionBinary": true,
+  "isolatedTemporaryProfile": true,
+  "passed": true,
+  "launches": [
+    {
+      "name": "fresh",
+      "exitCode": 0,
+      "signal": "real controlling-terminal Ctrl+C byte",
+      "shutdownSeconds": 0.0892574390018126,
+      "workspaceRevision": 2,
+      "exactlyOneTabAndOneChart": true,
+      "sqliteIntegrity": "ok",
+      "workspaceLockReleased": true,
+      "naturalProcessExitVerified": true,
+      "remainingLiveProcesses": [],
+      "logBytes": 35
+    },
+    {
+      "name": "restore",
+      "exitCode": 0,
+      "signal": "real controlling-terminal Ctrl+C byte",
+      "shutdownSeconds": 0.09726754600706045,
+      "workspaceRevision": 2,
+      "exactlyOneTabAndOneChart": true,
+      "sqliteIntegrity": "ok",
+      "workspaceLockReleased": true,
+      "naturalProcessExitVerified": true,
+      "remainingLiveProcesses": [],
+      "logBytes": 35
+    }
+  ]
+}

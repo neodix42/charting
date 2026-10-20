@@ -8,7 +8,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	"cryptodesk/internal/storage"
 	"github.com/wailsapp/wails/v2"
@@ -24,6 +26,15 @@ var assets embed.FS
 var appIcon []byte
 
 func main() {
+	termination := make(chan os.Signal, 16)
+	signal.Notify(termination, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(termination)
+	if handled, code, err := superviseGUI(termination); handled || err != nil {
+		if err != nil {
+			fatal(err)
+		}
+		os.Exit(code)
+	}
 	dataDir := flag.String("data-dir", "", "workspace directory (portable Windows default: executable directory/data)")
 	flag.Parse()
 	configureWebKitSignal()
@@ -57,6 +68,8 @@ func main() {
 		fatal(err)
 	}
 	a := newApp(store, loaded)
+	stopSignals := watchTermination(termination, a.requestClose)
+	defer stopSignals()
 	width, height := a.window.Width, a.window.Height
 	err = wails.Run(&options.App{Title: "CryptoDesk", Width: width, Height: height, MinWidth: 1100, MinHeight: 720, BackgroundColour: &options.RGBA{R: 14, G: 18, B: 25, A: 255}, AssetServer: &assetserver.Options{Assets: assets}, OnStartup: a.startup, OnDomReady: a.domready, OnBeforeClose: a.beforeClose, OnShutdown: a.shutdown, Bind: []interface{}{a}, Linux: &linux.Options{Icon: appIcon, ProgramName: "cryptodesk", WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand}, Windows: windowsOptions})
 	if err != nil {

@@ -2,7 +2,7 @@
 
 Run `scripts/smoke-desktop.sh` in a logged-in Ubuntu graphical session after building prerequisites. It compiles the real local production bundle with an additional `desktop_smoke` build tag. The tag contributes UI-driving/reporting methods absent from the normal release. No Vite server, injected fixture prices, separate Go daemon or live user workspace is used.
 
-The script creates an isolated temporary SQLite profile and runs three actual Wails/WebKit processes:
+The script creates an isolated temporary SQLite profile and runs three actual Wails/WebKit application launches:
 
 1. Fresh: asserts exactly one tab/one chart/1×1, a 3×3 grid with eight placeholders, one-at-a-time chart additions, a new single-chart tab and committed 3+1 configuration.
 2. Restore: restarts that exact profile, verifies saved settings/order/active layout and saves a final viewport/selection edit through native close without an explicit prior flush.
@@ -19,3 +19,9 @@ Remaining manual checks (record outcomes, never infer a pass from automation):
 - Real network loss/recovery, OS suspend/resume and quiet instruments.
 - Mixed providers on each interval in the native UI, alongside already separate live adapter tests.
 - Additional Ubuntu releases and X11. Current recorded build/smoke runs use Ubuntu 26.04.1 and Wayland.
+
+## Terminal signal verification
+
+Run `scripts/smoke-signals.sh --evidence /absolute/evidence/directory` in the same graphical session. Its tagged binary runs the production frontend and public feeds with an isolated workspace. The harness creates its own controlling terminal and foreground process group, sends a real Ctrl+C byte or direct OS signals, verifies exit status, SQLite state/lock release and natural process-tree exit, and restarts the actual desktop UI to verify restoration. Signal-specific automation methods and storage-failure injection remain confined to the explicit smoke build; normal releases expose none of those test hooks.
+
+The deterministic harness tests use temporary SQLite data and synthetic process reports without launching a desktop app. The actual native harness is separate from those tests and from Chromium browser E2E. Failure cleanup targets only the terminal session created by the harness.

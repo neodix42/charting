@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "version": "0.1.0",
+  "rootChecksumsVerified": true,
+  "linux": {
+    "archive": "cryptodesk-0.1.0-linux-amd64.tar.gz",
+    "bytes": 8516642,
+    "sha256": "41de906bacc8bd35855e385f062325d52b877eabd709cdd9d9193f9e21a3cbcd",
+    "target": "linux/amd64",
+    "workingTreeModified": true,
+    "safeArchivePathsAndX64ArchitectureVerified": true,
+    "binarySHA256": "185b76135d2953deccede901778c8b3eb306a3d4e3f6bb737843fbcadc58fa63",
+    "binaryMatchesRootExecutable": true
+  },
+  "windows": {
+    "archive": "cryptodesk-0.1.0-windows-amd64.zip",
+    "bytes": 284442791,
+    "sha256": "b48921862a8010bcc6103d0b201cecdfe14517ad7a9d6f31985ac791858f7328",
+    "target": "windows/amd64",
+    "workingTreeModified": true,
+    "safeArchivePathsAndX64ArchitectureVerified": true,
+    "verifiedPackagedFileChecksums": 187,
+    "localePaks": [
+      "copilot_overlay_strings_en-GB.pak",
+      "copilot_overlay_strings_en-US.pak",
+      "en-GB.pak",
+      "en-US.pak"
+    ],
+    "guiExecution": "unverified on Ubuntu"
+  },
+  "packagedCurrentTerminalCloseInstructions": true
+}

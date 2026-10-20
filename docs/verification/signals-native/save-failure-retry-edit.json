@@ -1,0 +1,71 @@
+{
+  "phase": "signal-failure",
+  "startedAt": "2026-10-20T09:11:40.694Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "signal test uses an isolated one-chart workspace",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "signal is requested before the pending edit is saved",
+      "passed": true,
+      "actual": "1h"
+    },
+    {
+      "name": "synthetic save failure preserves the committed workspace while close stays paused",
+      "passed": true,
+      "actual": {
+        "injectedFailures": 1,
+        "savedTimeframe": "1h"
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-20T09:11:41.164212098Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3218408,
+    "goHeapInUseBytes": 5087232,
+    "goVersion": "go1.26.8",
+    "goroutines": 17,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.96,
+    "processTreeRSSBytes": 596807680,
+    "processTreeRootPID": 3519335,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "syntheticSaveFailure": true,
+  "signalReady": true,
+  "workspaceId": "fcc18e51-2777-4a45-a4a5-7e4971e3c785",
+  "chartId": "24a84bbd-8d74-43f7-b104-7dab08ed9036",
+  "originalTimeframe": "1h",
+  "expectedTimeframe": "4h",
+  "baselineRevision": 1,
+  "readyAt": "2026-10-20T09:11:41.322Z",
+  "signalSaveFailureObserved": true,
+  "injectedFailureCount": 1,
+  "heldAutosaves": 0,
+  "realBackendRetryRequested": true
+}

@@ -1,0 +1,364 @@
+{
+  "phase": "restore",
+  "startedAt": "2026-10-20T09:11:25.775Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "restart restores actual 3+1 chart workspace",
+      "passed": true,
+      "actual": {
+        "tabs": 2,
+        "charts": [
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "name": "active tab restored",
+      "passed": true,
+      "actual": "0a865c32-85e5-4084-b6b1-b1592e3346b7"
+    },
+    {
+      "name": "only selected tab is mounted after restart",
+      "passed": true,
+      "actual": {
+        "charts": 3,
+        "placeholders": 6
+      }
+    },
+    {
+      "name": "native close flushed the final immediate edit",
+      "passed": true,
+      "actual": {
+        "id": "7108ad8d-a182-4857-abdd-c6aa31f23e70",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "4h",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": null,
+          "toSec": null,
+          "barSpacing": 6,
+          "rightOffset": 10
+        },
+        "indicators": [
+          {
+            "id": "12c958e2-aa54-4736-ad02-ed6e6ebc70fc",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51"
+          },
+          {
+            "id": "9799ddbf-b343-4580-9d25-12e8cb1b1b11",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef"
+          },
+          {
+            "id": "00515686-8ccc-4253-a9cf-dcd52788c70e",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "e70ecf97-e420-4182-9ce4-15322a73c901",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.65838377
+          },
+          {
+            "id": "9cec9e26-08e3-495d-925e-d6d1513ecc8d",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ]
+      }
+    },
+    {
+      "name": "restart restores shared indicators and custom parameters from SQLite",
+      "passed": true,
+      "actual": [
+        [
+          {
+            "id": "12c958e2-aa54-4736-ad02-ed6e6ebc70fc",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51"
+          },
+          {
+            "id": "9799ddbf-b343-4580-9d25-12e8cb1b1b11",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef"
+          },
+          {
+            "id": "00515686-8ccc-4253-a9cf-dcd52788c70e",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "e70ecf97-e420-4182-9ce4-15322a73c901",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.65838377
+          },
+          {
+            "id": "9cec9e26-08e3-495d-925e-d6d1513ecc8d",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ],
+        [
+          {
+            "id": "5105305c-795c-4edb-9588-75c60c2b96ea",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ],
+        [
+          {
+            "id": "29cd36a3-90c2-42cd-b2e6-1ded8ef795ba",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "shared action preserves the first chart original four indicators",
+      "passed": true,
+      "actual": [
+        {
+          "id": "12c958e2-aa54-4736-ad02-ed6e6ebc70fc",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51"
+        },
+        {
+          "id": "9799ddbf-b343-4580-9d25-12e8cb1b1b11",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef"
+        },
+        {
+          "id": "00515686-8ccc-4253-a9cf-dcd52788c70e",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "e70ecf97-e420-4182-9ce4-15322a73c901",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.65838377
+        }
+      ]
+    },
+    {
+      "name": "shared action leaves the hidden tab unchanged",
+      "passed": true,
+      "actual": {
+        "id": "e021b555-20c0-46ba-a0f5-c2c1013b73cf",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "1h",
+        "chartType": "candlestick",
+        "showVolume": true,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1791637200,
+          "toSec": 1792486800,
+          "barSpacing": 6,
+          "rightOffset": 13.166666666666666
+        }
+      }
+    },
+    {
+      "name": "restart restores shared weekly timeframes on the other active charts",
+      "passed": true,
+      "actual": [
+        "4h",
+        "1w",
+        "1w"
+      ]
+    },
+    {
+      "name": "restart restores the selected horizontal timeframe",
+      "passed": true
+    },
+    {
+      "name": "restart renders every chart own indicator configuration",
+      "passed": true,
+      "actual": [
+        5,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "restart restores the resized MACD pane from SQLite",
+      "passed": true,
+      "actual": {
+        "heights": [
+          72,
+          47
+        ],
+        "paneStretchFactor": 0.65838377
+      }
+    },
+    {
+      "name": "restart restores the saved pixel gap from SQLite",
+      "passed": true,
+      "actual": {
+        "unit": "pixels",
+        "value": 79
+      }
+    },
+    {
+      "name": "native Settings restores the saved value and unit",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 2,
+    "charts": [
+      3,
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-20T09:11:26.310743477Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3204264,
+    "goHeapInUseBytes": 5373952,
+    "goVersion": "go1.26.8",
+    "goroutines": 19,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 1.05,
+    "processTreeRSSBytes": 596742144,
+    "processTreeRootPID": 3517774,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "restoredIndicatorChart": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "restoredMACDPane": {
+    "heights": [
+      72,
+      47
+    ],
+    "paneStretchFactor": 0.65838377
+  },
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 18
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 2,
+      "cachedFeeds": 2,
+      "cachedCandles": 0,
+      "historyRequests": 2,
+      "queueDepth": 0,
+      "resyncs": 0,
+      "sockets": 0,
+      "reconnects": 0,
+      "restRequests": 2
+    },
+    "mode": "public live data",
+    "persistedRevision": 18,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "connecting · Connecting public spot streamFollowing live · Feed no messages · trade unknownUTC",
+    "connecting · Opening public spot streamFollowing live · Feed no messages · trade unknownUTC",
+    "connecting · Opening public spot streamFollowing live · Feed no messages · trade unknownUTC"
+  ],
+  "finishedAt": "2026-10-20T09:11:26.517Z"
+}

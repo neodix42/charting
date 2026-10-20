@@ -28,7 +28,7 @@ export interface Backend {
  GetHistory(requestId:string,key:FeedKey,fromSec:number,toSec:number,maxBars:number):Promise<HistoryResult>;
  GetDiagnostics():Promise<Record<string,unknown>>; ImportWorkspace():Promise<LoadResult>;ExportWorkspace():Promise<string>;ResetWorkspace():Promise<LoadResult>;
  GetBackups():Promise<Array<{id:number;reason:string;createdAt:string}>>;RecoverWorkspace(id:number):Promise<LoadResult>;
- ConfirmClose(token:string,discard:boolean):Promise<void>;OpenTradingView():Promise<void>;
+ FrontendReady():Promise<void>; ConfirmClose(token:string,discard:boolean):Promise<void>;OpenTradingView():Promise<void>;
 }
 export interface Runtime {EventsOn(name:string,callback:(...args:any[])=>void):()=>void}
 declare global {interface Window {go?:{main?:{App?:Backend}};runtime?:Runtime;__CRYPTO_TEST__?:boolean;__cryptodeskDiagnostics?:()=>Record<string,unknown>}}

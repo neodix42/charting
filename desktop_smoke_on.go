@@ -24,6 +24,9 @@ import (
 // These methods exist only in explicitly tagged verification binaries. The
 // normal application does not expose report writing or automation hooks.
 func (a *App) DesktopSmokeReport(report string) error {
+	return writeDesktopSmokeReport(report)
+}
+func writeDesktopSmokeReport(report string) error {
 	destination := os.Getenv("CRYPTODESK_SMOKE_REPORT")
 	if !filepath.IsAbs(destination) || len(report) > 256*1024 || !json.Valid([]byte(report)) {
 		return errors.New("invalid desktop smoke report")
@@ -31,7 +34,49 @@ func (a *App) DesktopSmokeReport(report string) error {
 	return os.WriteFile(destination, []byte(report), 0600)
 }
 func (a *App) DesktopSmokeClose() { runtime.Quit(a.ctx) }
+func (a *App) DesktopSmokeSignalExpectation() map[string]string {
+	return map[string]string{"workspaceId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_WORKSPACE"), "chartId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_CHART"), "timeframe": os.Getenv("CRYPTODESK_SMOKE_EXPECT_TIMEFRAME")}
+}
+func (a *App) DesktopSmokeSignalRetryRequested() bool {
+	marker := os.Getenv("CRYPTODESK_SMOKE_SIGNAL_RETRY")
+	if !filepath.IsAbs(marker) {
+		return false
+	}
+	info, err := os.Stat(marker)
+	return err == nil && info.Mode().IsRegular()
+}
 func desktopSmokePrepare(store *storage.Store) error {
+	if os.Getenv("CRYPTODESK_SMOKE_PHASE") == "signal-early" {
+		release := os.Getenv("CRYPTODESK_SMOKE_EARLY_RELEASE")
+		if !filepath.IsAbs(release) {
+			return errors.New("early signal smoke requires an absolute release marker path")
+		}
+		loaded, err := store.Load()
+		if err != nil {
+			return err
+		}
+		if len(loaded.Workspace.Tabs) != 1 || len(loaded.Workspace.Tabs[0].Charts) != 1 {
+			return errors.New("early signal smoke requires an isolated one-chart workspace")
+		}
+		chart := loaded.Workspace.Tabs[0].Charts[0]
+		report, _ := json.Marshal(map[string]any{"phase": "signal-early", "passed": true, "signalReady": true, "earlyBeforeUI": true, "workerPID": os.Getpid(), "workspaceId": loaded.Workspace.ID, "chartId": chart.ID, "originalTimeframe": chart.Timeframe, "expectedTimeframe": chart.Timeframe, "baselineRevision": loaded.Revision, "checks": []map[string]any{{"name": "early signal gate precedes desktop UI startup", "passed": true}}})
+		if err := writeDesktopSmokeReport(string(report)); err != nil {
+			return err
+		}
+		deadline := time.Now().Add(15 * time.Second)
+		for time.Now().Before(deadline) {
+			if info, err := os.Stat(release); err == nil {
+				if !info.Mode().IsRegular() {
+					return errors.New("early signal release marker must be a regular file")
+				}
+				return nil
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return errors.New("early signal smoke timed out waiting for the harness release marker")
+	}
 	if os.Getenv("CRYPTODESK_SMOKE_PHASE") != "capacity" {
 		return nil
 	}
@@ -115,12 +160,16 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 			}
 		}
 	}
-	inspect(os.Getpid(), 0)
-	return map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "goHeapBytes": memory.HeapAlloc, "goHeapInUseBytes": memory.HeapInuse, "goroutines": goruntime.NumGoroutine(), "processTreeRSSBytes": rssKB * 1024, "processTreeCPUSeconds": float64(cpuTicks) / ticksPerSecond, "processes": processes, "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process", "cpuAccounting": "active process CPU plus waited-child CPU", "goVersion": goruntime.Version(), "logicalCPUs": goruntime.NumCPU(), "sessionType": os.Getenv("XDG_SESSION_TYPE"), "waylandDisplay": os.Getenv("WAYLAND_DISPLAY"), "display": os.Getenv("DISPLAY")}
+	rootPID := os.Getpid()
+	if goruntime.GOOS == "linux" && os.Getenv("CRYPTODESK_INTERNAL_GUI_PARENT") == strconv.Itoa(os.Getppid()) {
+		rootPID = os.Getppid()
+	}
+	inspect(rootPID, 0)
+	return map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "goHeapBytes": memory.HeapAlloc, "goHeapInUseBytes": memory.HeapInuse, "goroutines": goruntime.NumGoroutine(), "processTreeRootPID": rootPID, "processTreeRSSBytes": rssKB * 1024, "processTreeCPUSeconds": float64(cpuTicks) / ticksPerSecond, "processes": processes, "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process", "cpuAccounting": "active process CPU plus waited-child CPU", "goVersion": goruntime.Version(), "logicalCPUs": goruntime.NumCPU(), "sessionType": os.Getenv("XDG_SESSION_TYPE"), "waylandDisplay": os.Getenv("WAYLAND_DISPLAY"), "display": os.Getenv("DISPLAY")}
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" {
 		return
 	}
 	encoded, _ := json.Marshal(phase)
@@ -128,6 +177,7 @@ func desktopSmoke(ctx context.Context, a *App) {
 }
 
 const desktopSmokeJavaScript = `async function(phase) {
+ if(phase==='signal-early')return; // Only the queued external signal may close this scenario.
  const report={phase,startedAt:new Date().toISOString(),userAgent:navigator.userAgent,checks:[],passed:false};
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const wait=async(predicate,label,timeout=20000)=>{const start=Date.now();while(Date.now()-start<timeout){const result=predicate();if(result)return result;await sleep(50);}throw Error('Timed out: '+label);};
@@ -160,7 +210,47 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='fresh'){
+  if(phase==='signal-edit'||phase==='signal-failure'){
+   check(initial.workspace.tabs.length===1&&initial.workspace.tabs[0].charts.length===1,'signal test uses an isolated one-chart workspace',report.initialCounts);
+   await flush();
+   const baseline=await api.LoadWorkspace(),original=baseline.workspace.tabs[0].charts[0],next=original.timeframe==='4h'?'15m':'4h';
+   const originalSave=api.SaveWorkspace.bind(api),heldSaves=[];let injectedFailures=0;
+   if(phase==='signal-failure'){
+    // Explicit test-only failure injection. One call rejects; later background
+    // autosaves are held so they cannot bypass the paused-close assertion.
+    // Retry restores the real Wails/SQLite writer and releases those calls.
+    report.syntheticSaveFailure=true;
+    api.SaveWorkspace=async(...args)=>{if(!injectedFailures){injectedFailures++;throw Error('Explicit signal-smoke synthetic SaveWorkspace failure');}await new Promise(resolve=>heldSaves.push(resolve));return originalSave(...args);};
+   }
+   q('[data-testid="chart-cell"] [aria-label="Timeframe '+next+'"]').click();
+   await wait(()=>q('[data-testid="chart-cell"] [aria-label="Timeframe '+next+'"]').getAttribute('aria-pressed')==='true'&&q('.save-indicator.pending'),'pending production timeframe edit');
+   const persisted=await api.LoadWorkspace();
+   check(persisted.workspace.tabs[0].charts[0].timeframe===original.timeframe,'signal is requested before the pending edit is saved',persisted.workspace.tabs[0].charts[0].timeframe);
+   report.signalReady=true;report.passed=true;report.workspaceId=baseline.workspace.id;report.chartId=original.id;
+   report.originalTimeframe=original.timeframe;report.expectedTimeframe=next;report.baselineRevision=baseline.revision;report.readyAt=new Date().toISOString();
+   await api.DesktopSmokeReport(JSON.stringify(report,null,2));
+   if(phase==='signal-failure'){
+    const retry=await wait(()=>qa('button').find(button=>button.textContent==='Retry save and close'),'paused-close retry after synthetic failure');
+    const failedSaved=await api.LoadWorkspace();
+    check(injectedFailures===1&&failedSaved.workspace.tabs[0].charts[0].timeframe===original.timeframe,'synthetic save failure preserves the committed workspace while close stays paused',{injectedFailures,savedTimeframe:failedSaved.workspace.tabs[0].charts[0].timeframe});
+    report.signalSaveFailureObserved=true;report.injectedFailureCount=injectedFailures;
+    await api.DesktopSmokeReport(JSON.stringify(report,null,2));
+    const retryDeadline=Date.now()+15000;while(!(await api.DesktopSmokeSignalRetryRequested())){if(Date.now()>retryDeadline)throw Error('Timed out waiting for external signal-failure retry marker');await sleep(25);}
+    api.SaveWorkspace=originalSave;report.heldAutosaves=heldSaves.length;report.realBackendRetryRequested=true;
+    heldSaves.splice(0).forEach(resolve=>resolve());
+    await api.DesktopSmokeReport(JSON.stringify(report,null,2));
+    retry.click();
+   }
+   // An external harness now sends an actual OS signal. No explicit frontend
+   // save, normal quit request or fixture bridge may make this test pass.
+   return;
+  }else if(phase==='signal-restore'){
+   const expected=await api.DesktopSmokeSignalExpectation(),restored=initial.workspace.tabs[0]?.charts[0];
+   check(initial.workspace.tabs.length===1&&initial.workspace.tabs[0].charts.length===1,'signal restart restores the exact one-chart workspace',report.initialCounts);
+   check(initial.workspace.id===expected.workspaceId&&restored.id===expected.chartId,'signal restart reopens the same workspace and chart',{workspaceId:initial.workspace.id,chartId:restored.id});
+   check(restored.timeframe===expected.timeframe,'OS signal saved the pending timeframe to SQLite',{expected:expected.timeframe,actual:restored.timeframe});
+   check(q('[data-testid="chart-cell"] [aria-label="Timeframe '+expected.timeframe+'"]').getAttribute('aria-pressed')==='true','signal restart renders the durable timeframe selection');
+  }else if(phase==='fresh'){
    check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
    check(initial.workspace.chartRightGap?.unit==='bars'&&initial.workspace.chartRightGap.value===10,'first launch defaults to a ten-bar right gap',initial.workspace.chartRightGap);

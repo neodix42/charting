@@ -1,0 +1,7 @@
+ok  	cryptodesk	7.843s
+?   	cryptodesk/cmd/smoke	[no test files]
+?   	cryptodesk/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+ok  	cryptodesk/internal/domain	(cached)
+ok  	cryptodesk/internal/exchange	(cached)
+ok  	cryptodesk/internal/market	(cached)
+ok  	cryptodesk/internal/storage	(cached)

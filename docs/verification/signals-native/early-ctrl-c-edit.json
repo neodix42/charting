@@ -1,0 +1,1 @@
+{"baselineRevision":1,"chartId":"30b66edb-1a0e-473a-bd58-8ad8168339ea","checks":[{"name":"early signal gate precedes desktop UI startup","passed":true}],"earlyBeforeUI":true,"expectedTimeframe":"1h","originalTimeframe":"1h","passed":true,"phase":"signal-early","signalReady":true,"workerPID":3519118,"workspaceId":"f37082e8-06be-4a77-9956-66b2b0188637"}

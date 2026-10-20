@@ -19,17 +19,20 @@ import (
 // App is the intentionally small privileged webview facade. Feed URLs, filesystem
 // paths and execution capabilities are never accepted from imported workspaces.
 type App struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	store         *storage.Store
-	market        *market.Service
-	mu            sync.Mutex
-	revision      int64
-	closeToken    string
-	closeAllowed  bool
-	closeTimedOut bool
-	closeTimer    *time.Timer
-	window        domain.Window
+	ctx            context.Context
+	cancel         context.CancelFunc
+	store          *storage.Store
+	market         *market.Service
+	mu             sync.Mutex
+	revision       int64
+	closeToken     string
+	closeAllowed   bool
+	closeTimedOut  bool
+	closeTimer     *time.Timer
+	domReady       bool
+	frontendReady  bool
+	closeRequested bool
+	window         domain.Window
 }
 
 func newApp(store *storage.Store, loaded storage.Loaded) *App {
@@ -44,11 +47,17 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	}})
 	return a
 }
-func (a *App) startup(ctx context.Context) { a.ctx, a.cancel = context.WithCancel(ctx) }
+func (a *App) startup(ctx context.Context) {
+	a.mu.Lock()
+	a.ctx, a.cancel = context.WithCancel(ctx)
+	a.mu.Unlock()
+}
 func (a *App) domready(ctx context.Context) {
 	a.mu.Lock()
+	a.domReady = true
 	w := a.window
 	a.applyWindowLocked(w)
+	pending := a.closeRequested
 	a.mu.Unlock()
 	go func() {
 		ticker := time.NewTicker(time.Second)
@@ -59,6 +68,10 @@ func (a *App) domready(ctx context.Context) {
 				return
 			case <-ticker.C:
 				a.mu.Lock()
+				if a.ctx.Err() != nil {
+					a.mu.Unlock()
+					return
+				}
 				before := a.window
 				a.captureWindowLocked()
 				after := a.window
@@ -70,6 +83,35 @@ func (a *App) domready(ctx context.Context) {
 		}
 	}()
 	desktopSmoke(ctx, a)
+	if pending {
+		a.requestClose()
+	}
+}
+
+// FrontendReady is called after the workspace's save/close listeners are
+// installed. A signal received during startup must not emit a lost save request.
+func (a *App) FrontendReady() {
+	a.mu.Lock()
+	a.frontendReady = true
+	pending := a.closeRequested
+	token := a.closeToken
+	ctx := a.ctx
+	a.mu.Unlock()
+	if token != "" {
+		runtime.EventsEmit(ctx, "prepare-close", map[string]string{"token": token})
+	} else if pending {
+		a.requestClose()
+	}
+}
+
+func (a *App) requestClose() {
+	a.mu.Lock()
+	a.closeRequested = true
+	ready, ctx := a.domReady, a.ctx
+	a.mu.Unlock()
+	if ready {
+		runtime.Quit(ctx)
+	}
 }
 
 func (a *App) applyWindowLocked(w domain.Window) {
@@ -269,10 +311,20 @@ func (a *App) beforeClose(ctx context.Context) bool {
 		a.mu.Unlock()
 		return false
 	}
+	a.closeRequested = true
+	if !a.domReady {
+		a.mu.Unlock()
+		return true
+	}
 	// A preserved invalid workspace has no interactive draft to flush.
 	if loaded, err := a.store.Load(); err != nil && loaded.Recovery != "" {
+		a.allowCloseLocked()
 		a.mu.Unlock()
 		return false
+	}
+	if !a.frontendReady {
+		a.mu.Unlock()
+		return true
 	}
 	if a.closeTimedOut {
 		a.closeTimedOut = false
@@ -280,7 +332,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 		answer, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{Type: runtime.WarningDialog, Title: "Final save was not acknowledged", Message: "Retry keeps CryptoDesk open so you can save. Discard quits and restores only the last committed workspace next launch.", Buttons: []string{"Retry", "Discard and quit"}, DefaultButton: "Retry", CancelButton: "Retry"})
 		if err == nil && answer == "Discard and quit" {
 			a.mu.Lock()
-			a.closeAllowed = true
+			a.allowCloseLocked()
 			a.mu.Unlock()
 			return false
 		}
@@ -312,13 +364,22 @@ func (a *App) ConfirmClose(token string, discard bool) error {
 		a.mu.Unlock()
 		return errors.New("close token expired; retry closing the window")
 	}
+	a.allowCloseLocked()
+	a.mu.Unlock()
+	runtime.Quit(a.ctx)
+	return nil
+}
+
+func (a *App) allowCloseLocked() {
 	if a.closeTimer != nil {
 		a.closeTimer.Stop()
 	}
 	a.closeAllowed = true
-	a.mu.Unlock()
-	runtime.Quit(a.ctx)
-	return nil
+	// Stop window queries before the GTK main loop ends. Otherwise a ticker
+	// could wait for that stopped loop while holding the app mutex during exit.
+	if a.cancel != nil {
+		a.cancel()
+	}
 }
 func (a *App) shutdown(ctx context.Context) {
 	if a.cancel != nil {

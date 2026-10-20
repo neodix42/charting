@@ -28,7 +28,7 @@ The larger Windows ZIP includes its pinned Fixed Version WebView2 runtime with E
 - Shared period buttons and an Indicators menu in the top header apply to every chart in the current tab. Individual chart controls remain independent.
 - Configurable grids with empty slots, draggable tabs/charts, resizable tracks, and chart maximization. Rename or duplicate a tab; **middle-click a tab** to close it and all its charts without confirmation. Each chart’s enlarged **×** button also closes it without confirmation. The final tab and final chart in each tab stay protected.
 - Theme and display timezone settings, volume, candlestick/line rendering, linear/log price scales, and saved viewports. Set the global right-side chart gap in **bars or pixels**, defaulting to **10 bars**.
-- Automatic SQLite workspace saving and restoration, JSON import/export, recovery snapshots and a final-save handshake on close. Hidden tabs retain configuration without keeping all their charts rendered or subscribed.
+- Automatic SQLite workspace saving and restoration, JSON import/export, recovery snapshots and a final-save handshake on window close or terminal **Ctrl+C**. Hidden tabs retain configuration without keeping all their charts rendered or subscribed.
 
 This is a read-only charting application. It does not place trades or connect to exchange accounts. Weekly candles start Monday at 00:00 UTC. Coinbase weekly history is aggregated from actual daily candles; incomplete coverage is marked provisional.
 
