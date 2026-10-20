@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "archive": "cryptodesk-0.1.0-windows-amd64.zip",
+  "bytes": 284438302,
+  "sha256": "97687bbf09b4da8d278bfd86002978d73affafcb85d95a31443deb3721e745e2",
+  "architecture": "Windows AMD64 GUI PE32+",
+  "verifiedPackagedFiles": 187,
+  "localePaks": [
+    "copilot_overlay_strings_en-GB.pak",
+    "copilot_overlay_strings_en-US.pak",
+    "en-GB.pak",
+    "en-US.pak"
+  ],
+  "stableReleaseAliasVerified": true,
+  "workingTreeModified": true,
+  "windowsGuiExecution": "unverified on Ubuntu",
+  "githubFixedWorkflowRerun": "not run"
+}

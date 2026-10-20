@@ -2,7 +2,8 @@
 
 Wails 2.17 does not expose the environment Language setting. Its pinned WebView2
 adapter already uses the public environment builder, so one additional option is
-enough. Go's source overlay keeps both the checkout and module cache untouched.
+enough. Missing source is downloaded through Go's verified module cache; the
+overlay keeps the checkout and downloaded dependency sources unchanged.
 """
 import hashlib
 import json
@@ -54,7 +55,27 @@ def prepare_language_overlay(directory: Path, language='en-US'):
     if module.get('Path') != MODULE or module.get('Version') != VERSION or module.get('Replace'):
         raise RuntimeError(f'The Windows language overlay requires the unmodified pinned {MODULE}@{VERSION}')
     if not module.get('Dir'):
-        raise RuntimeError(f'The pinned {MODULE}@{VERSION} source is unavailable; download the project Go dependencies first')
+        # A fresh Linux runner can resolve Windows-only module metadata without
+        # downloading its source. Installing the Linux Wails CLI does not hydrate
+        # this dependency either. Ask Go to fetch the exact selected version,
+        # retaining its normal checksum verification and cache reuse.
+        try:
+            result = subprocess.run(['go', 'mod', 'download', '-json', f'{MODULE}@{VERSION}'],
+                                    check=True, capture_output=True, text=True, timeout=180)
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or '').strip()
+            try:
+                detail = json.loads(error.stdout or '{}').get('Error') or detail
+            except json.JSONDecodeError:
+                pass
+            raise RuntimeError(f'Could not download the pinned {MODULE}@{VERSION}: {detail or error}') from error
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f'Timed out downloading the pinned {MODULE}@{VERSION}; check Go module proxy access and retry') from error
+        downloaded = json.loads(result.stdout)
+        if (downloaded.get('Path') != MODULE or downloaded.get('Version') != VERSION
+                or downloaded.get('Replace') or downloaded.get('Error') or not downloaded.get('Dir')):
+            raise RuntimeError(f'The download did not provide source for the unmodified pinned {MODULE}@{VERSION}')
+        module = downloaded
     original = Path(module['Dir']).absolute() / SOURCE_FILE
     source = original.read_bytes()
     patched = patch_language_source(source, language)

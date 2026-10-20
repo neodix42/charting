@@ -6,10 +6,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
 from unittest.mock import call, patch
+import zipfile
 
 spec = importlib.util.spec_from_file_location('windows_webview_language', Path(__file__).with_name('windows_webview_language.py'))
 language = importlib.util.module_from_spec(spec)
@@ -62,10 +64,12 @@ class WindowsWebViewLanguageTests(unittest.TestCase):
         report = {'Path': language.MODULE, 'Version': language.VERSION, 'Dir': str(module)}
         return module, source, report, app / 'go.mod'
 
-    def discovery(self, report, main_mod):
+    def discovery(self, report, main_mod, downloaded=None):
         def discover(arguments, **_kwargs):
             if arguments == ['go', 'list', '-m', '-json', language.MODULE]:
                 return types.SimpleNamespace(stdout=json.dumps(report))
+            if arguments == ['go', 'mod', 'download', '-json', f'{language.MODULE}@{language.VERSION}']:
+                return types.SimpleNamespace(stdout=json.dumps(downloaded if downloaded is not None else report))
             self.assertEqual(arguments, ['go', 'env', 'GOMOD'])
             return types.SimpleNamespace(stdout=str(main_mod) + '\n')
         return discover
@@ -116,6 +120,58 @@ class WindowsWebViewLanguageTests(unittest.TestCase):
             self.assertIn('replace ' + language.MODULE + ' ' + language.VERSION, Path(report['modfilePath']).read_text())
             self.assertEqual(Path(report['modfilePath']).with_suffix('.sum').read_bytes(), main_mod.with_suffix('.sum').read_bytes())
 
+    def test_cold_metadata_downloads_exact_pinned_module_before_overlay(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            module, source, downloaded, main_mod = self.module_fixture(root)
+            cold = {key: value for key, value in downloaded.items() if key != 'Dir'}
+            before = {path.name: path.read_bytes() for path in (main_mod, main_mod.with_suffix('.sum'))}
+            with patch.object(language.subprocess, 'run', side_effect=self.discovery(cold, main_mod, downloaded)) as run:
+                report = language.prepare_language_overlay(root / 'scratch')
+            self.assertEqual(run.call_args_list, [
+                call(['go', 'list', '-m', '-json', language.MODULE], check=True, capture_output=True, text=True, timeout=30),
+                call(['go', 'mod', 'download', '-json', f'{language.MODULE}@{language.VERSION}'], check=True, capture_output=True, text=True, timeout=180),
+                call(['go', 'env', 'GOMOD'], check=True, capture_output=True, text=True, timeout=30),
+            ])
+            self.assertEqual({path.name: path.read_bytes() for path in (main_mod, main_mod.with_suffix('.sum'))}, before)
+            self.assertEqual(source.read_bytes(), UPSTREAM)
+            self.assertEqual((Path(report['overlayPath']).parent / 'go-webview2-v1.0.22' / language.SOURCE_FILE).read_bytes(), UPSTREAM)
+            self.assertEqual(report['manifest']['originalSHA256'], language.SOURCE_SHA256)
+
+    def test_invalid_cold_download_reports_preserve_application_and_module_cache(self):
+        changes = [{'Path': 'example.invalid/other'}, {'Version': 'v1.0.23'}, {'Replace': {'Dir': '/somewhere'}},
+                   {'Error': 'Download failed'}, {'Dir': ''}]
+        for change in changes:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                module, source, downloaded, main_mod = self.module_fixture(root)
+                cold = {key: value for key, value in downloaded.items() if key != 'Dir'}
+                before = {path.name: path.read_bytes() for path in (main_mod, main_mod.with_suffix('.sum'))}
+                scratch = root / 'scratch'
+                with patch.object(language.subprocess, 'run', side_effect=self.discovery(cold, main_mod, {**downloaded, **change})):
+                    with self.assertRaises(RuntimeError):
+                        language.prepare_language_overlay(scratch)
+                self.assertFalse(scratch.exists())
+                self.assertEqual(source.read_bytes(), UPSTREAM)
+                self.assertEqual({path.name: path.read_bytes() for path in (main_mod, main_mod.with_suffix('.sum'))}, before)
+
+    def test_failed_or_timed_out_cold_download_preserves_sources_and_reports_failure(self):
+        command = ['go', 'mod', 'download', '-json', f'{language.MODULE}@{language.VERSION}']
+        failures = [subprocess.CalledProcessError(1, command, output='{"Error":"Unavailable"}', stderr='download unavailable'),
+                    subprocess.TimeoutExpired(command, timeout=180)]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                _, source, downloaded, main_mod = self.module_fixture(root)
+                cold = {key: value for key, value in downloaded.items() if key != 'Dir'}
+                before = {path.name: path.read_bytes() for path in (main_mod, main_mod.with_suffix('.sum'))}
+                with patch.object(language.subprocess, 'run', side_effect=[types.SimpleNamespace(stdout=json.dumps(cold)), failure]):
+                    with self.assertRaisesRegex(RuntimeError, 'download'):
+                        language.prepare_language_overlay(root / 'scratch')
+                self.assertFalse((root / 'scratch').exists())
+                self.assertEqual(source.read_bytes(), UPSTREAM)
+                self.assertEqual({path.name: path.read_bytes() for path in (main_mod, main_mod.with_suffix('.sum'))}, before)
+
     def test_module_version_replacement_existing_files_and_cache_destination_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -142,6 +198,65 @@ class WindowsWebViewLanguageTests(unittest.TestCase):
         self.assertEqual(language.quote_go_flag("-overlay=/tmp/Someone's Files/overlay.json"), '"-overlay=/tmp/Someone\'s Files/overlay.json"')
         with self.assertRaisesRegex(ValueError, 'both quote types'):
             language.quote_go_flag('-overlay=/tmp/both\'"quotes/overlay.json')
+
+    @unittest.skipUnless(shutil.which('go'), 'Go executable unavailable')
+    def test_real_go_cold_cache_downloads_from_local_proxy_without_changing_locks(self):
+        with tempfile.TemporaryDirectory(prefix='webview cold cache fixture ') as temporary:
+            root = Path(temporary)
+            app = root / 'application'
+            app.mkdir()
+            proxy = root / 'proxy'
+            versions = proxy / language.MODULE / '@v'
+            versions.mkdir(parents=True)
+            module_content = f'module {language.MODULE}\n\ngo 1.20\n'
+            (versions / f'{language.VERSION}.mod').write_text(module_content)
+            (versions / f'{language.VERSION}.info').write_text(json.dumps({'Version': language.VERSION, 'Time': '2024-01-01T00:00:00Z'}))
+            (versions / 'list').write_text(language.VERSION + '\n')
+            with zipfile.ZipFile(versions / f'{language.VERSION}.zip', 'w') as archive:
+                prefix = f'{language.MODULE}@{language.VERSION}/'
+                archive.writestr(prefix + 'go.mod', module_content)
+                archive.writestr(prefix + language.SOURCE_FILE, UPSTREAM)
+            main_mod = app / 'go.mod'
+            main_mod.write_text(f'module example.invalid/coldprobe\n\ngo 1.20\n\nrequire {language.MODULE} {language.VERSION}\n')
+            # Only this fixture disables the checksum service: its local proxy
+            # intentionally contains a tiny synthetic module, not upstream's ZIP.
+            base_env = dict(os.environ, GOPROXY=proxy.as_uri(), GOSUMDB='off', GONOSUMDB='', GONOPROXY='',
+                            GOPRIVATE='', GOWORK='off', GOTOOLCHAIN='local', GOFLAGS='-mod=readonly',
+                            GOPATH=str(root / 'gopath'), GOCACHE=str(root / 'build cache'))
+            seed_env = dict(base_env, GOMODCACHE=str(root / 'checksum seed cache'))
+            seeded = subprocess.run(['go', 'mod', 'download', '-json', f'{language.MODULE}@{language.VERSION}'],
+                                    cwd=app, env=seed_env, check=True, capture_output=True, text=True, timeout=30)
+            sums = json.loads(seeded.stdout)
+            main_sum = app / 'go.sum'
+            main_sum.write_text(f'{language.MODULE} {language.VERSION} {sums["Sum"]}\n'
+                                f'{language.MODULE} {language.VERSION}/go.mod {sums["GoModSum"]}\n')
+            before = {path.name: path.read_bytes() for path in (main_mod, main_sum)}
+            cold_cache = root / 'empty module cache'
+            cold_cache.mkdir()
+            self.assertEqual(list(cold_cache.iterdir()), [])
+            cold_env = dict(base_env, GOMODCACHE=str(cold_cache))
+            metadata = subprocess.run(['go', 'list', '-m', '-json', language.MODULE], cwd=app, env=cold_env,
+                                      check=True, capture_output=True, text=True, timeout=30)
+            selected = json.loads(metadata.stdout)
+            self.assertEqual(selected['Version'], language.VERSION)
+            self.assertFalse(selected.get('Dir'), 'Metadata-only discovery must reproduce the missing-source CI state')
+            self.assertFalse((cold_cache / f'{language.MODULE}@{language.VERSION}').exists())
+            self.assertEqual({path.name: path.read_bytes() for path in (main_mod, main_sum)}, before)
+            helper = ("import json,sys;from pathlib import Path;"
+                      "sys.path.insert(0,sys.argv[1]);"
+                      "from windows_webview_language import prepare_language_overlay;"
+                      "print(json.dumps(prepare_language_overlay(Path(sys.argv[2]))))")
+            result = subprocess.run([sys.executable, '-c', helper, str(Path(__file__).resolve().parent), str(root / 'scratch')],
+                                    cwd=app, env=cold_env, check=True, capture_output=True, text=True, timeout=30)
+            report = json.loads(result.stdout)
+            original = cold_cache / f'{language.MODULE}@{language.VERSION}' / language.SOURCE_FILE
+            self.assertEqual(original.read_bytes(), UPSTREAM)
+            self.assertEqual(hashlib.sha256(original.read_bytes()).hexdigest(), language.SOURCE_SHA256)
+            self.assertTrue((cold_cache / 'cache/download' / language.MODULE / '@v' / f'{language.VERSION}.zip').is_file())
+            overlay = json.loads(Path(report['overlayPath']).read_text())
+            patched = Path(next(iter(overlay['Replace'].values()))).read_bytes()
+            self.assertEqual(patched, language.patch_language_source(UPSTREAM))
+            self.assertEqual({path.name: path.read_bytes() for path in (main_mod, main_sum)}, before)
 
     @unittest.skipUnless(shutil.which('go'), 'Go executable unavailable')
     def test_go_actually_accepts_the_generated_flag_when_overlay_path_has_spaces(self):

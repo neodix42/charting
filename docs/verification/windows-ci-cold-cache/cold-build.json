@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "initialModuleCache": "empty isolated temporary GOMODCACHE",
+  "initialSelection": {
+    "Path": "github.com/wailsapp/go-webview2",
+    "Version": "v1.0.22",
+    "sourceDirPresent": false
+  },
+  "downloadedSourceSHA256": "c56b55d9050f28b53f8dee0e6aee6f830e09fa7ad4cf0a4def303273fbebf1b2",
+  "goModGoSumAndBindingsUnchanged": true,
+  "build": "./win-build.sh",
+  "hostedRerun": "not run; original job log was read only",
+  "windowsExecution": "unverified on Ubuntu"
+}
