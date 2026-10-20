@@ -14,23 +14,23 @@ async function expectTopHeader(page:Page){
  const header=page.locator('.app-header'),controls=toolbar(page);
  await expect(header.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
  await expect(header.getByRole('toolbar',{name:'Current tab chart controls',exact:true})).toBeVisible();
- for(const name of ['Add chart','Rename tab','Duplicate tab','Close tab','Open settings'])await expect(header.getByRole('button',{name,exact:true})).toBeVisible();
+ for(const name of ['Add chart','Duplicate tab','Open settings'])await expect(header.getByRole('button',{name,exact:true})).toBeVisible();
  await expect(header.getByRole('combobox',{name:'Grid layout',exact:true})).toBeVisible();
  await expect(page.locator('.workspace-title')).toHaveCount(0);
  await expect(page.getByText('Independent public spot charts',{exact:true})).toHaveCount(0);
  const geometry=await header.evaluate(element=>{
   const bounds=(node:Element)=>{const rect=node.getBoundingClientRect();return{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,centerY:(rect.top+rect.bottom)/2};};
   const find=(selector:string)=>bounds(element.querySelector(selector)!);
-  return{header:bounds(element),brand:find('.brand'),controls:find('[data-testid="tab-chart-controls"]'),periods:find('[role="group"][aria-label="Period for current tab"]'),indicators:find('[aria-label="Indicators for current tab"]'),grid:find('[aria-label="Grid layout"]'),add:find('[aria-label="Add chart"]'),rename:find('[aria-label="Rename tab"]'),duplicate:find('[aria-label="Duplicate tab"]'),close:find('[aria-label="Close tab"]'),save:find('.save-indicator'),settings:find('[aria-label="Open settings"]'),tabs:bounds(document.querySelector('.tab-row')!),chartTop:document.querySelector('.workspace-content')!.getBoundingClientRect().top,documentWidth:document.documentElement.scrollWidth,windowWidth:window.innerWidth};
+  return{header:bounds(element),brand:find('.brand'),controls:find('[data-testid="tab-chart-controls"]'),periods:find('[role="group"][aria-label="Period for current tab"]'),indicators:find('[aria-label="Indicators for current tab"]'),grid:find('[aria-label="Grid layout"]'),add:find('[aria-label="Add chart"]'),duplicate:find('[aria-label="Duplicate tab"]'),save:find('.save-indicator'),settings:find('[aria-label="Open settings"]'),tabs:bounds(document.querySelector('.tab-row')!),chartTop:document.querySelector('.workspace-content')!.getBoundingClientRect().top,documentWidth:document.documentElement.scrollWidth,windowWidth:window.innerWidth};
  });
- for(const rect of [geometry.brand,geometry.controls,geometry.periods,geometry.indicators,geometry.grid,geometry.add,geometry.rename,geometry.duplicate,geometry.close,geometry.save,geometry.settings]){
+ for(const rect of [geometry.brand,geometry.controls,geometry.periods,geometry.indicators,geometry.grid,geometry.add,geometry.duplicate,geometry.save,geometry.settings]){
   expect(rect.top).toBeGreaterThanOrEqual(geometry.header.top);
   expect(rect.bottom).toBeLessThanOrEqual(geometry.header.bottom);
   expect(Math.abs(rect.centerY-geometry.header.centerY)).toBeLessThanOrEqual(2);
   expect(rect.left).toBeGreaterThanOrEqual(geometry.header.left);
   expect(rect.right).toBeLessThanOrEqual(geometry.header.right);
  }
- const ordered=[geometry.brand,geometry.controls,geometry.grid,geometry.add,geometry.rename,geometry.duplicate,geometry.close,geometry.save,geometry.settings];
+ const ordered=[geometry.brand,geometry.controls,geometry.grid,geometry.add,geometry.duplicate,geometry.save,geometry.settings];
  for(let index=1;index<ordered.length;index++)expect(ordered[index].left).toBeGreaterThanOrEqual(ordered[index-1].right);
  expect(geometry.indicators.left).toBeGreaterThanOrEqual(geometry.periods.right);
  expect(Math.abs((geometry.controls.left+geometry.controls.right)/2-geometry.windowWidth/2)).toBeLessThanOrEqual(2);
@@ -47,15 +47,15 @@ for(const viewport of [{width:1600,height:1000},{width:1100,height:720}])test(`c
  await page.screenshot({path:`test-results/top-header-${viewport.width}.png`});
 });
 
-test('header tab actions preserve rename, grid, duplication and close behavior',async({page})=>{
+test('tab double-click and keyboard close preserve rename, grid and header duplication behavior',async({page})=>{
  await seed(page);const header=page.locator('.app-header');
- await header.getByRole('button',{name:'Rename tab',exact:true}).click();let dialog=page.getByRole('dialog',{name:'Rename tab',exact:true});
+ await page.getByRole('tab',{selected:true}).dblclick();let dialog=page.getByRole('dialog',{name:'Rename tab',exact:true});
  await dialog.getByRole('textbox',{name:'Tab name',exact:true}).fill('Header research');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
  await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
  await header.getByRole('combobox',{name:'Grid layout',exact:true}).selectOption('2x2');await expect(page.getByTestId('chart-placeholder')).toHaveCount(1);
  await header.getByRole('button',{name:'Add chart',exact:true}).click();await expect(page.getByTestId('chart-cell')).toHaveCount(4);await expect(page.getByTestId('chart-placeholder')).toHaveCount(0);
  await header.getByRole('button',{name:'Duplicate tab',exact:true}).click();await expect(page.getByRole('tab')).toHaveCount(3);await expect(page.getByTestId('chart-cell')).toHaveCount(4);
- await header.getByRole('button',{name:'Close tab',exact:true}).click();dialog=page.getByRole('dialog',{name:/Close Header research/});await dialog.getByRole('button',{name:'Close tab',exact:true}).click();
+ await page.keyboard.press('Control+w');dialog=page.getByRole('dialog',{name:/Close Header research/});await dialog.getByRole('button',{name:'Close tab',exact:true}).click();
  await expect(page.getByRole('tab')).toHaveCount(2);await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
  await expect(header.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
  const saved=await savedWorkspace(page);expect(saved.tabs).toHaveLength(2);expect(saved.tabs[0].name).toBe('Header research');expect(saved.tabs[0].charts).toHaveLength(4);expect(saved.tabs[0].grid).toMatchObject({rows:2,columns:2});

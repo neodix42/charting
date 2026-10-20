@@ -1,0 +1,386 @@
+{
+  "phase": "restore",
+  "startedAt": "2026-10-20T16:20:26.105Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "native restart restores machine-local settings and the actual downloaded candle data",
+      "passed": true,
+      "actual": {
+        "storage": {
+          "enabled": true,
+          "directory": "/tmp/cryptodesk-desktop-smoke.MWwhj2/candles-selected",
+          "sizeBytes": 425984
+        },
+        "bars": 500
+      }
+    },
+    {
+      "name": "restart restores actual 3+1 chart workspace",
+      "passed": true,
+      "actual": {
+        "tabs": 2,
+        "charts": [
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "name": "active tab restored",
+      "passed": true,
+      "actual": "4924c9bd-3100-47ba-8c90-729ec14833fa"
+    },
+    {
+      "name": "only selected tab is mounted after restart",
+      "passed": true,
+      "actual": {
+        "charts": 3,
+        "placeholders": 6
+      }
+    },
+    {
+      "name": "native close flushed the final immediate edit",
+      "passed": true,
+      "actual": {
+        "id": "cda3403c-ca8e-4036-8d37-07cef159b205",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "4h",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1791633600,
+          "toSec": 1792713600,
+          "barSpacing": 6,
+          "rightOffset": -12.833333333333357
+        },
+        "indicators": [
+          {
+            "id": "797518cc-a3d6-4508-827d-81d9f47ef447",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51",
+            "lineWidth": 3
+          },
+          {
+            "id": "579ebdbf-5743-4143-9b5d-c4f0535f7564",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef",
+            "lineWidth": 1
+          },
+          {
+            "id": "98be8a2c-15e4-4b04-87f7-0db16c8b94a4",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "2efd5f68-493e-4dcd-a1c3-2e60ade70a7b",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.34339785
+          },
+          {
+            "id": "a9facc85-344d-4754-bd93-b43c8b78acda",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "restart restores shared indicators and custom parameters from SQLite",
+      "passed": true,
+      "actual": [
+        [
+          {
+            "id": "797518cc-a3d6-4508-827d-81d9f47ef447",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51",
+            "lineWidth": 3
+          },
+          {
+            "id": "579ebdbf-5743-4143-9b5d-c4f0535f7564",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef",
+            "lineWidth": 1
+          },
+          {
+            "id": "98be8a2c-15e4-4b04-87f7-0db16c8b94a4",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "2efd5f68-493e-4dcd-a1c3-2e60ade70a7b",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.34339785
+          },
+          {
+            "id": "a9facc85-344d-4754-bd93-b43c8b78acda",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        [
+          {
+            "id": "b38c2e6e-6fca-4a7d-a3cc-458fcdfad911",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        [
+          {
+            "id": "73a00bd0-194e-4d8a-a0ea-9b715bbfe66e",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ]
+      ]
+    },
+    {
+      "name": "shared action preserves the first chart original four indicators",
+      "passed": true,
+      "actual": [
+        {
+          "id": "797518cc-a3d6-4508-827d-81d9f47ef447",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51",
+          "lineWidth": 3
+        },
+        {
+          "id": "579ebdbf-5743-4143-9b5d-c4f0535f7564",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef",
+          "lineWidth": 1
+        },
+        {
+          "id": "98be8a2c-15e4-4b04-87f7-0db16c8b94a4",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "2efd5f68-493e-4dcd-a1c3-2e60ade70a7b",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.34339785
+        }
+      ]
+    },
+    {
+      "name": "shared action leaves the hidden tab unchanged",
+      "passed": true,
+      "actual": {
+        "id": "0b0123f5-a4c4-4165-9108-60477448c7bd",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "1h",
+        "chartType": "candlestick",
+        "showVolume": true,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1791662400,
+          "toSec": 1792512000,
+          "barSpacing": 6,
+          "rightOffset": 13.166666666666703
+        }
+      }
+    },
+    {
+      "name": "restart restores shared weekly timeframes on the other active charts",
+      "passed": true,
+      "actual": [
+        "4h",
+        "1w",
+        "1w"
+      ]
+    },
+    {
+      "name": "restart restores the selected horizontal timeframe",
+      "passed": true
+    },
+    {
+      "name": "restart renders every chart own indicator configuration",
+      "passed": true,
+      "actual": [
+        5,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "restart restores the resized MACD pane from SQLite",
+      "passed": true,
+      "actual": {
+        "heights": [
+          89,
+          30
+        ],
+        "paneStretchFactor": 0.34339785
+      }
+    },
+    {
+      "name": "restart restores the saved pixel gap from SQLite",
+      "passed": true,
+      "actual": {
+        "unit": "pixels",
+        "value": 79
+      }
+    },
+    {
+      "name": "native Settings restores the saved value and unit",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 2,
+    "charts": [
+      3,
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-20T16:20:26.658461517Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3422384,
+    "goHeapInUseBytes": 5365760,
+    "goVersion": "go1.26.8",
+    "goroutines": 19,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 1.12,
+    "processTreeRSSBytes": 601047040,
+    "processTreeRootPID": 295440,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "restoredIndicatorChart": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "restoredMACDPane": {
+    "heights": [
+      89,
+      30
+    ],
+    "paneStretchFactor": 0.34339785
+  },
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 24
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 2,
+      "cachedFeeds": 2,
+      "cachedCandles": 980,
+      "historyRequests": 0,
+      "queueDepth": 0,
+      "resyncs": 0,
+      "sockets": 0,
+      "reconnects": 0,
+      "restRequests": 1
+    },
+    "mode": "public live data",
+    "persistedRevision": 24,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "connecting · Connecting public spot streamFollowing live · Feed no messages · trade unknownUTC",
+    "connecting · Opening public spot streamFollowing live · Feed no messages · trade unknownUTC",
+    "connecting · Opening public spot streamFollowing live · Feed no messages · trade unknownUTC"
+  ],
+  "finishedAt": "2026-10-20T16:20:27.011Z"
+}

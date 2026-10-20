@@ -76,12 +76,12 @@ test('left and right mouse buttons do not close tabs and the final tab cannot be
  await second.click();await expect(second).toHaveAttribute('aria-selected','true');await expect(page.getByRole('tab')).toHaveCount(2);
  await first.click({button:'middle'});await expect(page.getByRole('tab')).toHaveCount(1);
  await second.click({button:'middle'});await noCloseDialog(page);await expect(page.getByRole('tab')).toHaveCount(1);
- await expect(second).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close tab',exact:true})).toBeDisabled();
+ await expect(second).toHaveAttribute('aria-selected','true');await expect(page.locator('.app-header').getByRole('button',{name:'Close tab',exact:true})).toHaveCount(0);await second.focus();await page.keyboard.press('Control+w');await noCloseDialog(page);await expect(page.getByRole('tab')).toHaveCount(1);
 });
 
-test('header Close and Ctrl+W continue to require confirmation',async({page})=>{
+test('Ctrl+W continues to require confirmation after header Close is removed',async({page})=>{
  const workspace=await seed(page),target=workspace.tabs[0];
- await page.getByRole('button',{name:'Close tab',exact:true}).click();
+ await expect(page.locator('.app-header').getByRole('button',{name:'Close tab',exact:true})).toHaveCount(0);await tab(page,target.id).focus();await page.keyboard.press('Control+w');
  let dialog=page.getByRole('dialog',{name:`Close ${target.name}?`,exact:true});await expect(dialog).toContainText('all 3 charts');
  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('tab')).toHaveCount(2);
  await tab(page,target.id).focus();await page.keyboard.press('Control+w');

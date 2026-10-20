@@ -1,0 +1,822 @@
+{
+  "phase": "fresh",
+  "startedAt": "2026-10-20T16:17:18.342Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "first launch exactly one tab and chart",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "initial 1×1 grid",
+      "passed": true,
+      "actual": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1
+        ],
+        "columnFractions": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "first launch defaults to a ten-bar right gap",
+      "passed": true,
+      "actual": {
+        "unit": "bars",
+        "value": 10
+      }
+    },
+    {
+      "name": "retired header tab actions, dropdown and tab counter are absent",
+      "passed": true
+    },
+    {
+      "name": "Add tab follows the tab list inside the same scrollable content",
+      "passed": true
+    },
+    {
+      "name": "first launch plus is visible immediately after the last tab",
+      "passed": true,
+      "actual": {
+        "row": {
+          "left": 0,
+          "right": 1600,
+          "top": 62,
+          "bottom": 109,
+          "width": 1600,
+          "height": 47,
+          "centerY": 85.5
+        },
+        "strip": {
+          "left": 20,
+          "right": 184.53125,
+          "top": 62,
+          "bottom": 108,
+          "width": 164.53125,
+          "height": 46,
+          "centerY": 85
+        },
+        "last": {
+          "left": 20,
+          "right": 140.515625,
+          "top": 62,
+          "bottom": 108,
+          "width": 120.515625,
+          "height": 46,
+          "centerY": 85
+        },
+        "add": {
+          "left": 147.515625,
+          "right": 182.53125,
+          "top": 69.5,
+          "bottom": 100.5,
+          "width": 35.015625,
+          "height": 31,
+          "centerY": 85
+        },
+        "scrollLeft": 0,
+        "scrollWidth": 165,
+        "clientWidth": 165
+      }
+    },
+    {
+      "name": "first-launch plus stays beside the only tab",
+      "passed": true,
+      "actual": {
+        "row": {
+          "left": 0,
+          "right": 1600,
+          "top": 62,
+          "bottom": 109,
+          "width": 1600,
+          "height": 47,
+          "centerY": 85.5
+        },
+        "strip": {
+          "left": 20,
+          "right": 184.53125,
+          "top": 62,
+          "bottom": 108,
+          "width": 164.53125,
+          "height": 46,
+          "centerY": 85
+        },
+        "last": {
+          "left": 20,
+          "right": 140.515625,
+          "top": 62,
+          "bottom": 108,
+          "width": 120.515625,
+          "height": 46,
+          "centerY": 85
+        },
+        "add": {
+          "left": 147.515625,
+          "right": 182.53125,
+          "top": 69.5,
+          "bottom": 100.5,
+          "width": 35.015625,
+          "height": 31,
+          "centerY": 85
+        },
+        "scrollLeft": 0,
+        "scrollWidth": 165,
+        "clientWidth": 165
+      }
+    },
+    {
+      "name": "save indicator and neighboring controls keep the same geometry across saved, pending, saving and error states",
+      "passed": true,
+      "actual": {
+        "saved": {
+          "save": {
+            "left": 1374.578125,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 128,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "previous": {
+            "left": 1305.421875,
+            "right": 1366.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 61.15625,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "next": {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 73.421875,
+            "height": 30,
+            "centerY": 30.5
+          }
+        },
+        "syntheticFailure": "One explicitly injected SaveWorkspace rejection; retry uses the real native SQLite writer",
+        "pending": {
+          "save": {
+            "left": 1374.578125,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 128,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "previous": {
+            "left": 1305.421875,
+            "right": 1366.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 61.15625,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "next": {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 73.421875,
+            "height": 30,
+            "centerY": 30.5
+          }
+        },
+        "saving": {
+          "save": {
+            "left": 1374.578125,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 128,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "previous": {
+            "left": 1305.421875,
+            "right": 1366.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 61.15625,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "next": {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 73.421875,
+            "height": 30,
+            "centerY": 30.5
+          }
+        },
+        "error": {
+          "save": {
+            "left": 1374.578125,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 128,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "previous": {
+            "left": 1305.421875,
+            "right": 1366.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 61.15625,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "next": {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 73.421875,
+            "height": 30,
+            "centerY": 30.5
+          }
+        },
+        "recovered": {
+          "save": {
+            "left": 1374.578125,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 128,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "previous": {
+            "left": 1305.421875,
+            "right": 1366.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 61.15625,
+            "height": 30,
+            "centerY": 30.5
+          },
+          "next": {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "width": 73.421875,
+            "height": 30,
+            "centerY": 30.5
+          }
+        }
+      }
+    },
+    {
+      "name": "double-click tab rename persists through native SQLite",
+      "passed": true
+    },
+    {
+      "name": "native candle storage defaults off in the isolated profile",
+      "passed": true,
+      "actual": {
+        "enabled": false,
+        "directory": "/tmp/cryptodesk-desktop-smoke.rq8KRg/candles",
+        "sizeBytes": 0
+      }
+    },
+    {
+      "name": "native settings open a real candle database and show its measured size",
+      "passed": true,
+      "actual": {
+        "enabled": true,
+        "directory": "/tmp/cryptodesk-desktop-smoke.rq8KRg/candles-selected",
+        "sizeBytes": 275856
+      }
+    },
+    {
+      "name": "genuine public history is persisted with exact OHLCV through the native bridge",
+      "passed": true,
+      "actual": {
+        "key": {
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h"
+        },
+        "downloaded": [
+          {
+            "time": 1792490400,
+            "open": 81497.98,
+            "high": 81664.01,
+            "low": 81482,
+            "close": 81556.01,
+            "volume": 289.14986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          },
+          {
+            "time": 1792494000,
+            "open": 81556,
+            "high": 81651.92,
+            "low": 81450,
+            "close": 81504.32,
+            "volume": 371.57986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          },
+          {
+            "time": 1792497600,
+            "open": 81504.32,
+            "high": 81777.63,
+            "low": 81342,
+            "close": 81620.26,
+            "volume": 467.15949,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          },
+          {
+            "time": 1792501200,
+            "open": 81620.25,
+            "high": 82171.8,
+            "low": 81322.22,
+            "close": 82149.2,
+            "volume": 801.82291,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          }
+        ],
+        "stored": [
+          {
+            "time": 1792490400,
+            "open": 81497.98,
+            "high": 81664.01,
+            "low": 81482,
+            "close": 81556.01,
+            "volume": 289.14986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          },
+          {
+            "time": 1792494000,
+            "open": 81556,
+            "high": 81651.92,
+            "low": 81450,
+            "close": 81504.32,
+            "volume": 371.57986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          },
+          {
+            "time": 1792497600,
+            "open": 81504.32,
+            "high": 81777.63,
+            "low": 81342,
+            "close": 81620.26,
+            "volume": 467.15949,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          },
+          {
+            "time": 1792501200,
+            "open": 81620.25,
+            "high": 82171.8,
+            "low": 81322.22,
+            "close": 82149.2,
+            "volume": 801.82291,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 1792513039261
+          }
+        ]
+      }
+    },
+    {
+      "name": "native Settings refreshes actual candle folder size",
+      "passed": true,
+      "actual": "269.4 KiB"
+    },
+    {
+      "name": "middle-click protects the final tab without opening a menu or dialog",
+      "passed": true
+    },
+    {
+      "name": "chart X protects the final chart",
+      "passed": true
+    },
+    {
+      "name": "seven horizontal timeframe buttons replace the dropdown",
+      "passed": true,
+      "actual": [
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1d",
+        "1w"
+      ]
+    },
+    {
+      "name": "weekly timeframe selection is visible",
+      "passed": true
+    },
+    {
+      "name": "SMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 0
+    },
+    {
+      "name": "SMA native default width is two pixels",
+      "passed": true
+    },
+    {
+      "name": "EMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 1
+    },
+    {
+      "name": "EMA native default width is two pixels",
+      "passed": true
+    },
+    {
+      "name": "Ichimoku Cloud waits for parameter confirmation",
+      "passed": true,
+      "actual": 2
+    },
+    {
+      "name": "MACD waits for parameter confirmation",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "MACD creates additional pane canvases",
+      "passed": true,
+      "actual": {
+        "canvases": 11,
+        "canvasRows": 3
+      }
+    },
+    {
+      "name": "weekly timeframe persisted through Wails to SQLite",
+      "passed": true,
+      "actual": "1w"
+    },
+    {
+      "name": "all four indicators and custom SMA/EMA widths persisted through Wails to SQLite",
+      "passed": true,
+      "actual": [
+        {
+          "id": "6cd446dd-22c6-4120-a913-064103d39475",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51",
+          "lineWidth": 3
+        },
+        {
+          "id": "6012519b-034a-45a9-89d1-2a038920b1ff",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef",
+          "lineWidth": 1
+        },
+        {
+          "id": "4279247b-bfd7-4498-87f6-a1b3bfb46f4a",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "965c88ba-d34e-4168-96d9-745208a911f5",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.34339785
+        }
+      ]
+    },
+    {
+      "name": "resized MACD height persists through Wails to SQLite",
+      "passed": true,
+      "actual": {
+        "before": [
+          590,
+          89
+        ],
+        "after": [
+          505,
+          174
+        ],
+        "paneStretchFactor": 0.34339785
+      }
+    },
+    {
+      "name": "3×3 adds eight placeholders only",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "placeholders": 8
+      }
+    },
+    {
+      "name": "each Add chart creates exactly one chart",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "new tab has exactly one chart and 1×1 grid",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "grid": "1x1"
+      }
+    }
+  ],
+  "passed": false,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-20T16:17:18.807839236Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 2905024,
+    "goHeapInUseBytes": 4595712,
+    "goVersion": "go1.26.8",
+    "goroutines": 19,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.98,
+    "processTreeRSSBytes": 602365952,
+    "processTreeRootPID": 286715,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "initialTabStrip": {
+    "row": {
+      "left": 0,
+      "right": 1600,
+      "top": 62,
+      "bottom": 109,
+      "width": 1600,
+      "height": 47,
+      "centerY": 85.5
+    },
+    "strip": {
+      "left": 20,
+      "right": 184.53125,
+      "top": 62,
+      "bottom": 108,
+      "width": 164.53125,
+      "height": 46,
+      "centerY": 85
+    },
+    "last": {
+      "left": 20,
+      "right": 140.515625,
+      "top": 62,
+      "bottom": 108,
+      "width": 120.515625,
+      "height": 46,
+      "centerY": 85
+    },
+    "add": {
+      "left": 147.515625,
+      "right": 182.53125,
+      "top": 69.5,
+      "bottom": 100.5,
+      "width": 35.015625,
+      "height": 31,
+      "centerY": 85
+    },
+    "scrollLeft": 0,
+    "scrollWidth": 165,
+    "clientWidth": 165
+  },
+  "saveIndicatorGeometry": {
+    "saved": {
+      "save": {
+        "left": 1374.578125,
+        "right": 1502.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 128,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "previous": {
+        "left": 1305.421875,
+        "right": 1366.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 61.15625,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "next": {
+        "left": 1510.578125,
+        "right": 1584,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 73.421875,
+        "height": 30,
+        "centerY": 30.5
+      }
+    },
+    "syntheticFailure": "One explicitly injected SaveWorkspace rejection; retry uses the real native SQLite writer",
+    "pending": {
+      "save": {
+        "left": 1374.578125,
+        "right": 1502.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 128,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "previous": {
+        "left": 1305.421875,
+        "right": 1366.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 61.15625,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "next": {
+        "left": 1510.578125,
+        "right": 1584,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 73.421875,
+        "height": 30,
+        "centerY": 30.5
+      }
+    },
+    "saving": {
+      "save": {
+        "left": 1374.578125,
+        "right": 1502.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 128,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "previous": {
+        "left": 1305.421875,
+        "right": 1366.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 61.15625,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "next": {
+        "left": 1510.578125,
+        "right": 1584,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 73.421875,
+        "height": 30,
+        "centerY": 30.5
+      }
+    },
+    "error": {
+      "save": {
+        "left": 1374.578125,
+        "right": 1502.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 128,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "previous": {
+        "left": 1305.421875,
+        "right": 1366.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 61.15625,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "next": {
+        "left": 1510.578125,
+        "right": 1584,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 73.421875,
+        "height": 30,
+        "centerY": 30.5
+      }
+    },
+    "recovered": {
+      "save": {
+        "left": 1374.578125,
+        "right": 1502.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 128,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "previous": {
+        "left": 1305.421875,
+        "right": 1366.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 61.15625,
+        "height": 30,
+        "centerY": 30.5
+      },
+      "next": {
+        "left": 1510.578125,
+        "right": 1584,
+        "top": 15.5,
+        "bottom": 45.5,
+        "width": 73.421875,
+        "height": 30,
+        "centerY": 30.5
+      }
+    }
+  },
+  "candleStorage": {
+    "enabled": true,
+    "directory": "/tmp/cryptodesk-desktop-smoke.rq8KRg/candles-selected",
+    "sizeBytes": 275856,
+    "key": {
+      "exchange": "binance",
+      "market": "spot",
+      "instrument": "BTCUSDT",
+      "timeframe": "1h"
+    },
+    "from": 1792490400,
+    "to": 1792504800,
+    "downloadedBars": 4
+  },
+  "beforeIndicators": {
+    "canvases": 7,
+    "canvasRows": 2
+  },
+  "afterIndicators": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "macdPane": {
+    "before": [
+      590,
+      89
+    ],
+    "after": [
+      505,
+      174
+    ],
+    "paneStretchFactor": 0.34339785
+  },
+  "indicatorRevision": 7,
+  "error": "@wails://wails/:5:184",
+  "finishedAt": "2026-10-20T16:17:44.919Z"
+}

@@ -191,6 +191,20 @@ const desktopSmokeJavaScript = `async function(phase) {
  const input=async(selector,value)=>{const element=await wait(()=>q(selector),selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,String(value));element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));await sleep(100);};
  const flush=async()=>{await click('.save-indicator');await wait(()=>q('.save-indicator')?.textContent.includes('All changes saved'),'acknowledged save');};
  const middleTab=async(element)=>{const rect=element.getBoundingClientRect();element.dispatchEvent(new MouseEvent('auxclick',{bubbles:true,cancelable:true,button:1,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));await sleep(100);};
+ const bounds=element=>{const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height,centerY:(rect.top+rect.bottom)/2};};
+ const verifyTabStrip=async(label,overflow)=>{
+  const strip=q('.tabs'),list=q('[role="tablist"]'),add=q('[aria-label="Add tab"]'),tabs=qa('[role="tab"]'),last=tabs.at(-1);
+  check(!q('.app-header [aria-label="Rename tab"]')&&!q('.app-header [aria-label="Close tab"]')&&!q('[aria-label="All tabs"]')&&!q('.tab-row .capacity'),'retired header tab actions, dropdown and tab counter are absent');
+  check(list.parentElement===strip&&add.parentElement===strip&&list.nextElementSibling===add&&!list.contains(add),'Add tab follows the tab list inside the same scrollable content');
+  const previousScroll=strip.scrollLeft;
+  if(overflow)strip.scrollLeft=strip.scrollWidth;
+  await sleep(100);
+  const geometry={row:bounds(q('.tab-row')),strip:bounds(strip),last:bounds(last),add:bounds(add),scrollLeft:strip.scrollLeft,scrollWidth:strip.scrollWidth,clientWidth:strip.clientWidth};
+  check(geometry.add.left>=geometry.last.right-1&&geometry.add.left-geometry.last.right<=12&&Math.abs(geometry.add.centerY-geometry.last.centerY)<=2&&geometry.add.left>=geometry.strip.left-1&&geometry.add.right<=geometry.strip.right+1,label+' plus is visible immediately after the last tab',geometry);
+  if(overflow)check(strip.scrollWidth>strip.clientWidth&&strip.scrollLeft>0,'maximum-capacity tabs and plus share horizontal scrolling',geometry);
+  else check(strip.scrollLeft===0&&geometry.add.right<geometry.row.left+geometry.row.width/2,'first-launch plus stays beside the only tab',geometry);
+  strip.scrollLeft=previousScroll;return geometry;
+ };
  const indicatorDefaults={sma:{period:20},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
  const indicatorNames={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
  const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color)&&(indicator.type==='sma'?indicator.lineWidth===3:indicator.type==='ema'?indicator.lineWidth===1:indicator.lineWidth===undefined))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
@@ -257,6 +271,29 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
    check(initial.workspace.chartRightGap?.unit==='bars'&&initial.workspace.chartRightGap.value===10,'first launch defaults to a ten-bar right gap',initial.workspace.chartRightGap);
+   report.initialTabStrip=await verifyTabStrip('first launch',false);
+   await flush();
+   const saveGeometry=()=>({save:bounds(q('.save-indicator')),previous:bounds(q('[aria-label="Duplicate tab"]')),next:bounds(q('[aria-label="Open settings"]'))});
+   report.saveIndicatorGeometry={saved:saveGeometry(),syntheticFailure:'One explicitly injected SaveWorkspace rejection; retry uses the real native SQLite writer'};
+   const nativeSave=api.SaveWorkspace.bind(api),originalPeriod=initial.workspace.tabs[0].charts[0].timeframe,nextPeriod=originalPeriod==='4h'?'15m':'4h';
+   let releaseSave;const blockedSave=new Promise(resolve=>{releaseSave=resolve;});
+   api.SaveWorkspace=async()=>{await blockedSave;throw Error('Explicit native save-indicator geometry failure');};
+   try{
+    q('[data-testid="chart-cell"] [aria-label="Timeframe '+nextPeriod+'"]').click();
+    await wait(()=>q('.save-indicator.pending'),'pending save geometry');report.saveIndicatorGeometry.pending=saveGeometry();
+    await wait(()=>q('.save-indicator.saving'),'saving geometry');report.saveIndicatorGeometry.saving=saveGeometry();
+    releaseSave();await wait(()=>q('.save-indicator.error'),'failed save geometry');report.saveIndicatorGeometry.error=saveGeometry();
+   }finally{releaseSave();api.SaveWorkspace=nativeSave;}
+   await flush();report.saveIndicatorGeometry.recovered=saveGeometry();
+   const savedGeometry=report.saveIndicatorGeometry.saved;
+   check(['pending','saving','error','recovered'].every(state=>['save','previous','next'].every(control=>['left','right','width'].every(edge=>Math.abs(report.saveIndicatorGeometry[state][control][edge]-savedGeometry[control][edge])<.5))),'save indicator and neighboring controls keep the same geometry across saved, pending, saving and error states',report.saveIndicatorGeometry);
+   q('[data-testid="chart-cell"] [aria-label="Timeframe '+originalPeriod+'"]').click();await flush();
+   q('[role="tab"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0}));
+   await wait(()=>q('[role="dialog"][aria-label="Rename tab"]'),'native double-click rename dialog');
+   await input('[aria-label="Tab name"]','Native renamed tab');await click('[role="dialog"] button[type="submit"]');await flush();
+   check((await api.LoadWorkspace()).workspace.tabs[0].name==='Native renamed tab','double-click tab rename persists through native SQLite');
+   q('[role="tab"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0}));
+   await input('[aria-label="Tab name"]',initial.workspace.tabs[0].name);await click('[role="dialog"] button[type="submit"]');await flush();
    await click('[aria-label="Open settings"]');
    await wait(()=>q('.candle-storage-toggle input:not(:disabled)'),'native candle storage settings');
    const storageDefault=await api.GetCandleStorage();
@@ -316,6 +353,10 @@ const desktopSmokeJavaScript = `async function(phase) {
    await click('[aria-label="Add tab"]');
    await wait(()=>qa('[role="tab"]').length===2,'second tab');
    check(qa('[data-testid="chart-cell"]').length===1&&q('[aria-label="Grid layout"]').value==='1x1','new tab has exactly one chart and 1×1 grid',{charts:qa('[data-testid="chart-cell"]').length,grid:q('[aria-label="Grid layout"]').value});
+   const keyboardTab=q('[role="tab"][aria-selected="true"]');keyboardTab.focus();keyboardTab.dispatchEvent(new KeyboardEvent('keydown',{key:'w',ctrlKey:true,bubbles:true,cancelable:true}));
+   await wait(()=>q('[role="dialog"].confirmation'),'native Ctrl+W confirmation');
+   check(qa('[role="tab"]').length===2&&q('[role="dialog"]').textContent.includes('Remove this tab and all 1 chart'),'Ctrl+W keeps its whole-tab confirmation after removing the header Close button');
+   await click('[role="dialog"] button[type="button"]');
    qa('[role="tab"]')[0].click();await wait(()=>qa('[data-testid="chart-cell"]').length===3,'restore first tab');
    await flush();
    const saved=await api.LoadWorkspace();
@@ -325,8 +366,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(saved.workspace.tabs[0].charts.slice(1).every(chart=>!chart.indicators?.length)&&!saved.workspace.tabs[1].charts[0].indicators?.length,'new chart indicators remain independent',saved.workspace.tabs.map(tab=>tab.charts.map(chart=>chart.indicators?.length||0)));
    report.savedRevision=saved.revision;
    const shared=await wait(()=>q('[data-testid="tab-chart-controls"]'),'shared current tab controls'),header=q('.app-header');
-   const bounds=element=>{const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,centerY:(rect.top+rect.bottom)/2};};
-   const headerControls=[q('.brand'),shared,q('[aria-label="Grid layout"]'),q('[aria-label="Add chart"]'),q('[aria-label="Rename tab"]'),q('[aria-label="Duplicate tab"]'),q('[aria-label="Close tab"]'),q('.save-indicator'),q('[aria-label="Open settings"]')],headerRect=bounds(header),headerBounds=headerControls.map(bounds),tabsRect=bounds(q('.tab-row')),chartsRect=bounds(q('.workspace-content'));
+   const headerControls=[q('.brand'),shared,q('[aria-label="Grid layout"]'),q('[aria-label="Add chart"]'),q('[aria-label="Duplicate tab"]'),q('.save-indicator'),q('[aria-label="Open settings"]')],headerRect=bounds(header),headerBounds=headerControls.map(bounds),tabsRect=bounds(q('.tab-row')),chartsRect=bounds(q('.workspace-content'));
    report.sharedToolbarGeometry={header:headerRect,controls:headerBounds,tabTop:tabsRect.top,tabBottom:tabsRect.bottom,chartTop:chartsRect.top,windowWidth:window.innerWidth};
    check(headerControls.every(element=>header.contains(element))&&headerBounds.every(rect=>rect.top>=headerRect.top&&rect.bottom<=headerRect.bottom&&Math.abs(rect.centerY-headerRect.centerY)<=2)&&headerBounds.slice(1).every((rect,index)=>rect.left>=headerBounds[index].right)&&Math.abs((headerBounds[1].left+headerBounds[1].right)/2-window.innerWidth/2)<=3,'periods, indicators and workspace actions share the top logo row in order',report.sharedToolbarGeometry);
    check(!q('.workspace-title')&&chartsRect.top-tabsRect.bottom<=20,'duplicate workspace title row is removed and charts follow the tabs',report.sharedToolbarGeometry);
@@ -412,9 +452,11 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(initial.workspace.tabs.length===20&&initial.workspace.tabs.every(tab=>tab.charts.length===9),'explicit imported maximum restores20tabs180charts',report.initialCounts);
    check(qa('[data-testid="chart-cell"]').length===9&&qa('[data-testid="chart-canvas"]').length===9,'maximum workspace mounts nine chart instances only',{cells:qa('[data-testid="chart-cell"]').length,canvases:qa('[data-testid="chart-canvas"]').length});
    check(q('[aria-label="Add tab"]').disabled&&q('[aria-label="Duplicate tab"]').disabled&&q('[aria-label="Add chart"]').disabled,'capacity controls disabled',{addTab:q('[aria-label="Add tab"]').disabled,duplicate:q('[aria-label="Duplicate tab"]').disabled,addChart:q('[aria-label="Add chart"]').disabled});
+   report.capacityTabStrip=await verifyTabStrip('maximum capacity',true);
    report.switchMetrics=[];report.switchLatenciesMS=[];const switchStart=performance.now();
    for(let index=0;index<200;index++) {
     const target=(index+1)%20,started=performance.now();
+    qa('[role="tab"]')[target].scrollIntoView({block:'nearest',inline:'nearest'});
     qa('[role="tab"]')[target].click();
     await wait(()=>q('[role="tab"][aria-selected="true"]')===qa('[role="tab"]')[target]&&q('[data-testid="chart-cell"]')?.dataset.chartId===initial.workspace.tabs[target].charts[0].id,'native tab switch '+index);
     if(qa('[data-testid="chart-cell"]').length!==9)throw Error('Chart instance count after switch '+index);
@@ -431,7 +473,7 @@ const desktopSmokeJavaScript = `async function(phase) {
   report.frontend=window.__cryptodeskDiagnostics?.();report.backend=await api.GetDiagnostics();
   report.feedStatuses=qa('.chart-status').map(element=>element.textContent);
   report.passed=true;
- } catch(error) {report.error=String(error?.stack||error);}
+ } catch(error) {report.error=String(error)+'\n'+String(error?.stack||'');}
  report.finishedAt=new Date().toISOString();
  if(!api)api=window.go?.main?.App;
  if(api){
