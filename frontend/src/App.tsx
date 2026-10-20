@@ -70,7 +70,7 @@ function WorkspaceView({session,onReplace}:{session:Session;onReplace():void}){
  const timezones=Array.from(new Set(['UTC','system',Intl.DateTimeFormat().resolvedOptions().timeZone,'America/New_York','Europe/London','Europe/Berlin','Asia/Dubai','Asia/Tokyo','Asia/Singapore','Australia/Sydney']));
  return <div className="app-shell">
   <header className="app-header">
-   <a className="brand" href="#" aria-label="CryptoDesk" onClick={e=>e.preventDefault()}><img className="brand-icon" src={brandLogo} alt=""/><span>CryptoDesk</span><span className="brand-tag">SPOT TERMINAL</span></a>
+   <a className="brand" href="#" aria-label="CryptoDesk" onClick={e=>e.preventDefault()}><img className="brand-icon" src={brandLogo} alt=""/><span>CryptoDesk</span><span className="brand-tag">SPOT TERMINAL</span><span className="app-version" aria-label="Application version" title={`CryptoDesk release v${__CRYPTODESK_VERSION__}`}>v{__CRYPTODESK_VERSION__}</span></a>
    <TabChartControls key={active.id} charts={active.charts} onTimeframe={timeframe=>dispatch({type:'tabTimeframe',tabId:active.id,timeframe})} onIndicator={indicator=>dispatch({type:'tabIndicator',tabId:active.id,indicator})}/>
    <div className="header-actions">
     <div className="workspace-actions" role="group" aria-label="Workspace controls">

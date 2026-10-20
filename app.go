@@ -237,7 +237,7 @@ func (a *App) GetDiagnostics() map[string]any {
 	a.mu.Lock()
 	revision := a.revision
 	a.mu.Unlock()
-	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "mode": "public live data", "version": "0.1.0"}
+	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "mode": "public live data", "version": applicationVersion}
 }
 func (a *App) ExportWorkspace() (string, error) {
 	data, err := a.store.Export()

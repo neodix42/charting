@@ -20,9 +20,19 @@ spec.loader.exec_module(build)
 
 class WindowsPackagingTests(unittest.TestCase):
     def test_complete_producer_keeps_release_name_and_override_in_package_metadata(self):
+        for override in (True, False):
+            with self.subTest(environment_override=override):
+                self.check_complete_producer(override)
+
+    def test_wrong_or_missing_frontend_version_prevents_packaging(self):
+        for compiled_version in (None, "2.3.3"):
+            with self.subTest(compiled_version=compiled_version):
+                self.check_complete_producer(True, compiled_version)
+
+    def check_complete_producer(self, override, compiled_version="2.3.4"):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            files = {"VERSION": "0.1.0", "wails.json": json.dumps({"info": {"productVersion": "0.1.0"}}),
+            files = {"VERSION": "0.1.0" if override else "2.3.4", "wails.json": json.dumps({"info": {"productVersion": "0.1.0"}}),
                      "scripts/webview2-runtime.json": "{}", "APP_README.md": "readme", "LICENSE": "license", "STATUS.md": "status",
                      "docs/WINDOWS_PORTABLE.md": "windows", "docs/THIRD_PARTY_NOTICES.md": "notices", "docs/licenses/example.txt": "license"}
             for name, content in files.items():
@@ -40,6 +50,11 @@ class WindowsPackagingTests(unittest.TestCase):
                 if "build" in command and "windows/amd64" in command:
                     source = Path(kwargs["cwd"])
                     self.assertEqual(json.loads((source / "wails.json").read_text())["info"]["productVersion"], "2.3.4")
+                    self.assertEqual(kwargs["env"]["CRYPTODESK_VERSION"], "2.3.4")
+                    if compiled_version is not None:
+                        metadata = source / "frontend/dist/app-version.json"
+                        metadata.parent.mkdir(parents=True)
+                        metadata.write_text(json.dumps({"version": compiled_version, "tag": f"v{compiled_version}"}))
                     binary = source / "build/bin/cryptodesk.exe"
                     binary.parent.mkdir(parents=True)
                     binary.write_bytes(executable)
@@ -52,12 +67,21 @@ class WindowsPackagingTests(unittest.TestCase):
                     (runtime / "msedgewebview2.exe").write_bytes(executable)
                 return subprocess.CompletedProcess(command, 0)
 
-            with patch.dict(os.environ, {"CRYPTODESK_VERSION": "2.3.4"}), \
+            environment = dict(os.environ)
+            environment.pop("CRYPTODESK_VERSION", None)
+            if override:
+                environment["CRYPTODESK_VERSION"] = "2.3.4"
+            with patch.dict(os.environ, environment, clear=True), \
                  patch.object(build.shutil, "which", return_value="/fixture/tool"), \
                  patch.object(build, "source_provenance", return_value={"gitRevision": "a" * 40, "workingTreeModified": False}), \
                  patch.object(build.subprocess, "run", side_effect=run), \
                  patch.object(build.subprocess, "check_output", return_value="tool version\n"), \
                  patch.object(windows_webview_language, "prepare_language_overlay", return_value={"goFlag": "-overlay=fixture", "manifest": {}}):
+                if compiled_version != "2.3.4":
+                    with self.assertRaises((ValueError, FileNotFoundError)):
+                        build.run(root)
+                    self.assertFalse((root / "cryptodesk-2.3.4-windows-amd64.zip").exists())
+                    return
                 build.run(root)
             archive = root / "cryptodesk-2.3.4-windows-amd64.zip"
             self.assertTrue(archive.is_file())

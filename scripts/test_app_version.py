@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from app_version import app_version, parse_version
+from app_version import app_version, parse_version, verify_frontend_version
 from windows_build import set_snapshot_version
 
 
@@ -25,6 +25,28 @@ class AppVersionTests(unittest.TestCase):
             with self.subTest(version=value), self.assertRaises(ValueError):
                 parse_version(value)
         self.assertEqual(parse_version("0.65535.17"), (0, 65535, 17))
+
+    def test_compiled_frontend_must_match_release_version_and_tag(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata = root / "frontend/dist/app-version.json"
+            metadata.parent.mkdir(parents=True)
+            with self.assertRaises(FileNotFoundError):
+                verify_frontend_version(root, "2.3.4")
+            for value in [{"version": "2.3.4", "tag": "v2.3.4"},
+                          {"version": "2.3.3", "tag": "v2.3.3"},
+                          {"version": "2.3.4", "tag": "v2.3.3"},
+                          {"version": "2.3.4"}, [], None]:
+                with self.subTest(metadata=value):
+                    metadata.write_text(json.dumps(value))
+                    if value == {"version": "2.3.4", "tag": "v2.3.4"}:
+                        verify_frontend_version(root, "2.3.4")
+                    else:
+                        with self.assertRaises(ValueError):
+                            verify_frontend_version(root, "2.3.4")
+            metadata.write_text("{")
+            with self.assertRaises(ValueError):
+                verify_frontend_version(root, "2.3.4")
 
     def test_windows_resource_version_changes_only_the_snapshot(self):
         with tempfile.TemporaryDirectory() as temporary:

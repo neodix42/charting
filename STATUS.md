@@ -252,3 +252,17 @@ Verification on Ubuntu 26.04.1 / Node 24.19.0 / Go 1.26.8:
 - `go test ./internal/domain ./internal/storage`: PASS, including unchanged workspace validation/persistence coverage.
 
 Native desktop, public-provider smoke, distribution archive rebuilds and hosted release publication were not rerun for this focused frontend repair; prior platform/manual limits remain. Next verification beyond browser coverage is an isolated-profile native manual price-axis drag/save/restart and notification test using a rebuilt production binary.
+
+## Release version badge — 2026-10-20
+
+The header now shows `vX.Y.Z` immediately after SPOT TERMINAL, retaining the badge when compact headers hide that label. The existing release workflow's selected `CRYPTODESK_VERSION` drives Vite through the shared validated Python resolver; local builds retain the root VERSION fallback. The same build emits app-version.json, used by Go diagnostics instead of its former hardcoded 0.1.0. Linux/Windows producers refuse missing or mismatched compiled version/tag metadata before packaging; Windows explicitly propagates its resolved version into the isolated Wails build. No workflow edit, dependency change or latest-release request is needed.
+
+Verification:
+
+- `cd frontend && npm run typecheck && npm run lint && npm test && npm run build`: PASS, **87 unit tests** and production assets.
+- `cd frontend && CRYPTODESK_VERSION=12.34.56 npm run test:e2e -- app-version.spec.ts tab-controls.spec.ts header-stability.spec.ts production.spec.ts`: PASS, **15 browser tests**. A nonbaseline version proves both development and compiled production headers show v12.34.56 and match generated metadata. Geometry remains valid at 1100/1600px; production without a Wails bridge still visibly fails. Screenshots/report: `frontend/test-results/app-version-{1100,1600}.png`, `frontend/test-results/results.json`.
+- `python3 -m unittest discover -s scripts -p 'test_*.py'`: PASS, **145 checks**, including local/override Windows version propagation and packaging refusal for missing/mismatched metadata.
+- `go test -tags bindings .`: PASS. With `source scripts/common.sh`, `go test -tags webkit2_41 .` and `go vet -tags webkit2_41 .`: PASS, including compiled metadata/fallback behavior. `bash -n scripts/build-linux.sh` and `git diff --check`: PASS.
+- `CRYPTODESK_VERSION=12.34.56 python3 scripts/app_version.py --verify-frontend`: PASS against the actual generated production metadata. The local frontend is rebuilt with the default version after the override test.
+
+No new quote provider or derivatives market was added. Current live public instrument discovery verified XAGUSDT perpetual contracts on Binance and Bybit; the app's explicit spot-only discovery/validation excludes them. Adding these requires an explicitly named perpetual market and separate feed/cache identity. Native GUI, full distribution rebuilds, hosted publication and the remaining platform/manual matrix were not rerun; their prior limits remain. Verify the next GitHub release archive's displayed tag against its release page after publication.

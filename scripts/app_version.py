@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """One validated application version for local builds and automatic releases."""
+import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -24,8 +26,23 @@ def app_version(root, environment=None):
     return value
 
 
+def verify_frontend_version(root, version):
+    """Reject packaging when the compiled UI belongs to another release."""
+    parse_version(version)
+    metadata = json.loads(Path(root).joinpath("frontend/dist/app-version.json").read_text())
+    if not isinstance(metadata, dict) or metadata.get("version") != version or metadata.get("tag") != f"v{version}":
+        raise ValueError(f"Compiled frontend version must match release v{version}")
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verify-frontend", action="store_true", help="Verify the compiled frontend before packaging")
+    arguments = parser.parse_args()
     try:
-        print(app_version(Path(__file__).resolve().parent.parent))
+        root = Path(__file__).resolve().parent.parent
+        version = app_version(root)
+        if arguments.verify_frontend:
+            verify_frontend_version(root, version)
+        print(version)
     except (OSError, ValueError) as error:
         raise SystemExit(f"Invalid application version: {error}")

@@ -12,6 +12,7 @@ require_node
 require_wails
 python3 "$APP_ROOT/scripts/app_icons.py" --check
 "$APP_ROOT/.tools/wails" build -tags webkit2_41 -trimpath "$@"
+python3 "$APP_ROOT/scripts/app_version.py" --verify-frontend > /dev/null
 RELEASE_NAME="cryptodesk-$CRYPTODESK_VERSION-linux-amd64"
 ARTIFACT_DIR="$APP_ROOT/release/$RELEASE_NAME"
 mkdir -p "$ARTIFACT_DIR/docs"

@@ -25,6 +25,10 @@ var assets embed.FS
 //go:embed build/linux/window-icon.png
 var appIcon []byte
 
+func init() {
+	applicationVersion = bundledAppVersion(assets)
+}
+
 func main() {
 	termination := make(chan os.Signal, 16)
 	signal.Notify(termination, os.Interrupt, syscall.SIGTERM)

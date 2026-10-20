@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from app_version import app_version
+from app_version import app_version, verify_frontend_version
 from build_metadata import source_provenance
 
 ENGLISH_LOCALE_PAKS = frozenset({"en-US.pak", "en-GB.pak", "copilot_overlay_strings_en-US.pak", "copilot_overlay_strings_en-GB.pak"})
@@ -139,7 +139,7 @@ def run(root, cab=None):
         # Wails embeds this version in the executable's Windows resource. Update
         # only the temporary source snapshot, preserving the checkout's metadata.
         set_snapshot_version(source, version)
-        env = dict(os.environ, CGO_ENABLED="0", VITE_EXPLICIT_TEST_BRIDGE="0")
+        env = dict(os.environ, CGO_ENABLED="0", VITE_EXPLICIT_TEST_BRIDGE="0", CRYPTODESK_VERSION=version)
         # Wails does not expose the browser language option. A build-local overlay
         # adds the supported WebView2 Language API call to the exact pinned loader.
         from windows_webview_language import prepare_language_overlay
@@ -151,6 +151,7 @@ def run(root, cab=None):
                         "-compiler", str(compiler),
                         "-skipbindings", "-webview2", "error", "-m", "-nosyncgomod",
                         "-trimpath", "-o", "cryptodesk.exe"], cwd=source, env=env, check=True)
+        verify_frontend_version(source, version)
         executable = source / "build/bin/cryptodesk.exe"
         validate_executable(executable)
         package.mkdir()
