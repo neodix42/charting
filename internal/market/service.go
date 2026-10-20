@@ -54,6 +54,14 @@ type Options struct {
 	Emit       func(Event)
 	Now        func() time.Time
 	MaxCandles int
+	Cache      CandleCache
+}
+
+// CandleCache uses inclusive disk bounds; the bridge uses half-open history
+// bounds. Put must preserve call order and drain accepted writes on shutdown.
+type CandleCache interface {
+	Range(domain.FeedKey, int64, int64, int) ([]domain.Candle, error)
+	Put(domain.FeedKey, []domain.Candle)
 }
 type lease struct {
 	id, chart  string
@@ -148,6 +156,21 @@ func (s *Service) Attach(chart string, generation int64, key domain.FeedKey, fro
 	f := s.feeds[key]
 	if f == nil {
 		f = &feed{key: key, bars: map[int64]domain.Candle{}, changed: map[int64]int64{}, owners: map[string]*lease{}, health: domain.Health{State: "loading"}}
+		if s.opts.Cache != nil {
+			cached, _ := s.opts.Cache.Range(key, 0, 0, 1000)
+			if from > 0 && to > from && to < s.opts.Now().Unix()-2*exchange.TimeframeSeconds(key.Timeframe) {
+				cached, _ = s.opts.Cache.Range(key, from, to-1, 1000)
+			}
+			for _, c := range cached {
+				// Provider revisions restart with each connection/process. A stale
+				// disk revision must never reject this session's live corrections.
+				c.SourceRevision = 0
+				f.bars[c.Time] = c
+			}
+			if len(f.bars) > 0 {
+				f.health = domain.Health{State: "cached", Reason: "Locally stored candles; refreshing public spot data"}
+			}
+		}
 		s.feeds[key] = f
 	}
 	if f.timer != nil {
@@ -326,6 +349,9 @@ func (s *Service) update(ctx context.Context, f *feed, bars []domain.Candle, h d
 		kind = "bars"
 	}
 	s.emitLocked(f, updates, kind)
+	if s.opts.Cache != nil {
+		s.opts.Cache.Put(f.key, updates)
+	}
 	s.trimFeedLocked(f)
 	s.trimLocked()
 }
@@ -382,6 +408,9 @@ func (s *Service) History(ctx context.Context, id string, key domain.FeedKey, fr
 	return s.history(requestContext, id, key, from, to, limit)
 }
 func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, from, to int64, limit int) (History, error) {
+	if err := ctx.Err(); err != nil {
+		return History{}, err
+	}
 	if err := key.Validate(); err != nil {
 		return History{}, err
 	}
@@ -399,6 +428,21 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	if err != nil {
 		return History{}, err
 	}
+	// Only a complete contiguous page of closed, past buckets can bypass REST.
+	// Gaps, delistings and current buckets still go to the provider; a sparse disk
+	// page must never be mistaken for a complete market history.
+	if s.opts.Cache != nil && to <= exchange.BucketStart(s.opts.Now().Unix(), exchange.TimeframeSeconds(key.Timeframe)) {
+		cached, cacheErr := s.opts.Cache.Range(key, from, to-1, limit)
+		if err := ctx.Err(); err != nil {
+			return History{}, err
+		}
+		if cacheErr == nil && completeCachedPage(key, from, to, limit, cached) {
+			for i := range cached {
+				cached[i].SourceRevision = 0
+			}
+			return s.acceptHistory(id, key, from, to, revision, cached, false), nil
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	select {
@@ -414,6 +458,36 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	if err != nil {
 		return History{}, err
 	}
+	return s.acceptHistory(id, key, from, to, revision, bars, true), nil
+}
+
+func completeCachedPage(key domain.FeedKey, from, to int64, limit int, bars []domain.Candle) bool {
+	step := exchange.TimeframeSeconds(key.Timeframe)
+	last := exchange.BucketStart(to-1, step)
+	first := exchange.BucketStart(from, step)
+	if first < from {
+		first += step
+	}
+	if first > last {
+		return false
+	}
+	count := int((last-first)/step + 1)
+	if count > limit {
+		count = limit
+		first = last - int64(count-1)*step
+	}
+	if len(bars) != count {
+		return false
+	}
+	for i, c := range bars {
+		if !c.Closed || c.Time != first+int64(i)*step {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Service) acceptHistory(id string, key domain.FeedKey, from, to, revision int64, bars []domain.Candle, persist bool) History {
 	result := map[int64]domain.Candle{}
 	for _, c := range bars {
 		if valid(c) && c.Time >= from && c.Time < to {
@@ -425,7 +499,7 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	if f := s.feeds[key]; f != nil {
 		updates := []domain.Candle{}
 		for t, c := range result {
-			if f.changed[t] > revision {
+			if f.changed[t] > revision || (!persist && f.changed[t] > 0) {
 				result[t] = f.bars[t]
 				continue
 			}
@@ -441,11 +515,27 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 		}
 	}
 	ordered := sorted(result)
+	if persist && s.opts.Cache != nil {
+		s.opts.Cache.Put(key, ordered)
+	}
 	// A page must advance to an earlier timestamp before another pagination request.
 	// Sparse pages do not prove the listing boundary. A nonempty earlier page
 	// permits another bounded request; an empty page/progress check terminates it.
 	more := len(ordered) > 0
-	return History{RequestID: id, FeedKey: key, Bars: ordered, MoreHistory: more}, nil
+	return History{RequestID: id, FeedKey: key, Bars: ordered, MoreHistory: more}
+}
+
+// StoreCurrentCandles seeds a newly enabled/different cache with the genuine
+// bars already downloaded this session, without restarting any subscriptions.
+func (s *Service) StoreCurrentCandles() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.opts.Cache == nil {
+		return
+	}
+	for key, f := range s.feeds {
+		s.opts.Cache.Put(key, sorted(f.bars))
+	}
 }
 func valid(c domain.Candle) bool {
 	return c.Time >= 0 && c.Time < 32503680000 && c.Open > 0 && c.High >= c.Open && c.High >= c.Close && c.Low > 0 && c.Low <= c.Open && c.Low <= c.Close && c.Volume >= 0 && c.High < 1e100 && c.Volume < 1e100

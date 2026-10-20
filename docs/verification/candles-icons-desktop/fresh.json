@@ -1,0 +1,1022 @@
+{
+  "phase": "fresh",
+  "startedAt": "2026-10-20T15:48:46.571Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "first launch exactly one tab and chart",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "initial 1×1 grid",
+      "passed": true,
+      "actual": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1
+        ],
+        "columnFractions": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "first launch defaults to a ten-bar right gap",
+      "passed": true,
+      "actual": {
+        "unit": "bars",
+        "value": 10
+      }
+    },
+    {
+      "name": "native candle storage defaults off in the isolated profile",
+      "passed": true,
+      "actual": {
+        "enabled": false,
+        "directory": "/tmp/cryptodesk-desktop-smoke.Aqs4NS/candles",
+        "sizeBytes": 0
+      }
+    },
+    {
+      "name": "native settings open a real candle database and show its measured size",
+      "passed": true,
+      "actual": {
+        "enabled": true,
+        "directory": "/tmp/cryptodesk-desktop-smoke.Aqs4NS/candles-selected",
+        "sizeBytes": 144016
+      }
+    },
+    {
+      "name": "genuine public history is persisted with exact OHLCV through the native bridge",
+      "passed": true,
+      "actual": {
+        "key": {
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "timeframe": "1h"
+        },
+        "downloaded": [
+          {
+            "time": 1792486800,
+            "open": 81542.79,
+            "high": 81618.01,
+            "low": 81331.97,
+            "close": 81497.98,
+            "volume": 402.62735,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          },
+          {
+            "time": 1792490400,
+            "open": 81497.98,
+            "high": 81664.01,
+            "low": 81482,
+            "close": 81556.01,
+            "volume": 289.14986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          },
+          {
+            "time": 1792494000,
+            "open": 81556,
+            "high": 81651.92,
+            "low": 81450,
+            "close": 81504.32,
+            "volume": 371.57986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          },
+          {
+            "time": 1792497600,
+            "open": 81504.32,
+            "high": 81777.63,
+            "low": 81342,
+            "close": 81620.26,
+            "volume": 467.15949,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          }
+        ],
+        "stored": [
+          {
+            "time": 1792486800,
+            "open": 81542.79,
+            "high": 81618.01,
+            "low": 81331.97,
+            "close": 81497.98,
+            "volume": 402.62735,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          },
+          {
+            "time": 1792490400,
+            "open": 81497.98,
+            "high": 81664.01,
+            "low": 81482,
+            "close": 81556.01,
+            "volume": 289.14986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          },
+          {
+            "time": 1792494000,
+            "open": 81556,
+            "high": 81651.92,
+            "low": 81450,
+            "close": 81504.32,
+            "volume": 371.57986,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          },
+          {
+            "time": 1792497600,
+            "open": 81504.32,
+            "high": 81777.63,
+            "low": 81342,
+            "close": 81620.26,
+            "volume": 467.15949,
+            "closed": true,
+            "quality": "authoritative",
+            "sourceRevision": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "native Settings refreshes actual candle folder size",
+      "passed": true,
+      "actual": "140.6 KiB"
+    },
+    {
+      "name": "middle-click protects the final tab without opening a menu or dialog",
+      "passed": true
+    },
+    {
+      "name": "chart X protects the final chart",
+      "passed": true
+    },
+    {
+      "name": "seven horizontal timeframe buttons replace the dropdown",
+      "passed": true,
+      "actual": [
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1d",
+        "1w"
+      ]
+    },
+    {
+      "name": "weekly timeframe selection is visible",
+      "passed": true
+    },
+    {
+      "name": "SMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 0
+    },
+    {
+      "name": "SMA native default width is two pixels",
+      "passed": true
+    },
+    {
+      "name": "EMA waits for parameter confirmation",
+      "passed": true,
+      "actual": 1
+    },
+    {
+      "name": "EMA native default width is two pixels",
+      "passed": true
+    },
+    {
+      "name": "Ichimoku Cloud waits for parameter confirmation",
+      "passed": true,
+      "actual": 2
+    },
+    {
+      "name": "MACD waits for parameter confirmation",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "MACD creates additional pane canvases",
+      "passed": true,
+      "actual": {
+        "canvases": 11,
+        "canvasRows": 3
+      }
+    },
+    {
+      "name": "weekly timeframe persisted through Wails to SQLite",
+      "passed": true,
+      "actual": "1w"
+    },
+    {
+      "name": "all four indicators and custom SMA/EMA widths persisted through Wails to SQLite",
+      "passed": true,
+      "actual": [
+        {
+          "id": "97eb7774-ce17-404e-a8d9-921f09a6ad4c",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51",
+          "lineWidth": 3
+        },
+        {
+          "id": "711c6ace-bc29-480e-9a8d-5af25f7de534",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef",
+          "lineWidth": 1
+        },
+        {
+          "id": "dec03f80-f2ba-43e8-bc22-50ca988c9cc8",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "47f4880c-a50c-413a-8c65-8688c6ed7a94",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.34339785
+        }
+      ]
+    },
+    {
+      "name": "resized MACD height persists through Wails to SQLite",
+      "passed": true,
+      "actual": {
+        "before": [
+          590,
+          89
+        ],
+        "after": [
+          505,
+          174
+        ],
+        "paneStretchFactor": 0.34339785
+      }
+    },
+    {
+      "name": "3×3 adds eight placeholders only",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "placeholders": 8
+      }
+    },
+    {
+      "name": "each Add chart creates exactly one chart",
+      "passed": true,
+      "actual": 3
+    },
+    {
+      "name": "new tab has exactly one chart and 1×1 grid",
+      "passed": true,
+      "actual": {
+        "charts": 1,
+        "grid": "1x1"
+      }
+    },
+    {
+      "name": "small workspace saved with exact counts",
+      "passed": true,
+      "actual": [
+        3,
+        1
+      ]
+    },
+    {
+      "name": "independent chart settings saved",
+      "passed": true,
+      "actual": {
+        "id": "23d76721-0b8f-48b6-ab9e-b75c1e4ab26b",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "15m",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1792453500,
+          "toSec": 1792520100,
+          "barSpacing": 6,
+          "rightOffset": -16
+        },
+        "indicators": [
+          {
+            "id": "97eb7774-ce17-404e-a8d9-921f09a6ad4c",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51",
+            "lineWidth": 3
+          },
+          {
+            "id": "711c6ace-bc29-480e-9a8d-5af25f7de534",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef",
+            "lineWidth": 1
+          },
+          {
+            "id": "dec03f80-f2ba-43e8-bc22-50ca988c9cc8",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "47f4880c-a50c-413a-8c65-8688c6ed7a94",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.34339785
+          }
+        ]
+      }
+    },
+    {
+      "name": "indicator settings survive chart and tab additions",
+      "passed": true,
+      "actual": [
+        {
+          "id": "97eb7774-ce17-404e-a8d9-921f09a6ad4c",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51",
+          "lineWidth": 3
+        },
+        {
+          "id": "711c6ace-bc29-480e-9a8d-5af25f7de534",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef",
+          "lineWidth": 1
+        },
+        {
+          "id": "dec03f80-f2ba-43e8-bc22-50ca988c9cc8",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "47f4880c-a50c-413a-8c65-8688c6ed7a94",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.34339785
+        }
+      ]
+    },
+    {
+      "name": "new chart indicators remain independent",
+      "passed": true,
+      "actual": [
+        [
+          4,
+          0,
+          0
+        ],
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "name": "periods, indicators and workspace actions share the top logo row in order",
+      "passed": true,
+      "actual": {
+        "header": {
+          "left": 0,
+          "right": 1600,
+          "top": 0,
+          "bottom": 62,
+          "centerY": 31
+        },
+        "controls": [
+          {
+            "left": 16,
+            "right": 252.421875,
+            "top": 16,
+            "bottom": 45,
+            "centerY": 30.5
+          },
+          {
+            "left": 631.046875,
+            "right": 968.953125,
+            "top": 12.5,
+            "bottom": 48.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1070.15625,
+            "right": 1144.15625,
+            "top": 13.5,
+            "bottom": 47.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1149.15625,
+            "right": 1227.265625,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1232.265625,
+            "right": 1286.671875,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1291.671875,
+            "right": 1352.828125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1357.828125,
+            "right": 1398.734375,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1406.734375,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          }
+        ],
+        "tabTop": 62,
+        "tabBottom": 109,
+        "chartTop": 109,
+        "windowWidth": 1600
+      }
+    },
+    {
+      "name": "duplicate workspace title row is removed and charts follow the tabs",
+      "passed": true,
+      "actual": {
+        "header": {
+          "left": 0,
+          "right": 1600,
+          "top": 0,
+          "bottom": 62,
+          "centerY": 31
+        },
+        "controls": [
+          {
+            "left": 16,
+            "right": 252.421875,
+            "top": 16,
+            "bottom": 45,
+            "centerY": 30.5
+          },
+          {
+            "left": 631.046875,
+            "right": 968.953125,
+            "top": 12.5,
+            "bottom": 48.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1070.15625,
+            "right": 1144.15625,
+            "top": 13.5,
+            "bottom": 47.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1149.15625,
+            "right": 1227.265625,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1232.265625,
+            "right": 1286.671875,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1291.671875,
+            "right": 1352.828125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1357.828125,
+            "right": 1398.734375,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1406.734375,
+            "right": 1502.578125,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          },
+          {
+            "left": 1510.578125,
+            "right": 1584,
+            "top": 15.5,
+            "bottom": 45.5,
+            "centerY": 30.5
+          }
+        ],
+        "tabTop": 62,
+        "tabBottom": 109,
+        "chartTop": 109,
+        "windowWidth": 1600
+      }
+    },
+    {
+      "name": "shared weekly timeframe persists for the active tab only while maximized",
+      "passed": true,
+      "actual": [
+        [
+          "1w",
+          "1w",
+          "1w"
+        ],
+        [
+          "1h"
+        ]
+      ]
+    },
+    {
+      "name": "shared indicator opens one dialog and waits for OK",
+      "passed": true,
+      "actual": 1
+    },
+    {
+      "name": "shared EMA custom parameters persist with a distinct ID on every active chart",
+      "passed": true,
+      "actual": [
+        [
+          {
+            "id": "97eb7774-ce17-404e-a8d9-921f09a6ad4c",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51",
+            "lineWidth": 3
+          },
+          {
+            "id": "711c6ace-bc29-480e-9a8d-5af25f7de534",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef",
+            "lineWidth": 1
+          },
+          {
+            "id": "dec03f80-f2ba-43e8-bc22-50ca988c9cc8",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "47f4880c-a50c-413a-8c65-8688c6ed7a94",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.34339785
+          },
+          {
+            "id": "e97a5175-cd2c-461b-918b-137bddc232a0",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        [
+          {
+            "id": "63336c95-5af9-4228-abe9-97305d8d2082",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        [
+          {
+            "id": "d1ce98e0-18d2-46d6-8fd0-c374316d5376",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ]
+      ]
+    },
+    {
+      "name": "shared action preserves the first chart original four indicators",
+      "passed": true,
+      "actual": [
+        {
+          "id": "97eb7774-ce17-404e-a8d9-921f09a6ad4c",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51",
+          "lineWidth": 3
+        },
+        {
+          "id": "711c6ace-bc29-480e-9a8d-5af25f7de534",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef",
+          "lineWidth": 1
+        },
+        {
+          "id": "dec03f80-f2ba-43e8-bc22-50ca988c9cc8",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "47f4880c-a50c-413a-8c65-8688c6ed7a94",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.34339785
+        }
+      ]
+    },
+    {
+      "name": "shared action leaves the hidden tab unchanged",
+      "passed": true,
+      "actual": {
+        "id": "35843981-50bd-4130-a5ca-3b451e8085fc",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "1h",
+        "chartType": "candlestick",
+        "showVolume": true,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1791648000,
+          "toSec": 1792508400,
+          "barSpacing": 6,
+          "rightOffset": 10
+        }
+      }
+    },
+    {
+      "name": "native Settings shows the default ten-bar gap",
+      "passed": true
+    },
+    {
+      "name": "bar gap applies to every chart and persists through Wails to SQLite",
+      "passed": true,
+      "actual": {
+        "unit": "bars",
+        "value": 29
+      }
+    },
+    {
+      "name": "pixel gap persists without replacing chart instances or layout",
+      "passed": true,
+      "actual": {
+        "unit": "pixels",
+        "value": 79
+      }
+    },
+    {
+      "name": "chart X uses a larger glyph and hit target",
+      "passed": true,
+      "actual": {
+        "width": 30,
+        "height": 30,
+        "fontSize": "22px"
+      }
+    },
+    {
+      "name": "chart X closes a maximized chart immediately and restores its siblings",
+      "passed": true
+    },
+    {
+      "name": "active tab middle-click closes its remaining charts without confirmation",
+      "passed": true
+    },
+    {
+      "name": "chart X and active middle-close persist while preserving the original 3+1 workspace",
+      "passed": true,
+      "actual": [
+        {
+          "id": "e6c59d1e-f5c5-4a14-985d-1a9920d2932f",
+          "charts": 3
+        },
+        {
+          "id": "8946d996-c918-4c00-a285-68cda9c8b79e",
+          "charts": 1
+        }
+      ]
+    },
+    {
+      "name": "inactive middle-click removes its whole tab without confirmation, preserves active charts and persists to SQLite",
+      "passed": true,
+      "actual": [
+        {
+          "id": "e6c59d1e-f5c5-4a14-985d-1a9920d2932f",
+          "charts": 3
+        },
+        {
+          "id": "8946d996-c918-4c00-a285-68cda9c8b79e",
+          "charts": 1
+        }
+      ]
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-20T15:48:47.026051417Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 2900928,
+    "goHeapInUseBytes": 4587520,
+    "goVersion": "go1.26.8",
+    "goroutines": 19,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.94,
+    "processTreeRSSBytes": 602550272,
+    "processTreeRootPID": 210775,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "candleStorage": {
+    "enabled": true,
+    "directory": "/tmp/cryptodesk-desktop-smoke.Aqs4NS/candles-selected",
+    "sizeBytes": 144016,
+    "key": {
+      "exchange": "binance",
+      "market": "spot",
+      "instrument": "BTCUSDT",
+      "timeframe": "1h"
+    },
+    "from": 1792486800,
+    "to": 1792501200,
+    "downloadedBars": 4
+  },
+  "beforeIndicators": {
+    "canvases": 7,
+    "canvasRows": 2
+  },
+  "afterIndicators": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "macdPane": {
+    "before": [
+      590,
+      89
+    ],
+    "after": [
+      505,
+      174
+    ],
+    "paneStretchFactor": 0.34339785
+  },
+  "indicatorRevision": 2,
+  "savedRevision": 6,
+  "sharedToolbarGeometry": {
+    "header": {
+      "left": 0,
+      "right": 1600,
+      "top": 0,
+      "bottom": 62,
+      "centerY": 31
+    },
+    "controls": [
+      {
+        "left": 16,
+        "right": 252.421875,
+        "top": 16,
+        "bottom": 45,
+        "centerY": 30.5
+      },
+      {
+        "left": 631.046875,
+        "right": 968.953125,
+        "top": 12.5,
+        "bottom": 48.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1070.15625,
+        "right": 1144.15625,
+        "top": 13.5,
+        "bottom": 47.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1149.15625,
+        "right": 1227.265625,
+        "top": 15.5,
+        "bottom": 45.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1232.265625,
+        "right": 1286.671875,
+        "top": 15.5,
+        "bottom": 45.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1291.671875,
+        "right": 1352.828125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1357.828125,
+        "right": 1398.734375,
+        "top": 15.5,
+        "bottom": 45.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1406.734375,
+        "right": 1502.578125,
+        "top": 15.5,
+        "bottom": 45.5,
+        "centerY": 30.5
+      },
+      {
+        "left": 1510.578125,
+        "right": 1584,
+        "top": 15.5,
+        "bottom": 45.5,
+        "centerY": 30.5
+      }
+    ],
+    "tabTop": 62,
+    "tabBottom": 109,
+    "chartTop": 109,
+    "windowWidth": 1600
+  },
+  "sharedRevision": 9,
+  "gapRevision": 11,
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 17
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 1,
+      "cachedFeeds": 3,
+      "cachedCandles": 1480,
+      "historyRequests": 3,
+      "queueDepth": 0,
+      "resyncs": 4,
+      "sockets": 1,
+      "reconnects": 1,
+      "restRequests": 8
+    },
+    "mode": "public live data",
+    "persistedRevision": 17,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 0s ago · trade 0s agoUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 0s ago · trade 0s agoUTC",
+    "live · Public spot data; current bucket may be provisionalFollowing live · Feed 0s ago · trade 0s agoUTC"
+  ],
+  "finishedAt": "2026-10-20T15:48:54.955Z"
+}

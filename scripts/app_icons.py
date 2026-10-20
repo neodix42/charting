@@ -15,6 +15,8 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = Path("frontend/src/assets/cryptodesk.svg")
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
+LINUX_ICON_SIZES = (*ICON_SIZES, 512)
+LINUX_WINDOW_ICON_SIZE = 128
 
 
 def color(value):
@@ -97,11 +99,19 @@ def windows_icon(images):
 
 def assets(root=ROOT):
     svg = (root / SOURCE).read_bytes()
-    return {
+    pngs = {size: render_png(svg, size) for size in LINUX_ICON_SIZES}
+    result = {
         Path("build/linux/cryptodesk.svg"): svg,
-        Path("build/appicon.png"): render_png(svg, 512),
-        Path("build/windows/icon.ico"): windows_icon([(size, render_png(svg, size)) for size in ICON_SIZES]),
+        Path("build/appicon.png"): pngs[512],
+        Path("build/linux/cryptodesk.png"): pngs[512],
+        # GTK's X11 backend silently drops an oversized sole window icon.
+        # Keep this small enough for ordinary X11 property request limits.
+        Path("build/linux/window-icon.png"): pngs[LINUX_WINDOW_ICON_SIZE],
+        Path("build/windows/icon.ico"): windows_icon([(size, pngs[size]) for size in ICON_SIZES]),
     }
+    result.update({Path(f"build/linux/icons/hicolor/{size}x{size}/apps/cryptodesk.png"): pngs[size]
+                   for size in LINUX_ICON_SIZES})
+    return result
 
 
 def main():

@@ -22,7 +22,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-//go:embed build/appicon.png
+//go:embed build/linux/window-icon.png
 var appIcon []byte
 
 func main() {
@@ -68,6 +68,7 @@ func main() {
 		fatal(err)
 	}
 	a := newApp(store, loaded)
+	defer a.candles.Close() // Also drain if native startup fails before OnShutdown.
 	stopSignals := watchTermination(termination, a.requestClose)
 	defer stopSignals()
 	width, height := a.window.Width, a.window.Height

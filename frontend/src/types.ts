@@ -20,6 +20,7 @@ export interface MarketEvent extends Snapshot {chartId:string;generation:number;
 export interface Instrument {nativeId:string;baseAsset:string;quoteAsset:string;priceIncrement:string;sizeIncrement:string;availability:string;supportedIntervals:Interval[];providerMetadata?:Record<string,string>}
 export interface LoadResult {workspace:Workspace;revision:number;recovery?:string}
 export interface SaveResult {revision:number;acceptedEditSequence:number}
+export interface CandleStorageInfo {enabled:boolean;directory:string;sizeBytes:number;error?:string}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
 export interface Backend {
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
@@ -27,6 +28,7 @@ export interface Backend {
  AttachChart(id:string,generation:number,key:FeedKey,fromSec:number,toSec:number):Promise<Snapshot>; DetachChart(leaseId:string):Promise<void>;
  GetFeedSnapshot(leaseId:string,revision:number):Promise<Snapshot>;
  GetHistory(requestId:string,key:FeedKey,fromSec:number,toSec:number,maxBars:number):Promise<HistoryResult>;
+ GetCandleStorage():Promise<CandleStorageInfo>;ConfigureCandleStorage(enabled:boolean,directory:string):Promise<CandleStorageInfo>;ChooseCandleStorageDirectory():Promise<string>;
  GetDiagnostics():Promise<Record<string,unknown>>; ImportWorkspace():Promise<LoadResult>;ExportWorkspace():Promise<string>;ResetWorkspace():Promise<LoadResult>;
  GetBackups():Promise<Array<{id:number;reason:string;createdAt:string}>>;RecoverWorkspace(id:number):Promise<LoadResult>;
  FrontendReady():Promise<void>; ConfirmClose(token:string,discard:boolean):Promise<void>;OpenTradingView():Promise<void>;

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 import zlib
+import time
 
 spec = importlib.util.spec_from_file_location("app_icons", Path(__file__).with_name("app_icons.py"))
 icons = importlib.util.module_from_spec(spec)
@@ -46,6 +47,16 @@ def decode_png(content):
 
 
 class AppIconTests(unittest.TestCase):
+    def make_package(self, root):
+        package = root / "package"
+        package.mkdir()
+        for name in ("cryptodesk.svg", "cryptodesk.png", "cryptodesk.desktop"):
+            shutil.copy2(icons.ROOT / "build/linux" / name, package / name)
+        shutil.copytree(icons.ROOT / "build/linux/icons", package / "icons")
+        shutil.copy2(icons.ROOT / "scripts/install-user.sh", package / "install-user.sh")
+        (package / "cryptodesk").write_bytes(b"preserved binary")
+        return package
+
     def test_generated_native_assets_match_the_frontend_vector(self):
         for relative, expected in icons.assets().items():
             with self.subTest(path=str(relative)):
@@ -66,6 +77,18 @@ class AppIconTests(unittest.TestCase):
         self.assertEqual(pixel(256, 160), bytes.fromhex("111820ff"))
         self.assertEqual(pixel(40, 256), bytes.fromhex("111820ff"))
         self.assertTrue(any(0 < pixels[offset] < 255 for offset in range(3, len(pixels), 4)))
+
+    def test_linux_window_icon_fits_x11_limits_and_packaged_icons_cover_desktop_sizes(self):
+        main = (icons.ROOT / "main.go").read_text()
+        self.assertIn('//go:embed build/linux/window-icon.png', main)
+        width, height, pixels = decode_png((icons.ROOT / "build/linux/window-icon.png").read_bytes())
+        self.assertEqual((width, height), (128, 128))
+        self.assertLess(2 + width * height, 65500)
+        center = (height // 2 * width + width // 2) * 4
+        self.assertEqual(pixels[center:center + 4], bytes.fromhex("e7ad51ff"))
+        for size in icons.LINUX_ICON_SIZES:
+            image = icons.ROOT / f"build/linux/icons/hicolor/{size}x{size}/apps/cryptodesk.png"
+            self.assertEqual(decode_png(image.read_bytes())[:2], (size, size))
 
     def test_windows_ico_has_taskbar_explorer_and_high_dpi_sizes(self):
         content = (icons.ROOT / "build/windows/icon.ico").read_bytes()
@@ -98,18 +121,13 @@ class AppIconTests(unittest.TestCase):
     def test_installer_registers_only_this_app_inside_supplied_user_data_home(self):
         with tempfile.TemporaryDirectory(prefix="cryptodesk-icon-install-") as temporary:
             root = Path(temporary)
-            package = root / "portable"
-            package.mkdir()
-            for name in ("cryptodesk.svg", "cryptodesk.desktop"):
-                shutil.copy2(icons.ROOT / "build/linux" / name, package / name)
+            package = self.make_package(root)
             installer = package / "install-user.sh"
-            shutil.copy2(icons.ROOT / "scripts/install-user.sh", installer)
-            (package / "cryptodesk").write_bytes(b"preserved binary")
             data_home = root / 'user app data 100%'
             workspace = data_home / "cryptodesk/workspace.sqlite"
             workspace.parent.mkdir(parents=True)
             workspace.write_bytes(b"existing user workspace")
-            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"))
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"))
             subprocess.run([str(installer), "--dry-run"], env=env, check=True, capture_output=True)
             self.assertFalse((data_home / "applications").exists())
             subprocess.run([str(installer)], env=env, check=True, capture_output=True)
@@ -117,13 +135,156 @@ class AppIconTests(unittest.TestCase):
             self.assertEqual(installed.read_bytes(), b"preserved binary")
             self.assertTrue(installed.stat().st_mode & 0o111)
             self.assertEqual((data_home / "icons/hicolor/scalable/apps/cryptodesk.svg").read_bytes(), (icons.ROOT / icons.SOURCE).read_bytes())
+            self.assertEqual((data_home / "cryptodesk-app/cryptodesk.png").read_bytes(), (package / "cryptodesk.png").read_bytes())
             desktop = (data_home / "applications/cryptodesk.desktop").read_text()
-            self.assertIn(f'Exec="{str(installed).replace("%", "%%")}"', desktop)
-            self.assertIn("Icon=cryptodesk\n", desktop)
+            self.assertIn(f'Exec="/usr/bin/env" "{str(installed).replace("%", "%%")}"', desktop)
+            self.assertIn(f"Icon={data_home}/cryptodesk-app/cryptodesk.png\n", desktop)
             self.assertIn("StartupWMClass=cryptodesk\n", desktop)
             self.assertEqual(workspace.read_bytes(), b"existing user workspace")
-            self.assertEqual(sorted(str(path.relative_to(data_home)) for path in data_home.rglob("*") if path.is_file()),
-                             ["applications/cryptodesk.desktop", "cryptodesk-app/cryptodesk", "cryptodesk/workspace.sqlite", "icons/hicolor/scalable/apps/cryptodesk.svg"])
+            for size in icons.LINUX_ICON_SIZES:
+                self.assertEqual((data_home / f"icons/hicolor/{size}x{size}/apps/cryptodesk.png").read_bytes(),
+                                 (package / f"icons/hicolor/{size}x{size}/apps/cryptodesk.png").read_bytes())
+            self.assertFalse(any((data_home / "cryptodesk-app").glob(".install.*")))
+            subprocess.run([str(installer)], env=env, check=True, capture_output=True)
+            self.assertEqual(workspace.read_bytes(), b"existing user workspace")
+
+    def test_portable_installer_keeps_launcher_runtime_licenses_and_sources_together(self):
+        with tempfile.TemporaryDirectory(prefix="cryptodesk-runtime-install-") as temporary:
+            root = Path(temporary)
+            package = self.make_package(root)
+            shutil.copy2(icons.ROOT / "build/linux/portable-launcher.sh", package / "cryptodesk")
+            binary = package / "runtime/usr/bin/cryptodesk"
+            binary.parent.mkdir(parents=True)
+            binary.write_text('#!/bin/sh\nprintf "bundled-runtime\\n"\n')
+            binary.chmod(0o755)
+            for name in ("sources/pinned.tar.xz", "licenses/COPYING"):
+                path = package / "runtime" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name)
+            data_home = root / "app data"
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"))
+            subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+            installed = data_home / "cryptodesk-app"
+            shutil.rmtree(package)
+            result = subprocess.run([str(installed / "cryptodesk")], env=env, check=True, capture_output=True, text=True)
+            self.assertEqual(result.stdout, "bundled-runtime\n")
+            self.assertTrue((installed / "runtime/usr/bin/cryptodesk").stat().st_mode & 0o111)
+            self.assertEqual((installed / "runtime/sources/pinned.tar.xz").read_text(), "sources/pinned.tar.xz")
+            self.assertEqual((installed / "runtime/licenses/COPYING").read_text(), "licenses/COPYING")
+
+    def test_upgrading_a_running_binary_preserves_its_process_and_unrelated_user_files(self):
+        with tempfile.TemporaryDirectory(prefix="cryptodesk-atomic-install-") as temporary:
+            root = Path(temporary)
+            package = self.make_package(root)
+            shutil.copy2("/bin/sh", package / "cryptodesk")
+            data_home = root / "user data"
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"))
+            subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+            installed = data_home / "cryptodesk-app"
+            preserved = installed / "my-notes.txt"
+            preserved.write_text("user notes")
+            process = subprocess.Popen([str(installed / "cryptodesk"), "-c", "read icon_test_line"], stdin=subprocess.PIPE)
+            try:
+                shutil.copy2(shutil.which("true"), package / "cryptodesk")
+                subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+                self.assertIsNone(process.poll())
+                self.assertEqual((installed / "cryptodesk").read_bytes(), (package / "cryptodesk").read_bytes())
+                self.assertEqual(preserved.read_text(), "user notes")
+            finally:
+                process.terminate()
+                process.wait(timeout=5)
+                process.stdin.close()
+
+    def test_desktop_launcher_handles_shell_characters_and_percent_in_install_path(self):
+        if not shutil.which("gio"):
+            self.skipTest("GIO launcher unavailable")
+        with tempfile.TemporaryDirectory(prefix="cryptodesk-desktop-escape-") as temporary:
+            root = Path(temporary)
+            package = self.make_package(root)
+            (package / "cryptodesk").write_text('#!/bin/sh\nprintf "launched\\n" > "$CRYPTO_ICON_TEST_RECORD"\n')
+            data_home = root / 'app data 100% $literal `literal` "quote" \\slash'
+            record = root / "launch-record"
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"), CRYPTO_ICON_TEST_RECORD=str(record))
+            subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+            desktop = data_home / "applications/cryptodesk.desktop"
+            if shutil.which("desktop-file-validate"):
+                subprocess.run(["desktop-file-validate", str(desktop)], check=True, capture_output=True)
+            subprocess.run(["gio", "launch", str(desktop)], env=env, check=True, capture_output=True)
+            deadline = time.monotonic() + 3
+            while not record.exists() and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertEqual(record.read_text(), "launched\n")
+
+    def test_incomplete_package_and_invalid_options_do_not_create_an_installation(self):
+        with tempfile.TemporaryDirectory(prefix="cryptodesk-missing-icon-") as temporary:
+            root = Path(temporary)
+            package = self.make_package(root)
+            (package / "cryptodesk.png").unlink()
+            data_home = root / "user data"
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"))
+            for arguments in ([], ["--dry-run"], ["--dry-run", "extra"]):
+                result = subprocess.run([str(package / "install-user.sh"), *arguments], env=env, capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(data_home.exists())
+
+    def test_existing_desktop_directory_gets_same_executable_shortcut_and_only_its_trust_metadata(self):
+        with tempfile.TemporaryDirectory(prefix="cryptodesk-shortcut-") as temporary:
+            root = Path(temporary)
+            package = self.make_package(root)
+            desktop_dir = root / "My Desktop"
+            desktop_dir.mkdir()
+            data_home = root / "user data"
+            fake_bin = root / "test commands"
+            fake_bin.mkdir()
+            record = root / "trust record"
+            gio = fake_bin / "gio"
+            gio.write_text('#!/bin/sh\nprintf "%s\\n" "$@" >> "$CRYPTO_ICON_TEST_RECORD"\n')
+            gio.chmod(0o755)
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(desktop_dir),
+                       CRYPTO_ICON_TEST_RECORD=str(record), PATH=str(fake_bin) + os.pathsep + os.environ["PATH"])
+            subprocess.run([str(package / "install-user.sh"), "--dry-run"], env=env, check=True, capture_output=True)
+            self.assertEqual(list(desktop_dir.iterdir()), [])
+            self.assertFalse(record.exists())
+            subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+            shortcut = desktop_dir / "cryptodesk.desktop"
+            registered = data_home / "applications/cryptodesk.desktop"
+            self.assertEqual(shortcut.read_bytes(), registered.read_bytes())
+            self.assertTrue(shortcut.stat().st_mode & 0o100)
+            self.assertEqual(record.read_text().splitlines(), ["set", "--type", "string", str(shortcut), "metadata::trusted", "true"])
+            shortcut.write_text("Preserve this customized desktop launcher\n")
+            record.unlink()
+            subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+            self.assertEqual(shortcut.read_text(), "Preserve this customized desktop launcher\n")
+            self.assertFalse(record.exists())
+
+    def test_failed_portable_upgrade_restores_previous_runtime_and_preserves_unrelated_temporary_file(self):
+        with tempfile.TemporaryDirectory(prefix="cryptodesk-rollback-install-") as temporary:
+            root = Path(temporary)
+            package = self.make_package(root)
+            binary = package / "runtime/usr/bin/cryptodesk"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("previous runtime")
+            binary.chmod(0o755)
+            data_home = root / "app data"
+            env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"))
+            unrelated = data_home / "applications/cryptodesk.desktop.tmp"
+            unrelated.parent.mkdir(parents=True)
+            unrelated.write_text("unrelated temporary file")
+            subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
+            self.assertEqual(unrelated.read_text(), "unrelated temporary file")
+            binary.write_text("new runtime")
+            fake_bin = root / "failing commands"
+            fake_bin.mkdir()
+            python = fake_bin / "python3"
+            python.write_text('#!/bin/sh\nexit 73\n')
+            python.chmod(0o755)
+            failed_env = dict(env, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"])
+            result = subprocess.run([str(package / "install-user.sh")], env=failed_env, capture_output=True)
+            self.assertEqual(result.returncode, 73)
+            installed = data_home / "cryptodesk-app"
+            self.assertEqual((installed / "runtime/usr/bin/cryptodesk").read_text(), "previous runtime")
+            self.assertEqual(unrelated.read_text(), "unrelated temporary file")
+            self.assertFalse(any(installed.glob(".install.*")))
 
 
 if __name__ == "__main__":

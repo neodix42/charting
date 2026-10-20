@@ -22,6 +22,8 @@ The small Linux archive requires GTK3, WebKitGTK 4.1 and libsoup3 runtime librar
 
 The larger Windows ZIP includes its pinned Fixed Version WebView2 runtime with English locale packs, so a separate browser installation is unnecessary. Extract into a writable local folder, keeping `WebView2` and `portable.marker` beside the executable. Workspace and browser data remain in the portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md).
 
+Both Linux archives include `install-user.sh` for optional installation to your user profile. It registers the CryptoDesk logo for the application menu and taskbar, and creates a shortcut when your desktop folder exists. Run it again after updating, then restart the app. [Installation details](APP_README.md#run-the-built-release).
+
 ## Features
 
 - Independent exchange, instrument and period per chart: **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Search current spot instruments, pan/zoom, load older history, and return to live data. Connection failures and provisional candles remain visible.
@@ -30,6 +32,7 @@ The larger Windows ZIP includes its pinned Fixed Version WebView2 runtime with E
 - Configurable grids with empty slots, draggable tabs/charts, resizable tracks, and chart maximization. Rename or duplicate a tab; **middle-click a tab** to close it and all its charts without confirmation. Each chart’s enlarged **×** button also closes it without confirmation. The final tab and final chart in each tab stay protected.
 - Theme and display timezone settings, volume, candlestick/line rendering, linear/log price scales, and saved viewports. Set the global right-side chart gap in **bars or pixels**, defaulting to **10 bars**.
 - Automatic SQLite workspace saving and restoration, JSON import/export, recovery snapshots and a final-save handshake on window close or terminal **Ctrl+C**. Hidden tabs retain configuration without keeping all their charts rendered or subscribed.
+- Optional **Store candle data locally** setting, off by default. Reuse genuine downloaded candles across restarts, choose a storage folder and inspect its size. Storage preferences stay on this machine and are excluded from workspace JSON; see [local candle storage](APP_README.md#local-candle-storage).
 
 This is a read-only charting application. It does not place trades or connect to exchange accounts. Weekly candles start Monday at 00:00 UTC. Coinbase weekly history is aggregated from actual daily candles; incomplete coverage is marked provisional.
 

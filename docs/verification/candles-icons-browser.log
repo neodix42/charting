@@ -1,0 +1,68 @@
+Using Node v24.19.0 and npm 11.17.0
+
+> cryptodesk-frontend@1.0.0 test:e2e
+> playwright test
+
+[WebServer] (node:214640) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:214801) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:214896) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 49 tests using 1 worker
+
+(node:214966) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/candle-storage.spec.ts:6:1 › local candle storage defaults off, applies a selected folder explicitly, refreshes size and restores outside workspace JSON (1.8s)
+  ✓   2 e2e/candle-storage.spec.ts:18:1 › storage errors stay visible and a failed apply preserves the applied configuration (1.2s)
+  ✓   3 e2e/candle-storage.spec.ts:26:1 › size polling runs only for enabled visible settings and never overwrites pending folder edits (1.3s)
+  ✓   4 e2e/candle-storage.spec.ts:32:1 › a delayed size response cannot replace a newer applied folder or a reopened settings session (1.4s)
+  ✓   5 e2e/candle-storage.spec.ts:38:1 › an applied storage startup error can retry the same configuration without editing the folder (1.2s)
+  ✓   6 e2e/chart-close.spec.ts:14:1 › chart X has a larger hit target and removes one chart immediately with persistence and lease cleanup (2.6s)
+  ✓   7 e2e/chart-close.spec.ts:30:1 › closing the maximized chart immediately restores its remaining siblings and protects the final chart (2.7s)
+  ✓   8 e2e/chart-close.spec.ts:45:1 › rapid chart X clicks stay immediate during a pending save and retain the final chart (2.6s)
+  ✓   9 e2e/indicator-width.spec.ts:17:1 › SMA and EMA widths create, edit, cancel and reload without changing feeds or a resized MACD pane (4.1s)
+  ✓  10 e2e/indicator-width.spec.ts:31:1 › shared SMA and EMA width selections persist independently on every actual chart (3.4s)
+  ✓  11 e2e/indicator-width.spec.ts:38:1 › restored legacy averages use width 2 without rewriting omitted widths or exposing controls on other indicators (1.1s)
+  ✓  12 e2e/indicators.spec.ts:5:1 › horizontal timeframe buttons include weekly and restore the saved selection (2.0s)
+  ✓  13 e2e/indicators.spec.ts:17:1 › all four indicators configure, render, edit, remove and persist independently (3.6s)
+  ✓  14 e2e/indicators.spec.ts:33:1 › indicator controls stay in the header row in a three by three grid (1.7s)
+  ✓  15 e2e/indicators.spec.ts:39:1 › long indicator periods load earlier history in bounded pages without a new feed lease (853ms)
+  ✓  16 e2e/indicators.spec.ts:50:1 › insufficient indicator history explains the required bars and can retry (772ms)
+  ✓  17 e2e/indicators.spec.ts:55:1 › a delayed indicator history response cannot enter a different timeframe (825ms)
+  ✓  18 e2e/panes-status.spec.ts:31:1 › healthy public-data details stay in the footer while the crosshair is over future cloud space (728ms)
+  ✓  19 e2e/panes-status.spec.ts:54:1 › loading and failed feeds keep their central connection and retry messages (552ms)
+  ✓  20 e2e/panes-status.spec.ts:67:1 › a dragged MACD height survives edits, tab switches, viewport resize and restart without new feed leases (4.4s)
+  ✓  21 e2e/panes-status.spec.ts:93:1 › multiple MACD panes retain their own sizes when an earlier pane is removed (3.6s)
+  ✓  22 e2e/production.spec.ts:2:1 › production browser preview visibly rejects missing Wails bridge without fixtures (352ms)
+  ✓  23 e2e/right-gap.spec.ts:35:1 › fresh and legacy workspaces display a ten-bar gap without expanding their layouts (1.2s)
+  ✓  24 e2e/right-gap.spec.ts:49:1 › a gap change repaints every active chart and maximized sibling and persists for hidden tabs (4.6s)
+  ✓  25 e2e/right-gap.spec.ts:83:1 › pixel gaps stay fixed through zoom, resize, future Ichimoku spans and a new live candle (2.8s)
+  ✓  26 e2e/right-gap.spec.ts:109:1 › invalid and unapplied gap drafts preserve the saved rule and zero is accepted (2.5s)
+  ✓  27 e2e/right-gap.spec.ts:123:1 › Apply refreshes a full older window and a late older page cannot evict the latest candle (1.5s)
+  ✓  28 e2e/tab-controls.spec.ts:44:74 › chart controls and tab actions share the top logo row at 1600px (1.6s)
+  ✓  29 e2e/tab-controls.spec.ts:44:74 › chart controls and tab actions share the top logo row at 1100px (612ms)
+  ✓  30 e2e/tab-controls.spec.ts:50:1 › header tab actions preserve rename, grid, duplication and close behavior (2.6s)
+  ✓  31 e2e/tab-controls.spec.ts:65:1 › top-center tab controls display mixed periods and apply weekly to every current chart (2.8s)
+  ✓  32 e2e/tab-controls.spec.ts:76:1 › one tab indicator dialog applies custom settings independently to visible and maximized sibling charts (4.1s)
+  ✓  33 e2e/tab-controls.spec.ts:86:1 › tab period selection tracks per-chart edits and affects hidden maximized siblings (1.9s)
+  ✓  34 e2e/tab-controls.spec.ts:92:1 › a chart at indicator capacity disables the tab dropdown without partially applying settings (2.8s)
+  ✓  35 e2e/tab-middle-click.spec.ts:20:1 › middle-click closes an inactive whole tab without selecting it or opening a menu or confirmation (1.7s)
+  ✓  36 e2e/tab-middle-click.spec.ts:36:1 › middle-clicking the active tab removes all its charts and releases their leases (2.4s)
+  ✓  37 e2e/tab-middle-click.spec.ts:48:1 › middle-clicking an inactive tab preserves the active maximized chart and its siblings (2.4s)
+  ✓  38 e2e/tab-middle-click.spec.ts:62:1 › middle-clicking an inactive tab preserves the focused chart search input (597ms)
+  ✓  39 e2e/tab-middle-click.spec.ts:71:1 › left and right mouse buttons do not close tabs and the final tab cannot be middle-closed (841ms)
+  ✓  40 e2e/tab-middle-click.spec.ts:82:1 › header Close and Ctrl+W continue to require confirmation (1.7s)
+  ✓  41 e2e/tab-middle-click.spec.ts:93:1 › failed save before middle-click closure preserves its target and all chart configurations (761ms)
+  ✓  42 e2e/tab-middle-click.spec.ts:104:1 › repeated middle-clicks waiting on one save close only the captured target (1.5s)
+  ✓  43 e2e/workspace.spec.ts:5:1 › first launch is exactly one chart; larger grid creates placeholders only (685ms)
+  ✓  44 e2e/workspace.spec.ts:6:1 › chart and tab caps, one-chart new tab, disable final removal (3.4s)
+  ✓  45 e2e/workspace.spec.ts:7:1 › small saved workspace restores exact counts, selections and independent duplication (2.1s)
+  ✓  46 e2e/workspace.spec.ts:9:1 › restart retains actual smaller workspace and layout rather than expanding capacity (2.0s)
+{"scenario":"explicit fixtures 180 configurations, 9 active charts, 200 switches","totalMs":36360,"switchMedianMs":169,"switchP95Ms":235,"before":[{"name":"ScriptDuration","value":0},{"name":"TaskDuration","value":0.022762},{"name":"JSHeapUsedSize","value":13053308}],"after":{"metrics":[{"name":"ScriptDuration","value":15.458445},{"name":"TaskDuration","value":34.123568},{"name":"JSHeapUsedSize","value":16036196}],"leases":9}}
+  ✓  47 e2e/workspace.spec.ts:10:1 › full capacity workspace mounts at most nine charts; 200 switches release resources (36.5s)
+  ✓  48 e2e/workspace.spec.ts:11:1 › maximize restores grid; keyboard shortcuts do not fire in search input (1.0s)
+  ✓  49 e2e/workspace.spec.ts:12:1 › controlled close flushes the final selection; a save failure stays open until explicit retry (781ms)
+
+  49 passed (2.2m)

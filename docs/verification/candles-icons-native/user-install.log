@@ -1,0 +1,7 @@
+Install app to /home/neodix/.local/share/cryptodesk-app
+Launcher to /home/neodix/.local/share/applications/cryptodesk.desktop
+Icons to /home/neodix/.local/share/icons/hicolor
+Workspace configuration is preserved.
+Desktop shortcut to /home/neodix/Desktop/cryptodesk.desktop
+gtk-update-icon-cache: Cache file created successfully.
+Installed. Launch CryptoDesk from your application menu.

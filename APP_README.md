@@ -12,14 +12,18 @@ Run the root `./cryptodesk` produced by `./build.sh`, or extract `cryptodesk-X.Y
 
 For a machine without GTK/WebKit, choose **`cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz`**, extract the whole directory and run its **`./cryptodesk` launcher**. It includes GTK/WebKit, their helper processes and runtime dependencies, licenses and matching source archives. Keep its `runtime` directory beside the launcher. No installation or FUSE is needed. The host still supplies compatible glibc, graphics drivers, desktop session and fonts; CI builds use Ubuntu 24.04, while local packages require the glibc version of their build host or newer. Workspace storage remains in the normal user profile unless `--data-dir` is supplied. [Portable Linux details](docs/LINUX_PORTABLE.md).
 
-Optional user-local installation for the **small native archive** (the bundled runtime archive runs directly from its extracted directory):
+Optional user-local installation for **either Linux archive**:
 
 ```bash
 ./install-user.sh --dry-run
 ./install-user.sh
 ```
 
-This writes the binary under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local/share/cryptodesk-app`), a launcher and the CryptoDesk diamond logo as its SVG icon. The matching `cryptodesk` desktop identity lets Ubuntu Wayland use this logo in the application menu and taskbar. The executable also embeds the logo for native window icons; Windows builds carry the same logo in their executable resources. Run the installer again after rebuilding to update the installed app and icon, then restart CryptoDesk. It does not start the application or replace workspace data. Source-checkout equivalent: `scripts/install-user.sh --dry-run` after building.
+This writes the app under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local/share/cryptodesk-app`), registers its application launcher and installs the same diamond logo shown in the app's top-left corner. The launcher uses an absolute PNG icon path, with SVG and eight PNG sizes also registered in the user icon theme. The native window embeds a smaller copy that GTK accepts on X11; the matching `cryptodesk` desktop identity provides Wayland taskbar association. Windows builds carry the same logo in their executable resources.
+
+If your configured desktop folder exists, installation also creates an executable `cryptodesk.desktop` shortcut there, preserving any differing existing shortcut. It sets that file's trusted metadata when supported; your desktop may still require **Allow Launching**. Per-user icon/application metadata is refreshed when the desktop tools are available. No system settings or workspace data are changed. The bundled-runtime installer copies the complete runtime, including licenses and sources; the original extraction folder can then be removed.
+
+Run the installer again after rebuilding or downloading an updated archive, then close and reopen CryptoDesk. If an existing pinned taskbar entry retains an old icon, unpin it and pin the newly installed **CryptoDesk** application entry. Installation does not start the app. Source-checkout equivalent: `scripts/install-user.sh --dry-run` after building.
 
 ## Downloads and release versions
 
@@ -74,7 +78,7 @@ Live smoke makes public requests and reports exact outcomes. Native smoke uses a
 
 Use Add Tab or Ctrl+T to create a single-chart tab; Add Chart or Ctrl+Shift+N adds one chart. Ctrl+Tab / Ctrl+Shift+Tab changes tab; Ctrl+W closes the active tab with confirmation. **Middle-click any tab** to close that tab and all its charts without a confirmation dialog; an inactive target stays inactive. The final tab cannot be closed. Each chart has a larger **×** button that removes the chart immediately without confirmation; the final chart in a tab stays protected. Shortcuts stay inactive in editors/selectors. Tabs scroll, and the All tabs menu reaches all 20. Rename, duplicate or drag tabs; drag chart headers to reorder. Row/column splitters resize tracks. Maximize chart temporarily and restore it without changing the saved grid.
 
-Each chart has its own exchange, searchable native instrument, horizontal period buttons (`1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`), volume, candlestick/line style and linear/log scale. The buttons stay in the chart header row; small chart headers scroll horizontally. Drag/pan/zoom the chart; scrolling left loads older history. Return to live follows current bars. Manual price scaling and time viewports are saved. Settings provides theme, IANA/system timezone, JSON import/export/reset and diagnostics. Candle boundaries remain UTC regardless of display timezone.
+Each chart has its own exchange, searchable native instrument, horizontal period buttons (`1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`), volume, candlestick/line style and linear/log scale. The buttons stay in the chart header row; small chart headers scroll horizontally. Drag/pan/zoom the chart; scrolling left loads older history. Return to live follows current bars. Manual price scaling and time viewports are saved. Settings provides theme, IANA/system timezone, optional local candle storage, JSON import/export/reset and diagnostics. Candle boundaries remain UTC regardless of display timezone.
 
 **Settings → Chart right gap** sets the space between the latest candle and the chart’s right edge for every tab. Choose **Bars** (default **10**) or **Pixels**, enter a whole number, and press **Apply**. All current charts update immediately, including maximized siblings; inactive tabs use the same setting when opened. Changing the gap returns all charts to live while retaining their zoom and price settings. The preference survives restart and JSON export/import. Accepted values are 0–500 bars or 0–5,000 CSS pixels; a gap that exceeds the available chart width is reduced to keep the latest candle visible. Ichimoku’s projected cloud does not move the gap’s anchor away from the latest price candle.
 
@@ -105,6 +109,18 @@ Live status and public-data details stay in the chart’s bottom-left footer, in
 
 Provider failures remain visible in their chart. Retry or reselect without losing configuration. Prices are never synthesized as a fallback. Coinbase live intervals derive from deduplicated trades, rather than relabelling its five-minute candle channel. An initial/reconnected partial bucket has provisional volume: the last REST snapshot or explicitly observed-only trades, never REST plus all buffered trade volume. Public Coinbase aliased USDC products are labelled/rejected; choose the actual USD product explicitly.
 
+## Local candle storage
+
+**Store candle data locally** in Settings is **off by default**. Check it, edit the **Storage folder** path or use **Choose folder…**, then click **Apply**. Checkbox and folder edits take effect together only when Apply succeeds. Clearing the path and applying selects the default folder. Failed configuration changes remain visible and preserve the previously applied setting; Apply can retry the same configuration after a storage error.
+
+The default folder is `<profile>/candles`: normally `~/.local/share/cryptodesk/candles` on Linux, or `$XDG_DATA_HOME/cryptodesk/candles` when that variable is set. `--data-dir` selects the profile and therefore its default candle folder. The Windows portable profile uses `data/candles` beside the executable. The optional database is `candles.sqlite3` inside the selected folder. The enabled flag and chosen path are saved separately in `<profile>/candle-storage.json`; workspace JSON import, export and Reset Workspace do not change them or include cache contents.
+
+Settings shows the applied folder and its total size. **Refresh** measures it again; while storage is enabled and its settings are visible, size updates approximately every five seconds. The total includes SQLite sidecars and other regular files in the selected folder; symlinks are not followed. Folder edits do not replace the applied path or its size until Apply succeeds.
+
+Enabling storage saves genuine downloaded candles currently held in memory, then stores accepted live updates and history pages by exchange, instrument and period. On restart, saved candles can appear immediately with a **cached** status while real public data reconnects. Complete, contiguous pages of closed historical candles can be reused from disk. Current/open candles, missing coverage and gaps still require provider data; unavailable feeds remain visibly unavailable rather than being presented as live cached prices.
+
+Disabling storage stops disk caching and leaves existing files intact. Changing folders opens the selected cache for subsequent storage without moving or deleting the previous folder; select the old folder again to reuse its data. Disk storage can grow with downloaded history and has no automatic eviction or deletion. Memory caches and active chart windows remain bounded.
+
 ## Save, export and recover
 
 Workspace data lives at `$XDG_DATA_HOME/cryptodesk/workspace.sqlite`, normally `~/.local/share/cryptodesk/workspace.sqlite`, with user-only permissions. A local lock prevents another process from editing the same store. For an isolated profile use `./cryptodesk --data-dir /absolute/test-directory`.
@@ -117,6 +133,6 @@ For a portable backup, export JSON. To copy the database manually, close the app
 
 ## Boundaries and attribution
 
-Caches, history pages, queues and rendered instances are bounded. Active series retain at most 10,000 bars in a moving window: older-history loads evict newer bars while preserving the selected historical range, and Return to live reloads the latest window. Full manual desktop, high-DPI and target-release coverage is recorded separately in STATUS.md; automated browser tests do not establish those checks. Exact window position on Wayland is best effort; normal size and maximized state are saved.
+Memory caches, history request sizes, queues and rendered instances are bounded. The optional disk candle cache is persistent and can grow; it has no automatic deletion. Active series retain at most 10,000 bars in a moving window: older-history loads evict newer bars while preserving the selected historical range, and Return to live reloads the latest window. Full manual desktop, high-DPI and target-release coverage is recorded separately in STATUS.md; automated browser tests do not establish those checks. Exact window position on Wayland is best effort; normal size and maximized state are saved.
 
 Charts by [TradingView](https://www.tradingview.com/), using Apache-2.0 Lightweight Charts. Its creator attribution remains visible. [Third-party notices](docs/THIRD_PARTY_NOTICES.md) and copied licenses ship with the archive. There is no trade execution, wallet, credential storage, hosted TradingView client, paid feature gate, telemetry or automatic updater.

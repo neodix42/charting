@@ -7,9 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"cryptodesk/internal/candlestorage"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/storage"
@@ -23,6 +25,7 @@ type App struct {
 	cancel         context.CancelFunc
 	store          *storage.Store
 	market         *market.Service
+	candles        *candlestorage.Manager
 	mu             sync.Mutex
 	revision       int64
 	closeToken     string
@@ -40,12 +43,46 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	if a.window.Width < 400 {
 		a.window = domain.Window{Width: 1600, Height: 1000}
 	}
-	a.market = market.New(market.Options{Emit: func(e market.Event) {
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "market:update", e)
+	a.candles = candlestorage.New(store.Directory(), func(message string) {
+		a.mu.Lock()
+		ctx := a.ctx
+		a.mu.Unlock()
+		if ctx != nil && ctx.Err() == nil {
+			runtime.EventsEmit(ctx, "candle-storage-error", message)
+		}
+	})
+	a.market = market.New(market.Options{Cache: a.candles, Emit: func(e market.Event) {
+		a.mu.Lock()
+		ctx := a.ctx
+		a.mu.Unlock()
+		if ctx != nil {
+			runtime.EventsEmit(ctx, "market:update", e)
 		}
 	}})
 	return a
+}
+
+func (a *App) GetCandleStorage() (candlestorage.Info, error) { return a.candles.Info() }
+func (a *App) ConfigureCandleStorage(enabled bool, directory string) (candlestorage.Info, error) {
+	if strings.TrimSpace(directory) == "" {
+		directory = filepath.Join(a.store.Directory(), "candles")
+	}
+	info, err := a.candles.Configure(enabled, directory)
+	if err == nil && enabled {
+		a.market.StoreCurrentCandles()
+	}
+	return info, err
+}
+func (a *App) ChooseCandleStorageDirectory() (string, error) {
+	info, err := a.candles.Info()
+	if err != nil {
+		return "", err
+	}
+	initial := info.Directory
+	if st, e := os.Stat(initial); e != nil || !st.IsDir() {
+		initial = a.store.Directory()
+	}
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose candle data folder", DefaultDirectory: initial, CanCreateDirectories: true})
 }
 func (a *App) startup(ctx context.Context) {
 	a.mu.Lock()
@@ -386,5 +423,10 @@ func (a *App) shutdown(ctx context.Context) {
 		a.cancel()
 	}
 	a.market.Close()
+	if a.candles != nil {
+		if err := a.candles.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "Close candle storage:", err)
+		}
+	}
 	_ = a.store.Close()
 }

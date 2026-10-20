@@ -1,0 +1,114 @@
+.............................................Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/tmplds55kb7/.tools/node-test
+.....Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/cryptodesk install tools tgokbq6x/.tools/node-test
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+....Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+................................................Extracting all pinned WebView2 1.2.3.4 runtime files
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmp9wuyu72g/first
+...Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpghvc5lwn/first
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Extracting all pinned WebView2 1.2.3.4 runtime files
+.Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpy_dez8ax/first
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpy_dez8ax/second
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/cryptodesk runtime path tdqm3uc7/portable package/WebView2
+......Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+...................
+----------------------------------------------------------------------
+Ran 143 tests in 4.801s
+
+OK
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+English locales: kept 4, removed 1 packs (0.00 MiB unpacked)
+
+Portable Windows ZIP: /tmp/tmpm3c4zjtc/cryptodesk-2.3.4-windows-amd64.zip
+Size: 0.0 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.
+English locales: kept 4, removed 2 packs (0.00 MiB unpacked)
+Using Node v24.19.0 and npm 11.17.0
+ok  	cryptodesk/internal/candlecache	(cached)
+ok  	cryptodesk/internal/candlestorage	(cached)
+ok  	cryptodesk/internal/domain	(cached)
+ok  	cryptodesk/internal/exchange	(cached)
+ok  	cryptodesk/internal/market	(cached)
+ok  	cryptodesk/internal/storage	2.811s
+?   	cryptodesk/cmd/smoke	[no test files]
+ok  	cryptodesk	0.035s
+
+added 137 packages, and audited 138 packages in 988ms
+
+39 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> cryptodesk-frontend@1.0.0 typecheck
+> tsc --noEmit
+
+
+> cryptodesk-frontend@1.0.0 lint
+> eslint src vite.config.ts
+
+
+> cryptodesk-frontend@1.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/neodix/gitProjects/charting/frontend
+
+
+ Test Files  9 passed (9)
+      Tests  74 passed (74)
+   Start at  19:53:09
+   Duration  279ms (transform 61%, import 20%, tests 14%, worker 5%)
+
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 40 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/cryptodesk-D_A9QZBY.svg    0.36 kB │ gzip:   0.21 kB
+dist/index.html                        0.82 kB │ gzip:   0.47 kB
+dist/assets/index-B33x4j4o.css        18.22 kB │ gzip:   4.49 kB
+dist/assets/index-D8GnjVjq.js        459.92 kB │ gzip: 144.84 kB
+
+✓ built in 173ms
+Deterministic tests complete. Browser E2E: cd frontend && npm run test:e2e
+Live provider smoke is separate: go run ./cmd/smoke
+Desktop smoke steps: docs/DESKTOP_SMOKE.md

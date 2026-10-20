@@ -34,6 +34,9 @@ func writeDesktopSmokeReport(report string) error {
 	return os.WriteFile(destination, []byte(report), 0600)
 }
 func (a *App) DesktopSmokeClose() { runtime.Quit(a.ctx) }
+func (a *App) DesktopSmokeCandleRows(key domain.FeedKey, from, to int64) ([]domain.Candle, error) {
+	return a.candles.Range(key, from, to, 1000)
+}
 func (a *App) DesktopSmokeSignalExpectation() map[string]string {
 	return map[string]string{"workspaceId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_WORKSPACE"), "chartId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_CHART"), "timeframe": os.Getenv("CRYPTODESK_SMOKE_EXPECT_TIMEFRAME")}
 }
@@ -254,6 +257,24 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
    check(initial.workspace.chartRightGap?.unit==='bars'&&initial.workspace.chartRightGap.value===10,'first launch defaults to a ten-bar right gap',initial.workspace.chartRightGap);
+   await click('[aria-label="Open settings"]');
+   await wait(()=>q('.candle-storage-toggle input:not(:disabled)'),'native candle storage settings');
+   const storageDefault=await api.GetCandleStorage();
+   check(!q('.candle-storage-toggle input').checked&&!storageDefault.enabled&&storageDefault.directory.endsWith('/candles'),'native candle storage defaults off in the isolated profile',storageDefault);
+   q('.candle-storage-toggle input').click();await sleep(100);
+   await input('[aria-label="Candle storage folder"]',storageDefault.directory+'-selected');
+   await click('[aria-label="Apply candle storage settings"]');
+   await wait(()=>q('[aria-label="Applied candle storage settings"]').textContent==='Applied: Enabled','native cache preference acknowledged');
+   const storageApplied=await api.GetCandleStorage();
+   check(storageApplied.enabled&&storageApplied.directory===storageDefault.directory+'-selected'&&storageApplied.sizeBytes>0&&!storageApplied.error,'native settings open a real candle database and show its measured size',storageApplied);
+   const cacheKey={exchange:initial.workspace.tabs[0].charts[0].exchange,market:'spot',instrument:initial.workspace.tabs[0].charts[0].instrument,timeframe:'1h'},cacheTo=Math.floor(Date.now()/3600000)*3600-7200,cacheFrom=cacheTo-14400;
+   const downloaded=await api.GetHistory('desktop-cache-real-download',cacheKey,cacheFrom,cacheTo,4);
+   const storedBars=await api.DesktopSmokeCandleRows(cacheKey,cacheFrom,cacheTo-1);
+   check(downloaded.bars.length>0&&JSON.stringify(storedBars)===JSON.stringify(downloaded.bars),'genuine public history is persisted with exact OHLCV through the native bridge',{key:cacheKey,downloaded:downloaded.bars,stored:storedBars});
+   report.candleStorage={...storageApplied,key:cacheKey,from:cacheFrom,to:cacheTo,downloadedBars:downloaded.bars.length};
+   await click('[aria-label="Refresh candle storage size"]');
+   check(q('[aria-label="Candle storage folder size"]').textContent!=='0 B','native Settings refreshes actual candle folder size',q('[aria-label="Candle storage folder size"]').textContent);
+   await click('[aria-label="Close settings"]');
    await middleTab(q('[role="tab"]'));
    check(qa('[role="tab"]').length===1&&!q('[role="menu"]')&&!q('[role="dialog"]'),'middle-click protects the final tab without opening a menu or dialog');
    check(q('[aria-label="Remove chart"]').disabled,'chart X protects the final chart');
@@ -366,6 +387,8 @@ const desktopSmokeJavaScript = `async function(phase) {
    const closedMiddle=await api.LoadWorkspace();
    check(!q('[role="menu"]')&&!q('[role="dialog"]')&&closedMiddle.workspace.tabs.length===2&&!closedMiddle.workspace.tabs.some(tab=>tab.id===duplicateID)&&closedMiddle.workspace.activeTabId===pixelGapSaved.workspace.activeTabId&&closedMiddle.workspace.tabs.map(tab=>tab.charts.length).join(',')==='3,1'&&JSON.stringify(qa('[data-testid="chart-cell"]').map(cell=>cell.dataset.chartId))===JSON.stringify(mountedBeforeClose),'inactive middle-click removes its whole tab without confirmation, preserves active charts and persists to SQLite',closedMiddle.workspace.tabs.map(tab=>({id:tab.id,charts:tab.charts.length})));
   } else if(phase==='restore') {
+   const storageRestored=await api.GetCandleStorage(),cacheKey={exchange:initial.workspace.tabs[0].charts[0].exchange,market:'spot',instrument:initial.workspace.tabs[0].charts[0].instrument,timeframe:'1h'},restoredBars=await api.DesktopSmokeCandleRows(cacheKey,0,0);
+   check(storageRestored.enabled&&storageRestored.directory.endsWith('/candles-selected')&&storageRestored.sizeBytes>0&&restoredBars.length>=4,'native restart restores machine-local settings and the actual downloaded candle data',{storage:storageRestored,bars:restoredBars.length});
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);
    check(qa('[data-testid="chart-cell"]').length===3&&qa('[data-testid="chart-placeholder"]').length===6,'only selected tab is mounted after restart',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});

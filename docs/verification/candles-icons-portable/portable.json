@@ -1,0 +1,115 @@
+{
+  "passed": true,
+  "archive": "cryptodesk-0.1.0-linux-amd64-portable.tar.gz",
+  "launches": [
+    {
+      "phase": "fresh",
+      "exitCode": 0,
+      "signal": "real controlling-terminal Ctrl+C",
+      "shutdownSeconds": 0.09350281099614222,
+      "workspaceRevision": 1,
+      "sqliteIntegrity": "ok",
+      "workspaceLockReleased": true,
+      "naturalProcessExitVerified": true,
+      "remainingLiveProcesses": [],
+      "mappings": [
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/bin/cryptodesk",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        },
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/bin/cryptodesk",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        },
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        },
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "restore",
+      "exitCode": 0,
+      "signal": "real controlling-terminal Ctrl+C",
+      "shutdownSeconds": 0.1407479699992109,
+      "workspaceRevision": 2,
+      "sqliteIntegrity": "ok",
+      "workspaceLockReleased": true,
+      "naturalProcessExitVerified": true,
+      "remainingLiveProcesses": [],
+      "mappings": [
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/bin/cryptodesk",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        },
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/bin/cryptodesk",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        },
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        },
+        {
+          "executable": "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess",
+          "libraries": [
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0",
+            "/tmp/cryptodesk portable check zvy_k2z2/cryptodesk-0.1.0-linux-amd64-portable/runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "sha256": "fde0285ae92f42130e97835490d57710a7927c72353bd5a9809f28f2eabb389a",
+  "manifest": {
+    "version": "0.1.0",
+    "target": "linux/amd64",
+    "packageVariant": "portable"
+  },
+  "maskedHostPaths": [
+    "/usr/lib/x86_64-linux-gnu/libgtk-3.so.0.2420.32",
+    "/usr/lib/x86_64-linux-gnu/libgdk-3.so.0.2420.32",
+    "/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0.21.10",
+    "/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so.0.10.14",
+    "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1",
+    "/usr/lib/x86_64-linux-gnu/gio/modules",
+    "/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0",
+    "/usr/lib/x86_64-linux-gnu/gstreamer-1.0",
+    "/usr/share/glib-2.0/schemas",
+    "/usr/libexec/glycin-loaders"
+  ],
+  "finishedAtUTC": "2026-10-20T15:56:18.058653+00:00"
+}

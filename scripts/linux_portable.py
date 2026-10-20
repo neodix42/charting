@@ -199,8 +199,9 @@ def create(root):
     with tempfile.TemporaryDirectory(dir=workspace) as temporary:
         directory = Path(temporary) / name
         directory.mkdir()
-        for filename in ("APP_README.md", "LICENSE", "cryptodesk.desktop", "cryptodesk.svg"):
+        for filename in ("APP_README.md", "LICENSE", "cryptodesk.desktop", "cryptodesk.svg", "cryptodesk.png", "install-user.sh"):
             shutil.copy2(standard / filename, directory / filename)
+        shutil.copytree(standard / "icons", directory / "icons")
         shutil.copytree(standard / "docs", directory / "docs")
         shutil.copy2(root / "build/linux/portable-launcher.sh", directory / "cryptodesk")
         (directory / "cryptodesk").chmod(0o755)

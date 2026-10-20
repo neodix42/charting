@@ -1,0 +1,56 @@
+{
+  "passed": true,
+  "binarySHA256": "dcab282d547927973c1f7f181aede0a9bcef1dcd94d891ca6db6a973d35b4669",
+  "launches": [
+    {
+      "backend": "x11",
+      "wmClass": "WM_CLASS(STRING) = \"cryptodesk\", \"Cryptodesk\"\n_NET_WM_PID(CARDINAL) = 238085\n_NET_WM_NAME(UTF8_STRING) = \"cryptodesk\"",
+      "nativeIconDimensions": [
+        128,
+        128
+      ],
+      "exactHeaderLogoPixels": true,
+      "argbSHA256": "d92c138445199f717081116410abb2a39670c7dbca9551078306bc71b70181fe",
+      "exitCode": 0,
+      "naturalProcessExit": true,
+      "remainingProcesses": []
+    },
+    {
+      "backend": "wayland",
+      "appID": "cryptodesk",
+      "matchesInstalledDesktopID": true,
+      "protocolEvidence": [
+        "[2952328.927] {Default Queue}  -> xdg_toplevel#43.set_app_id(\"cryptodesk\")"
+      ],
+      "exitCode": 0,
+      "naturalProcessExit": true,
+      "remainingProcesses": []
+    }
+  ],
+  "installer": {
+    "desktopID": "cryptodesk.desktop",
+    "shortcutExecutable": true,
+    "absolutePNG": true,
+    "rasterSizes": [
+      16,
+      24,
+      32,
+      48,
+      64,
+      128,
+      256,
+      512
+    ],
+    "trust": "Exact per-file GIO command captured; host metadata was not changed"
+  },
+  "themeLookup": "loader write=1 error=none\nloader close=1 error=none pixbuf=0x5bdfb1682090\nfile pixbuf=0x5bdfb16b6e50 error=none\ntheme icon=/tmp/cryptodesk installed icon 56jhnoq0/data/icons/hicolor/48x48/apps/cryptodesk.png",
+  "desktopLaunch": {
+    "gioLaunchActualShortcut": true,
+    "nativeIconDimensions": [
+      128,
+      128
+    ],
+    "closedWithSIGINT": true,
+    "isolatedUserDirectories": true
+  }
+}
