@@ -1,0 +1,5 @@
+Install binary to /home/neodix/.local/share/cryptodesk-app
+Launcher to /home/neodix/.local/share/applications/cryptodesk.desktop
+Icon to /home/neodix/.local/share/icons/hicolor/scalable/apps/cryptodesk.svg
+Workspace configuration is preserved.
+Installed. Launch CryptoDesk from your application menu.

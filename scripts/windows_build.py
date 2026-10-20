@@ -115,6 +115,7 @@ def language_compiler(directory, go_flag):
 
 def run(root, cab=None):
     root = root.resolve()
+    subprocess.run([sys.executable, str(root / "scripts/app_icons.py"), "--check"], check=True)
     if not (shutil.which("7z") or shutil.which("7zz")):
         raise RuntimeError("7z is required to extract Microsoft's runtime CAB (Ubuntu package: 7zip). No packages were installed.")
     pin = json.loads((root / "scripts/webview2-runtime.json").read_text())

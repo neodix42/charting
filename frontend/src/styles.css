@@ -8,3 +8,25 @@
 .tab-chart-controls{display:flex;align-items:center;justify-content:center;gap:12px;flex-shrink:0;padding:9px 20px 0}.tab-chart-controls .timeframe-buttons{gap:2px;padding:3px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}.tab-chart-controls .timeframe-buttons button{min-width:36px;border-color:transparent;background:transparent}.tab-chart-controls .timeframe-buttons button[aria-pressed=true]{color:var(--accent);background:#e7ad5111;border-color:#e7ad5144;font-weight:650}.tab-chart-controls select{min-width:132px}
 
 .chart-gap-setting{flex-wrap:wrap}.chart-gap-fields{max-width:100%}.chart-gap-controls{display:flex;align-items:center;gap:6px}.chart-gap-controls input{width:85px}.chart-gap-fields>small{display:block;margin-top:6px}.chart-gap-fields .danger{color:var(--danger)}
+
+.app-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);height:62px;min-height:62px;gap:12px;padding:0 16px}
+.app-header .brand{justify-self:start;font-size:20px;gap:8px;white-space:nowrap}
+.app-header .brand-icon{width:29px;height:29px;object-fit:contain;flex-shrink:0}
+.app-header .brand-tag{font-size:7px;margin-left:3px;padding:4px}
+.app-header .tab-chart-controls{justify-self:center;gap:8px;padding:0;min-width:0}
+.app-header .tab-chart-controls .timeframe-buttons{padding:2px;gap:1px}
+.app-header .tab-chart-controls .timeframe-buttons button{min-width:29px;padding:4px 5px;font-size:11px}
+.app-header .tab-chart-controls select{min-width:110px;width:110px;font-size:11px}
+.header-actions{display:flex;align-items:center;justify-self:end;gap:8px;white-space:nowrap}
+.workspace-actions{display:flex;align-items:center;gap:5px}
+.workspace-actions button,.workspace-actions select{font-size:11px;padding:5px 6px;min-height:30px}
+.workspace-actions .layout-select{gap:5px;font-size:11px}
+.workspace-actions select{padding-right:16px;min-width:58px}
+.workspace-actions .capacity{font-size:10px}
+.header-action .action-icon{display:none}
+.header-actions .save-indicator{font-size:10px;padding:5px 2px}
+.header-actions .settings-button{font-size:11px;padding:5px 7px}
+.workspace-content{padding-top:14px}
+.brand-mark{padding:0;background:none;object-fit:contain}
+@media(max-width:1580px){.app-header .brand-tag{display:none}.workspace-actions .action-label{display:none}.header-action .action-icon{display:inline}.workspace-actions .header-action{min-width:29px;font-size:15px;padding:3px 6px}.header-actions .settings-button span{display:none}.header-actions .settings-button{min-width:30px;font-size:15px;padding:3px 6px}}
+@media(max-width:1250px){.app-header{gap:8px;padding:0 12px}.app-header .brand{font-size:18px;gap:6px}.app-header .brand-icon{width:25px;height:25px}.workspace-actions .chart-capacity{display:none}.header-actions{gap:6px}.workspace-actions{gap:4px}.app-header .tab-chart-controls{gap:6px}.app-header .tab-chart-controls .timeframe-buttons button{min-width:25px;padding:4px 3px}.app-header .tab-chart-controls select{min-width:110px;width:110px}.workspace-actions .layout-select{gap:4px}}

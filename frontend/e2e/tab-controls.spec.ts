@@ -10,11 +10,62 @@ async function seed(page:Page,workspace:Workspace=structuredClone(intermediate) 
 }
 const toolbar=(page:Page)=>page.getByRole('toolbar',{name:'Current tab chart controls',exact:true});
 
-test('centered tab controls display mixed periods and apply weekly to every current chart',async({page})=>{
+async function expectTopHeader(page:Page){
+ const header=page.locator('.app-header'),controls=toolbar(page);
+ await expect(header.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
+ await expect(header.getByRole('toolbar',{name:'Current tab chart controls',exact:true})).toBeVisible();
+ for(const name of ['Add chart','Rename tab','Duplicate tab','Close tab','Open settings'])await expect(header.getByRole('button',{name,exact:true})).toBeVisible();
+ await expect(header.getByRole('combobox',{name:'Grid layout',exact:true})).toBeVisible();
+ await expect(page.locator('.workspace-title')).toHaveCount(0);
+ await expect(page.getByText('Independent public spot charts',{exact:true})).toHaveCount(0);
+ const geometry=await header.evaluate(element=>{
+  const bounds=(node:Element)=>{const rect=node.getBoundingClientRect();return{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,centerY:(rect.top+rect.bottom)/2};};
+  const find=(selector:string)=>bounds(element.querySelector(selector)!);
+  return{header:bounds(element),brand:find('.brand'),controls:find('[data-testid="tab-chart-controls"]'),periods:find('[role="group"][aria-label="Period for current tab"]'),indicators:find('[aria-label="Indicators for current tab"]'),grid:find('[aria-label="Grid layout"]'),add:find('[aria-label="Add chart"]'),rename:find('[aria-label="Rename tab"]'),duplicate:find('[aria-label="Duplicate tab"]'),close:find('[aria-label="Close tab"]'),save:find('.save-indicator'),settings:find('[aria-label="Open settings"]'),tabs:bounds(document.querySelector('.tab-row')!),chartTop:document.querySelector('.workspace-content')!.getBoundingClientRect().top,documentWidth:document.documentElement.scrollWidth,windowWidth:window.innerWidth};
+ });
+ for(const rect of [geometry.brand,geometry.controls,geometry.periods,geometry.indicators,geometry.grid,geometry.add,geometry.rename,geometry.duplicate,geometry.close,geometry.save,geometry.settings]){
+  expect(rect.top).toBeGreaterThanOrEqual(geometry.header.top);
+  expect(rect.bottom).toBeLessThanOrEqual(geometry.header.bottom);
+  expect(Math.abs(rect.centerY-geometry.header.centerY)).toBeLessThanOrEqual(2);
+  expect(rect.left).toBeGreaterThanOrEqual(geometry.header.left);
+  expect(rect.right).toBeLessThanOrEqual(geometry.header.right);
+ }
+ const ordered=[geometry.brand,geometry.controls,geometry.grid,geometry.add,geometry.rename,geometry.duplicate,geometry.close,geometry.save,geometry.settings];
+ for(let index=1;index<ordered.length;index++)expect(ordered[index].left).toBeGreaterThanOrEqual(ordered[index-1].right);
+ expect(geometry.indicators.left).toBeGreaterThanOrEqual(geometry.periods.right);
+ expect(Math.abs((geometry.controls.left+geometry.controls.right)/2-geometry.windowWidth/2)).toBeLessThanOrEqual(2);
+ expect(geometry.header.bottom).toBeLessThanOrEqual(geometry.tabs.top);
+ expect(geometry.chartTop-geometry.tabs.bottom).toBeLessThanOrEqual(20);
+ expect(geometry.documentWidth).toBe(geometry.windowWidth);
+ const controlsGeometry=await controls.evaluate(element=>{const periods=element.querySelector('[role="group"]')!.getBoundingClientRect(),indicators=element.querySelector('select')!.getBoundingClientRect(),row=element.getBoundingClientRect();return{center:(periods.left+indicators.right)/2,rowCenter:(row.left+row.right)/2};});
+ expect(Math.abs(controlsGeometry.center-controlsGeometry.rowCenter)).toBeLessThanOrEqual(2);
+}
+
+for(const viewport of [{width:1600,height:1000},{width:1100,height:720}])test(`chart controls and tab actions share the top logo row at ${viewport.width}px`,async({page})=>{
+ await page.setViewportSize(viewport);await seed(page);await expectTopHeader(page);
+ await expect(page.getByRole('tab',{name:/Main/})).toBeVisible();
+ await page.screenshot({path:`test-results/top-header-${viewport.width}.png`});
+});
+
+test('header tab actions preserve rename, grid, duplication and close behavior',async({page})=>{
+ await seed(page);const header=page.locator('.app-header');
+ await header.getByRole('button',{name:'Rename tab',exact:true}).click();let dialog=page.getByRole('dialog',{name:'Rename tab',exact:true});
+ await dialog.getByRole('textbox',{name:'Tab name',exact:true}).fill('Header research');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
+ await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
+ await header.getByRole('combobox',{name:'Grid layout',exact:true}).selectOption('2x2');await expect(page.getByTestId('chart-placeholder')).toHaveCount(1);
+ await header.getByRole('button',{name:'Add chart',exact:true}).click();await expect(page.getByTestId('chart-cell')).toHaveCount(4);await expect(page.getByTestId('chart-placeholder')).toHaveCount(0);
+ await header.getByRole('button',{name:'Duplicate tab',exact:true}).click();await expect(page.getByRole('tab')).toHaveCount(3);await expect(page.getByTestId('chart-cell')).toHaveCount(4);
+ await header.getByRole('button',{name:'Close tab',exact:true}).click();dialog=page.getByRole('dialog',{name:/Close Header research/});await dialog.getByRole('button',{name:'Close tab',exact:true}).click();
+ await expect(page.getByRole('tab')).toHaveCount(2);await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
+ await expect(header.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
+ const saved=await savedWorkspace(page);expect(saved.tabs).toHaveLength(2);expect(saved.tabs[0].name).toBe('Header research');expect(saved.tabs[0].charts).toHaveLength(4);expect(saved.tabs[0].grid).toMatchObject({rows:2,columns:2});
+ await page.reload();await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();await expectTopHeader(page);
+});
+
+test('top-center tab controls display mixed periods and apply weekly to every current chart',async({page})=>{
  const workspace=structuredClone(intermediate) as Workspace;for(const chart of workspace.tabs[0].charts)chart.view={mode:'historical',fromSec:1791763200,toSec:1791849600,barSpacing:9,rightOffset:2};await seed(page,workspace);
  const controls=toolbar(page),periods=controls.getByRole('group',{name:'Period for current tab',exact:true});await expect(controls).toHaveAttribute('data-testid','tab-chart-controls');await expect(periods.getByRole('button')).toHaveCount(7);await expect(periods.locator('[aria-pressed="true"]')).toHaveCount(0);
- const geometry=await controls.evaluate(element=>{const periods=element.querySelector('[role="group"]')!.getBoundingClientRect(),indicators=element.querySelector('select')!.getBoundingClientRect(),row=element.getBoundingClientRect(),tabs=document.querySelector('.tab-row')!.getBoundingClientRect(),area=document.querySelector('.workspace-toolbar')!.getBoundingClientRect();return{center:(Math.min(periods.left,indicators.left)+Math.max(periods.right,indicators.right))/2,rowCenter:(row.left+row.right)/2,rowTop:row.top,rowBottom:row.bottom,tabsBottom:tabs.bottom,areaTop:area.top};});
- expect(Math.abs(geometry.center-geometry.rowCenter)).toBeLessThanOrEqual(2);expect(geometry.rowTop).toBeGreaterThanOrEqual(geometry.tabsBottom);expect(geometry.rowBottom).toBeLessThanOrEqual(geometry.areaTop);
+ await expectTopHeader(page);
  await page.evaluate(()=>{const api=window.go!.main!.App!,original=api.AttachChart.bind(api);(window as any).__tabControlAttachments=[];api.AttachChart=async(...args)=>{(window as any).__tabControlAttachments.push({key:args[2],from:args[3],to:args[4]});return original(...args);};});
  await controls.getByRole('button',{name:'Apply 1w to current tab',exact:true}).click();await expect(periods.getByRole('button',{name:'Apply 1w to current tab',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('button',{name:'Timeframe 1w',exact:true})).toHaveCount(3);for(const chart of await page.getByTestId('chart-cell').all())await expect(chart.getByRole('button',{name:'Timeframe 1w',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect.poll(()=>page.evaluate(()=>(window as any).__tabControlAttachments.length)).toBe(3);const attachments=await page.evaluate(()=>(window as any).__tabControlAttachments);expect(attachments.every((attachment:any)=>attachment.key.timeframe==='1w'&&attachment.to-attachment.from===500*604800&&attachment.to>Date.now()/1000-30)).toBe(true);

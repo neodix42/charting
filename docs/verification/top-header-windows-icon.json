@@ -1,0 +1,25 @@
+{
+  "method": "LoadFromEXE, GetIcon(ID(3)), normalized ICO byte comparison using pinned tc-hib/winres v0.3.1",
+  "normalizedActualSHA256": "e77815b1ebb39414625ca20e0a0ebe6581e5ccfab2f91342fce6d4200f2fe8ba",
+  "normalizedBytes": 4936,
+  "normalizedExpectedSHA256": "e77815b1ebb39414625ca20e0a0ebe6581e5ccfab2f91342fce6d4200f2fe8ba",
+  "passed": true,
+  "resourceID": 3,
+  "resourceType": "RT_GROUP_ICON",
+  "sizes": [
+    16,
+    24,
+    32,
+    48,
+    64,
+    128,
+    256
+  ],
+  "archiveSHA256": "3d5d4e0ff4efa6b952b254771d8caca4eb30165883b277e6c177d3a9dc9f8e53",
+  "archive": "cryptodesk-0.1.0-windows-amd64.zip",
+  "executableSHA256": "d316a8465aa71c80fe67425f847459c4788a09c6d4b390e6809292824615ee6a",
+  "canonicalICO": "build/windows/icon.ico",
+  "sourceSVG": "frontend/src/assets/cryptodesk.svg",
+  "nativeWindowsGUIExecuted": false,
+  "rootModuleManifestsUnchanged": true
+}

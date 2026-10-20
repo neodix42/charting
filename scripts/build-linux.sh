@@ -4,6 +4,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 require_native
 require_node
 require_wails
+python3 "$APP_ROOT/scripts/app_icons.py" --check
 "$APP_ROOT/.tools/wails" build -tags webkit2_41 -trimpath "$@"
 ARTIFACT_DIR="$APP_ROOT/release/cryptodesk-0.1.0-linux-amd64"
 mkdir -p "$ARTIFACT_DIR/docs"

@@ -1,0 +1,24 @@
+
+> cryptodesk-frontend@1.0.0 test:e2e
+> playwright test tab-controls.spec.ts
+
+[WebServer] (node:3324780) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3324926) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:3325010) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 7 tests using 1 worker
+
+(node:3325079) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/tab-controls.spec.ts:44:74 › chart controls and tab actions share the top logo row at 1600px (1.7s)
+  ✓  2 e2e/tab-controls.spec.ts:44:74 › chart controls and tab actions share the top logo row at 1100px (1.6s)
+  ✓  3 e2e/tab-controls.spec.ts:50:1 › header tab actions preserve rename, grid, duplication and close behavior (2.4s)
+  ✓  4 e2e/tab-controls.spec.ts:65:1 › top-center tab controls display mixed periods and apply weekly to every current chart (3.0s)
+  ✓  5 e2e/tab-controls.spec.ts:76:1 › one tab indicator dialog applies custom settings independently to visible and maximized sibling charts (4.0s)
+  ✓  6 e2e/tab-controls.spec.ts:86:1 › tab period selection tracks per-chart edits and affects hidden maximized siblings (1.9s)
+  ✓  7 e2e/tab-controls.spec.ts:92:1 › a chart at indicator capacity disables the tab dropdown without partially applying settings (2.9s)
+
+  7 passed (21.3s)

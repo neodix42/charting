@@ -1,0 +1,17 @@
+{
+  "installedBinary": "/home/neodix/.local/share/cryptodesk-app/cryptodesk",
+  "launcher": "/home/neodix/.local/share/applications/cryptodesk.desktop",
+  "icon": "/home/neodix/.local/share/icons/hicolor/scalable/apps/cryptodesk.svg",
+  "installedBinaryMatchesRoot": true,
+  "iconMatchesCanonicalSVG": true,
+  "desktopIdentity": "cryptodesk",
+  "workspaceModifiedByInstaller": false,
+  "probeUsesIsolatedWorkspace": true,
+  "nativeWindowsGUIVerified": false,
+  "waylandProbeExitCode": 137,
+  "actualWaylandAppIDVerified": true,
+  "waylandAppIDMessages": [
+    "[ 478516.626] {Default Queue}  -> xdg_toplevel#43.set_app_id(\"cryptodesk\")"
+  ],
+  "probeTermination": "Expected bounded probe: timeout sent SIGTERM at five seconds and killed the isolated process group two seconds later; this was an app-ID check, not the normal-close test."
+}

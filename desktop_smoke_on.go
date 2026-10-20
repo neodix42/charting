@@ -207,9 +207,12 @@ const desktopSmokeJavaScript = `async function(phase) {
    verifyIndicators(saved.workspace.tabs[0].charts[0],'indicator settings survive chart and tab additions');
    check(saved.workspace.tabs[0].charts.slice(1).every(chart=>!chart.indicators?.length)&&!saved.workspace.tabs[1].charts[0].indicators?.length,'new chart indicators remain independent',saved.workspace.tabs.map(tab=>tab.charts.map(chart=>chart.indicators?.length||0)));
    report.savedRevision=saved.revision;
-   const shared=await wait(()=>q('[data-testid="tab-chart-controls"]'),'shared current tab controls'),sharedRect=shared.getBoundingClientRect(),tabsRect=q('.tab-row').getBoundingClientRect(),chartsRect=q('.workspace-content').getBoundingClientRect();
-   report.sharedToolbarGeometry={left:sharedRect.left,right:sharedRect.right,top:sharedRect.top,bottom:sharedRect.bottom,tabBottom:tabsRect.bottom,chartTop:chartsRect.top,windowWidth:window.innerWidth};
-   check(shared.getAttribute('role')==='toolbar'&&shared.getAttribute('aria-label')==='Current tab chart controls'&&sharedRect.top>=tabsRect.bottom&&sharedRect.bottom<=chartsRect.top&&Math.abs((sharedRect.left+sharedRect.right)/2-window.innerWidth/2)<=3,'shared toolbar is centered between the tabs and chart area',report.sharedToolbarGeometry);
+   const shared=await wait(()=>q('[data-testid="tab-chart-controls"]'),'shared current tab controls'),header=q('.app-header');
+   const bounds=element=>{const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,centerY:(rect.top+rect.bottom)/2};};
+   const headerControls=[q('.brand'),shared,q('[aria-label="Grid layout"]'),q('[aria-label="Add chart"]'),q('[aria-label="Rename tab"]'),q('[aria-label="Duplicate tab"]'),q('[aria-label="Close tab"]'),q('.save-indicator'),q('[aria-label="Open settings"]')],headerRect=bounds(header),headerBounds=headerControls.map(bounds),tabsRect=bounds(q('.tab-row')),chartsRect=bounds(q('.workspace-content'));
+   report.sharedToolbarGeometry={header:headerRect,controls:headerBounds,tabTop:tabsRect.top,tabBottom:tabsRect.bottom,chartTop:chartsRect.top,windowWidth:window.innerWidth};
+   check(headerControls.every(element=>header.contains(element))&&headerBounds.every(rect=>rect.top>=headerRect.top&&rect.bottom<=headerRect.bottom&&Math.abs(rect.centerY-headerRect.centerY)<=2)&&headerBounds.slice(1).every((rect,index)=>rect.left>=headerBounds[index].right)&&Math.abs((headerBounds[1].left+headerBounds[1].right)/2-window.innerWidth/2)<=3,'periods, indicators and workspace actions share the top logo row in order',report.sharedToolbarGeometry);
+   check(!q('.workspace-title')&&chartsRect.top-tabsRect.bottom<=20,'duplicate workspace title row is removed and charts follow the tabs',report.sharedToolbarGeometry);
    await click('[data-testid="chart-cell"] [aria-label="Maximize chart"]');
    await click('[data-testid="tab-chart-controls"] [aria-label="Apply 1w to current tab"]');
    await wait(()=>qa('[data-testid="chart-cell"] [aria-label="Timeframe 1w"][aria-pressed="true"]').length===3,'shared weekly timeframe reaches all three charts while maximized');
