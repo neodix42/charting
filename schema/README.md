@@ -45,3 +45,11 @@ New workspaces explicitly use ten bars. Legacy documents may omit the setting, i
 which case charts use ten bars while the exported JSON retains the original omitted
 field. Each chart's existing `view.rightOffset` remains a viewport value, separate from
 this global preference. No schema-version or SQLite table migration is required.
+
+Chart `market` accepts `spot` and `perpetual` for Binance and Bybit; Coinbase
+accepts `spot` only. It remains required, so existing spot workspaces retain their
+exact identities and new charts still start with spot. Exchange, market, native
+instrument and timeframe together identify a feed, including its memory and disk
+candle caches. A spot and perpetual instrument may have the same native symbol.
+This extends the existing string enum without changing the workspace or SQLite
+schema version.

@@ -40,6 +40,9 @@ func (a *App) DesktopSmokeCandleRows(key domain.FeedKey, from, to int64) ([]doma
 func (a *App) DesktopSmokeSignalExpectation() map[string]string {
 	return map[string]string{"workspaceId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_WORKSPACE"), "chartId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_CHART"), "timeframe": os.Getenv("CRYPTODESK_SMOKE_EXPECT_TIMEFRAME")}
 }
+func (a *App) DesktopSmokeMarketExpectation() map[string]string {
+	return map[string]string{"workspaceId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_WORKSPACE"), "chartId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_CHART"), "exchange": os.Getenv("CRYPTODESK_SMOKE_EXPECT_EXCHANGE"), "market": os.Getenv("CRYPTODESK_SMOKE_EXPECT_MARKET"), "instrument": os.Getenv("CRYPTODESK_SMOKE_EXPECT_INSTRUMENT"), "version": os.Getenv("CRYPTODESK_VERSION")}
+}
 func (a *App) DesktopSmokeSignalRetryRequested() bool {
 	marker := os.Getenv("CRYPTODESK_SMOKE_SIGNAL_RETRY")
 	if !filepath.IsAbs(marker) {
@@ -172,7 +175,7 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" {
 		return
 	}
 	encoded, _ := json.Marshal(phase)
@@ -183,7 +186,7 @@ const desktopSmokeJavaScript = `async function(phase) {
  if(phase==='signal-early')return; // Only the queued external signal may close this scenario.
  const report={phase,startedAt:new Date().toISOString(),userAgent:navigator.userAgent,checks:[],passed:false};
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
- const wait=async(predicate,label,timeout=20000)=>{const start=Date.now();while(Date.now()-start<timeout){const result=predicate();if(result)return result;await sleep(50);}throw Error('Timed out: '+label);};
+ const wait=async(predicate,label,timeout=20000)=>{const start=Date.now();while(Date.now()-start<timeout){const result=await predicate();if(result)return result;await sleep(50);}throw Error('Timed out: '+label);};
  const check=(condition,name,actual)=>{report.checks.push({name,passed:!!condition,actual});if(!condition)throw Error(name+': '+JSON.stringify(actual));};
  const q=selector=>document.querySelector(selector),qa=selector=>Array.from(document.querySelectorAll(selector));
  const click=async(selector)=>{const element=await wait(()=>q(selector),selector);if(element.disabled)throw Error('Disabled control: '+selector);element.click();await sleep(100);};
@@ -227,7 +230,68 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='signal-edit'||phase==='signal-failure'){
+  if(phase==='markets'||phase==='markets-restore'){
+   const expected=await api.DesktopSmokeMarketExpectation(),diagnostics=await api.GetDiagnostics(),cell=q('[data-testid="chart-cell"]');
+   check(initial.workspace.tabs.length===1&&initial.workspace.tabs[0].charts.length===1&&qa('[data-testid="chart-cell"]').length===1,'market smoke keeps exactly one tab and chart',report.initialCounts);
+   check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'market smoke keeps the original 1×1 grid',initial.workspace.tabs[0].grid);
+   check(!q('.app-header').textContent.toUpperCase().includes('SPOT TERMINAL'),'SPOT TERMINAL label is absent from the native header',q('.app-header').textContent);
+   const version=q('[aria-label="Application version"]');
+   check(expected.version&&diagnostics.version===expected.version&&version?.textContent==='v'+expected.version&&q('.brand').contains(version),'native header and backend use the built release version',{expected:expected.version,backend:diagnostics.version,header:version?.textContent});
+   check(!q('select[aria-label="Market"]')&&!q('select[aria-label="Market type"]')&&q('[aria-label="Selected market"]').tagName==='SPAN','market type appears as a label without a separate selector');
+   report.marketSelections=[];report.catalogs=[];
+   await api.ConfigureCandleStorage(true,'');
+   const selected=()=>q('[data-testid="chart-cell"] [aria-label="Selected market"]')?.textContent;
+   const identity=chart=>({exchange:chart.exchange,market:chart.market,instrument:chart.instrument,timeframe:chart.timeframe});
+   const verifyPublicBars=async(key,label)=>{
+    const entry={...key,label,passed:false};report.marketSelections.push(entry);
+    try{
+     const now=Math.floor(Date.now()/1000),step={ '1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400,'1w':604800 }[key.timeframe];
+     const history=await api.GetHistory('native-markets-'+Date.now(),key,Math.max(0,now-step*6),now,6);
+     check(JSON.stringify(history.feedKey)===JSON.stringify(key),label+' history retains the exact market identity',history.feedKey);
+     check(history.bars.length>0&&history.bars.every(bar=>Number(bar.open)>0&&Number(bar.low)>0&&Number(bar.low)<=Number(bar.open)&&Number(bar.high)>=Number(bar.close)&&Number(bar.volume)>=0&&bar.time<now&&bar.time>1230768000),label+' returns genuine public OHLCV bars',{count:history.bars.length,last:history.bars.at(-1)});
+     await wait(()=>q('.ohlcv b')&&q('.chart-status > span:nth-child(2)')?.textContent.startsWith('live'),label+' renders real public bars in WebKit',30000);
+     const disk=await wait(async()=>{const bars=await api.DesktopSmokeCandleRows(key,0,0);return bars.length?bars:false;},label+' candles persist under their full feed key',10000);
+     entry.passed=true;entry.historyBars=history.bars.length;entry.diskBars=disk.length;entry.last=history.bars.at(-1);entry.status=q('.chart-status').textContent;entry.ohlcv=q('.ohlcv').textContent;
+    }catch(error){entry.error=String(error);entry.status=q('.chart-status')?.textContent;report.checks.push({name:label+' real public data and rendered candles',passed:false,actual:entry});}
+   };
+   const choose=async(provider,symbol,market)=>{
+    const label=market==='perpetual'?'Perpetual':'Spot';
+    await click('[data-testid="chart-cell"] [aria-label="Select instrument"]');
+    await input('[aria-label="Search instruments"]',symbol);
+    const button=await wait(()=>q('.product-list button[aria-label="'+symbol+' '+label+'"]'),provider+' '+symbol+' '+label+' listed',30000);
+    const badge=button.querySelector('.product-market'),details=button.querySelector('.product-details'),geometry={row:bounds(button),badge:bounds(badge),details:bounds(details)};
+    check(badge.textContent===label&&geometry.badge.left>=geometry.details.right-1&&geometry.row.right-geometry.badge.right<=30&&Math.abs(geometry.badge.centerY-geometry.details.centerY)<=3,provider+' '+symbol+' '+label+' badge is at the right of its symbol row',geometry);
+    button.click();await wait(()=>!q('.instrument-picker')&&selected()===label,provider+' '+symbol+' '+label+' selection');
+    await flush();const saved=await api.LoadWorkspace(),chart=saved.workspace.tabs[0].charts[0],key=identity(chart);
+    check(chart.exchange===provider&&chart.instrument===symbol&&chart.market===market,provider+' '+symbol+' '+label+' saves the chosen market to SQLite',key);
+    await verifyPublicBars(key,provider+' '+symbol+' '+label);
+    return saved;
+   };
+   if(phase==='markets'){
+    check(initial.workspace.tabs[0].charts[0].exchange==='binance'&&initial.workspace.tabs[0].charts[0].market==='spot'&&initial.workspace.tabs[0].charts[0].instrument==='BTCUSDT','new native workspace preserves its spot starter',identity(initial.workspace.tabs[0].charts[0]));
+    for(const provider of ['binance','bybit']){
+     await select('[data-testid="chart-cell"] [aria-label="Exchange"]',provider);
+     const list=await api.ListInstruments(provider),bitcoin=list.filter(item=>item.nativeId==='BTCUSDT'),silver=list.find(item=>item.nativeId==='XAGUSDT'&&item.market==='perpetual');
+     report.catalogs.push({provider,count:list.length,bitcoin:bitcoin.map(item=>({nativeId:item.nativeId,market:item.market,priceIncrement:item.priceIncrement})),silver,warnings:Array.from(new Set(list.map(item=>item.providerMetadata?.catalogWarning).filter(Boolean)))});
+     check(bitcoin.some(item=>item.market==='spot')&&bitcoin.some(item=>item.market==='perpetual')&&!!silver,provider+' combined public catalog contains BTCUSDT Spot, BTCUSDT Perpetual and XAGUSDT Perpetual',report.catalogs.at(-1));
+     await click('[data-testid="chart-cell"] [aria-label="Select instrument"]');await input('[aria-label="Search instruments"]','BTCUSDT');
+     await wait(()=>q('.product-list button[aria-label="BTCUSDT Spot"]')&&q('.product-list button[aria-label="BTCUSDT Perpetual"]'),provider+' same-symbol spot and perpetual rows together');
+     check(qa('.product-list button').filter(button=>button.querySelector('strong')?.textContent==='BTCUSDT').length===2,provider+' displays both native BTCUSDT markets in the same symbol list');
+     await click('[aria-label="Close instrument selector"]');
+     await choose(provider,'BTCUSDT','spot');await choose(provider,'BTCUSDT','perpetual');await choose(provider,'XAGUSDT','perpetual');
+    }
+    await flush();const saved=await api.LoadWorkspace(),chart=saved.workspace.tabs[0].charts[0];
+    report.savedSelection={workspaceId:saved.workspace.id,chartId:chart.id,...identity(chart),revision:saved.revision};
+    check(saved.workspace.id===initial.workspace.id&&chart.id===initial.workspace.tabs[0].charts[0].id&&saved.workspace.tabs.length===1&&saved.workspace.tabs[0].charts.length===1,'changing markets preserves the original workspace and chart identities',report.savedSelection);
+   }else{
+    const chart=initial.workspace.tabs[0].charts[0];
+    check(initial.workspace.id===expected.workspaceId&&chart.id===expected.chartId,'native restart reopens the same workspace and chart',{expected,workspaceId:initial.workspace.id,chartId:chart.id});
+    check(chart.exchange===expected.exchange&&chart.market===expected.market&&chart.instrument===expected.instrument&&chart.market==='perpetual','native restart restores the exact saved perpetual selection',identity(chart));
+    check(q('[aria-label="Exchange"]').value===expected.exchange&&q('[aria-label="Select instrument"]').textContent.includes(expected.instrument)&&selected()==='Perpetual','WebKit renders the restored provider, symbol and Perpetual label');
+    await verifyPublicBars(identity(chart),'restored '+chart.exchange+' '+chart.instrument+' Perpetual');
+    await flush();report.savedSelection={workspaceId:initial.workspace.id,chartId:chart.id,...identity(chart),revision:(await api.LoadWorkspace()).revision};
+   }
+  }else if(phase==='signal-edit'||phase==='signal-failure'){
    check(initial.workspace.tabs.length===1&&initial.workspace.tabs[0].charts.length===1,'signal test uses an isolated one-chart workspace',report.initialCounts);
    await flush();
    const baseline=await api.LoadWorkspace(),original=baseline.workspace.tabs[0].charts[0],next=original.timeframe==='4h'?'15m':'4h';
@@ -472,7 +536,7 @@ const desktopSmokeJavaScript = `async function(phase) {
   }
   report.frontend=window.__cryptodeskDiagnostics?.();report.backend=await api.GetDiagnostics();
   report.feedStatuses=qa('.chart-status').map(element=>element.textContent);
-  report.passed=true;
+  report.passed=report.checks.every(check=>check.passed);
  } catch(error) {report.error=String(error)+'\n'+String(error?.stack||'');}
  report.finishedAt=new Date().toISOString();
  if(!api)api=window.go?.main?.App;

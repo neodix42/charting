@@ -12,7 +12,7 @@ async function expectVersion(page:Page){
   const label=element.previousElementSibling!;
   return{labelText:label.textContent,labelVisible:getComputedStyle(label).display!=='none',label:bounds(label),badge:bounds(element),brand:bounds(element.parentElement!),controls:bounds(document.querySelector('[data-testid="tab-chart-controls"]')!),documentWidth:document.documentElement.scrollWidth,windowWidth:innerWidth};
  });
- expect(geometry.labelText).toBe('SPOT TERMINAL');
+ expect(geometry.labelText).toBe('CryptoDesk');await expect(page.getByText('SPOT TERMINAL',{exact:true})).toHaveCount(0);await expect(page.locator('.brand-tag')).toHaveCount(0);
  if(geometry.labelVisible)expect(geometry.badge.left).toBeGreaterThanOrEqual(geometry.label.right);
  expect(geometry.brand.right).toBeLessThanOrEqual(geometry.controls.left);
  expect(geometry.badge.top).toBeGreaterThanOrEqual(geometry.brand.top);expect(geometry.badge.bottom).toBeLessThanOrEqual(geometry.brand.bottom);

@@ -6,6 +6,14 @@ export function AttachChart(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AttachChart'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ChooseCandleStorageDirectory() {
+  return window['go']['main']['App']['ChooseCandleStorageDirectory']();
+}
+
+export function ConfigureCandleStorage(arg1, arg2) {
+  return window['go']['main']['App']['ConfigureCandleStorage'](arg1, arg2);
+}
+
 export function ConfirmClose(arg1, arg2) {
   return window['go']['main']['App']['ConfirmClose'](arg1, arg2);
 }
@@ -18,8 +26,16 @@ export function ExportWorkspace() {
   return window['go']['main']['App']['ExportWorkspace']();
 }
 
+export function FrontendReady() {
+  return window['go']['main']['App']['FrontendReady']();
+}
+
 export function GetBackups() {
   return window['go']['main']['App']['GetBackups']();
+}
+
+export function GetCandleStorage() {
+  return window['go']['main']['App']['GetCandleStorage']();
 }
 
 export function GetDiagnostics() {

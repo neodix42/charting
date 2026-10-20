@@ -23,17 +23,19 @@ func ParseNative(provider string, data []byte, k domain.FeedKey) ([]domain.Candl
 			EventTime int64           `json:"E"`
 			Symbol    string          `json:"s"`
 			K         struct {
-				Start       int64           `json:"t"`
-				End         int64           `json:"T"`
-				LastTrade   json.RawMessage `json:"L"`
-				TakerVolume json.RawMessage `json:"V"`
-				Interval    string          `json:"i"`
-				Open        string          `json:"o"`
-				High        string          `json:"h"`
-				Low         string          `json:"l"`
-				Close       string          `json:"c"`
-				Volume      string          `json:"v"`
-				Closed      bool            `json:"x"`
+				Start            int64           `json:"t"`
+				End              int64           `json:"T"`
+				LastTrade        json.RawMessage `json:"L"`
+				TakerVolume      json.RawMessage `json:"V"`
+				Interval         string          `json:"i"`
+				Open             string          `json:"o"`
+				High             string          `json:"h"`
+				Low              string          `json:"l"`
+				Close            string          `json:"c"`
+				Volume           string          `json:"v"`
+				QuoteVolume      string          `json:"q"`
+				TakerQuoteVolume json.RawMessage `json:"Q"`
+				Closed           bool            `json:"x"`
 			} `json:"k"`
 		}
 		if err := json.Unmarshal(data, &e); err != nil {
@@ -51,7 +53,11 @@ func ParseNative(provider string, data []byte, k domain.FeedKey) ([]domain.Candl
 		if e.K.Start%1000 != 0 {
 			return nil, fmt.Errorf("invalid millisecond kline start")
 		}
-		c, err := ParseCandle(e.K.Start/1000, e.K.Open, e.K.High, e.K.Low, e.K.Close, e.K.Volume, e.K.Closed, "live", e.EventTime)
+		volume := e.K.Volume
+		if marketCategory(k) == "inverse" {
+			volume = e.K.QuoteVolume // COIN-M q is base-asset volume; v is contracts.
+		}
+		c, err := ParseCandle(e.K.Start/1000, e.K.Open, e.K.High, e.K.Low, e.K.Close, volume, e.K.Closed, "live", e.EventTime)
 		if err != nil {
 			return nil, err
 		}
@@ -65,11 +71,11 @@ func ParseNative(provider string, data []byte, k domain.FeedKey) ([]domain.Candl
 			Topic     string `json:"topic"`
 			Timestamp int64  `json:"ts"`
 			Data      []struct {
-				Start                          int64  `json:"start"`
-				Interval                       string `json:"interval"`
-				Open, High, Low, Close, Volume string
-				Confirm                        bool  `json:"confirm"`
-				Timestamp                      int64 `json:"timestamp"`
+				Start                                    int64  `json:"start"`
+				Interval                                 string `json:"interval"`
+				Open, High, Low, Close, Volume, Turnover string
+				Confirm                                  bool  `json:"confirm"`
+				Timestamp                                int64 `json:"timestamp"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(data, &e); err != nil {
@@ -86,7 +92,11 @@ func ParseNative(provider string, data []byte, k domain.FeedKey) ([]domain.Candl
 			if revision == 0 {
 				revision = v.Timestamp
 			}
-			c, err := ParseCandle(v.Start/1000, v.Open, v.High, v.Low, v.Close, v.Volume, v.Confirm, "live", revision)
+			volume := v.Volume
+			if marketCategory(k) == "inverse" {
+				volume = v.Turnover // Inverse volume is quote coin; turnover is base coin.
+			}
+			c, err := ParseCandle(v.Start/1000, v.Open, v.High, v.Low, v.Close, volume, v.Confirm, "live", revision)
 			if err != nil {
 				return nil, err
 			}
@@ -160,7 +170,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 	} else if a.provider == "bybit" {
 		topic = "kline." + bybitIntervals[k.Timeframe] + "." + k.Instrument
 	}
-	messages, unsubscribe := a.hub.subscribe(topic)
+	messages, unsubscribe := a.socketFor(k).subscribe(topic)
 	defer unsubscribe()
 	duration := TimeframeSeconds(k.Timeframe)
 	localRevision := time.Now().UnixMilli()
@@ -175,7 +185,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 	}
 	native := NewNativeSeries(512)
 	trades := NewTradeAggregator(duration, time.Now().Unix())
-	health := domain.Health{State: "connecting", Reason: "Opening public spot stream"}
+	health := domain.Health{State: "connecting", Reason: "Opening public " + k.Market + " stream"}
 	send(nil, health)
 	type historyResult struct {
 		bars    []domain.Candle
@@ -265,7 +275,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 			ready = true
 			repairFrom = 0
 			health.State = "live"
-			health.Reason = "Public spot data; current bucket may be provisional"
+			health.Reason = "Public " + k.Market + " data; current bucket may be provisional"
 			if a.provider == "coinbase" {
 				health.Reason = "Live trades; partial bucket volume is the last REST snapshot or observed-only"
 			}

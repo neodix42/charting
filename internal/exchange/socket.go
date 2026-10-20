@@ -20,6 +20,7 @@ type wireEvent struct {
 }
 type socketHub struct {
 	a             *publicAdapter
+	category      string
 	mu            sync.Mutex
 	subs          map[string]map[uint64]chan wireEvent
 	next          uint64
@@ -34,7 +35,23 @@ type socketHub struct {
 }
 
 func newSocketHub(a *publicAdapter) *socketHub {
-	return &socketHub{a: a, subs: map[string]map[uint64]chan wireEvent{}, wake: make(chan struct{}, 1), active: map[string]bool{}}
+	return &socketHub{a: a, category: "spot", subs: map[string]map[uint64]chan wireEvent{}, wake: make(chan struct{}, 1), active: map[string]bool{}}
+}
+func (h *socketHub) endpoint() string {
+	switch h.category {
+	case "linear":
+		return h.a.futuresWS
+	case "inverse":
+		return h.a.inverseWS
+	default:
+		return h.a.ws
+	}
+}
+func (h *socketHub) readTimeout() time.Duration {
+	if h.a.provider == "binance" && h.category != "spot" {
+		return 4 * time.Minute // Derivatives server control pings may be 3 minutes apart.
+	}
+	return 75 * time.Second
 }
 func (h *socketHub) subscribe(topic string) (<-chan wireEvent, func()) {
 	h.mu.Lock()
@@ -123,7 +140,7 @@ func (h *socketHub) run() {
 	}()
 	delay := time.Second
 	for len(h.topics()) > 0 {
-		h.publish("", wireEvent{state: "connecting", reason: "Connecting public spot stream"})
+		h.publish("", wireEvent{state: "connecting", reason: "Connecting public market stream"})
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		h.mu.Lock()
 		h.attemptCancel = cancel
@@ -133,7 +150,7 @@ func (h *socketHub) run() {
 		h.mu.Unlock()
 		dialer := *websocket.DefaultDialer
 		dialer.HandshakeTimeout = 12 * time.Second
-		conn, resp, err := dialer.DialContext(ctx, h.a.ws, http.Header{"User-Agent": {"CryptoDesk/1.0"}})
+		conn, resp, err := dialer.DialContext(ctx, h.endpoint(), http.Header{"User-Agent": {"CryptoDesk/1.0"}})
 		cancel()
 		if err != nil {
 			if resp != nil {
@@ -161,8 +178,14 @@ func (h *socketHub) run() {
 		h.reconnects++
 		h.mu.Unlock()
 		conn.SetReadLimit(2 << 20)
-		_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second))
-		conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(75 * time.Second)) })
+		_ = conn.SetReadDeadline(time.Now().Add(h.readTimeout()))
+		conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(h.readTimeout())) })
+		conn.SetPingHandler(func(data string) error {
+			if err := conn.SetReadDeadline(time.Now().Add(h.readTimeout())); err != nil {
+				return err
+			}
+			return conn.WriteControl(websocket.PongMessage, []byte(data), time.Now().Add(10*time.Second))
+		})
 		active := map[string]bool{}
 		if err = h.syncSubscriptions(conn, active); err != nil {
 			conn.Close()
@@ -216,7 +239,7 @@ func (h *socketHub) connected(conn *websocket.Conn, active map[string]bool) erro
 		for {
 			_, data, err := conn.ReadMessage()
 			if err == nil {
-				_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second))
+				_ = conn.SetReadDeadline(time.Now().Add(h.readTimeout()))
 			}
 			select {
 			case messages <- readResult{data, err}:

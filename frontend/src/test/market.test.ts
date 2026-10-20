@@ -1,11 +1,18 @@
 import {afterEach,describe,it,expect,vi} from 'vitest';
-import {CandleBatcher,MarketBridge,marketDiagnostics,mergeBars} from '../bridge/market';
+import {CandleBatcher,MarketBridge,marketDiagnostics,mergeBars,keyOf} from '../bridge/market';
+import {feedKey} from '../types';
 import type {Backend,Candle,FeedKey,MarketEvent,Runtime,Snapshot} from '../types';
 const key:FeedKey={exchange:'binance',market:'spot',instrument:'BTCUSDT',timeframe:'1h'};
 const candle=(time:number,revision=1):Candle=>({time,open:10,high:12,low:9,close:11,volume:3,closed:false,quality:'live',sourceRevision:revision});
 function harness(overrides:Partial<Backend>={}){let receive:(e:MarketEvent)=>void=()=>{};let registered=false;const cancel=vi.fn();const runtime:Runtime={EventsOn(_name,fn){registered=true;receive=fn;return cancel;}};const api={AttachChart:vi.fn(async()=>{expect(registered).toBe(true);return{leaseId:'lease',revision:1,bars:[candle(100)],health:{state:'live'}};}),DetachChart:vi.fn(async()=>{}),GetFeedSnapshot:vi.fn(async()=>({leaseId:'lease',revision:3,bars:[candle(100),candle(200),candle(300)],health:{state:'live'}})),...overrides} as unknown as Backend;const market=new MarketBridge(api,runtime);const emit=(revision:number,extra:Partial<MarketEvent>={})=>receive({chartId:'chart',generation:1,feedKey:key,leaseId:'lease',revision,kind:'bars',bars:[candle(revision*100,revision)],health:{state:'live'},...extra});return{api,market,emit,cancel};}
 afterEach(()=>vi.useRealTimers());
 describe('central chart lease event ordering',()=>{
+ it('keeps identical spot and perpetual symbols distinct and rejects the other market event',async()=>{
+  const perpetual={...key,market:'perpetual' as const};expect(feedKey(perpetual)).toEqual(perpetual);expect(keyOf(perpetual)).not.toBe(keyOf(key));
+  const h=harness(),onData=vi.fn(),subscription=h.market.attach('chart',1,perpetual,0,1000,onData);await subscription.ready;
+  h.emit(2);expect(onData).toHaveBeenCalledTimes(1);
+  h.emit(2,{feedKey:perpetual});expect(onData).toHaveBeenCalledTimes(2);h.market.dispose();
+ });
  it('registers listener before attach; applies snapshot then only newer buffered events',async()=>{let resolve!:(s:Snapshot)=>void;const pending=new Promise<Snapshot>(yes=>resolve=yes);const h=harness({AttachChart:vi.fn(()=>pending)}),onData=vi.fn();const subscription=h.market.attach('chart',1,key,0,1000,onData);h.emit(1);h.emit(2);resolve({leaseId:'lease',revision:1,bars:[candle(100)],health:{state:'live'}});await subscription.ready;expect(onData.mock.calls.map(x=>x[0].revision)).toEqual([1,2]);expect(onData.mock.calls.map(x=>x[1])).toEqual([true,false]);subscription.close();expect(h.api.DetachChart).toHaveBeenCalledWith('lease');h.market.dispose();expect(h.cancel).toHaveBeenCalledTimes(1);});
  it('resnapshots a revision gap and ignores duplicate and wrong-generation data',async()=>{const h=harness(),onData=vi.fn(),subscription=h.market.attach('chart',1,key,0,1000,onData);await subscription.ready;h.emit(2,{generation:0});h.emit(1);expect(onData).toHaveBeenCalledTimes(1);h.emit(3);await Promise.resolve();await Promise.resolve();expect(h.api.GetFeedSnapshot).toHaveBeenCalledTimes(1);expect(onData.mock.calls.map(x=>x[0].revision)).toEqual([1,3]);h.emit(3);expect(onData).toHaveBeenCalledTimes(2);h.market.dispose();});
  it('late attach of an already unmounted chart releases lease and applies no data',async()=>{let resolve!:(s:Snapshot)=>void;const h=harness({AttachChart:vi.fn(()=>new Promise<Snapshot>(yes=>resolve=yes))}),onData=vi.fn(),subscription=h.market.attach('chart',1,key,0,1000,onData);subscription.close();resolve({leaseId:'late',revision:1,bars:[candle(100)],health:{state:'live'}});await subscription.ready;expect(onData).not.toHaveBeenCalled();expect(h.api.DetachChart).toHaveBeenCalledWith('late');h.market.dispose();});

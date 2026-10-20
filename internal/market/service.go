@@ -168,7 +168,7 @@ func (s *Service) Attach(chart string, generation int64, key domain.FeedKey, fro
 				f.bars[c.Time] = c
 			}
 			if len(f.bars) > 0 {
-				f.health = domain.Health{State: "cached", Reason: "Locally stored candles; refreshing public spot data"}
+				f.health = domain.Health{State: "cached", Reason: "Locally stored candles; refreshing public market data"}
 			}
 		}
 		s.feeds[key] = f
@@ -257,7 +257,7 @@ func (s *Service) run(ctx context.Context, f *feed, a exchange.Adapter) {
 		f.cancel()
 		f.cancel = nil
 	}
-	state, reason := "disconnected", "Public spot stream ended; retry the feed"
+	state, reason := "disconnected", "Public market stream ended; retry the feed"
 	if err != nil {
 		state, reason = exchange.ErrorKind(err), err.Error()
 	}
@@ -373,6 +373,13 @@ func (s *Service) Instruments(ctx context.Context, provider string) ([]domain.In
 	items, err := a.Instruments(ctx)
 	if err != nil {
 		return nil, err
+	}
+	for _, item := range items {
+		if item.ProviderMetadata["catalogWarning"] != "" {
+			// A partial catalog remains useful, but retry must recheck the market
+			// endpoint that failed rather than reuse the partial result for an hour.
+			return items, nil
+		}
 	}
 	s.mu.Lock()
 	s.instruments[provider] = instrumentCache{append([]domain.Instrument(nil), items...), s.opts.Now()}

@@ -1,3 +1,26 @@
+export namespace candlestorage {
+
+	export class Info {
+	    enabled: boolean;
+	    directory: string;
+	    sizeBytes: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.directory = source["directory"];
+	        this.sizeBytes = source["sizeBytes"];
+	        this.error = source["error"];
+	    }
+	}
+
+}
+
 export namespace domain {
 	
 	export class Candle {
@@ -26,6 +49,28 @@ export namespace domain {
 	        this.closed = source["closed"];
 	        this.quality = source["quality"];
 	        this.sourceRevision = source["sourceRevision"];
+	    }
+	}
+	export class Indicator {
+	    id: string;
+	    type: string;
+	    parameters: Record<string, number>;
+	    color?: string;
+	    lineWidth?: number;
+	    paneStretchFactor?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Indicator(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.parameters = source["parameters"];
+	        this.color = source["color"];
+	        this.lineWidth = source["lineWidth"];
+	        this.paneStretchFactor = source["paneStretchFactor"];
 	    }
 	}
 	export class View {
@@ -106,6 +151,7 @@ export namespace domain {
 	    showVolume: boolean;
 	    priceScale: PriceScale;
 	    view: View;
+	    indicators?: Indicator[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Chart(source);
@@ -122,6 +168,7 @@ export namespace domain {
 	        this.showVolume = source["showVolume"];
 	        this.priceScale = this.convertValues(source["priceScale"], PriceScale);
 	        this.view = this.convertValues(source["view"], View);
+	        this.indicators = this.convertValues(source["indicators"], Indicator);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -141,6 +188,20 @@ export namespace domain {
 		    }
 		    return a;
 		}
+	}
+	export class ChartRightGap {
+	    unit: string;
+	    value: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ChartRightGap(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.unit = source["unit"];
+	        this.value = source["value"];
+	    }
 	}
 	export class FeedKey {
 	    exchange: string;
@@ -196,8 +257,10 @@ export namespace domain {
 	        this.lastTradeAt = source["lastTradeAt"];
 	    }
 	}
+
 	export class Instrument {
 	    nativeId: string;
+	    market: string;
 	    baseAsset: string;
 	    quoteAsset: string;
 	    priceIncrement: string;
@@ -213,6 +276,7 @@ export namespace domain {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.nativeId = source["nativeId"];
+	        this.market = source["market"];
 	        this.baseAsset = source["baseAsset"];
 	        this.quoteAsset = source["quoteAsset"];
 	        this.priceIncrement = source["priceIncrement"];
@@ -283,6 +347,7 @@ export namespace domain {
 	    id: string;
 	    theme: string;
 	    displayTimezone: string;
+	    chartRightGap?: ChartRightGap;
 	    activeTabId: string;
 	    window: Window;
 	    tabs: Tab[];
@@ -298,6 +363,7 @@ export namespace domain {
 	        this.id = source["id"];
 	        this.theme = source["theme"];
 	        this.displayTimezone = source["displayTimezone"];
+	        this.chartRightGap = this.convertValues(source["chartRightGap"], ChartRightGap);
 	        this.activeTabId = source["activeTabId"];
 	        this.window = this.convertValues(source["window"], Window);
 	        this.tabs = this.convertValues(source["tabs"], Tab);

@@ -24,8 +24,8 @@ func (k FeedKey) Validate() error {
 	if k.Exchange != "binance" && k.Exchange != "bybit" && k.Exchange != "coinbase" {
 		return fmt.Errorf("unsupported exchange")
 	}
-	if k.Market != "spot" {
-		return fmt.Errorf("only public spot markets are supported")
+	if !supportedMarket(k.Exchange, k.Market) {
+		return fmt.Errorf("unsupported market for exchange")
 	}
 	if len(k.Instrument) > 128 || !nativeSymbol.MatchString(k.Instrument) {
 		return fmt.Errorf("invalid native instrument")
@@ -36,6 +36,10 @@ func (k FeedKey) Validate() error {
 		}
 	}
 	return fmt.Errorf("unsupported interval")
+}
+
+func supportedMarket(exchange, market string) bool {
+	return market == "spot" || (market == "perpetual" && (exchange == "binance" || exchange == "bybit"))
 }
 
 type Candle struct {
@@ -51,7 +55,7 @@ type Candle struct {
 }
 
 func (c Candle) Validate() error {
-	// Reject millisecond timestamps before the rendering boundary. These spot markets
+	// Reject millisecond timestamps before the rendering boundary. These markets
 	// did not exist before 2009; limiting to year 3000 catches accidental unit errors.
 	if c.Time < 1230768000 || c.Time > 32503680000 {
 		return fmt.Errorf("candle timestamp must be UTC Unix seconds")
@@ -75,6 +79,7 @@ type Health struct {
 }
 type Instrument struct {
 	NativeID           string            `json:"nativeId"`
+	Market             string            `json:"market"`
 	BaseAsset          string            `json:"baseAsset"`
 	QuoteAsset         string            `json:"quoteAsset"`
 	PriceIncrement     string            `json:"priceIncrement"`

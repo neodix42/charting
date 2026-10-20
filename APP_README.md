@@ -1,6 +1,8 @@
 # CryptoDesk
 
-CryptoDesk is an Ubuntu and Windows desktop spot-market chart workspace built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. It fetches public Binance, Bybit and Coinbase data directly. No API keys, account or development server are required to run the release.
+CryptoDesk is an Ubuntu and Windows desktop chart workspace for spot and perpetual markets built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. It fetches public Binance, Bybit and Coinbase data directly. No API keys, account or development server are required to run the release.
+
+Open the symbol dropdown to browse both **Spot** and **Perpetual** instruments on Binance and Bybit. Each row shows its market type on the right; identical names such as BTCUSDT remain separate choices. The chart keeps the selected market on save/restart and uses its own historical/live feed and candle cache. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported, including XAGUSDT silver contracts. Dated futures and options are excluded. Coinbase currently supplies spot instruments. Search by symbol, base/quote asset or market label. If a provider category is restricted, available symbols remain usable alongside an explicit warning and Retry discovery.
 
 **First launch has exactly one tab and one chart in a 1×1 grid.** Add tabs and charts as needed, up to 20 tabs and 9 charts per tab. Selecting a larger grid adds empty controls, not chart configurations. New tabs start with one chart. Later launches restore your actual saved workspace.
 
@@ -29,7 +31,7 @@ Run the installer again after rebuilding or downloading an updated archive, then
 
 The main [README](https://github.com/neodix42/charting#download) links to the [latest release](https://github.com/neodix42/charting/releases/latest). Pushing commits to `main` runs the release workflow: check and build both Linux variants and Windows, assign `v0.1.0` initially and increment subsequent patch tags, then publish all three versioned packages together. Unversioned duplicate archives are no longer published. `SHA256SUMS` verifies the archives and `release.json` records their version, source commit and hashes. Historical completed releases are preserved. The workflow assumes `main` is the default branch. Superseded queued commits or older workflow contents are skipped in favor of the newer push; a workflow change during a build stops publication before remote writes.
 
-The header displays the installed build's `vX.Y.Z` release tag beside SPOT TERMINAL. It is embedded at build time and works offline; it does not change when a newer release is published. Packaging verifies that the UI version matches the selected release, and diagnostics reports the same compiled version.
+The header displays the installed build's `vX.Y.Z` release tag beside the CryptoDesk name. It is embedded at build time and works offline; it does not change when a newer release is published. Packaging verifies that the UI version matches the selected release, and diagnostics reports the same compiled version.
 
 Local builds use the baseline in `VERSION` (currently `0.1.0`). Set `CRYPTODESK_VERSION=X.Y.Z` to override it for either build script; the header, output filename, package manifest and Windows product version follow this value. Release CI passes its selected version without making source-version bump commits. Hosted execution and Windows GUI checks are recorded separately in [STATUS.md](STATUS.md).
 

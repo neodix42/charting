@@ -1,4 +1,4 @@
-// Package exchange implements fixed, public spot endpoints. It has no Wails dependency.
+// Package exchange implements fixed, public market endpoints. It has no Wails dependency.
 package exchange
 
 import (
@@ -80,17 +80,20 @@ var bybitIntervals = map[string]string{"1m": "1", "5m": "5", "15m": "15", "1h": 
 var coinbaseIntervals = map[string]string{"1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE", "1h": "ONE_HOUR", "4h": "FOUR_HOUR", "1d": "ONE_DAY"}
 
 type publicAdapter struct {
-	provider, base, ws string
-	client             *http.Client
-	mu                 sync.Mutex
-	instruments        []domain.Instrument
-	fetched            time.Time
-	hub                *socketHub
-	requests           atomic.Int64
-	requestMu          sync.Mutex
-	nextRequest        time.Time
-	blockedUntil       atomic.Int64
-	requestSlots       chan struct{}
+	provider, base, ws       string
+	futuresBase, inverseBase string
+	futuresWS, inverseWS     string
+	client                   *http.Client
+	mu                       sync.Mutex
+	instruments              []domain.Instrument
+	fetched                  time.Time
+	hub                      *socketHub
+	hubs                     map[string]*socketHub
+	requests                 atomic.Int64
+	requestMu                sync.Mutex
+	nextRequest              time.Time
+	blockedUntil             atomic.Int64
+	requestSlots             chan struct{}
 }
 
 func New(provider string) (Adapter, error) {
@@ -99,9 +102,15 @@ func New(provider string) (Adapter, error) {
 	case "binance":
 		a.base = "https://api.binance.com"
 		a.ws = "wss://stream.binance.com:9443/ws"
+		a.futuresBase = "https://fapi.binance.com"
+		a.inverseBase = "https://dapi.binance.com"
+		a.futuresWS = "wss://fstream.binance.com/market/ws"
+		a.inverseWS = "wss://dstream.binance.com/ws"
 	case "bybit":
 		a.base = "https://api.bybit.com"
 		a.ws = "wss://stream.bybit.com/v5/public/spot"
+		a.futuresWS = "wss://stream.bybit.com/v5/public/linear"
+		a.inverseWS = "wss://stream.bybit.com/v5/public/inverse"
 	case "coinbase":
 		a.base = "https://api.coinbase.com"
 		a.ws = "wss://advanced-trade-ws.coinbase.com"
@@ -109,6 +118,7 @@ func New(provider string) (Adapter, error) {
 		return nil, &Error{Kind: "unknownInstrument", Message: "Unknown exchange"}
 	}
 	a.hub = newSocketHub(a)
+	a.hubs = map[string]*socketHub{"spot": a.hub}
 	return a, nil
 }
 func (a *publicAdapter) validate(k domain.FeedKey) error {
@@ -127,7 +137,11 @@ func coinbaseAlias(id string) bool {
 	return strings.HasSuffix(id, "-USDC") && id != "USDT-USDC" && id != "EURC-USDC"
 }
 func (a *publicAdapter) get(ctx context.Context, path string, q url.Values, dst any) error {
-	u := a.base + path
+	return a.getAt(ctx, a.base, path, q, dst)
+}
+
+func (a *publicAdapter) getAt(ctx context.Context, base, path string, q url.Values, dst any) error {
+	u := base + path
 	if len(q) > 0 {
 		u += "?" + q.Encode()
 	}
@@ -153,7 +167,7 @@ func (a *publicAdapter) get(ctx context.Context, path string, q url.Values, dst 
 			<-a.requestSlots
 			return err
 		}
-		req.Header.Set("User-Agent", "CryptoDesk/1.0 public-spot")
+		req.Header.Set("User-Agent", "CryptoDesk/1.0 public-market-data")
 		req.Header.Set("Accept", "application/json")
 		a.requests.Add(1)
 		resp, err := a.client.Do(req)
@@ -254,16 +268,50 @@ type Diagnostics struct {
 }
 
 func (a *publicAdapter) Diagnostics() Diagnostics {
-	h := a.hub
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	d := Diagnostics{Sockets: h.sockets, Reconnects: h.reconnects, RESTRequests: a.requests.Load()}
-	for _, channels := range h.subs {
-		for _, ch := range channels {
-			d.QueueDepth += len(ch)
+	a.mu.Lock()
+	hubs := make([]*socketHub, 0, len(a.hubs))
+	for _, h := range a.hubs {
+		hubs = append(hubs, h)
+	}
+	a.mu.Unlock()
+	d := Diagnostics{RESTRequests: a.requests.Load()}
+	for _, h := range hubs {
+		h.mu.Lock()
+		d.Sockets += h.sockets
+		d.Reconnects += h.reconnects
+		for _, channels := range h.subs {
+			for _, ch := range channels {
+				d.QueueDepth += len(ch)
+			}
 		}
+		h.mu.Unlock()
 	}
 	return d
+}
+
+// Native perpetual IDs identify their settlement family even before discovery,
+// so saved charts restore without waiting for a symbol catalog request.
+func marketCategory(k domain.FeedKey) string {
+	if k.Market != "perpetual" {
+		return "spot"
+	}
+	if strings.HasSuffix(k.Instrument, "_PERP") || strings.HasSuffix(k.Instrument, "USD") {
+		return "inverse"
+	}
+	return "linear"
+}
+
+func (a *publicAdapter) socketFor(k domain.FeedKey) *socketHub {
+	category := marketCategory(k)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if h := a.hubs[category]; h != nil {
+		return h
+	}
+	h := newSocketHub(a)
+	h.category = category
+	a.hubs[category] = h
+	return h
 }
 
 func maxTime(a, b time.Time) time.Time {

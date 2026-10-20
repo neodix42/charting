@@ -223,7 +223,7 @@ func Validate(w Workspace) error {
 					return bad("%s", err)
 				}
 			}
-			if !member(chart.Exchange, "binance", "bybit", "coinbase") || chart.Market != "spot" {
+			if !member(chart.Exchange, "binance", "bybit", "coinbase") || !supportedMarket(chart.Exchange, chart.Market) {
 				return bad("unsupported exchange or market")
 			}
 			if !text(chart.Instrument, 128) {

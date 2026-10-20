@@ -316,7 +316,10 @@
           ]
         },
         "market": {
-          "const": "spot"
+          "enum": [
+            "spot",
+            "perpetual"
+          ]
         },
         "instrument": {
           "type": "string",
@@ -377,6 +380,27 @@
           }
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "exchange": {
+                "const": "coinbase"
+              }
+            },
+            "required": [
+              "exchange"
+            ]
+          },
+          "then": {
+            "properties": {
+              "market": {
+                "const": "spot"
+              }
+            }
+          }
+        }
+      ],
       "required": [
         "id",
         "exchange",

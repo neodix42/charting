@@ -143,6 +143,39 @@ func TestRangeBoundsAndProviderIsolation(t *testing.T) {
 	}
 }
 
+func TestSameSymbolSpotAndPerpetualRemainIsolatedAfterRestart(t *testing.T) {
+	directory := t.TempDir()
+	s := openTest(t, directory)
+	spot, perpetual := testKey(), testKey()
+	perpetual.Market = "perpetual"
+	spotBar, perpetualBar := testCandle(0), testCandle(0)
+	spotBar.Close, spotBar.Volume = 100.5, 3
+	perpetualBar.Close, perpetualBar.Volume = 101.5, 7
+	for _, entry := range []struct {
+		key domain.FeedKey
+		bar domain.Candle
+	}{{spot, spotBar}, {perpetual, perpetualBar}} {
+		if err := s.Upsert(entry.key, []domain.Candle{entry.bar}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s = openTest(t, directory)
+	corrected := spotBar
+	corrected.Volume = 2
+	if err := s.Upsert(spot, []domain.Candle{corrected}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTest(t, s, spot, 0, 0, 10); !reflect.DeepEqual(got, []domain.Candle{corrected}) {
+		t.Fatal("spot candle was overwritten by perpetual", got)
+	}
+	if got := readTest(t, s, perpetual, 0, 0, 10); !reflect.DeepEqual(got, []domain.Candle{perpetualBar}) {
+		t.Fatal("spot correction changed perpetual candle", got)
+	}
+}
+
 func TestInvalidBatchesAreAtomic(t *testing.T) {
 	s := openTest(t, t.TempDir())
 	key := testKey()
@@ -175,7 +208,7 @@ func TestInvalidBatchesAreAtomic(t *testing.T) {
 	invalidKey := key
 	invalidKey.Market = "futures"
 	if err := s.Upsert(invalidKey, []domain.Candle{valid}); err == nil {
-		t.Fatal("nonpublic spot market accepted")
+		t.Fatal("unsupported market accepted")
 	}
 	if err := s.Upsert(key, make([]domain.Candle, maxBatch+1)); err == nil {
 		t.Fatal("unbounded batch accepted")

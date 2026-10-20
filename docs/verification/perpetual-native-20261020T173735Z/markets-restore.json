@@ -1,0 +1,200 @@
+{
+  "phase": "markets-restore",
+  "startedAt": "2026-10-20T17:37:52.646Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "market smoke keeps exactly one tab and chart",
+      "passed": true,
+      "actual": {
+        "tabs": 1,
+        "charts": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "market smoke keeps the original 1×1 grid",
+      "passed": true,
+      "actual": {
+        "rows": 1,
+        "columns": 1,
+        "rowFractions": [
+          1
+        ],
+        "columnFractions": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "SPOT TERMINAL label is absent from the native header",
+      "passed": true,
+      "actual": "CryptoDeskv0.1.01m5m15m1h4h1d1wIndicatorsSMAEMAIchimoku CloudMACDCharts 1/9Grid1 × 11 × 22 × 12 × 22 × 33 × 23 × 3＋ Add chart⧉DuplicateAll changes saved⚙ Settings"
+    },
+    {
+      "name": "native header and backend use the built release version",
+      "passed": true,
+      "actual": {
+        "expected": "0.1.0",
+        "backend": "0.1.0",
+        "header": "v0.1.0"
+      }
+    },
+    {
+      "name": "market type appears as a label without a separate selector",
+      "passed": true
+    },
+    {
+      "name": "native restart reopens the same workspace and chart",
+      "passed": true,
+      "actual": {
+        "expected": {
+          "chartId": "d072f70d-5f27-4e15-8c08-192551ede550",
+          "exchange": "bybit",
+          "instrument": "XAGUSDT",
+          "market": "perpetual",
+          "version": "0.1.0",
+          "workspaceId": "a9449456-40e7-46a0-b7e6-655d074373d1"
+        },
+        "workspaceId": "a9449456-40e7-46a0-b7e6-655d074373d1",
+        "chartId": "d072f70d-5f27-4e15-8c08-192551ede550"
+      }
+    },
+    {
+      "name": "native restart restores the exact saved perpetual selection",
+      "passed": true,
+      "actual": {
+        "exchange": "bybit",
+        "market": "perpetual",
+        "instrument": "XAGUSDT",
+        "timeframe": "1h"
+      }
+    },
+    {
+      "name": "WebKit renders the restored provider, symbol and Perpetual label",
+      "passed": true
+    },
+    {
+      "name": "restored bybit XAGUSDT Perpetual history retains the exact market identity",
+      "passed": true,
+      "actual": {
+        "exchange": "bybit",
+        "market": "perpetual",
+        "instrument": "XAGUSDT",
+        "timeframe": "1h"
+      }
+    },
+    {
+      "name": "restored bybit XAGUSDT Perpetual returns genuine public OHLCV bars",
+      "passed": true,
+      "actual": {
+        "count": 6,
+        "last": {
+          "time": 1792515600,
+          "open": 57.88,
+          "high": 58.03,
+          "low": 57.83,
+          "close": 57.99,
+          "volume": 4642.959,
+          "closed": false,
+          "quality": "provisional",
+          "sourceRevision": 0
+        }
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-20T17:37:53.113639732Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3600336,
+    "goHeapInUseBytes": 5586944,
+    "goVersion": "go1.26.8",
+    "goroutines": 18,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 1,
+    "processTreeRSSBytes": 608706560,
+    "processTreeRootPID": 486905,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "marketSelections": [
+    {
+      "exchange": "bybit",
+      "market": "perpetual",
+      "instrument": "XAGUSDT",
+      "timeframe": "1h",
+      "label": "restored bybit XAGUSDT Perpetual",
+      "passed": true,
+      "historyBars": 6,
+      "diskBars": 500,
+      "last": {
+        "time": 1792515600,
+        "open": 57.88,
+        "high": 58.03,
+        "low": 57.83,
+        "close": 57.99,
+        "volume": 4642.959,
+        "closed": false,
+        "quality": "provisional",
+        "sourceRevision": 0
+      },
+      "status": "live · Public perpetual data; current bucket may be provisionalFollowing live · Feed 0s ago · trade 0s agoUTC",
+      "ohlcv": "O 57.88H 58.03L 57.83C 57.99V 4,642.959 baseprovisional"
+    }
+  ],
+  "catalogs": [],
+  "savedSelection": {
+    "workspaceId": "a9449456-40e7-46a0-b7e6-655d074373d1",
+    "chartId": "d072f70d-5f27-4e15-8c08-192551ede550",
+    "exchange": "bybit",
+    "market": "perpetual",
+    "instrument": "XAGUSDT",
+    "timeframe": "1h",
+    "revision": 14
+  },
+  "frontend": {
+    "chartInstances": 1,
+    "consumers": 1,
+    "bufferedEvents": 0,
+    "savedTabs": 1,
+    "savedCharts": 1,
+    "revision": 14
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 1,
+      "uniqueFeeds": 1,
+      "cachedFeeds": 1,
+      "cachedCandles": 500,
+      "historyRequests": 1,
+      "queueDepth": 0,
+      "resyncs": 1,
+      "sockets": 1,
+      "reconnects": 1,
+      "restRequests": 4
+    },
+    "mode": "public live data",
+    "persistedRevision": 14,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "live · Public perpetual data; current bucket may be provisionalFollowing live · Feed 0s ago · trade 0s agoUTC"
+  ],
+  "finishedAt": "2026-10-20T17:37:53.894Z"
+}

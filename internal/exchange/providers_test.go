@@ -170,10 +170,15 @@ func TestInstrumentDiscoveryMetadataCacheAndCopies(t *testing.T) {
 				hits++
 				switch provider {
 				case "binance":
+					if r.URL.Path != "/api/v3/exchangeInfo" {
+						fmt.Fprint(w, `{"symbols":[]}`)
+						return
+					}
 					fmt.Fprint(w, `{"symbols":[{"symbol":"BTCUSDT","status":"TRADING","baseAsset":"BTC","quoteAsset":"USDT","isSpotTradingAllowed":true,"filters":[{"filterType":"PRICE_FILTER","tickSize":"0.01"},{"filterType":"LOT_SIZE","stepSize":"0.0001"}]}]}`)
 				case "bybit":
 					if r.URL.Query().Get("category") != "spot" {
-						t.Error("not spot")
+						fmt.Fprint(w, `{"retCode":0,"result":{"list":[]}}`)
+						return
 					}
 					fmt.Fprint(w, `{"retCode":0,"result":{"list":[{"symbol":"BTCUSDT","status":"Trading","baseCoin":"BTC","quoteCoin":"USDT","priceFilter":{"tickSize":"0.01"},"lotSizeFilter":{"basePrecision":"0.0001"}}]}}`)
 				case "coinbase":
@@ -184,11 +189,13 @@ func TestInstrumentDiscoveryMetadataCacheAndCopies(t *testing.T) {
 			generic, _ := New(provider)
 			a := generic.(*publicAdapter)
 			a.base = server.URL
+			a.futuresBase = server.URL
+			a.inverseBase = server.URL
 			items, e := a.Instruments(context.Background())
 			if e != nil {
 				t.Fatal(e)
 			}
-			if len(items) != 1 || items[0].PriceIncrement != "0.01" || items[0].SizeIncrement != "0.0001" {
+			if len(items) != 1 || items[0].Market != "spot" || items[0].PriceIncrement != "0.01" || items[0].SizeIncrement != "0.0001" {
 				t.Fatalf("bad metadata %+v", items)
 			}
 			items[0].SupportedIntervals[0] = "oops"
@@ -199,7 +206,11 @@ func TestInstrumentDiscoveryMetadataCacheAndCopies(t *testing.T) {
 				items[0].ProviderMetadata["publicAlias"] = "oops"
 			}
 			again, e := a.Instruments(context.Background())
-			if e != nil || hits != 1 || again[0].SupportedIntervals[0] != "1m" || again[0].ProviderMetadata["publicAlias"] == "oops" {
+			expected := 3
+			if provider == "coinbase" {
+				expected = 1
+			}
+			if e != nil || hits != expected || again[0].SupportedIntervals[0] != "1m" || again[0].ProviderMetadata["publicAlias"] == "oops" {
 				t.Fatalf("cache mutation or duplicate fetch: %+v %v hits%d", again, e, hits)
 			}
 		})

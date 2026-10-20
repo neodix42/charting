@@ -37,21 +37,50 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 	if a.provider == "coinbase" && k.Timeframe == "1w" {
 		return a.coinbaseWeeklyHistory(ctx, k, from, to, time.Now().Unix())
 	}
+	// COIN-M permits at most 200 days per REST request. Keep each request
+	// within that window without truncating a user's daily/weekly history page.
+	if a.provider == "binance" && marketCategory(k) == "inverse" && to-from > 200*86400 {
+		pageSpan := (200 * 86400 / d) * d
+		var bars []domain.Candle
+		for cursor := from; cursor < to; {
+			end := min(to, cursor+pageSpan)
+			page, err := a.History(ctx, k, cursor, end, limit)
+			if err != nil {
+				return nil, err
+			}
+			bars = append(bars, page...)
+			cursor = end
+		}
+		return Normalize(bars, d)
+	}
 	q := url.Values{}
 	var result []domain.Candle
 	now := time.Now().Unix()
 	switch a.provider {
 	case "binance":
+		base, path := a.base, "/api/v3/klines"
+		if k.Market == "perpetual" {
+			base, path = a.futuresBase, "/fapi/v1/klines"
+			if marketCategory(k) == "inverse" {
+				base, path = a.inverseBase, "/dapi/v1/klines"
+			}
+		}
 		q.Set("symbol", k.Instrument)
 		q.Set("interval", k.Timeframe)
 		q.Set("startTime", strconv.FormatInt(from*1000, 10))
 		q.Set("endTime", strconv.FormatInt(to*1000-1, 10))
 		q.Set("limit", strconv.Itoa(limit))
 		var rows [][]json.RawMessage
-		if err := a.get(ctx, "/api/v3/klines", q, &rows); err != nil {
+		if err := a.getAt(ctx, base, path, q, &rows); err != nil {
 			return nil, err
 		}
 		for _, row := range rows {
+			if marketCategory(k) == "inverse" {
+				if len(row) < 8 {
+					return nil, fmt.Errorf("short Binance inverse kline")
+				}
+				row[5] = row[7] // COIN-M: index 5 is contracts; index 7 is base volume.
+			}
 			c, err := parseArrayCandle(row, "binance", d, now)
 			if err != nil {
 				return nil, err
@@ -59,7 +88,7 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 			result = append(result, c)
 		}
 	case "bybit":
-		q.Set("category", "spot")
+		q.Set("category", marketCategory(k))
 		q.Set("symbol", k.Instrument)
 		q.Set("interval", bybitIntervals[k.Timeframe])
 		q.Set("start", strconv.FormatInt(from*1000, 10))
@@ -74,6 +103,12 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 			return nil, err
 		}
 		for _, row := range payload.Result.List {
+			if marketCategory(k) == "inverse" {
+				if len(row) < 7 {
+					return nil, fmt.Errorf("short Bybit inverse kline")
+				}
+				row[5] = row[6] // Inverse turnover is in base coin.
+			}
 			c, err := parseArrayCandle(row, "bybit", d, now)
 			if err != nil {
 				return nil, err
@@ -161,54 +196,14 @@ func (a *publicAdapter) Instruments(ctx context.Context) ([]domain.Instrument, e
 	a.mu.Unlock()
 	var result []domain.Instrument
 	makeInstrument := func(id, base, quote, price, size, status string, metadata map[string]string) {
-		result = append(result, domain.Instrument{NativeID: id, BaseAsset: base, QuoteAsset: quote, PriceIncrement: price, SizeIncrement: size, Availability: status, SupportedIntervals: append([]string(nil), domain.Intervals...), ProviderMetadata: metadata})
+		result = append(result, domain.Instrument{NativeID: id, Market: "spot", BaseAsset: base, QuoteAsset: quote, PriceIncrement: price, SizeIncrement: size, Availability: status, SupportedIntervals: append([]string(nil), domain.Intervals...), ProviderMetadata: metadata})
 	}
+	var catalogErr error
 	switch a.provider {
-	case "binance":
-		var payload struct {
-			Symbols []struct {
-				Symbol, Status, BaseAsset, QuoteAsset string
-				IsSpotTradingAllowed                  bool `json:"isSpotTradingAllowed"`
-				Filters                               []struct{ FilterType, TickSize, StepSize string }
-			}
-		}
-		if err := a.get(ctx, "/api/v3/exchangeInfo", url.Values{"permissions": {"SPOT"}, "showPermissionSets": {"false"}}, &payload); err != nil {
-			return nil, err
-		}
-		for _, v := range payload.Symbols {
-			if !v.IsSpotTradingAllowed {
-				continue
-			}
-			price, size := "", ""
-			for _, f := range v.Filters {
-				if f.FilterType == "PRICE_FILTER" {
-					price = f.TickSize
-				}
-				if f.FilterType == "LOT_SIZE" {
-					size = f.StepSize
-				}
-			}
-			makeInstrument(v.Symbol, v.BaseAsset, v.QuoteAsset, price, size, v.Status, nil)
-		}
-	case "bybit":
-		var payload struct {
-			Result struct {
-				List []struct {
-					Symbol, BaseCoin, QuoteCoin, Status string
-					PriceFilter                         struct{ TickSize string }
-					LotSizeFilter                       struct{ BasePrecision, QtyStep string }
-				}
-			}
-		}
-		if err := a.get(ctx, "/v5/market/instruments-info", url.Values{"category": {"spot"}}, &payload); err != nil {
-			return nil, err
-		}
-		for _, v := range payload.Result.List {
-			size := v.LotSizeFilter.BasePrecision
-			if size == "" {
-				size = v.LotSizeFilter.QtyStep
-			}
-			makeInstrument(v.Symbol, v.BaseCoin, v.QuoteCoin, v.PriceFilter.TickSize, size, v.Status, nil)
+	case "binance", "bybit":
+		result, catalogErr = a.allInstruments(ctx)
+		if len(result) == 0 && catalogErr != nil {
+			return nil, catalogErr
 		}
 	case "coinbase":
 		// Prefer documented cursor pagination; offset remains a compatibility path
@@ -286,7 +281,23 @@ func (a *publicAdapter) Instruments(ctx context.Context) ([]domain.Instrument, e
 			return nil, &Error{Kind: "internal", Message: "Coinbase instrument pagination exceeded bounded request budget"}
 		}
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].NativeID < result[j].NativeID })
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].NativeID == result[j].NativeID {
+			return result[i].Market == "spot" && result[j].Market != "spot"
+		}
+		return result[i].NativeID < result[j].NativeID
+	})
+	if catalogErr != nil {
+		for i := range result {
+			if result[i].ProviderMetadata == nil {
+				result[i].ProviderMetadata = map[string]string{}
+			}
+			result[i].ProviderMetadata["catalogWarning"] = catalogErr.Error()
+		}
+		// A retry must re-query missing categories rather than caching an
+		// incomplete list as though discovery succeeded in full.
+		return cloneInstruments(result), nil
+	}
 	a.mu.Lock()
 	a.instruments = result
 	a.fetched = time.Now()
