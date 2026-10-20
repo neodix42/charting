@@ -26,13 +26,13 @@ The larger Windows ZIP includes its pinned Fixed Version WebView2 runtime with E
 - Independent exchange, instrument and period per chart: **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Search current spot instruments, pan/zoom, load older history, and return to live data. Connection failures and provisional candles remain visible.
 - **SMA, EMA, Ichimoku Cloud and MACD**, with parameter dialogs, multiple instances, editable colors and saved settings. MACD uses separate resizable panes and remembers their proportions.
 - Shared period buttons and an Indicators menu in the top header apply to every chart in the current tab. Individual chart controls remain independent.
-- Configurable grids with empty slots, draggable tabs/charts, resizable tracks, and chart maximization. Rename or duplicate a tab; **right-click a tab → Close tab** to confirm removal of that tab and all its charts. The final tab stays open.
+- Configurable grids with empty slots, draggable tabs/charts, resizable tracks, and chart maximization. Rename or duplicate a tab; **middle-click a tab** to close it and all its charts without confirmation. Each chart’s enlarged **×** button also closes it without confirmation. The final tab and final chart in each tab stay protected.
 - Theme and display timezone settings, volume, candlestick/line rendering, linear/log price scales, and saved viewports. Set the global right-side chart gap in **bars or pixels**, defaulting to **10 bars**.
 - Automatic SQLite workspace saving and restoration, JSON import/export, recovery snapshots and a final-save handshake on close. Hidden tabs retain configuration without keeping all their charts rendered or subscribed.
 
 This is a read-only charting application. It does not place trades or connect to exchange accounts. Weekly candles start Monday at 00:00 UTC. Coinbase weekly history is aggregated from actual daily candles; incomplete coverage is marked provisional.
 
-Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. A tab's context menu also opens with the keyboard Menu key or **Shift+F10**.
+Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab.
 
 ## Build from source
 

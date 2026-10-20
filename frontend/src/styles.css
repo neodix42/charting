@@ -9,9 +9,6 @@
 
 .chart-gap-setting{flex-wrap:wrap}.chart-gap-fields{max-width:100%}.chart-gap-controls{display:flex;align-items:center;gap:6px}.chart-gap-controls input{width:85px}.chart-gap-fields>small{display:block;margin-top:6px}.chart-gap-fields .danger{color:var(--danger)}
 
-.tab-context-menu{position:fixed;z-index:50;min-width:170px;max-width:calc(100vw - 16px);padding:5px;border:1px solid var(--border);border-radius:6px;background:var(--elevated);box-shadow:var(--shadow)}
-.tab-context-menu button{display:block;width:100%;border:0;background:none;border-radius:3px;text-align:left;padding:8px 10px;font-size:12px}
-.tab-context-menu button:focus-visible{outline-offset:-2px;background:var(--hover)}
 
 .app-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);height:62px;min-height:62px;gap:12px;padding:0 16px}
 .app-header .brand{justify-self:start;font-size:20px;gap:8px;white-space:nowrap}
@@ -34,3 +31,5 @@
 .brand-mark{padding:0;background:none;object-fit:contain}
 @media(max-width:1580px){.app-header .brand-tag{display:none}.workspace-actions .action-label{display:none}.header-action .action-icon{display:inline}.workspace-actions .header-action{min-width:29px;font-size:15px;padding:3px 6px}.header-actions .settings-button span{display:none}.header-actions .settings-button{min-width:30px;font-size:15px;padding:3px 6px}}
 @media(max-width:1250px){.app-header{gap:8px;padding:0 12px}.app-header .brand{font-size:18px;gap:6px}.app-header .brand-icon{width:25px;height:25px}.workspace-actions .chart-capacity{display:none}.header-actions{gap:6px}.workspace-actions{gap:4px}.app-header .tab-chart-controls{gap:6px}.app-header .tab-chart-controls .timeframe-buttons button{min-width:25px;padding:4px 3px}.app-header .tab-chart-controls select{min-width:110px;width:110px}.workspace-actions .layout-select{gap:4px}}
+
+.chart-header .chart-close{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;height:30px;min-width:30px;min-height:30px;padding:0;font-size:22px;line-height:1}
