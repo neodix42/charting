@@ -27,7 +27,9 @@ export function hitTestDrawing(drawings:readonly ProjectedDrawing[],point:Screen
   const drawing=drawings[i],anchor=drawing.coordinates[0];
   if(!anchor||drawing.coordinates.some(value=>!Number.isFinite(value.x)||!Number.isFinite(value.y)))continue;
   if(drawing.type==='horizontal'){
-   if(anchor.y>=0&&anchor.y<=height&&Math.abs(point.y-anchor.y)<=tolerance)return drawing.id;
+   const other=drawing.coordinates[1];
+   if(other){const segment=clipSegment(anchor,{x:other.x,y:anchor.y},width,height);if(segment&&segmentDistance(point,...segment)<=tolerance)return drawing.id;}
+   else if(anchor.y>=0&&anchor.y<=height&&Math.abs(point.y-anchor.y)<=tolerance)return drawing.id;
   }else if(drawing.type==='trendline'){
    const other=drawing.coordinates[1],segment=other&&clipSegment(anchor,other,width,height);
    if(segment&&segmentDistance(point,...segment)<=tolerance)return drawing.id;
@@ -38,4 +40,12 @@ export function hitTestDrawing(drawings:readonly ProjectedDrawing[],point:Screen
   }
  }
  return null;
+}
+
+/** Handles belong to the selected drawing and stay usable in media/CSS coordinates. */
+export function hitTestHandle(drawing:ProjectedDrawing,point:ScreenPoint,width:number,height:number):number|null{
+ if(![point.x,point.y,width,height].every(Number.isFinite)||point.x<0||point.y<0||point.x>width||point.y>height)return null;
+ let nearest:number|null=null,distance=8;
+ drawing.coordinates.forEach((handle,index)=>{const next=Math.hypot(point.x-handle.x,point.y-handle.y);if(next<=distance){nearest=index;distance=next;}});
+ return nearest;
 }

@@ -506,15 +506,36 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(JSON.stringify(moveDraft)===JSON.stringify(drawingSaved),'native moving preview is not persisted before placement',moveDraft);
    drawPoint(.25,.6);await flush();const movedDrawings=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
    check(movedDrawings.length===4&&movedDrawings.every((drawing,index)=>drawing.id===drawingSaved[index].id&&drawing.type===drawingSaved[index].type&&drawing.exchange===drawingSaved[index].exchange&&drawing.market===drawingSaved[index].market&&drawing.instrument===drawingSaved[index].instrument)&&movedDrawings[2].points[0].price!==drawingSaved[2].points[0].price&&movedDrawings.every((drawing,index)=>index===2||JSON.stringify(drawing)===JSON.stringify(drawingSaved[index])),'native double-click move commits new anchors on the same drawing without changing its siblings',movedDrawings);
-   check(drawingCell.querySelector('[aria-label="Cursor"]').getAttribute('aria-pressed')==='true','native drawing placement exits move mode');
-   report.drawingMove={before:drawingSaved[2],after:movedDrawings[2]};report.savedDrawings=movedDrawings;
+   check(!drawingCell.querySelector('.drawing-hint').textContent.includes('Move drawing')&&!drawingCell.querySelector('[aria-label="Delete selected drawing"]').disabled,'native drawing placement exits move mode and keeps the item selected');
+   report.drawingMove={before:drawingSaved[2],after:movedDrawings[2]};
+   const resizePoint=(target,type,x,y,buttons)=>{const rect=drawingPlot.getBoundingClientRect();target.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:7,pointerType:'mouse',isPrimary:true,button:0,buttons,clientX:rect.left+x,clientY:rect.top+rect.height*y}));};
+   resizePoint(drawingPlot,'pointerdown',8,.6,1);
+   await wait(()=>drawingCell.querySelector('.drawing-hint').textContent.includes('Adjust endpoint'),'native selected horizontal endpoint starts resizing');
+   resizePoint(drawingCell.querySelector('.chart-drawing-overlay'),'pointermove',80,.72,1);
+   await flush();const resizeDraft=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
+   check(JSON.stringify(resizeDraft)===JSON.stringify(movedDrawings),'native endpoint preview leaves the committed SQLite anchors intact',resizeDraft);
+   resizePoint(drawingCell.querySelector('.chart-drawing-overlay'),'pointerup',80,.72,0);
+   await flush();const resizedDrawings=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
+   check(resizedDrawings.length===4&&resizedDrawings[2].id===movedDrawings[2].id&&resizedDrawings[2].points.length===2&&resizedDrawings[2].points[0].time!==resizedDrawings[2].points[1].time&&resizedDrawings[2].points[0].price===resizedDrawings[2].points[1].price&&resizedDrawings[2].points[0].price!==movedDrawings[2].points[0].price&&resizedDrawings.every((drawing,index)=>index===2||JSON.stringify(drawing)===JSON.stringify(movedDrawings[index])),'native endpoint release persists a finite horizontal segment on the same ID and preserves its siblings',resizedDrawings);
+   report.drawingResize={before:movedDrawings[2],after:resizedDrawings[2]};
+   for(const method of ['button','keyboard']){
+    drawingCell.querySelector('[aria-label="Arrow up"]').click();await sleep(100);drawPoint(.12,.18);await flush();
+    const temporary=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings.at(-1),selectRect=drawingPlot.getBoundingClientRect(),selectPoint={bubbles:true,cancelable:true,pointerId:9,pointerType:'mouse',isPrimary:true,button:0,clientX:selectRect.left+selectRect.width*.12,clientY:selectRect.top+selectRect.height*.18};
+    drawingPlot.dispatchEvent(new PointerEvent('pointerdown',{...selectPoint,buttons:1}));drawingPlot.dispatchEvent(new PointerEvent('pointerup',{...selectPoint,buttons:0}));
+    await wait(()=>!drawingCell.querySelector('[aria-label="Delete selected drawing"]').disabled,'native single click selects the temporary arrow for '+method+' deletion');
+    if(method==='button')drawingCell.querySelector('[aria-label="Delete selected drawing"]').click();
+    else{document.activeElement?.blur();document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',bubbles:true,cancelable:true}));}
+    await flush();const deleted=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
+    check(!deleted.some(drawing=>drawing.id===temporary.id)&&JSON.stringify(deleted)===JSON.stringify(resizedDrawings),'native '+method+' deletion removes only the single-clicked item and persists its removal',deleted);
+   }
+   report.savedDrawings=resizedDrawings;
   } else if(phase==='restore') {
    const storageRestored=await api.GetCandleStorage(),cacheKey={exchange:initial.workspace.tabs[0].charts[0].exchange,market:'spot',instrument:initial.workspace.tabs[0].charts[0].instrument,timeframe:'1h'},restoredBars=await api.DesktopSmokeCandleRows(cacheKey,0,0);
    check(storageRestored.enabled&&storageRestored.directory.endsWith('/candles-selected')&&storageRestored.sizeBytes>0&&restoredBars.length>=4,'native restart restores machine-local settings and the actual downloaded candle data',{storage:storageRestored,bars:restoredBars.length});
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);
    const restoredDrawings=initial.workspace.tabs[0].charts[0].drawings;
-   check(restoredDrawings?.map(d=>d.type).join(',')==='arrowUp,arrowDown,horizontal,trendline'&&restoredDrawings.every(d=>d.points.length===(d.type==='trendline'?2:1)&&d.points.every(p=>Number.isInteger(p.time)&&p.time>0&&Number.isFinite(p.price)&&p.price>0)),'native restart restores all drawing types and saved price/time anchors',restoredDrawings);
+   check(restoredDrawings?.map(d=>d.type).join(',')==='arrowUp,arrowDown,horizontal,trendline'&&restoredDrawings.every(d=>d.points.length===(d.type==='trendline'||d.type==='horizontal'?2:1)&&d.points.every(p=>Number.isInteger(p.time)&&p.time>0&&Number.isFinite(p.price)&&p.price>0)),'native restart restores all drawing types, resized horizontal segment and saved price/time anchors',restoredDrawings);
    check(qa('[role="group"][aria-label="Drawing tools"]').length===3&&q('[aria-label="Drawing count"]').textContent==='4','restored WebKit chart exposes its saved drawings and each chart retains its toolbar');
    report.restoredDrawings=restoredDrawings;
    check(qa('[data-testid="chart-cell"]').length===3&&qa('[data-testid="chart-placeholder"]').length===6,'only selected tab is mounted after restart',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});

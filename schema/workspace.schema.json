@@ -472,7 +472,7 @@
       ]
     },
     "drawing": {
-      "description": "A chart-owned drawing shown only for its exchange, market and native instrument, across all timeframes.",
+      "description": "A chart-owned drawing shown only for its exchange, market and native instrument, across all timeframes. Horizontal drawings use one point for a full-width level or two endpoints for a finite segment; backend semantic validation requires two distinct times with identical prices.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -538,8 +538,20 @@
                 "minItems": 2
               }
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "arrowUp",
+                  "arrowDown"
+                ]
+              }
+            }
           },
-          "else": {
+          "then": {
             "properties": {
               "points": {
                 "maxItems": 1

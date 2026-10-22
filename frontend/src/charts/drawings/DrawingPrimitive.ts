@@ -1,6 +1,6 @@
 import type {IChartApi,IPanePrimitive,IPanePrimitivePaneView,IPrimitivePaneRenderer,ISeriesApi,PaneAttachedParameter} from 'lightweight-charts';
 import type {Candle,DrawingConfig,DrawingPoint,DrawingType} from '../../types';
-import {clipSegment,drawingLogicalToCoordinate,drawingTimeToLogical,type ScreenPoint} from './geometry';
+import {clipSegment,drawingCoordinateToLogical,drawingLogicalToCoordinate,drawingLogicalToTime,drawingTimeToLogical,type ScreenPoint} from './geometry';
 import {arrowOutline} from './hitTest';
 
 export type DrawingPriceSeries=ISeriesApi<'Candlestick'>|ISeriesApi<'Line'>;
@@ -14,7 +14,8 @@ export function drawDrawings(context:CanvasRenderingContext2D,drawings:readonly 
   const point=drawing.coordinates[0];if(!point)continue;context.strokeStyle=colors[drawing.type];context.fillStyle=colors[drawing.type];
   if(drawing.type==='horizontal'){
    if(point.y<0||point.y>height)continue;
-   context.beginPath();context.moveTo(0,point.y);context.lineTo(width,point.y);context.stroke();
+   const other=drawing.coordinates[1],segment=other?clipSegment(point,{x:other.x,y:point.y},width,height):[{x:0,y:point.y},{x:width,y:point.y}];
+   if(segment){context.beginPath();context.moveTo(segment[0].x,segment[0].y);context.lineTo(segment[1].x,segment[1].y);context.stroke();}
   }else if(drawing.type==='trendline'){
    const other=drawing.coordinates[1];if(!other)continue;const clipped=clipSegment(point,other,width,height);if(!clipped)continue;
    context.beginPath();context.moveTo(clipped[0].x,clipped[0].y);context.lineTo(clipped[1].x,clipped[1].y);context.stroke();
@@ -28,6 +29,16 @@ export function drawDrawings(context:CanvasRenderingContext2D,drawings:readonly 
  context.restore();
 }
 
+/** Visible endpoint handles distinguish selection without changing persisted drawing styles. */
+export function drawSelection(context:CanvasRenderingContext2D,drawing:ProjectedDrawing,width:number,height:number){
+ context.save();context.beginPath();context.rect(0,0,width,height);context.clip();context.globalAlpha=1;context.setLineDash([]);context.lineWidth=1.5;context.strokeStyle='#e9af55';context.fillStyle='#ffffff';
+ for(const handle of drawing.coordinates){
+  if(handle.x<-4||handle.x>width+4||handle.y<-4||handle.y>height+4)continue;
+  context.beginPath();context.rect(handle.x-4,handle.y-4,8,8);context.fill();context.stroke();
+ }
+ context.restore();
+}
+
 /** A pane primitive remains visible when switching between candle and line price series. */
 export class DrawingPrimitive implements IPanePrimitive {
  private chart:IChartApi|null=null;
@@ -36,16 +47,20 @@ export class DrawingPrimitive implements IPanePrimitive {
  private preview:{type:DrawingType;points:DrawingPoint[]}|null=null;
  private step=60;
  private hasBars=false;
+ private bars:readonly Candle[]=[];
+ private selectedId:string|null=null;
+ private selection:ProjectedDrawing|null=null;
  private projected:ProjectedDrawing[]=[];
  private projectedPreview:ProjectedDrawing[]=[];
- private readonly renderer:IPrimitivePaneRenderer={draw:target=>target.useMediaCoordinateSpace(({context,mediaSize})=>{drawDrawings(context,this.projected,mediaSize.width,mediaSize.height);drawDrawings(context,this.projectedPreview,mediaSize.width,mediaSize.height,true);})};
+ private readonly renderer:IPrimitivePaneRenderer={draw:target=>target.useMediaCoordinateSpace(({context,mediaSize})=>{drawDrawings(context,this.projected,mediaSize.width,mediaSize.height);drawDrawings(context,this.projectedPreview,mediaSize.width,mediaSize.height,true);if(this.selection)drawSelection(context,this.selection,mediaSize.width,mediaSize.height);})};
  private readonly views:readonly IPanePrimitivePaneView[]=[{zOrder:()=> 'top',renderer:()=>this.renderer}];
  constructor(private series:DrawingPriceSeries,private readonly onViewUpdate?:()=>void){}
  attached({chart,requestUpdate}:PaneAttachedParameter){this.chart=chart as IChartApi;this.requestUpdate=requestUpdate;}
- detached(){this.chart=null;this.requestUpdate=null;this.projected=[];this.projectedPreview=[];this.drawings=[];this.preview=null;}
+ detached(){this.chart=null;this.requestUpdate=null;this.projected=[];this.projectedPreview=[];this.drawings=[];this.preview=null;this.bars=[];this.selectedId=null;this.selection=null;}
  paneViews(){return this.views;}
  setSeries(series:DrawingPriceSeries){this.series=series;this.invalidate();}
- setData(drawings:readonly DrawingConfig[],bars:readonly Candle[],step:number){this.drawings=drawings;this.hasBars=bars.length>0;this.step=step;this.invalidate();}
+ setData(drawings:readonly DrawingConfig[],bars:readonly Candle[],step:number){this.drawings=drawings;this.bars=bars;this.hasBars=bars.length>0;this.step=step;this.invalidate();}
+ setSelection(id:string|null){if(this.selectedId===id)return;this.selectedId=id;this.invalidate();}
  setPreview(preview:{type:DrawingType;points:DrawingPoint[]}|null){this.preview=preview;this.invalidate();}
  private invalidate(){this.updateAllViews();this.requestUpdate?.();}
  private project(id:string,type:DrawingType,points:DrawingPoint[]):ProjectedDrawing|null{
@@ -61,8 +76,20 @@ export class DrawingPrimitive implements IPanePrimitive {
  updateAllViews(){
   this.projected=this.drawings.flatMap(drawing=>{const projected=this.project(drawing.id,drawing.type,drawing.points);return projected?[projected]:[];});
   const preview=this.preview&&this.project('preview',this.preview.type,this.preview.points);this.projectedPreview=preview?[preview]:[];
+  const selected=this.selectedId&&(this.projected.find(drawing=>drawing.id===this.selectedId)??this.projectedPreview[0]);this.selection=selected?this.selectionFor(selected):null;
   this.onViewUpdate?.();
+ }
+ private selectionFor(drawing:ProjectedDrawing):ProjectedDrawing|null{
+  if(!this.selectedId)return null;
+  if(drawing.type!=='horizontal'||drawing.points.length!==1)return {...drawing,id:this.selectedId};
+  const chart=this.chart;if(!chart)return null;
+  const width=chart.paneSize(0).width,inset=Math.min(8,width/4),scale=chart.timeScale(),price=drawing.points[0].price,y=drawing.coordinates[0].y;
+  const coordinates=[{x:inset,y},{x:width-inset,y}],points:DrawingPoint[]=[];
+  for(const point of coordinates){const logical=drawingCoordinateToLogical(scale,point.x),time=logical===null?null:drawingLogicalToTime(scale,logical,this.bars,this.step);if(time===null||!Number.isFinite(time)||Math.round(time)<1||Math.round(time)>253402300799)return null;points.push({time:Math.round(time),price});}
+  if(points[0].time===points[1].time)return null;
+  return {id:this.selectedId,type:drawing.type,points,coordinates};
  }
  read(){this.updateAllViews();return this.projected.map(drawing=>({...drawing,points:drawing.points.map(point=>({...point})),coordinates:drawing.coordinates.map(point=>({...point}))}));}
  readPreview(){this.updateAllViews();return this.projectedPreview.map(drawing=>({...drawing,points:drawing.points.map(point=>({...point})),coordinates:drawing.coordinates.map(point=>({...point}))}));}
+ readSelection(){this.updateAllViews();return this.selection?{...this.selection,points:this.selection.points.map(point=>({...point})),coordinates:this.selection.coordinates.map(point=>({...point}))}:null;}
 }

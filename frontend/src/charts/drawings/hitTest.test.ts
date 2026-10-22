@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import type {ProjectedDrawing} from './DrawingPrimitive';
-import {hitTestDrawing} from './hitTest';
+import {hitTestDrawing,hitTestHandle} from './hitTest';
 
 const drawing=(id:string,type:ProjectedDrawing['type'],coordinates:ProjectedDrawing['coordinates']):ProjectedDrawing=>({id,type,coordinates,points:[]});
 describe('drawing selection geometry',()=>{
@@ -27,5 +27,17 @@ describe('drawing selection geometry',()=>{
   expect(hitTestDrawing([drawing('hidden','horizontal',[{x:25,y:-3}])],{x:20,y:0},100,100)).toBeNull();
   expect(hitTestDrawing([drawing('hidden','arrowUp',[{x:25,y:-40}])],{x:25,y:0},100,100)).toBeNull();
   expect(hitTestDrawing([drawing('invalid','horizontal',[{x:25,y:NaN}])],{x:25,y:25},100,100)).toBeNull();
+ });
+ it('selects finite horizontal segments only along their painted extent, including reversed endpoints',()=>{
+  const segment=drawing('finite','horizontal',[{x:70,y:40},{x:20,y:40}]);
+  expect(hitTestDrawing([segment],{x:40,y:43},100,100)).toBe('finite');
+  expect(hitTestDrawing([segment],{x:90,y:40},100,100)).toBeNull();
+ });
+ it('finds only visible selected handles with a small CSS-pixel tolerance',()=>{
+  const segment=drawing('trend','trendline',[{x:20,y:40},{x:70,y:60}]);
+  expect(hitTestHandle(segment,{x:25,y:42},100,100)).toBe(0);
+  expect(hitTestHandle(segment,{x:70,y:65},100,100)).toBe(1);
+  expect(hitTestHandle(segment,{x:45,y:50},100,100)).toBeNull();
+  expect(hitTestHandle(segment,{x:20,y:40},100,30)).toBeNull();
  });
 });

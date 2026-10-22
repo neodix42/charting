@@ -85,25 +85,62 @@ func TestDrawingScopeAndAnchorBoundaries(t *testing.T) {
 	}
 }
 
+func TestHorizontalDrawingLegacyAndResizedSegmentsRoundTrip(t *testing.T) {
+	for name, points := range map[string][]DrawingPoint{
+		"legacy full width": {{Time: 1700000000, Price: 42123.5}},
+		"forward segment":   {{Time: 1700000000, Price: 42123.5}, {Time: 1700003600, Price: 42123.5}},
+		"reversed segment":  {{Time: 1700003600, Price: 42123.5}, {Time: 1700000000, Price: 42123.5}},
+		"boundary times":    {{Time: 1, Price: math.SmallestNonzeroFloat64}, {Time: 253402300799, Price: math.SmallestNonzeroFloat64}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := NewWorkspace()
+			d := testDrawing("horizontal")
+			d.Points = points
+			w.Tabs[0].Charts[0].Drawings = []Drawing{d}
+			data, err := json.Marshal(w)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual, err := DecodeWorkspace(data)
+			if err != nil || !reflect.DeepEqual(w, actual) {
+				t.Fatal("horizontal drawing geometry changed", err)
+			}
+			roundTrip, err := json.Marshal(actual)
+			if err != nil || string(data) != string(roundTrip) || actual.SchemaVersion != 1 {
+				t.Fatal("horizontal drawing changed its JSON shape or workspace version", err)
+			}
+		})
+	}
+}
+
 func TestInvalidDrawingConfigurationsRejected(t *testing.T) {
 	cases := map[string]func(*Drawing){
-		"unknown type":            func(d *Drawing) { d.Type = "script" },
-		"invalid UUID":            func(d *Drawing) { d.ID = "drawing-1" },
-		"unknown exchange":        func(d *Drawing) { d.Exchange = "other" },
-		"unknown market":          func(d *Drawing) { d.Market = "futures" },
-		"Coinbase perpetual":      func(d *Drawing) { d.Exchange, d.Market = "coinbase", "perpetual" },
-		"blank instrument":        func(d *Drawing) { d.Instrument = " \t" },
-		"long instrument":         func(d *Drawing) { d.Instrument = strings.Repeat("a", 129) },
-		"control instrument":      func(d *Drawing) { d.Instrument = "BTC\x00USDT" },
-		"executable instrument":   func(d *Drawing) { d.Instrument = "<script>" },
-		"URL instrument":          func(d *Drawing) { d.Instrument = "https://example.invalid" },
-		"no points":               func(d *Drawing) { d.Points = nil },
-		"one trendline point":     func(d *Drawing) { d.Points = d.Points[:1] },
-		"three trendline points":  func(d *Drawing) { d.Points = append(d.Points, DrawingPoint{Time: 1700010000, Price: 43000}) },
-		"identical points":        func(d *Drawing) { d.Points[1] = d.Points[0] },
-		"arrow with two points":   func(d *Drawing) { d.Type = "arrowUp" },
-		"down arrow with two":     func(d *Drawing) { d.Type = "arrowDown" },
-		"horizontal with two":     func(d *Drawing) { d.Type = "horizontal" },
+		"unknown type":             func(d *Drawing) { d.Type = "script" },
+		"invalid UUID":             func(d *Drawing) { d.ID = "drawing-1" },
+		"unknown exchange":         func(d *Drawing) { d.Exchange = "other" },
+		"unknown market":           func(d *Drawing) { d.Market = "futures" },
+		"Coinbase perpetual":       func(d *Drawing) { d.Exchange, d.Market = "coinbase", "perpetual" },
+		"blank instrument":         func(d *Drawing) { d.Instrument = " \t" },
+		"long instrument":          func(d *Drawing) { d.Instrument = strings.Repeat("a", 129) },
+		"control instrument":       func(d *Drawing) { d.Instrument = "BTC\x00USDT" },
+		"executable instrument":    func(d *Drawing) { d.Instrument = "<script>" },
+		"URL instrument":           func(d *Drawing) { d.Instrument = "https://example.invalid" },
+		"no points":                func(d *Drawing) { d.Points = nil },
+		"one trendline point":      func(d *Drawing) { d.Points = d.Points[:1] },
+		"three trendline points":   func(d *Drawing) { d.Points = append(d.Points, DrawingPoint{Time: 1700010000, Price: 43000}) },
+		"identical points":         func(d *Drawing) { d.Points[1] = d.Points[0] },
+		"arrow with two points":    func(d *Drawing) { d.Type = "arrowUp" },
+		"down arrow with two":      func(d *Drawing) { d.Type = "arrowDown" },
+		"horizontal prices differ": func(d *Drawing) { d.Type = "horizontal" },
+		"horizontal times equal": func(d *Drawing) {
+			d.Type = "horizontal"
+			d.Points[1] = d.Points[0]
+		},
+		"horizontal with three": func(d *Drawing) {
+			d.Type = "horizontal"
+			d.Points[1].Price = d.Points[0].Price
+			d.Points = append(d.Points, DrawingPoint{Time: 1700010000, Price: d.Points[0].Price})
+		},
 		"time zero":               func(d *Drawing) { d.Points[0].Time = 0 },
 		"negative time":           func(d *Drawing) { d.Points[1].Time = -1 },
 		"time beyond range":       func(d *Drawing) { d.Points[1].Time = 253402300800 },

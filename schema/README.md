@@ -58,8 +58,13 @@ Each chart may save an optional `drawings` array, limited to 100 drawings across
 of that chart's instruments. Omission preserves the exact legacy JSON shape. Each
 drawing requires `id`, `type`, `exchange`, `market`, `instrument`, and `points`.
 The supported types are `arrowUp`, `arrowDown`, `horizontal`, and `trendline`.
-Arrows and horizontal lines require one point; trendlines require two distinct
-points. Each point stores an integer UTC Unix-second `time` from 1–253402300799
+Arrows require one point; trendlines require two distinct points. Horizontal lines
+accept one point for a full-width level or two endpoints for a finite segment.
+Two horizontal endpoints must have distinct times and the exact same price; the
+backend enforces this semantic rule. Endpoint order is preserved, including when
+resizing crosses the other endpoint. Legacy one-point horizontal levels roundtrip
+without adding an endpoint or changing their full-width behavior. Each point stores
+an integer UTC Unix-second `time` from 1–253402300799
 and a finite, positive `price`. Distinct means either time or price differs, so
 vertical and horizontal trendlines are valid. Only geometry and instrument scope
 are saved; screen coordinates and temporary drawing previews are runtime state.

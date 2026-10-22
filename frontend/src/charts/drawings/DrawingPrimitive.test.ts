@@ -1,7 +1,7 @@
 import {describe,expect,it,vi} from 'vitest';
-import type {IChartApi,PaneAttachedParameter} from 'lightweight-charts';
+import type {IChartApi,PaneAttachedParameter,Time} from 'lightweight-charts';
 import type {Candle,DrawingConfig} from '../../types';
-import {DrawingPrimitive,drawDrawings,type DrawingPriceSeries} from './DrawingPrimitive';
+import {DrawingPrimitive,drawDrawings,drawSelection,type DrawingPriceSeries} from './DrawingPrimitive';
 
 function canvas(){
  const paths:{kind:string;color:string;points:number[][]}[]=[];let points:number[][]=[];
@@ -31,5 +31,19 @@ describe('drawing pane primitive',()=>{
  });
  it('omits drawings while the new market has no bars and never supplies autoscale expansion',()=>{
   const primitive=new DrawingPrimitive({priceToCoordinate:()=>20} as unknown as DrawingPriceSeries);primitive.setData(drawings,[],60);expect(primitive.read()).toEqual([]);expect(primitive).not.toHaveProperty('autoscaleInfo');
+ });
+ it('renders finite horizontal lines and visible selection handles without extending their endpoints',()=>{
+  const h=canvas(),drawing={id:'finite',type:'horizontal' as const,points:[],coordinates:[{x:80,y:40},{x:20,y:40}]};
+  drawDrawings(h.context,[drawing],100,100);expect(h.paths[0].points).toEqual([[80,40],[20,40]]);
+  drawSelection(h.context,drawing,100,100);expect(h.context.rect).toHaveBeenCalledWith(76,36,8,8);expect(h.context.rect).toHaveBeenCalledWith(16,36,8,8);
+ });
+ it('supplies temporary horizontal edge handles without changing a legacy full-width level',()=>{
+  const times=[1000,1060,1120,1180,1240],chart={paneSize:()=>({width:200,height:100}),timeScale:()=>({timeToIndex:(time:number,nearest?:boolean)=>{const i=times.indexOf(time);if(i>=0)return i;if(!nearest)return null;const next=times.findIndex(value=>value>time);return next<0?times.length-1:next;},coordinateToLogical:(x:number)=>Math.ceil(x/50),logicalToCoordinate:(index:number)=>Number.isInteger(index)?index*50:0,coordinateToTime:(x:number)=>times[Math.round(x/50)] as Time??null})} as unknown as IChartApi;
+  const level:DrawingConfig={...scope,id:'level',type:'horizontal',points:[{time:1060,price:90}]};
+  const primitive=new DrawingPrimitive({priceToCoordinate:(price:number)=>100-price} as DrawingPriceSeries);primitive.attached({chart,requestUpdate:vi.fn()} as unknown as PaneAttachedParameter);primitive.setData([level],times.map(time=>({time})) as Candle[],60);primitive.setSelection(level.id);
+  expect(primitive.readSelection()).toEqual({id:'level',type:'horizontal',points:[{time:1010,price:90},{time:1230,price:90}],coordinates:[{x:8,y:10},{x:192,y:10}]});
+  expect(primitive.read()[0].points).toEqual(level.points);expect(level.points).toHaveLength(1);
+  primitive.setData([],times.map(time=>({time})) as Candle[],60);primitive.setPreview({type:'horizontal',points:[{time:1060,price:80},{time:1180,price:80}]});
+  expect(primitive.readSelection()?.coordinates).toEqual([{x:50,y:20},{x:150,y:20}]);primitive.setSelection(null);expect(primitive.readSelection()).toBeNull();
  });
 });

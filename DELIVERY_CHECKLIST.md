@@ -14,6 +14,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Coinbase public5mrestriction addressed via trade-derived intervals; aliases rejected/labelled; overlapping volume stays provisional.
 - [x] History/volume/precision/crosshair/scale/viewport code and regression tests, including bounded moving windows.
 - [x] Per-chart up/down arrows, horizontal lines and two-click trendlines; UTC/price anchors persist through SQLite restart, JSON round trips and independent tab duplication. Drawing controls and zoom/resize/line-style/symbol-scope behavior verified in browser; actual Wails drawing placement/restart verified on Ubuntu (2026-10-22).
+- [x] Single-click selection, per-chart Delete button and Delete/Del keys; draggable line endpoints, finite horizontal segments and same-ID edits/deletions persist across restart. Native Wails/WebKit verifies selection, preview isolation, endpoint release, button/keyboard deletion and exact SQLite restoration (2026-10-22).
 - [x] Double-click drawing selection, preview movement, click placement and cancellation; preserve IDs/scopes and restore moved anchors through native SQLite restart. All 85 browser tests pass, including 17 drawing cases with physical 2× backing stores (2026-10-22).
 - [ ] Full native manual header/splitter dragging and historical/manual-price viewport matrix (code/tests exist; manual pass not asserted).
 

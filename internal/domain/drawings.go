@@ -27,7 +27,14 @@ type DrawingPoint struct {
 func validateDrawing(d Drawing) error {
 	count := 1
 	switch d.Type {
-	case "arrowUp", "arrowDown", "horizontal":
+	case "arrowUp", "arrowDown":
+	case "horizontal":
+		// Legacy levels span the chart with one anchor. Resizing a level stores
+		// two endpoints without changing its type or the workspace version.
+		if len(d.Points) != 1 && len(d.Points) != 2 {
+			return fmt.Errorf("horizontal drawing requires one point or two endpoints")
+		}
+		count = len(d.Points)
 	case "trendline":
 		count = 2
 	default:
@@ -50,7 +57,11 @@ func validateDrawing(d Drawing) error {
 			return fmt.Errorf("drawing price must be finite and positive")
 		}
 	}
-	if count == 2 && d.Points[0] == d.Points[1] {
+	if d.Type == "horizontal" && count == 2 &&
+		(d.Points[0].Time == d.Points[1].Time || d.Points[0].Price != d.Points[1].Price) {
+		return fmt.Errorf("horizontal drawing requires distinct endpoint times at the same price")
+	}
+	if d.Type == "trendline" && d.Points[0] == d.Points[1] {
 		return fmt.Errorf("trendline drawing requires two distinct points")
 	}
 	return nil
