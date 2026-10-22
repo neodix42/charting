@@ -3,9 +3,10 @@ import {test,expect,type Locator,type Page} from '@playwright/test';
 type DrawingType='arrowUp'|'arrowDown'|'horizontal'|'trendline';
 interface DrawingPoint {time:number;price:number}
 interface Drawing {id:string;type:DrawingType;exchange:string;market:string;instrument:string;points:DrawingPoint[]}
+type ProjectedDrawing=Pick<Drawing,'id'|'type'|'points'>&{coordinates:Array<{x:number;y:number}>};
 interface LayerDiagnostic {
  id:string;tool:DrawingType|null;draft:DrawingPoint[];width:number;height:number;
- drawings:Array<Pick<Drawing,'id'|'type'|'points'>&{coordinates:Array<{x:number;y:number}>}>;
+ drawings:ProjectedDrawing[];preview:ProjectedDrawing[];
 }
 
 const savedDrawings=(page:Page,chartIndex=0,tabIndex=0):Promise<Drawing[]>=>page.evaluate(({chartIndex,tabIndex})=>(window as any).__testWorkspace().tabs[tabIndex].charts[chartIndex].drawings??[],{chartIndex,tabIndex});
@@ -30,6 +31,71 @@ async function flush(page:Page){
  await page.locator('.save-indicator').click();
  await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
 }
+
+/** Compare media coordinates with the actual price-pane canvas, independently of the drawing overlay. */
+async function expectPointerPosition(page:Page,chart:Locator,kind:'preview'|'drawings',drawingIndex:number,pointIndex:number,client:{x:number;y:number}){
+ const id=await chart.getAttribute('data-chart-id');
+ await expect.poll(async()=>{
+  const layer=(await layers(page)).find(layer=>layer.id===id),coordinate=layer?.[kind]?.[drawingIndex]?.coordinates[pointIndex];
+  const canvas=await chart.getByTestId('chart-canvas').locator('canvas').first().boundingBox();
+  return layer&&coordinate&&canvas?Math.max(Math.abs(canvas.x+coordinate.x*canvas.width/layer.width-client.x),Math.abs(canvas.y+coordinate.y*canvas.height/layer.height-client.y)):Infinity;
+ },{message:`${kind} anchor ${pointIndex+1} must be under the pointer at viewport (${client.x}, ${client.y})`}).toBeLessThanOrEqual(1);
+}
+async function drawAtPointer(page:Page,chart:Locator){
+ const id=await chart.getAttribute('data-chart-id'),expected:Array<{type:DrawingType;positions:Array<{x:number;y:number}>}>=[];
+ const cases:Array<{type:DrawingType;label:string;ys:number[]}>= [
+  {type:'arrowUp',label:'Arrow up',ys:[.64]},{type:'arrowDown',label:'Arrow down',ys:[.32]},
+  {type:'horizontal',label:'Horizontal line',ys:[.47]},{type:'trendline',label:'Trendline',ys:[.71,.26]},
+ ];
+ for(const [drawingIndex,{type,label,ys}] of cases.entries()){
+  await tools(chart).getByRole('button',{name:label,exact:true}).click();
+  await expect(tools(chart).getByRole('button',{name:label,exact:true})).toHaveAttribute('aria-pressed','true');
+  const positions:Array<{x:number;y:number}>=[];
+  for(const [pointIndex,fraction] of ys.entries()){
+   const canvas=await chart.getByTestId('chart-canvas').locator('canvas').first().boundingBox();
+   if(!canvas)throw Error('Price pane is unavailable');
+   // Fractional native pointer coordinates also catch integer rounding in the event-to-price conversion.
+   const x=canvas.x+Math.floor(canvas.width*(pointIndex?.88:.78))+.375,y=canvas.y+Math.floor(canvas.height*fraction)+.625;
+   positions.push({x,y});await page.mouse.move(x,y);
+   await expectPointerPosition(page,chart,'preview',0,pointIndex,{x,y});
+   if(pointIndex)await expectPointerPosition(page,chart,'preview',0,0,positions[0]);
+   await page.mouse.click(x,y);
+   if(type==='trendline'&&!pointIndex)await expect.poll(async()=>(await layers(page)).find(layer=>layer.id===id)?.draft.length).toBe(1);
+  }
+  await expect.poll(async()=>(await layers(page)).find(layer=>layer.id===id)?.drawings.length).toBe(drawingIndex+1);
+  for(const [pointIndex,position] of positions.entries())await expectPointerPosition(page,chart,'drawings',drawingIndex,pointIndex,position);
+  expected.push({type,positions});
+ }
+ return expected;
+}
+
+test('drawing previews and committed arrow tips and line anchors stay at the pointer position',async({page})=>{
+ await page.goto('/');const chart=page.getByTestId('chart-cell');await expect(chart.getByLabel('OHLCV')).toContainText('61,000.00');
+ const expected=await drawAtPointer(page,chart);await flush(page);const saved=await savedDrawings(page);
+ expect(saved.map(drawing=>drawing.type)).toEqual(expected.map(drawing=>drawing.type));
+ await page.reload();await expect(chart.getByLabel('OHLCV')).toContainText('61,000.00');
+ for(const [drawingIndex,drawing] of expected.entries())for(const [pointIndex,position] of drawing.positions.entries())await expectPointerPosition(page,chart,'drawings',drawingIndex,pointIndex,position);
+ expect(await savedDrawings(page)).toEqual(saved);
+});
+
+test.describe('high-density chart drawing pointer alignment',()=>{
+ test.use({deviceScaleFactor:2});
+ test('a lower grid row with multiple MACD panes keeps previews and saved drawings under the pointer',async({page})=>{
+  await page.goto('/');await page.getByLabel('Grid layout').selectOption('2x1');await page.getByRole('button',{name:'Add chart',exact:true}).click();
+  const charts=page.getByTestId('chart-cell'),chart=charts.nth(1);await expect(charts).toHaveCount(2);await expect(chart.getByLabel('OHLCV')).toContainText('61,000.00');
+  for(const fast of ['12','8']){
+   await chart.getByLabel('Indicators',{exact:true}).selectOption('macd');const dialog=page.getByRole('dialog',{name:'MACD parameters',exact:true});
+   await dialog.getByLabel('Fast period',{exact:true}).fill(fast);await dialog.getByRole('button',{name:'OK',exact:true}).click();
+  }
+  await expect(chart.locator('.indicator-chip')).toHaveCount(2);
+  const geometry=await chart.getByTestId('chart-canvas').locator('canvas').first().evaluate(canvas=>({devicePixelRatio:window.devicePixelRatio,bitmapHeight:(canvas as HTMLCanvasElement).height,cssHeight:canvas.getBoundingClientRect().height,top:canvas.getBoundingClientRect().top}));
+  expect(geometry.devicePixelRatio).toBe(2);expect(geometry.bitmapHeight).toBe(geometry.cssHeight*2);expect(geometry.top).toBeGreaterThan(500);
+  const expected=await drawAtPointer(page,chart);await flush(page);const saved=await savedDrawings(page,1);
+  expect(await savedDrawings(page,0)).toEqual([]);await page.reload();await expect(chart.locator('.indicator-chip')).toHaveCount(2);
+  for(const [drawingIndex,drawing] of expected.entries())for(const [pointIndex,position] of drawing.positions.entries())await expectPointerPosition(page,chart,'drawings',drawingIndex,pointIndex,position);
+  expect(await savedDrawings(page,1)).toEqual(saved);
+ });
+});
 
 test('each chart draws both arrows, a horizontal line and a two-point trendline, and restores their price/time anchors',async({page})=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));

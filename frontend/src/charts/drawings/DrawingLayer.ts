@@ -1,7 +1,7 @@
 import type {ChartOptions,IChartApi,IPaneApi,Time} from 'lightweight-charts';
 import type {Candle,DrawingConfig,DrawingPoint,DrawingType} from '../../types';
 import {DrawingPrimitive,type DrawingPriceSeries} from './DrawingPrimitive';
-import {drawingLogicalToTime} from './geometry';
+import {drawingCoordinateToLogical,drawingLogicalToTime} from './geometry';
 
 /** Entries exist only when ChartCell explicitly enables its browser-test diagnostics. */
 export const drawingDiagnostics=new Map<string,DrawingLayer>();
@@ -12,6 +12,7 @@ export class DrawingLayer {
  private readonly element:HTMLDivElement;
  private readonly overlay:HTMLDivElement;
  private readonly ownerDocument:Document;
+ private readonly previousPosition:string|null;
  private disposed=false;
  private tool:DrawingType|null=null;
  private bars:readonly Candle[]=[];
@@ -23,6 +24,11 @@ export class DrawingLayer {
  private readonly resize:ResizeObserver|null;
  constructor(private readonly chart:IChartApi,private series:DrawingPriceSeries,private readonly onCommit:(type:DrawingType,points:DrawingPoint[])=>void,private readonly onToolChange?:()=>void){
   this.element=chart.chartElement();this.ownerDocument=this.element.ownerDocument;
+  const position=this.ownerDocument.defaultView?.getComputedStyle(this.element).position||this.element.style.position||'static';
+  this.previousPosition=position==='static'?this.element.style.position||'':null;
+  // Overlay coordinates and the price pane must share the chart's origin,
+  // rather than the positioned chart cell above its header and OHLC rows.
+  if(this.previousPosition!==null)this.element.style.position='relative';
   this.overlay=this.ownerDocument.createElement('div');this.overlay.className='chart-drawing-overlay';this.overlay.setAttribute('aria-hidden','true');this.overlay.dataset.testid='drawing-overlay';
   Object.assign(this.overlay.style,{position:'absolute',zIndex:'20',display:'none',cursor:'crosshair',touchAction:'none',userSelect:'none'});
   this.element.appendChild(this.overlay);this.pane=series.getPane();
@@ -38,7 +44,7 @@ export class DrawingLayer {
  }
  private anchor(event:PointerEvent):DrawingPoint|null{
   const bounds=this.overlay.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top;if(x<0||y<0||x>bounds.width||y>bounds.height)return null;
-  const scale=this.chart.timeScale(),logical=scale.coordinateToLogical(x),time=logical===null?null:drawingLogicalToTime(scale,logical,this.bars,this.step),price=this.series.coordinateToPrice(y);
+  const scale=this.chart.timeScale(),logical=drawingCoordinateToLogical(scale,x),time=logical===null?null:drawingLogicalToTime(scale,logical,this.bars,this.step),price=this.series.coordinateToPrice(y);
   if(time===null||price===null||!Number.isFinite(price)||price<=0||!Number.isFinite(time))return null;
   const seconds=Math.round(time);return seconds>=1&&seconds<=253402300799?{time:seconds,price}:null;
  }
@@ -76,10 +82,10 @@ export class DrawingLayer {
   if(!tool&&this.previousInteraction){this.chart.applyOptions(this.previousInteraction);this.previousInteraction=null;}
   this.tool=tool;this.overlay.style.display=tool?'block':'none';this.syncOverlay();this.preview();
  }
- read(){const size=this.chart.paneSize(this.pane.paneIndex());return {tool:this.tool,draft:this.draft.map(point=>({...point})),drawings:this.primitive.read(),width:size.width,height:size.height};}
+ read(){const size=this.chart.paneSize(this.pane.paneIndex());return {tool:this.tool,draft:this.draft.map(point=>({...point})),drawings:this.primitive.read(),preview:this.primitive.readPreview(),width:size.width,height:size.height};}
  dispose(){
   if(this.disposed)return;this.setTool(null);this.disposed=true;this.resize?.disconnect();
   this.overlay.removeEventListener('pointerdown',this.pointerDown);this.overlay.removeEventListener('pointermove',this.pointerMove);this.overlay.removeEventListener('pointerup',this.pointerUp);this.overlay.removeEventListener('pointercancel',this.pointerCancel);this.overlay.removeEventListener('pointerleave',this.pointerLeave);this.overlay.removeEventListener('wheel',this.preventWheel);this.ownerDocument.removeEventListener('keydown',this.keyDown);
-  this.pane.detachPrimitive(this.primitive);this.overlay.remove();this.bars=[];this.draft=[];this.hover=null;
+  this.pane.detachPrimitive(this.primitive);this.overlay.remove();if(this.previousPosition!==null)this.element.style.position=this.previousPosition;this.bars=[];this.draft=[];this.hover=null;
  }
 }

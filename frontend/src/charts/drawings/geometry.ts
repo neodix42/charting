@@ -4,6 +4,21 @@ export interface TimedPoint {time:number}
 export interface ScreenPoint {x:number;y:number}
 export type DrawingTimeScale=Pick<ITimeScaleApi<Time>,'coordinateToLogical'|'logicalToCoordinate'|'coordinateToTime'|'timeToIndex'>;
 
+/** The public coordinateToLogical API snaps to a bar; drawing anchors need the space between bars too. */
+export function drawingCoordinateToLogical(scale:DrawingTimeScale,x:number):number|null{
+ const rawIndex=scale.coordinateToLogical(x);if(rawIndex===null||!Number.isFinite(rawIndex)||!Number.isFinite(x))return null;
+ const index=Math.floor(rawIndex) as Logical;
+ const start=scale.logicalToCoordinate(index),end=scale.logicalToCoordinate((index+1) as Logical);
+ return start===null||end===null||!Number.isFinite(start)||!Number.isFinite(end)||end===start?null:index+(x-start)/(end-start);
+}
+
+/** The pinned public output API accepts integer bar indices; interpolate fractional drawing positions. */
+export function drawingLogicalToCoordinate(scale:DrawingTimeScale,logical:number):number|null{
+ if(!Number.isFinite(logical))return null;
+ const index=Math.floor(logical),start=scale.logicalToCoordinate(index as Logical),end=scale.logicalToCoordinate((index+1) as Logical);
+ return start===null||end===null||!Number.isFinite(start)||!Number.isFinite(end)?null:start+(end-start)*(logical-index);
+}
+
 function timeAt(scale:DrawingTimeScale,index:number):number|null{
  const x=scale.logicalToCoordinate(index as Logical);if(x===null)return null;
  const time=scale.coordinateToTime(x);return typeof time==='number'&&Number.isFinite(time)?time:null;

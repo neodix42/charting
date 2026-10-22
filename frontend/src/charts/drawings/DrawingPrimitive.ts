@@ -1,6 +1,6 @@
-import type {IChartApi,IPanePrimitive,IPanePrimitivePaneView,IPrimitivePaneRenderer,ISeriesApi,Logical,PaneAttachedParameter} from 'lightweight-charts';
+import type {IChartApi,IPanePrimitive,IPanePrimitivePaneView,IPrimitivePaneRenderer,ISeriesApi,PaneAttachedParameter} from 'lightweight-charts';
 import type {Candle,DrawingConfig,DrawingPoint,DrawingType} from '../../types';
-import {clipSegment,drawingTimeToLogical,type ScreenPoint} from './geometry';
+import {clipSegment,drawingLogicalToCoordinate,drawingTimeToLogical,type ScreenPoint} from './geometry';
 
 export type DrawingPriceSeries=ISeriesApi<'Candlestick'>|ISeriesApi<'Line'>;
 export interface ProjectedDrawing {id:string;type:DrawingType;points:DrawingPoint[];coordinates:ScreenPoint[]}
@@ -52,7 +52,7 @@ export class DrawingPrimitive implements IPanePrimitive {
   const scale=this.chart?.timeScale();if(!scale||!this.hasBars)return null;
   const coordinates:ScreenPoint[]=[];
   for(const point of points){
-   const logical=drawingTimeToLogical(scale,point.time,this.step),x=logical===null?null:scale.logicalToCoordinate(logical as Logical),y=this.series.priceToCoordinate(point.price);
+   const logical=drawingTimeToLogical(scale,point.time,this.step),x=logical===null?null:drawingLogicalToCoordinate(scale,logical),y=this.series.priceToCoordinate(point.price);
    if(x===null||y===null||!Number.isFinite(x)||!Number.isFinite(y))return null;
    coordinates.push({x,y});
   }
@@ -64,4 +64,5 @@ export class DrawingPrimitive implements IPanePrimitive {
   this.onViewUpdate?.();
  }
  read(){this.updateAllViews();return this.projected.map(drawing=>({...drawing,points:drawing.points.map(point=>({...point})),coordinates:drawing.coordinates.map(point=>({...point}))}));}
+ readPreview(){this.updateAllViews();return this.projectedPreview.map(drawing=>({...drawing,points:drawing.points.map(point=>({...point})),coordinates:drawing.coordinates.map(point=>({...point}))}));}
 }

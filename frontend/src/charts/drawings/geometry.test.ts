@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import type {Coordinate,Logical,TimePointIndex,UTCTimestamp} from 'lightweight-charts';
-import {clipSegment,drawingLogicalToTime,drawingTimeToLogical,type DrawingTimeScale} from './geometry';
+import {clipSegment,drawingCoordinateToLogical,drawingLogicalToCoordinate,drawingLogicalToTime,drawingTimeToLogical,type DrawingTimeScale} from './geometry';
 
 function timeScale(times:number[],zoom=10,offset=0):DrawingTimeScale{
  return {
@@ -12,6 +12,16 @@ function timeScale(times:number[],zoom=10,offset=0):DrawingTimeScale{
 }
 
 describe('drawing UTC anchors',()=>{
+ it('retains pointer positions between candles even when the public input API snaps to bar indices',()=>{
+  const scale=timeScale([1000,1060,1120],40,11);
+  scale.coordinateToLogical=x=>Math.ceil((x-11)/40) as Logical;
+  scale.logicalToCoordinate=index=>(Number.isInteger(index)?index*40+11:0) as Coordinate;
+  for(const x of [-25.5,11,23.25,71.75,200.5]){
+   const logical=drawingCoordinateToLogical(scale,x)!;
+   expect(drawingLogicalToCoordinate(scale,logical)).toBeCloseTo(x,10);
+  }
+  expect(drawingCoordinateToLogical({...scale,coordinateToLogical:()=>null},25)).toBeNull();
+ });
  it('interpolates actual candle gaps and preserves anchors through zoom and prepended history',()=>{
   const bars=[{time:1000},{time:1060},{time:1180}],scale=timeScale(bars.map(bar=>bar.time));
   expect(drawingLogicalToTime(scale,1.5,bars,60)).toBe(1120);expect(drawingTimeToLogical(scale,1120,60)).toBe(1.5);

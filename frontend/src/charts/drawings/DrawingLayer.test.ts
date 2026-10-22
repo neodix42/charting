@@ -18,8 +18,9 @@ function pointer(element:Element,type:string,x:number,y:number,id=1){
  const event=new Event(type,{cancelable:true});Object.assign(event,{clientX:x+10,clientY:y+20,pointerId:id,button:0});element.dispatchEvent(event);return event;
 }
 const bars=[{time:1000},{time:1060},{time:1120}] as Candle[];
-function harness(){
+function harness(position=''){
  const document=new TestDocument(),element=new Element(document),paneElement=new Element(document),options={handleScale:{mouseWheel:true,pinch:false,axisPressedMouseMove:{time:true,price:false}},handleScroll:{mouseWheel:false,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false}},commit=vi.fn(),toolChange=vi.fn();let primitive:IPanePrimitive|null=null,zoom=1;
+ element.style.position=position;
  const pane={getHTMLElement:()=>paneElement,paneIndex:()=>0,attachPrimitive:vi.fn((value:IPanePrimitive)=>{primitive=value;value.attached?.({chart,requestUpdate:vi.fn()} as unknown as PaneAttachedParameter);}),detachPrimitive:vi.fn((value:IPanePrimitive)=>value.detached?.())};
  const chart={chartElement:()=>element,priceScale:()=>({width:()=>0}),paneSize:()=>({width:400,height:300}),timeScale:()=>({timeToIndex:(time:number,nearest?:boolean)=>{const index=bars.findIndex(bar=>bar.time===time);return index!==-1?index:nearest?Math.min(2,Math.max(0,Math.ceil((time-1000)/60))):null;},logicalToCoordinate:(logical:number)=>logical*100*zoom,coordinateToLogical:(x:number)=>x/100/zoom,coordinateToTime:(x:number)=>bars[Math.round(x/100/zoom)]?.time??null}),options:()=>options,applyOptions:vi.fn()};
  const series={getPane:()=>pane,coordinateToPrice:(y:number)=>1000-y,priceToCoordinate:(price:number)=>1000-price};
@@ -29,6 +30,13 @@ function harness(){
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('drawing interaction ownership',()=>{
+ it('keeps the input overlay relative to the chart and restores only positioning it owns',()=>{
+  for(const original of ['','static','relative','absolute']){
+   const h=harness(original);
+   expect(h.element.style.position).toBe(original===''||original==='static'?'relative':original);
+   h.layer.dispose();expect(h.element.style.position).toBe(original);
+  }
+ });
  it('commits arrows and horizontals at UTC/price anchors, restores chart controls and clears each tool',()=>{
   const h=harness();
   for(const type of ['arrowUp','arrowDown','horizontal'] as const){
