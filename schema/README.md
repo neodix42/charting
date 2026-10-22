@@ -8,7 +8,7 @@ Normative cardinality: tabs minItems=1/maxItems=20; charts minItems=1/maxItems=9
 are constructed in application code as one tab and one chart, not by JSON Schema `default`.
 
 Additional semantic validation:
-- UUIDs are valid and globally unique across workspace, tabs, charts and indicators.
+- UUIDs are valid and globally unique across workspace, tabs, charts, indicators and drawings.
 - activeTabId refers to an existing tab.
 - Actual charts fit the selected grid; only documented grid presets are accepted.
 - Row/column fraction array lengths match rows/columns; each sum is 1 within 1e-6.
@@ -53,3 +53,23 @@ instrument and timeframe together identify a feed, including its memory and disk
 candle caches. A spot and perpetual instrument may have the same native symbol.
 This extends the existing string enum without changing the workspace or SQLite
 schema version.
+
+Each chart may save an optional `drawings` array, limited to 100 drawings across all
+of that chart's instruments. Omission preserves the exact legacy JSON shape. Each
+drawing requires `id`, `type`, `exchange`, `market`, `instrument`, and `points`.
+The supported types are `arrowUp`, `arrowDown`, `horizontal`, and `trendline`.
+Arrows and horizontal lines require one point; trendlines require two distinct
+points. Each point stores an integer UTC Unix-second `time` from 1–253402300799
+and a finite, positive `price`. Distinct means either time or price differs, so
+vertical and horizontal trendlines are valid. Only geometry and instrument scope
+are saved; screen coordinates and temporary drawing previews are runtime state.
+
+A drawing belongs to its chart and appears only for the saved exchange, market,
+and native instrument, independently of timeframe. Changing a chart's selection
+retains its other drawings for restoration when that instrument is selected again.
+The exchange/market combinations follow chart rules, including Coinbase spot only;
+instrument names must be safe, nonblank, at most 128 characters, and cannot contain
+endpoint URLs. Unknown properties, explicit null, duplicate UUIDs and malformed
+anchors are rejected before saving or importing. The additive field needs no
+schema-version change or SQLite table migration because drawings are committed
+with the existing complete workspace snapshots.

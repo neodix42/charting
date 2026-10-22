@@ -13,6 +13,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] All three public spot adapters/all six intervals implemented and deterministic/live tested.
 - [x] Coinbase public5mrestriction addressed via trade-derived intervals; aliases rejected/labelled; overlapping volume stays provisional.
 - [x] History/volume/precision/crosshair/scale/viewport code and regression tests, including bounded moving windows.
+- [x] Per-chart up/down arrows, horizontal lines and two-click trendlines; UTC/price anchors persist through SQLite restart, JSON round trips and independent tab duplication. Drawing controls and zoom/resize/line-style/symbol-scope behavior verified in browser; actual Wails drawing placement/restart verified on Ubuntu (2026-10-22).
 - [ ] Full native manual header/splitter dragging and historical/manual-price viewport matrix (code/tests exist; manual pass not asserted).
 
 ## Reliability

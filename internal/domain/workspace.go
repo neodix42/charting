@@ -72,6 +72,7 @@ type Chart struct {
 	PriceScale PriceScale  `json:"priceScale"`
 	View       View        `json:"view"`
 	Indicators []Indicator `json:"indicators,omitempty"`
+	Drawings   []Drawing   `json:"drawings,omitempty"`
 }
 type PriceScale struct {
 	Mode        string      `json:"mode"`
@@ -220,6 +221,17 @@ func Validate(w Workspace) error {
 					return bad("indicator UUID is invalid or duplicated")
 				}
 				if err := validateIndicator(indicator); err != nil {
+					return bad("%s", err)
+				}
+			}
+			if len(chart.Drawings) > MaxDrawings {
+				return bad("maximum %d drawings per chart", MaxDrawings)
+			}
+			for _, drawing := range chart.Drawings {
+				if !addID(drawing.ID) {
+					return bad("drawing UUID is invalid or duplicated")
+				}
+				if err := validateDrawing(drawing); err != nil {
 					return bad("%s", err)
 				}
 			}

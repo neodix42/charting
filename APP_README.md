@@ -90,6 +90,12 @@ Centered in the top header alongside the CryptoDesk logo, shared period buttons 
 
 Weekly candles start Monday at 00:00 UTC. Binance and Bybit provide native weekly candles. Coinbase weekly history is derived from actual daily candles, with live updates from its public trades; incomplete weekly coverage remains provisional.
 
+### Drawing tools
+
+Every chart has a **Draw** toolbar: **Arrow up**, **Arrow down**, **Horizontal line** and **Trendline**. Choose a tool, then click the price chart to place it. A trendline uses two clicks, one for each end, with a preview between them. Press **Esc** or choose **Cursor** to cancel an unfinished drawing and resume panning. **Undo drawing** removes the last drawing on the current instrument; **Clear drawings** removes all drawings on that instrument.
+
+Completed drawings autosave to SQLite and restore after restart, tab switches and JSON export/import. Positions use UTC times and prices, so zooming, resizing and changing timeframes preserve their anchors. Drawings belong to their chart, exchange, market and instrument: switching symbols hides unrelated drawings and switching back restores them. Add Chart starts without drawings; Duplicate Tab copies them independently. Each chart supports up to 100 saved drawings across its instruments.
+
 ### Indicators
 
 Each chart has an **Indicators** dropdown. Select SMA, EMA, Ichimoku Cloud or MACD, adjust its parameters, then press **OK** to add it. SMA and EMA also offer **Line width** from **1–4 px**, default **2 px**, in both individual and shared dialogs. Cancel leaves the chart unchanged. Click an applied indicator's label to edit it, or its × to remove it. Multiple instances can use different periods, colors and line widths; settings are independent per chart and survive restart and JSON export/import. There are at most 12 indicators per chart to bound rendering work. Existing SMA/EMA instances without a width retain their two-pixel appearance.

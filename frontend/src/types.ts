@@ -8,8 +8,11 @@ export interface IndicatorParameters {period?:number;conversion?:number;base?:nu
 export type IndicatorLineWidth = 1|2|3|4;
 export interface IndicatorConfig {id:string;type:IndicatorType;parameters:IndicatorParameters;color?:string;lineWidth?:IndicatorLineWidth;paneStretchFactor?:number}
 export interface FeedKey {exchange:Exchange; market:Market; instrument:string; timeframe:Interval}
+export type DrawingType = 'arrowUp'|'arrowDown'|'horizontal'|'trendline';
+export interface DrawingPoint {time:number;price:number}
+export interface DrawingConfig {id:string;type:DrawingType;exchange:Exchange;market:Market;instrument:string;points:DrawingPoint[]}
 export interface View {mode:'live'|'historical'; fromSec:number|null; toSec:number|null; barSpacing:number; rightOffset:number}
-export interface ChartConfig extends FeedKey {id:string; chartType:'candlestick'|'line'; showVolume:boolean; priceScale:{mode:'linear'|'log'; autoScale:boolean; manualRange:{min:number;max:number}|null}; view:View; indicators?:IndicatorConfig[]}
+export interface ChartConfig extends FeedKey {id:string; chartType:'candlestick'|'line'; showVolume:boolean; priceScale:{mode:'linear'|'log'; autoScale:boolean; manualRange:{min:number;max:number}|null}; view:View; indicators?:IndicatorConfig[];drawings?:DrawingConfig[]}
 export interface Grid {rows:number;columns:number;rowFractions:number[];columnFractions:number[]}
 export interface Tab {id:string;name:string;grid:Grid;charts:ChartConfig[]}
 export interface ChartRightGap {unit:'bars'|'pixels';value:number}

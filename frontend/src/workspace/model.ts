@@ -1,5 +1,5 @@
 import type {ChartConfig, ChartRightGap, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
-export const MAX_TABS=20, MAX_CHARTS=9, MAX_INDICATORS=12;
+export const MAX_TABS=20, MAX_CHARTS=9, MAX_INDICATORS=12, MAX_DRAWINGS=100;
 export const DEFAULT_CHART_RIGHT_GAP:ChartRightGap={unit:'bars',value:10};
 export const presets = [[1,1],[1,2],[2,1],[2,2],[2,3],[3,2],[3,3]] as const;
 export const uuid=()=>crypto.randomUUID();
@@ -7,7 +7,7 @@ export const equalTracks=(n:number)=>Array.from({length:n},()=>1/n);
 export const grid=(rows=1,columns=1):Grid=>({rows,columns,rowFractions:equalTracks(rows),columnFractions:equalTracks(columns)});
 export const liveView=()=>({mode:'live' as const,fromSec:null,toSec:null,barSpacing:6,rightOffset:10});
 const copyIndicators=(chart:ChartConfig)=>chart.indicators?.map(indicator=>({...structuredClone(indicator),id:uuid()}))??[];
-export const newChart=(source?:ChartConfig):ChartConfig=>source?{...structuredClone(source),id:uuid(),view:liveView(),indicators:copyIndicators(source)}:{id:uuid(),exchange:'binance',market:'spot',instrument:'BTCUSDT',timeframe:'1h',chartType:'candlestick',showVolume:true,priceScale:{mode:'linear',autoScale:true,manualRange:null},view:liveView(),indicators:[]};
+export const newChart=(source?:ChartConfig):ChartConfig=>source?{...structuredClone(source),id:uuid(),view:liveView(),indicators:copyIndicators(source),drawings:[]}:{id:uuid(),exchange:'binance',market:'spot',instrument:'BTCUSDT',timeframe:'1h',chartType:'candlestick',showVolume:true,priceScale:{mode:'linear',autoScale:true,manualRange:null},view:liveView(),indicators:[]};
 export const newTab=(name:string):Tab=>({id:uuid(),name,grid:grid(),charts:[newChart()]});
 // Called only by explicit fixture mode or a confirmed reset. Production startup belongs to Go.
 export function firstWorkspace():Workspace {const tab=newTab('Tab 1');return {schemaVersion:1,app:'cryptodesk',id:uuid(),theme:'dark',displayTimezone:'UTC',chartRightGap:{...DEFAULT_CHART_RIGHT_GAP},activeTabId:tab.id,window:{width:1600,height:1000,maximized:false},tabs:[tab]};}
@@ -19,7 +19,7 @@ export function reduceWorkspace(w:Workspace,a:Action):Workspace {
  const change=(tab:Tab)=>({...w,tabs:w.tabs.map(t=>t.id===tab.id?tab:t)});
  switch(a.type){
  case 'addTab':{if(w.tabs.length>=MAX_TABS)throw Error('Maximum 20 tabs');const t=newTab(generatedName(w));return {...w,tabs:[...w.tabs,t],activeTabId:t.id};}
- case 'duplicateTab':{if(w.tabs.length>=MAX_TABS)throw Error('Maximum 20 tabs');const source=w.tabs.find(t=>t.id===a.id);if(!source)return w;const t=structuredClone(source);t.id=uuid();t.name=`${source.name.slice(0,70)} copy`;t.charts=t.charts.map(c=>({...c,id:uuid(),indicators:copyIndicators(c)}));return {...w,tabs:[...w.tabs,t],activeTabId:t.id};}
+ case 'duplicateTab':{if(w.tabs.length>=MAX_TABS)throw Error('Maximum 20 tabs');const source=w.tabs.find(t=>t.id===a.id);if(!source)return w;const t=structuredClone(source);t.id=uuid();t.name=`${source.name.slice(0,70)} copy`;t.charts=t.charts.map(c=>({...c,id:uuid(),indicators:copyIndicators(c),...(c.drawings?{drawings:c.drawings.map(drawing=>({...drawing,id:uuid()}))}:{})}));return {...w,tabs:[...w.tabs,t],activeTabId:t.id};}
  case 'selectTab':return w.tabs.some(t=>t.id===a.id)?{...w,activeTabId:a.id}:w;
  case 'renameTab':{const name=a.name.trim();if(!name||name.length>80)throw Error('Tab names must contain 1–80 characters');return {...w,tabs:w.tabs.map(t=>t.id===a.id?{...t,name}:t)};}
  case 'removeTab':{if(w.tabs.length===1)throw Error('Keep at least one tab');const index=w.tabs.findIndex(t=>t.id===a.id);const tabs=w.tabs.filter(t=>t.id!==a.id);return {...w,tabs,activeTabId:w.activeTabId===a.id?tabs[Math.max(0,index-1)].id:w.activeTabId};}

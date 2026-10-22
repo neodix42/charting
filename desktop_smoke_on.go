@@ -490,11 +490,23 @@ const desktopSmokeJavaScript = `async function(phase) {
    await wait(()=>qa('[role="tab"]').length===2,'remove inactive middle-click target');await flush();
    const closedMiddle=await api.LoadWorkspace();
    check(!q('[role="menu"]')&&!q('[role="dialog"]')&&closedMiddle.workspace.tabs.length===2&&!closedMiddle.workspace.tabs.some(tab=>tab.id===duplicateID)&&closedMiddle.workspace.activeTabId===pixelGapSaved.workspace.activeTabId&&closedMiddle.workspace.tabs.map(tab=>tab.charts.length).join(',')==='3,1'&&JSON.stringify(qa('[data-testid="chart-cell"]').map(cell=>cell.dataset.chartId))===JSON.stringify(mountedBeforeClose),'inactive middle-click removes its whole tab without confirmation, preserves active charts and persists to SQLite',closedMiddle.workspace.tabs.map(tab=>({id:tab.id,charts:tab.charts.length})));
+   const drawingCell=q('[data-testid="chart-cell"]');
+   await wait(()=>drawingCell.querySelector('.ohlcv b'),'price data available for native drawing tools');
+   const drawPoint=(x,y)=>{const target=drawingCell.querySelector('.chart-drawing-overlay'),rect=target.getBoundingClientRect(),point={bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,clientX:rect.left+rect.width*x,clientY:rect.top+rect.height*y};target.dispatchEvent(new PointerEvent('pointerdown',{...point,buttons:1}));target.dispatchEvent(new PointerEvent('pointerup',{...point,buttons:0}));};
+   for(const [label,x,y] of [['Arrow up',.65,.55],['Arrow down',.8,.3],['Horizontal line',.75,.45],['Trendline',.65,.55]]){drawingCell.querySelector('[aria-label="'+label+'"]').click();await sleep(100);drawPoint(x,y);await sleep(100);if(label==='Trendline'){drawPoint(.85,.3);await sleep(100);}}
+   await flush();const drawingSaved=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
+   check(drawingSaved?.map(d=>d.type).join(',')==='arrowUp,arrowDown,horizontal,trendline'&&drawingSaved.every(d=>d.points.length===(d.type==='trendline'?2:1)&&d.points.every(p=>Number.isInteger(p.time)&&p.time>0&&Number.isFinite(p.price)&&p.price>0)),'native drawing toolbar places all four tools and commits UTC/price anchors to SQLite',drawingSaved);
+   check(drawingCell.querySelector('[aria-label="Cursor"]').getAttribute('aria-pressed')==='true','completed native drawings return to cursor mode');
+   report.savedDrawings=drawingSaved;
   } else if(phase==='restore') {
    const storageRestored=await api.GetCandleStorage(),cacheKey={exchange:initial.workspace.tabs[0].charts[0].exchange,market:'spot',instrument:initial.workspace.tabs[0].charts[0].instrument,timeframe:'1h'},restoredBars=await api.DesktopSmokeCandleRows(cacheKey,0,0);
    check(storageRestored.enabled&&storageRestored.directory.endsWith('/candles-selected')&&storageRestored.sizeBytes>0&&restoredBars.length>=4,'native restart restores machine-local settings and the actual downloaded candle data',{storage:storageRestored,bars:restoredBars.length});
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
    check(initial.workspace.activeTabId===initial.workspace.tabs[0].id,'active tab restored',initial.workspace.activeTabId);
+   const restoredDrawings=initial.workspace.tabs[0].charts[0].drawings;
+   check(restoredDrawings?.map(d=>d.type).join(',')==='arrowUp,arrowDown,horizontal,trendline'&&restoredDrawings.every(d=>d.points.length===(d.type==='trendline'?2:1)&&d.points.every(p=>Number.isInteger(p.time)&&p.time>0&&Number.isFinite(p.price)&&p.price>0)),'native restart restores all drawing types and saved price/time anchors',restoredDrawings);
+   check(qa('[role="group"][aria-label="Drawing tools"]').length===3&&q('[aria-label="Drawing count"]').textContent==='4','restored WebKit chart exposes its saved drawings and each chart retains its toolbar');
+   report.restoredDrawings=restoredDrawings;
    check(qa('[data-testid="chart-cell"]').length===3&&qa('[data-testid="chart-placeholder"]').length===6,'only selected tab is mounted after restart',{charts:qa('[data-testid="chart-cell"]').length,placeholders:qa('[data-testid="chart-placeholder"]').length});
    check(initial.workspace.tabs[0].charts[0].timeframe==='4h'&&!initial.workspace.tabs[0].charts[0].showVolume,'native close flushed the final immediate edit',initial.workspace.tabs[0].charts[0]);
    verifySharedIndicators(initial.workspace,'restart restores shared indicators and custom parameters from SQLite');

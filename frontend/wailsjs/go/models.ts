@@ -51,6 +51,60 @@ export namespace domain {
 	        this.sourceRevision = source["sourceRevision"];
 	    }
 	}
+	export class DrawingPoint {
+	    time: number;
+	    price: number;
+
+	    static createFrom(source: any = {}) {
+	        return new DrawingPoint(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.price = source["price"];
+	    }
+	}
+	export class Drawing {
+	    id: string;
+	    type: string;
+	    exchange: string;
+	    market: string;
+	    instrument: string;
+	    points: DrawingPoint[];
+
+	    static createFrom(source: any = {}) {
+	        return new Drawing(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.exchange = source["exchange"];
+	        this.market = source["market"];
+	        this.instrument = source["instrument"];
+	        this.points = this.convertValues(source["points"], DrawingPoint);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Indicator {
 	    id: string;
 	    type: string;
@@ -152,6 +206,7 @@ export namespace domain {
 	    priceScale: PriceScale;
 	    view: View;
 	    indicators?: Indicator[];
+	    drawings?: Drawing[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Chart(source);
@@ -169,6 +224,7 @@ export namespace domain {
 	        this.priceScale = this.convertValues(source["priceScale"], PriceScale);
 	        this.view = this.convertValues(source["view"], View);
 	        this.indicators = this.convertValues(source["indicators"], Indicator);
+	        this.drawings = this.convertValues(source["drawings"], Drawing);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

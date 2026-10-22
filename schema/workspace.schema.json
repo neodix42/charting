@@ -378,6 +378,13 @@
           "items": {
             "$ref": "#/$defs/indicator"
           }
+        },
+        "drawings": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/drawing"
+          }
         }
       },
       "allOf": [
@@ -442,6 +449,120 @@
         "name",
         "grid",
         "charts"
+      ]
+    },
+    "drawingPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "description": "Absolute UTC Unix seconds, independent of chart size and timeframe.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 253402300799
+        },
+        "price": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "time",
+        "price"
+      ]
+    },
+    "drawing": {
+      "description": "A chart-owned drawing shown only for its exchange, market and native instrument, across all timeframes.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "type": {
+          "enum": [
+            "arrowUp",
+            "arrowDown",
+            "horizontal",
+            "trendline"
+          ]
+        },
+        "exchange": {
+          "enum": [
+            "binance",
+            "bybit",
+            "coinbase"
+          ]
+        },
+        "market": {
+          "enum": [
+            "spot",
+            "perpetual"
+          ]
+        },
+        "instrument": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "points": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/drawingPoint"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "exchange",
+        "market",
+        "instrument",
+        "points"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trendline"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "points": {
+                "minItems": 2
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "points": {
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exchange": {
+                "const": "coinbase"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "market": {
+                "const": "spot"
+              }
+            }
+          }
+        }
       ]
     },
     "indicator": {
