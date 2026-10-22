@@ -1,6 +1,7 @@
 import type {IChartApi,IPanePrimitive,IPanePrimitivePaneView,IPrimitivePaneRenderer,ISeriesApi,PaneAttachedParameter} from 'lightweight-charts';
 import type {Candle,DrawingConfig,DrawingPoint,DrawingType} from '../../types';
 import {clipSegment,drawingLogicalToCoordinate,drawingTimeToLogical,type ScreenPoint} from './geometry';
+import {arrowOutline} from './hitTest';
 
 export type DrawingPriceSeries=ISeriesApi<'Candlestick'>|ISeriesApi<'Line'>;
 export interface ProjectedDrawing {id:string;type:DrawingType;points:DrawingPoint[];coordinates:ScreenPoint[]}
@@ -18,10 +19,9 @@ export function drawDrawings(context:CanvasRenderingContext2D,drawings:readonly 
    const other=drawing.coordinates[1];if(!other)continue;const clipped=clipSegment(point,other,width,height);if(!clipped)continue;
    context.beginPath();context.moveTo(clipped[0].x,clipped[0].y);context.lineTo(clipped[1].x,clipped[1].y);context.stroke();
   }else{
-   const direction=drawing.type==='arrowUp'?1:-1;
    if(point.x<-10||point.x>width+10||point.y<-30||point.y>height+30)continue;
    // The chosen price is the arrow tip; the shaft extends away from that exact anchor.
-   context.beginPath();context.moveTo(point.x,point.y);context.lineTo(point.x-7,point.y+direction*10);context.lineTo(point.x-3,point.y+direction*10);context.lineTo(point.x-3,point.y+direction*24);context.lineTo(point.x+3,point.y+direction*24);context.lineTo(point.x+3,point.y+direction*10);context.lineTo(point.x+7,point.y+direction*10);context.closePath();context.fill();
+   const outline=arrowOutline(point,drawing.type);context.beginPath();context.moveTo(outline[0].x,outline[0].y);for(const vertex of outline.slice(1))context.lineTo(vertex.x,vertex.y);context.closePath();context.fill();
   }
   if(preview)for(const anchor of drawing.coordinates){context.beginPath();context.arc(anchor.x,anchor.y,3,0,Math.PI*2);context.fill();}
  }

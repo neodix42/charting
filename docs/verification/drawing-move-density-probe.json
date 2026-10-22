@@ -1,0 +1,16 @@
+{
+  "environment": "Playwright Chromium headless shell 1248; viewport1600x1000",
+  "rawCanvas": [
+    {"browserArgs":[],"deviceScaleFactor":1,"devicePixelRatio":1,"cssSize":{"width":300,"height":200},"devicePixelContentBoxSize":{"inlineSize":300,"blockSize":200}},
+    {"browserArgs":[],"deviceScaleFactor":2,"devicePixelRatio":2,"cssSize":{"width":300,"height":200},"devicePixelContentBoxSize":{"inlineSize":300,"blockSize":200}},
+    {"browserArgs":["--force-device-scale-factor=2"],"deviceScaleFactor":2,"devicePixelRatio":2,"cssSize":{"width":300,"height":200},"devicePixelContentBoxSize":{"inlineSize":600,"blockSize":400}}
+  ],
+  "chartPricePaneAfterTwoMACDs": {
+    "browserArgs":[],"deviceScaleFactor":2,"devicePixelRatio":2,
+    "bounds":{"x":18,"y":675,"width":1496,"height":172.5},
+    "devicePixelContentBoxSize":{"inlineSize":1496,"blockSize":173},
+    "contentBoxSize":{"inlineSize":1496,"blockSize":172.5},
+    "bitmapAtObserverCallback":{"width":2992,"height":345},
+    "bitmapAfterObserverApplied":{"width":1496,"height":173}
+  }
+}

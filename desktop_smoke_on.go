@@ -498,7 +498,16 @@ const desktopSmokeJavaScript = `async function(phase) {
    await flush();const drawingSaved=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
    check(drawingSaved?.map(d=>d.type).join(',')==='arrowUp,arrowDown,horizontal,trendline'&&drawingSaved.every(d=>d.points.length===(d.type==='trendline'?2:1)&&d.points.every(p=>Number.isInteger(p.time)&&p.time>0&&Number.isFinite(p.price)&&p.price>0)),'native drawing toolbar places all four tools and commits UTC/price anchors to SQLite',drawingSaved);
    check(drawingCell.querySelector('[aria-label="Cursor"]').getAttribute('aria-pressed')==='true','completed native drawings return to cursor mode');
-   report.savedDrawings=drawingSaved;
+   const moveRect=drawingPlot.getBoundingClientRect();
+   drawingPlot.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0,clientX:moveRect.left+moveRect.width*.2,clientY:moveRect.top+moveRect.height*.45}));
+   await wait(()=>drawingCell.querySelector('.drawing-hint').textContent.includes('Move drawing'),'native double-click selects the horizontal drawing');
+   drawingCell.querySelector('.chart-drawing-overlay').dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',isPrimary:true,clientX:moveRect.left+moveRect.width*.25,clientY:moveRect.top+moveRect.height*.6}));
+   await flush();const moveDraft=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
+   check(JSON.stringify(moveDraft)===JSON.stringify(drawingSaved),'native moving preview is not persisted before placement',moveDraft);
+   drawPoint(.25,.6);await flush();const movedDrawings=(await api.LoadWorkspace()).workspace.tabs[0].charts[0].drawings;
+   check(movedDrawings.length===4&&movedDrawings.every((drawing,index)=>drawing.id===drawingSaved[index].id&&drawing.type===drawingSaved[index].type&&drawing.exchange===drawingSaved[index].exchange&&drawing.market===drawingSaved[index].market&&drawing.instrument===drawingSaved[index].instrument)&&movedDrawings[2].points[0].price!==drawingSaved[2].points[0].price&&movedDrawings.every((drawing,index)=>index===2||JSON.stringify(drawing)===JSON.stringify(drawingSaved[index])),'native double-click move commits new anchors on the same drawing without changing its siblings',movedDrawings);
+   check(drawingCell.querySelector('[aria-label="Cursor"]').getAttribute('aria-pressed')==='true','native drawing placement exits move mode');
+   report.drawingMove={before:drawingSaved[2],after:movedDrawings[2]};report.savedDrawings=movedDrawings;
   } else if(phase==='restore') {
    const storageRestored=await api.GetCandleStorage(),cacheKey={exchange:initial.workspace.tabs[0].charts[0].exchange,market:'spot',instrument:initial.workspace.tabs[0].charts[0].instrument,timeframe:'1h'},restoredBars=await api.DesktopSmokeCandleRows(cacheKey,0,0);
    check(storageRestored.enabled&&storageRestored.directory.endsWith('/candles-selected')&&storageRestored.sizeBytes>0&&restoredBars.length>=4,'native restart restores machine-local settings and the actual downloaded candle data',{storage:storageRestored,bars:restoredBars.length});

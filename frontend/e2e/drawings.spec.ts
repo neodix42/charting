@@ -1,5 +1,7 @@
 import {test,expect,type Locator,type Page} from '@playwright/test';
 
+test.use({deviceScaleFactor:2,launchOptions:{args:['--force-device-scale-factor=2']}});
+
 type DrawingType='arrowUp'|'arrowDown'|'horizontal'|'trendline';
 interface DrawingPoint {time:number;price:number}
 interface Drawing {id:string;type:DrawingType;exchange:string;market:string;instrument:string;points:DrawingPoint[]}
@@ -79,7 +81,6 @@ test('drawing previews and committed arrow tips and line anchors stay at the poi
 });
 
 test.describe('high-density chart drawing pointer alignment',()=>{
- test.use({deviceScaleFactor:2});
  test('a lower grid row with multiple MACD panes keeps previews and saved drawings under the pointer',async({page})=>{
   await page.goto('/');await page.getByLabel('Grid layout').selectOption('2x1');await page.getByRole('button',{name:'Add chart',exact:true}).click();
   const charts=page.getByTestId('chart-cell'),chart=charts.nth(1);await expect(charts).toHaveCount(2);await expect(chart.getByLabel('OHLCV')).toContainText('61,000.00');
@@ -88,8 +89,20 @@ test.describe('high-density chart drawing pointer alignment',()=>{
    await dialog.getByLabel('Fast period',{exact:true}).fill(fast);await dialog.getByRole('button',{name:'OK',exact:true}).click();
   }
   await expect(chart.locator('.indicator-chip')).toHaveCount(2);
-  const geometry=await chart.getByTestId('chart-canvas').locator('canvas').first().evaluate(canvas=>({devicePixelRatio:window.devicePixelRatio,bitmapHeight:(canvas as HTMLCanvasElement).height,cssHeight:canvas.getBoundingClientRect().height,top:canvas.getBoundingClientRect().top}));
-  expect(geometry.devicePixelRatio).toBe(2);expect(geometry.bitmapHeight).toBe(geometry.cssHeight*2);expect(geometry.top).toBeGreaterThan(500);
+  // fancy-canvas sizes its bitmap from ResizeObserver's physical box; Chromium's
+  // context DPR emulation alone leaves that box at the host's density.
+  const priceCanvas=chart.getByTestId('chart-canvas').locator('canvas').first();
+  const deviceBox=await priceCanvas.evaluate(canvas=>new Promise<{width:number;height:number}>((resolve,reject)=>{
+   const observer=new ResizeObserver(entries=>{
+    observer.disconnect();const size=entries[0]?.devicePixelContentBoxSize[0];
+    if(size)resolve({width:size.inlineSize,height:size.blockSize});else reject(Error('Device pixel box is unavailable'));
+   });observer.observe(canvas,{box:'device-pixel-content-box'});
+  }));
+  const id=await chart.getAttribute('data-chart-id'),media=(await layers(page)).find(layer=>layer.id===id)!;
+  const bitmap={width:Math.trunc(Math.max(deviceBox.width,media.width)),height:Math.trunc(Math.max(deviceBox.height,media.height))};
+  const paneGeometry=()=>priceCanvas.evaluate(canvas=>({devicePixelRatio:window.devicePixelRatio,cssWidth:canvas.getBoundingClientRect().width,cssHeight:canvas.getBoundingClientRect().height,top:canvas.getBoundingClientRect().top}));
+  await expect.poll(()=>priceCanvas.evaluate(canvas=>({width:(canvas as HTMLCanvasElement).width,height:(canvas as HTMLCanvasElement).height}))).toEqual(bitmap);
+  const geometry=await paneGeometry();expect(geometry.devicePixelRatio).toBe(2);expect(Math.abs(deviceBox.width-geometry.cssWidth*2)).toBeLessThanOrEqual(1);expect(Math.abs(deviceBox.height-geometry.cssHeight*2)).toBeLessThanOrEqual(1);expect(geometry.top).toBeGreaterThan(500);
   const expected=await drawAtPointer(page,chart);await flush(page);const saved=await savedDrawings(page,1);
   expect(await savedDrawings(page,0)).toEqual([]);await page.reload();await expect(chart.locator('.indicator-chip')).toHaveCount(2);
   for(const [drawingIndex,drawing] of expected.entries())for(const [pointIndex,position] of drawing.positions.entries())await expectPointerPosition(page,chart,'drawings',drawingIndex,pointIndex,position);
