@@ -137,6 +137,18 @@ Enabling storage saves genuine downloaded candles currently held in memory, then
 
 Disabling storage stops disk caching and leaves existing files intact. Changing folders opens the selected cache for subsequent storage without moving or deleting the previous folder; select the old folder again to reuse its data. Disk storage can grow with downloaded history and has no automatic eviction or deletion. Memory caches and active chart windows remain bounded.
 
+## Screener
+
+The fixed **Screener** tab stays at the right of the chart tabs, independently of the 20-chart-tab limit. Opening it saves the chart view and releases its chart subscriptions. Selecting a chart tab restores that workspace. **Analysis** is reserved for future work and is currently empty.
+
+Open **Screener → Downloader** to browse the instruments supported by the bundled [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node), grouped by its README categories. Search for an instrument, select individual instruments, a category, or all instruments, and choose one common timeframe and UTC date range. The start date is included and the end date is excluded. Press **Download** to queue CSV downloads; each instrument shows its progress, result or provider error. You can leave the Screener while downloads continue, or cancel the batch. Application shutdown cancels unfinished downloads. Completed files are retained.
+
+**Settings → Screener download folder** changes the destination for future downloads. The Linux default is `~/.local/share/cryptodesk/screener` (`/home/neodix/.local/share/cryptodesk/screener` for this checkout's user). It follows `$XDG_DATA_HOME` or an explicit `--data-dir` profile. Windows portable builds use `data/screener` beside the executable. Choosing or typing a path takes effect only after **Apply** succeeds. Changing folders does not move or remove previous downloads. The machine-local preference stays outside workspace import, export and reset.
+
+Release archives include a private Node runtime, the pinned Dukascopy downloader and its browser support. Extract the complete archive and keep `screener-runtime` beside the application; no global Node/npm installation or runtime `npx` installation is needed. Downloads require network access to Dukascopy. Upstream restrictions and empty/unavailable ranges are reported as errors; chart data and synthetic fixtures are never substituted. Tick histories and selecting every instrument can produce substantial downloads.
+
+For an optional live desktop verification, run `scripts/smoke-screener.sh` after building the bundled runtime. It uses a temporary profile and downloads only two BTCUSD daily candles through the actual download button. Results are recorded under `docs/verification/screener/desktop-live`; no user workspace is opened.
+
 ## Save, export and recover
 
 Workspace data lives at `$XDG_DATA_HOME/cryptodesk/workspace.sqlite`, normally `~/.local/share/cryptodesk/workspace.sqlite`, with user-only permissions. A local lock prevents another process from editing the same store. For an isolated profile use `./cryptodesk --data-dir /absolute/test-directory`.

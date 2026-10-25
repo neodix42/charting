@@ -2,10 +2,14 @@
 
 Releases contain two distinct Linux x64 archives:
 
-- `cryptodesk-X.Y.Z-linux-amd64.tar.gz`: small native binary; GTK3, WebKitGTK 4.1 and libsoup3 must be installed.
+- `cryptodesk-X.Y.Z-linux-amd64.tar.gz`: native app with its Screener downloader; GTK3, WebKitGTK 4.1, libsoup3 and Chromium's normal shared libraries (including NSS/NSPR and ALSA) must be installed.
 - `cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz`: larger package with the GTK/WebKit runtime and matching helper processes, relevant GIO/GdkPixbuf/GStreamer modules, schemas, icons, dependency libraries, redistribution notices and exact corresponding source archives.
 
-Download from the [latest release](https://github.com/neodix42/charting/releases/latest), verify its `SHA256SUMS`, extract the **whole directory**, and run its root `./cryptodesk` launcher. Keep the `runtime` directory beside it. FUSE and system installation are unnecessary. The ordinary optional user-local installer applies to the small native archive; copying only the bundled package's launcher will not install its runtime.
+Download from the [latest release](https://github.com/neodix42/charting/releases/latest), verify its `SHA256SUMS`, extract the **whole directory**, and run its root `./cryptodesk` launcher. Keep the `runtime` and `screener-runtime` directories beside it. FUSE and system installation are unnecessary. The optional `./install-user.sh` copies either complete package into the current user's application directory and preserves the workspace and downloaded files. Copying only the launcher omits its runtimes.
+
+Both archives preinstall the Screener's pinned dukascopy-node 1.51.0, private Node.js 24.19.0, Playwright 1.64.1 and matching Chrome for Testing 156.0.8078.4 (Chromium revision 1248). The app uses these adjacent files directly; Node/npm, `npx` and browser downloads are unnecessary on the destination machine. The portable archive also bundles Chromium's shared-library dependency closure. Data still requires internet access to Dukascopy. The downloader directory defaults to the per-user CryptoDesk data folder's `screener` directory and is adjustable in Settings.
+
+`screener-runtime/SCREENER-PROVENANCE.json` records the official archive URLs, pinned SHA-256 values, npm lockfile hash and every runtime file's checksum. Node's full license is in `NODE-LICENSE`; npm LICENSE/NOTICE/third-party notices are retained under `node_modules`, and Chromium retains its `ABOUT` and embedded `chrome://credits` notices. Browser and Node security updates require rebuilding with newly reviewed pins. The release publisher rejects missing, changed or incomplete downloader runtimes.
 
 The launcher scopes library/module paths to this process and starts the real app under `runtime/usr/bin`. It restores the caller's original environment when opening an external browser. It preserves arguments containing spaces and resolves an explicitly relative `--data-dir` against the caller's directory. By default, the same normal per-user workspace is used; this package does not silently create a different workspace. For a profile beside the package, explicitly run `./cryptodesk --data-dir ./data`. Close other instances that use that profile first.
 
@@ -27,6 +31,8 @@ sha256sum -c cryptodesk-Portable-SHA256SUMS
 ```
 
 Use an Ubuntu x64 build host with the normal native build prerequisites and Ubuntu runtime packages for GTK3, WebKitGTK 4.1, GLib networking, GSettings desktop schemas, Adwaita icons, librsvg, GStreamer base plugins, bubblewrap and xdg-dbus-proxy. The CI workflow provisions these on its disposable runner. Local scripts never install system packages or change system settings. The initial build needs the configured Ubuntu archives to provide the exact source versions of redistributed installed packages. Missing files, sources or checksums fail packaging rather than producing an incomplete release.
+
+The first build downloads checksum-verified official Node and Chromium archives into `.tools/screener-downloads` and runs `npm ci --ignore-scripts` against the Screener lockfile. Later builds reuse these caches after validation. A complete development runtime is staged at `.tools/screener-runtime-linux-amd64`, so `./cryptodesk` built at the checkout root also has a preinstalled downloader. No global npm packages, OS packages or browser configuration are changed.
 
 The source helper uses isolated APT configuration, lists, downloads and logs below `.tools/portable-sources`; host APT hooks are excluded. Source indexes are authenticated with the Ubuntu archive keyring. The complete `.dsc`, tar/diff source files, authenticated index records and SHA-256 inventory ship under `runtime/sources`; notices and license texts are under `runtime/licenses`. No source extraction or compilation occurs during collection. Runtime files can be replaced independently, and their exact hashes are listed in `runtime-manifest.json`. The portable archive contains regular files/directories only.
 

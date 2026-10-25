@@ -39,6 +39,14 @@ if [[ -d "$SOURCE_DIR/runtime" ]]; then
   if [[ ! -x "$SOURCE_DIR/runtime/usr/bin/cryptodesk" ]]; then echo 'The bundled Linux runtime is incomplete' >&2; exit 1; fi
   PORTABLE_RUNTIME=1
 fi
+SCREENER_RUNTIME=0
+if [[ -d "$SOURCE_DIR/screener-runtime" ]]; then
+  for screener_file in worker.cjs node package.json package-lock.json SCREENER-PROVENANCE.json; do
+    if [[ ! -s "$SOURCE_DIR/screener-runtime/$screener_file" ]]; then echo 'The bundled Screener runtime is incomplete' >&2; exit 1; fi
+  done
+  if [[ ! -x "$SOURCE_DIR/screener-runtime/node" ]]; then echo 'The bundled Screener Node runtime is not executable' >&2; exit 1; fi
+  SCREENER_RUNTIME=1
+fi
 printf 'Install app to %s\nLauncher to %s\nIcons to %s\nWorkspace configuration is preserved.\n' "$INSTALL_DIR" "$DESKTOP_DIR/cryptodesk.desktop" "$ICON_DIR"
 if [[ "$PORTABLE_RUNTIME" == 1 ]]; then echo 'The complete bundled runtime, licenses and sources will be copied with the launcher.'; fi
 if [[ -n "$DESKTOP_SHORTCUT_DIR" ]]; then printf 'Desktop shortcut to %s\n' "$DESKTOP_SHORTCUT_DIR/cryptodesk.desktop"; fi
@@ -47,6 +55,7 @@ mkdir -p "$INSTALL_DIR" "$DESKTOP_DIR" "$ICON_DIR/scalable/apps"
 STAGING="$(mktemp -d "$INSTALL_DIR/.install.XXXXXXXX")"
 INSTALL_COMMITTED=0
 NEW_RUNTIME_MOVED=0
+NEW_SCREENER_MOVED=0
 cleanup_install() {
   local install_status=$?
   if [[ "$INSTALL_COMMITTED" != 1 ]]; then
@@ -56,6 +65,12 @@ cleanup_install() {
     elif [[ "$NEW_RUNTIME_MOVED" == 1 ]]; then
       rm -rf -- "$INSTALL_DIR/runtime"
     fi
+    if [[ -e "$STAGING/previous-screener" ]]; then
+      if [[ -e "$INSTALL_DIR/screener-runtime" ]]; then rm -rf -- "$INSTALL_DIR/screener-runtime"; fi
+      mv -- "$STAGING/previous-screener" "$INSTALL_DIR/screener-runtime"
+    elif [[ "$NEW_SCREENER_MOVED" == 1 ]]; then
+      rm -rf -- "$INSTALL_DIR/screener-runtime"
+    fi
   fi
   rm -rf -- "$STAGING"
   return "$install_status"
@@ -64,6 +79,12 @@ trap cleanup_install EXIT
 install -m 755 "$SOURCE_DIR/cryptodesk" "$STAGING/cryptodesk"
 install -m 644 "$SOURCE_DIR/cryptodesk.png" "$STAGING/cryptodesk.png"
 install -m 644 "$SOURCE_DIR/cryptodesk.svg" "$STAGING/cryptodesk.svg"
+if [[ "$SCREENER_RUNTIME" == 1 ]]; then
+  cp -a -- "$SOURCE_DIR/screener-runtime" "$STAGING/screener-runtime"
+  if [[ -e "$INSTALL_DIR/screener-runtime" ]]; then mv -- "$INSTALL_DIR/screener-runtime" "$STAGING/previous-screener"; fi
+  mv -- "$STAGING/screener-runtime" "$INSTALL_DIR/screener-runtime"
+  NEW_SCREENER_MOVED=1
+fi
 if [[ "$PORTABLE_RUNTIME" == 1 ]]; then
   cp -a -- "$SOURCE_DIR/runtime" "$STAGING/runtime"
   if [[ -e "$INSTALL_DIR/runtime" ]]; then mv -- "$INSTALL_DIR/runtime" "$STAGING/previous-runtime"; fi

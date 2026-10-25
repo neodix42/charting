@@ -14,9 +14,24 @@ import urllib.error
 import zipfile
 
 import release
+import screener_bundle as screener
 
 COMMIT = "a" * 40
 OTHER = "b" * 40
+
+
+def screener_entries(target):
+    """A structurally complete runtime with real inventory checks, without downloads."""
+    entries = {name: b"Pinned runtime fixture" for name in screener.required_files(target)}
+    for name, version in (("dukascopy-node", screener.DUKASCOPY_VERSION), ("playwright-core", screener.PLAYWRIGHT_VERSION)):
+        entries[f"node_modules/{name}/package.json"] = json.dumps({"version": version}).encode()
+    manifest = {"target": target, "nodeVersion": screener.NODE_VERSION, "dukascopyVersion": screener.DUKASCOPY_VERSION,
+                "playwrightVersion": screener.PLAYWRIGHT_VERSION, "chromiumVersion": screener.CHROMIUM_VERSION,
+                "chromiumRevision": screener.CHROMIUM_REVISION,
+                "files": {name: {"bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()} for name, content in entries.items()}}
+    entries[screener.MANIFEST] = json.dumps(manifest).encode()
+    return [("screener-runtime/" + name, content, 0o755 if name in {screener.PINS[target]["executable"], screener.browser_path(target)} else 0o644)
+            for name, content in entries.items()]
 
 
 def published(tag="v0.1.0", commit=COMMIT, draft=False, legacy=False):
@@ -55,6 +70,7 @@ def portable_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
                              for name, content, _ in entries if name.startswith("runtime/")}
                 entries.append(("runtime-manifest.json", json.dumps(inventory).encode(), 0o644))
             entries.append(("version.json", json.dumps(manifest).encode(), 0o644))
+            entries.extend(screener_entries("linux-amd64"))
             with tarfile.open(versioned, "w:gz") as archive:
                 for name, content, mode in entries:
                     entry = tarfile.TarInfo(prefix + name)
@@ -73,6 +89,8 @@ def portable_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
                     archive.writestr(prefix + name, "portable runtime fixture")
                 archive.writestr(prefix + "cryptodesk.exe", binary)
                 archive.writestr(prefix + "version.json", json.dumps(manifest))
+                for name, content, _ in screener_entries("windows-amd64"):
+                    archive.writestr(prefix + name, content)
 
 
 def rewrite_tar(path, mutate):
@@ -264,6 +282,29 @@ class GitPlanningTests(unittest.TestCase):
 
 
 class BundleTests(unittest.TestCase):
+    def test_missing_corrupt_or_wrong_target_screener_runtime_prevents_publication(self):
+        for mutation in ("missing-worker", "missing-chromium", "corrupt-node", "wrong-target", "missing-license"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                portable_inputs(root)
+                archive = root / "cryptodesk-0.1.0-linux-amd64.tar.gz"
+                def mutate(entry, content):
+                    name = entry.name.removeprefix("cryptodesk-0.1.0-linux-amd64/screener-runtime/")
+                    if (mutation == "missing-worker" and name == "worker.cjs"
+                        or mutation == "missing-chromium" and name == screener.browser_path("linux-amd64")
+                        or mutation == "missing-license" and name == "NODE-LICENSE"):
+                        return None
+                    if mutation == "corrupt-node" and name == "node":
+                        content = b"corrupt node executable"
+                    if mutation == "wrong-target" and name == screener.MANIFEST:
+                        manifest = json.loads(content)
+                        manifest["target"] = "windows-amd64"
+                        content = json.dumps(manifest).encode()
+                    return entry, content
+                rewrite_tar(archive, mutate)
+                with self.assertRaisesRegex(ValueError, "Screener"):
+                    release.bundle(root, "0.1.0", COMMIT)
+
     def test_bundle_verifies_source_and_architecture_and_creates_download_checksums(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

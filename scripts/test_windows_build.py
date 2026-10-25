@@ -71,7 +71,13 @@ class WindowsPackagingTests(unittest.TestCase):
             environment.pop("CRYPTODESK_VERSION", None)
             if override:
                 environment["CRYPTODESK_VERSION"] = "2.3.4"
+            def screener(root, target, destination):
+                self.assertEqual(target, "windows-amd64")
+                destination.mkdir()
+                (destination / "worker.cjs").write_text("pinned downloader worker")
+                return {"dukascopyVersion": "1.51.0", "files": {}}
             with patch.dict(os.environ, environment, clear=True), \
+                 patch.object(build, "assemble_screener", side_effect=screener), \
                  patch.object(build.shutil, "which", return_value="/fixture/tool"), \
                  patch.object(build, "source_provenance", return_value={"gitRevision": "a" * 40, "workingTreeModified": False}), \
                  patch.object(build.subprocess, "run", side_effect=run), \
@@ -91,6 +97,7 @@ class WindowsPackagingTests(unittest.TestCase):
                 self.assertEqual(manifest["version"], "2.3.4")
                 self.assertFalse(manifest["workingTreeModified"])
                 self.assertEqual(result.read("cryptodesk-2.3.4-windows-amd64/STATUS.md"), b"status")
+                self.assertEqual(result.read("cryptodesk-2.3.4-windows-amd64/screener-runtime/worker.cjs"), b"pinned downloader worker")
             self.assertEqual(json.loads((root / "wails.json").read_text())["info"]["productVersion"], "0.1.0")
             self.assertIn(archive.name, (root / "cryptodesk-Windows-SHA256SUMS").read_text())
 

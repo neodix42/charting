@@ -265,14 +265,23 @@ class AppIconTests(unittest.TestCase):
             binary.parent.mkdir(parents=True)
             binary.write_text("previous runtime")
             binary.chmod(0o755)
+            screener = package / "screener-runtime"
+            screener.mkdir()
+            for name in ("worker.cjs", "node", "package.json", "package-lock.json", "SCREENER-PROVENANCE.json"):
+                (screener / name).write_text("previous downloader")
+            (screener / "node").chmod(0o755)
             data_home = root / "app data"
             env = dict(os.environ, XDG_DATA_HOME=str(data_home), HOME=str(root / "home"), XDG_DESKTOP_DIR=str(root / "no desktop"))
             unrelated = data_home / "applications/cryptodesk.desktop.tmp"
             unrelated.parent.mkdir(parents=True)
             unrelated.write_text("unrelated temporary file")
+            downloaded = data_home / "cryptodesk/screener/btcusd.csv"
+            downloaded.parent.mkdir(parents=True)
+            downloaded.write_text("saved historical prices")
             subprocess.run([str(package / "install-user.sh")], env=env, check=True, capture_output=True)
             self.assertEqual(unrelated.read_text(), "unrelated temporary file")
             binary.write_text("new runtime")
+            (screener / "worker.cjs").write_text("new downloader")
             fake_bin = root / "failing commands"
             fake_bin.mkdir()
             python = fake_bin / "python3"
@@ -283,6 +292,8 @@ class AppIconTests(unittest.TestCase):
             self.assertEqual(result.returncode, 73)
             installed = data_home / "cryptodesk-app"
             self.assertEqual((installed / "runtime/usr/bin/cryptodesk").read_text(), "previous runtime")
+            self.assertEqual((installed / "screener-runtime/worker.cjs").read_text(), "previous downloader")
+            self.assertEqual(downloaded.read_text(), "saved historical prices")
             self.assertEqual(unrelated.read_text(), "unrelated temporary file")
             self.assertFalse(any(installed.glob(".install.*")))
 

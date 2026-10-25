@@ -14,6 +14,7 @@ import (
 	"cryptodesk/internal/candlestorage"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/market"
+	"cryptodesk/internal/screener"
 	"cryptodesk/internal/storage"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -26,6 +27,7 @@ type App struct {
 	store          *storage.Store
 	market         *market.Service
 	candles        *candlestorage.Manager
+	screener       *screener.Manager
 	mu             sync.Mutex
 	revision       int64
 	closeToken     string
@@ -40,6 +42,7 @@ type App struct {
 
 func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	a := &App{store: store, revision: loaded.Revision, window: loaded.Workspace.Window}
+	a.screener = screener.New(store.Directory())
 	if a.window.Width < 400 {
 		a.window = domain.Window{Width: 1600, Height: 1000}
 	}
@@ -423,6 +426,9 @@ func (a *App) shutdown(ctx context.Context) {
 		a.cancel()
 	}
 	a.market.Close()
+	if a.screener != nil {
+		a.screener.Close()
+	}
 	if a.candles != nil {
 		if err := a.candles.Close(); err != nil {
 			fmt.Fprintln(os.Stderr, "Close candle storage:", err)

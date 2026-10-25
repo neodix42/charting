@@ -161,7 +161,7 @@ class PortableRuntimeTests(unittest.TestCase):
 keys = ['LD_LIBRARY_PATH', 'GIO_MODULE_DIR', 'GIO_EXTRA_MODULES', 'GSETTINGS_SCHEMA_DIR',
         'GTK_PATH', 'GTK_IM_MODULE', 'GTK_MODULES', 'GTK3_MODULES', 'GDK_PIXBUF_MODULE_FILE',
         'GST_PLUGIN_SCANNER_1_0', 'GST_REGISTRY_1_0', 'GLYCIN_DATA_DIR', 'XDG_DATA_DIRS',
-        'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'TZ', 'HOME', 'PATH']
+        'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'TZ', 'HOME', 'PATH', 'CRYPTODESK_SCREENER_RUNTIME']
 print(json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd(), 'env': {key: os.environ.get(key) for key in keys}}))
 sys.exit(int(os.environ.get('CRYPTO_TEST_EXIT', '0')))
 """)
@@ -198,6 +198,7 @@ sys.exit(int(os.environ.get('CRYPTO_TEST_EXIT', '0')))
             self.assertEqual(actual["GST_PLUGIN_SCANNER_1_0"], str(library_dir / "gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"))
             self.assertEqual(actual["GST_REGISTRY_1_0"], str(root / "cache with spaces/cryptodesk/gstreamer-registry.bin"))
             self.assertEqual(actual["GLYCIN_DATA_DIR"], str(usr / "share"))
+            self.assertEqual(actual["CRYPTODESK_SCREENER_RUNTIME"], str(package / "screener-runtime"))
             self.assertEqual(actual["XDG_DATA_DIRS"], str(usr / "share") + ":/explicit-host-data")
             self.assertTrue(actual["PATH"].startswith(str(usr / "bin") + ":"))
             for name in ("XDG_DATA_HOME", "XDG_CACHE_HOME", "TZ", "HOME"):

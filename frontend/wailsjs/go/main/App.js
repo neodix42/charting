@@ -6,12 +6,24 @@ export function AttachChart(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AttachChart'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CancelScreenerDownload() {
+  return window['go']['main']['App']['CancelScreenerDownload']();
+}
+
 export function ChooseCandleStorageDirectory() {
   return window['go']['main']['App']['ChooseCandleStorageDirectory']();
 }
 
+export function ChooseScreenerDirectory() {
+  return window['go']['main']['App']['ChooseScreenerDirectory']();
+}
+
 export function ConfigureCandleStorage(arg1, arg2) {
   return window['go']['main']['App']['ConfigureCandleStorage'](arg1, arg2);
+}
+
+export function ConfigureScreenerDirectory(arg1) {
+  return window['go']['main']['App']['ConfigureScreenerDirectory'](arg1);
 }
 
 export function ConfirmClose(arg1, arg2) {
@@ -50,6 +62,14 @@ export function GetHistory(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetHistory'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function GetScreener() {
+  return window['go']['main']['App']['GetScreener']();
+}
+
+export function GetScreenerCatalog() {
+  return window['go']['main']['App']['GetScreenerCatalog']();
+}
+
 export function ImportWorkspace() {
   return window['go']['main']['App']['ImportWorkspace']();
 }
@@ -76,4 +96,8 @@ export function ResetWorkspace() {
 
 export function SaveWorkspace(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveWorkspace'](arg1, arg2, arg3, arg4);
+}
+
+export function StartScreenerDownload(arg1) {
+  return window['go']['main']['App']['StartScreenerDownload'](arg1);
 }

@@ -6,4 +6,8 @@ Exact installed licenses and notices for Go modules and frontend runtime package
 
 fancy-canvas 2.1.0 declares MIT in its npm metadata but omits LICENSE from the published package. The upstream license (Copyright 2019 TradingView, Inc.) is retained from <https://github.com/tradingview/fancy-canvas/blob/master/LICENSE>. No fonts, images or icon packs are downloaded by the application. The CryptoDesk SVG icon is original project artwork under the repository license.
 
-The release uses OS-provided GTK3/WebKitGTK shared libraries; it does not redistribute a browser runtime. Provider data is fetched directly for local display; workspace exports contain configuration only. There are no trading, account-key, telemetry or hosted data redistribution components.
+The standard Linux release uses OS-provided GTK3/WebKitGTK shared libraries. The Linux portable release includes its documented GTK/WebKit runtime and matching source archives, and Windows includes its pinned Microsoft WebView2 runtime and license.
+
+All release variants also include the Screener's private Node.js 24.19.0, MIT-licensed dukascopy-node 1.51.0 and its locked dependencies, Playwright Core 1.64.1 and Chromium 156.0.8078.4. Their licenses, notices and browser credits are retained inside `screener-runtime`; `SCREENER-PROVENANCE.json` records the verified source archives and complete packaged inventory. `scripts/screener_bundle.py` assembles and verifies these files without installing global packages.
+
+Provider data is fetched directly for local display or user-requested CSV downloads; workspace exports contain configuration only. There are no trading, account-key, telemetry or hosted data redistribution components.

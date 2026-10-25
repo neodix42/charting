@@ -1,0 +1,55 @@
+//go:build bindings
+
+package main
+
+import (
+	"path/filepath"
+	"reflect"
+	"testing"
+
+	"cryptodesk/internal/screener"
+	"cryptodesk/internal/storage"
+)
+
+func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
+	profile := t.TempDir()
+	store, err := storage.Open(filepath.Join(profile, "workspace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	before, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := screener.New(profile)
+	t.Cleanup(manager.Close)
+	app := &App{store: store, screener: manager}
+	if got := app.GetScreener().Directory; got != filepath.Join(profile, "screener") {
+		t.Fatalf("default folder: %q", got)
+	}
+	destination := filepath.Join(profile, "selected", "market data")
+	configured, err := app.ConfigureScreenerDirectory(destination)
+	if err != nil || configured.Directory != destination {
+		t.Fatalf("configure directory: %+v, %v", configured, err)
+	}
+	if _, err = app.StartScreenerDownload(screener.Request{Symbols: []string{"not-a-real-instrument"}, Timeframe: "d1", From: "2024-01-01", To: "2024-01-02"}); err == nil {
+		t.Fatal("facade accepted an unsupported instrument")
+	}
+	if jobs := app.CancelScreenerDownload().Jobs; len(jobs) != 0 {
+		t.Fatalf("invalid request created jobs: %+v", jobs)
+	}
+	after, err := store.Load()
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("machine-local configuration changed saved workspace: %v", err)
+	}
+	reopened := screener.New(profile)
+	defer reopened.Close()
+	if got := reopened.Info().Directory; got != destination {
+		t.Fatalf("preference did not restore: %q", got)
+	}
+	configured, err = app.ConfigureScreenerDirectory("  ")
+	if err != nil || configured.Directory != filepath.Join(profile, "screener") {
+		t.Fatalf("empty path did not reset to profile default: %+v, %v", configured, err)
+	}
+}

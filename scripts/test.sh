@@ -3,6 +3,12 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 require_node
+(
+  cd "$APP_ROOT/screener-runtime"
+  npm ci --ignore-scripts --no-audit --no-fund
+  npm test
+  npm run catalog -- --check
+)
 go test -race ./internal/... ./cmd/...
 go test -tags bindings .
 go vet ./internal/... ./cmd/...

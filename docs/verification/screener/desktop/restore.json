@@ -1,0 +1,589 @@
+{
+  "phase": "restore",
+  "startedAt": "2026-10-25T11:01:19.496Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "native restart restores Screener folder independently of chart workspace",
+      "passed": true,
+      "actual": {
+        "directory": "/tmp/cryptodesk-desktop-smoke.DSc0tM/screener-selected",
+        "runtimeAvailable": true,
+        "jobs": []
+      }
+    },
+    {
+      "name": "native restart restores machine-local settings and the actual downloaded candle data",
+      "passed": true,
+      "actual": {
+        "storage": {
+          "enabled": true,
+          "directory": "/tmp/cryptodesk-desktop-smoke.DSc0tM/candles-selected",
+          "sizeBytes": 430080
+        },
+        "bars": 500
+      }
+    },
+    {
+      "name": "restart restores actual 3+1 chart workspace",
+      "passed": true,
+      "actual": {
+        "tabs": 2,
+        "charts": [
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "name": "active tab restored",
+      "passed": true,
+      "actual": "f96f94b9-5ffe-4ec6-911b-951897618c0b"
+    },
+    {
+      "name": "native restart restores all drawing types, resized horizontal segment and saved price/time anchors",
+      "passed": true,
+      "actual": [
+        {
+          "id": "eda9aa6e-bc0e-44e8-8031-40e7fdfd69c0",
+          "type": "arrowUp",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "points": [
+            {
+              "time": 1785211200,
+              "price": 79818.13238798502
+            }
+          ]
+        },
+        {
+          "id": "2fc310c4-1a9c-4ae3-8f08-f601e874899d",
+          "type": "arrowDown",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "points": [
+            {
+              "time": 1791864000,
+              "price": 106784.11937171468
+            }
+          ]
+        },
+        {
+          "id": "de330439-5408-4fa6-9c9f-fb4500c341d8",
+          "type": "horizontal",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "points": [
+            {
+              "time": 1764446400,
+              "price": 60882.01708385476
+            },
+            {
+              "time": 1799928000,
+              "price": 60882.01708385476
+            }
+          ]
+        },
+        {
+          "id": "81279398-9bce-4a28-b7f4-39ffbec7dbac",
+          "type": "trendline",
+          "exchange": "binance",
+          "market": "spot",
+          "instrument": "BTCUSDT",
+          "points": [
+            {
+              "time": 1785211200,
+              "price": 79818.13238798502
+            },
+            {
+              "time": 1794081600,
+              "price": 106784.11937171468
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "restored WebKit chart exposes its saved drawings and each chart retains its toolbar",
+      "passed": true
+    },
+    {
+      "name": "only selected tab is mounted after restart",
+      "passed": true,
+      "actual": {
+        "charts": 3,
+        "placeholders": 6
+      }
+    },
+    {
+      "name": "native close flushed the final immediate edit",
+      "passed": true,
+      "actual": {
+        "id": "1158d8bc-5fe0-46a5-b536-2c338bcf68a4",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "4h",
+        "chartType": "candlestick",
+        "showVolume": false,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1792036800,
+          "toSec": 1793116800,
+          "barSpacing": 6,
+          "rightOffset": -12.833333333333336
+        },
+        "indicators": [
+          {
+            "id": "bc41c2f0-be00-489e-a3d2-59acbd950940",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51",
+            "lineWidth": 3
+          },
+          {
+            "id": "a4aac689-efb0-4f04-8287-da2b04d3c556",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef",
+            "lineWidth": 1
+          },
+          {
+            "id": "41ac8a8b-8f1f-4bca-8d6f-bec3ef0d98d4",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "9de31823-0f82-4327-957a-b32b4d9a45b6",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.35541343
+          },
+          {
+            "id": "faabcf1e-7281-44a3-831f-19652f0c5b6c",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        "drawings": [
+          {
+            "id": "eda9aa6e-bc0e-44e8-8031-40e7fdfd69c0",
+            "type": "arrowUp",
+            "exchange": "binance",
+            "market": "spot",
+            "instrument": "BTCUSDT",
+            "points": [
+              {
+                "time": 1785211200,
+                "price": 79818.13238798502
+              }
+            ]
+          },
+          {
+            "id": "2fc310c4-1a9c-4ae3-8f08-f601e874899d",
+            "type": "arrowDown",
+            "exchange": "binance",
+            "market": "spot",
+            "instrument": "BTCUSDT",
+            "points": [
+              {
+                "time": 1791864000,
+                "price": 106784.11937171468
+              }
+            ]
+          },
+          {
+            "id": "de330439-5408-4fa6-9c9f-fb4500c341d8",
+            "type": "horizontal",
+            "exchange": "binance",
+            "market": "spot",
+            "instrument": "BTCUSDT",
+            "points": [
+              {
+                "time": 1764446400,
+                "price": 60882.01708385476
+              },
+              {
+                "time": 1799928000,
+                "price": 60882.01708385476
+              }
+            ]
+          },
+          {
+            "id": "81279398-9bce-4a28-b7f4-39ffbec7dbac",
+            "type": "trendline",
+            "exchange": "binance",
+            "market": "spot",
+            "instrument": "BTCUSDT",
+            "points": [
+              {
+                "time": 1785211200,
+                "price": 79818.13238798502
+              },
+              {
+                "time": 1794081600,
+                "price": 106784.11937171468
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "restart restores shared indicators and custom parameters from SQLite",
+      "passed": true,
+      "actual": [
+        [
+          {
+            "id": "bc41c2f0-be00-489e-a3d2-59acbd950940",
+            "type": "sma",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#e7ad51",
+            "lineWidth": 3
+          },
+          {
+            "id": "a4aac689-efb0-4f04-8287-da2b04d3c556",
+            "type": "ema",
+            "parameters": {
+              "period": 20
+            },
+            "color": "#61b6ef",
+            "lineWidth": 1
+          },
+          {
+            "id": "41ac8a8b-8f1f-4bca-8d6f-bec3ef0d98d4",
+            "type": "ichimoku",
+            "parameters": {
+              "base": 26,
+              "conversion": 9,
+              "displacement": 26,
+              "spanB": 52
+            },
+            "color": "#b58cf1"
+          },
+          {
+            "id": "9de31823-0f82-4327-957a-b32b4d9a45b6",
+            "type": "macd",
+            "parameters": {
+              "fast": 12,
+              "signal": 9,
+              "slow": 26
+            },
+            "color": "#61b6ef",
+            "paneStretchFactor": 0.35541343
+          },
+          {
+            "id": "faabcf1e-7281-44a3-831f-19652f0c5b6c",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        [
+          {
+            "id": "43ebb4a0-d2e5-4b7b-a31d-0a4d9daf4926",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ],
+        [
+          {
+            "id": "21e1b4e2-b3d8-4509-8623-90032342cb96",
+            "type": "ema",
+            "parameters": {
+              "period": 34
+            },
+            "color": "#61b6ef",
+            "lineWidth": 4
+          }
+        ]
+      ]
+    },
+    {
+      "name": "shared action preserves the first chart original four indicators",
+      "passed": true,
+      "actual": [
+        {
+          "id": "bc41c2f0-be00-489e-a3d2-59acbd950940",
+          "type": "sma",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#e7ad51",
+          "lineWidth": 3
+        },
+        {
+          "id": "a4aac689-efb0-4f04-8287-da2b04d3c556",
+          "type": "ema",
+          "parameters": {
+            "period": 20
+          },
+          "color": "#61b6ef",
+          "lineWidth": 1
+        },
+        {
+          "id": "41ac8a8b-8f1f-4bca-8d6f-bec3ef0d98d4",
+          "type": "ichimoku",
+          "parameters": {
+            "base": 26,
+            "conversion": 9,
+            "displacement": 26,
+            "spanB": 52
+          },
+          "color": "#b58cf1"
+        },
+        {
+          "id": "9de31823-0f82-4327-957a-b32b4d9a45b6",
+          "type": "macd",
+          "parameters": {
+            "fast": 12,
+            "signal": 9,
+            "slow": 26
+          },
+          "color": "#61b6ef",
+          "paneStretchFactor": 0.35541343
+        }
+      ]
+    },
+    {
+      "name": "shared action leaves the hidden tab unchanged",
+      "passed": true,
+      "actual": {
+        "id": "7b1ba266-addf-494a-be5a-2add8db34dd1",
+        "exchange": "binance",
+        "market": "spot",
+        "instrument": "BTCUSDT",
+        "timeframe": "1h",
+        "chartType": "candlestick",
+        "showVolume": true,
+        "priceScale": {
+          "mode": "linear",
+          "autoScale": true,
+          "manualRange": null
+        },
+        "view": {
+          "mode": "live",
+          "fromSec": 1792076400,
+          "toSec": 1792926000,
+          "barSpacing": 6,
+          "rightOffset": 13.166666666666629
+        }
+      }
+    },
+    {
+      "name": "restart restores shared weekly timeframes on the other active charts",
+      "passed": true,
+      "actual": [
+        "4h",
+        "1w",
+        "1w"
+      ]
+    },
+    {
+      "name": "restart restores the selected horizontal timeframe",
+      "passed": true
+    },
+    {
+      "name": "restart renders every chart own indicator configuration",
+      "passed": true,
+      "actual": [
+        5,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "restart restores the resized MACD pane from SQLite",
+      "passed": true,
+      "actual": {
+        "heights": [
+          63,
+          22
+        ],
+        "paneStretchFactor": 0.35541343
+      }
+    },
+    {
+      "name": "restart restores the saved pixel gap from SQLite",
+      "passed": true,
+      "actual": {
+        "unit": "pixels",
+        "value": 79
+      }
+    },
+    {
+      "name": "native Settings restores the saved value and unit",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 2,
+    "charts": [
+      3,
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-25T11:01:20.090539117Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3438624,
+    "goHeapInUseBytes": 5464064,
+    "goVersion": "go1.26.8",
+    "goroutines": 19,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 1.2,
+    "processTreeRSSBytes": 581152768,
+    "processTreeRootPID": 241577,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "restoredDrawings": [
+    {
+      "id": "eda9aa6e-bc0e-44e8-8031-40e7fdfd69c0",
+      "type": "arrowUp",
+      "exchange": "binance",
+      "market": "spot",
+      "instrument": "BTCUSDT",
+      "points": [
+        {
+          "time": 1785211200,
+          "price": 79818.13238798502
+        }
+      ]
+    },
+    {
+      "id": "2fc310c4-1a9c-4ae3-8f08-f601e874899d",
+      "type": "arrowDown",
+      "exchange": "binance",
+      "market": "spot",
+      "instrument": "BTCUSDT",
+      "points": [
+        {
+          "time": 1791864000,
+          "price": 106784.11937171468
+        }
+      ]
+    },
+    {
+      "id": "de330439-5408-4fa6-9c9f-fb4500c341d8",
+      "type": "horizontal",
+      "exchange": "binance",
+      "market": "spot",
+      "instrument": "BTCUSDT",
+      "points": [
+        {
+          "time": 1764446400,
+          "price": 60882.01708385476
+        },
+        {
+          "time": 1799928000,
+          "price": 60882.01708385476
+        }
+      ]
+    },
+    {
+      "id": "81279398-9bce-4a28-b7f4-39ffbec7dbac",
+      "type": "trendline",
+      "exchange": "binance",
+      "market": "spot",
+      "instrument": "BTCUSDT",
+      "points": [
+        {
+          "time": 1785211200,
+          "price": 79818.13238798502
+        },
+        {
+          "time": 1794081600,
+          "price": 106784.11937171468
+        }
+      ]
+    }
+  ],
+  "restoredIndicatorChart": {
+    "canvases": 11,
+    "canvasRows": 3
+  },
+  "restoredMACDPane": {
+    "heights": [
+      63,
+      22
+    ],
+    "paneStretchFactor": 0.35541343
+  },
+  "frontend": {
+    "chartInstances": 3,
+    "consumers": 3,
+    "bufferedEvents": 0,
+    "savedTabs": 2,
+    "savedCharts": 4,
+    "revision": 30
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 3,
+      "uniqueFeeds": 2,
+      "cachedFeeds": 2,
+      "cachedCandles": 980,
+      "historyRequests": 0,
+      "queueDepth": 0,
+      "resyncs": 0,
+      "sockets": 0,
+      "reconnects": 0,
+      "restRequests": 2
+    },
+    "mode": "public live data",
+    "persistedRevision": 30,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [
+    "connecting · Connecting public market streamFollowing live · Feed no messages · trade unknownUTC",
+    "connecting · Opening public spot streamFollowing live · Feed no messages · trade unknownUTC",
+    "connecting · Opening public spot streamFollowing live · Feed no messages · trade unknownUTC"
+  ],
+  "finishedAt": "2026-10-25T11:01:20.482Z"
+}

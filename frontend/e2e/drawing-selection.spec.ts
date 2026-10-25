@@ -240,7 +240,7 @@ test('only one chart owns selection and keyboard deletion, and tab switches disp
  expect((await layers(page)).some(item=>oldIds.includes(item.id))).toBe(false);
  expect((await layers(page))[0]).toMatchObject({selectedId:null,editingId:null});
  await page.keyboard.press('Delete');await flush(page);expect(await savedDrawings(page,0,0)).toEqual(firstSaved);
- await page.getByRole('tab').first().click();await expect(charts).toHaveCount(2);
+ await page.locator('[role="tab"][data-tab-id]').first().click();await expect(charts).toHaveCount(2);
  await expect.poll(async()=>(await layer(page,first)).drawings[0]?.points).toEqual(firstSaved[0].points);
  expect((await layer(page,first)).selectedId).toBeNull();await expect(deleteButton(first)).toBeDisabled();
  expect((await layer(page,second)).drawings).toEqual([]);

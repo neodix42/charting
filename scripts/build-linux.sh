@@ -21,6 +21,8 @@ cp "$APP_ROOT/build/linux/cryptodesk.desktop" "$APP_ROOT/build/linux/cryptodesk.
 cp -R "$APP_ROOT/build/linux/icons" "$ARTIFACT_DIR/"
 cp "$APP_ROOT/LICENSE" "$APP_ROOT/STATUS.md" "$ARTIFACT_DIR/"
 cp -R "$APP_ROOT/docs/." "$ARTIFACT_DIR/docs/"
+python3 "$APP_ROOT/scripts/screener_bundle.py" --root "$APP_ROOT" --target linux-amd64 --destination "$APP_ROOT/.tools/screener-runtime-linux-amd64"
+python3 "$APP_ROOT/scripts/screener_bundle.py" --target linux-amd64 --copy-from "$APP_ROOT/.tools/screener-runtime-linux-amd64" --destination "$ARTIFACT_DIR/screener-runtime"
 python3 "$APP_ROOT/scripts/version-manifest.py" "$ARTIFACT_DIR/version.json"
 cd "$APP_ROOT/release"
 tar -czf "$RELEASE_NAME.tar.gz" "$RELEASE_NAME"

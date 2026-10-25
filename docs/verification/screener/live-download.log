@@ -1,0 +1,19 @@
+UTC 2026-10-25T11:03:26.335766+00:00
+Bounded real public Dukascopy smoke; no fixtures
+Node /home/neodix/gitProjects/charting/.tools/screener-runtime-linux-amd64/node
+Worker /home/neodix/gitProjects/charting/screener-runtime/worker.cjs
+dukascopy-node 1.51.0; Chromium bundled revision 1248; BTCUSD d1 from 2024-01-01 inclusive to 2024-01-03 exclusive UTC
+Exit 0
+stdout:
+{"type":"progress","progress":0,"message":"Downloading 1 source files"}
+{"type":"progress","progress":95,"message":"Fetched 1 of 1 source files"}
+{"type":"done","rows":2,"message":"Downloaded 2 rows"}
+
+stderr:
+
+CSV verification: exact two UTC daily candles, ordered, no duplicated timestamps
+timestamp,open,high,low,close,volume
+1704067200000,43712.4,44154.2,43426.2,44146.3,0.0159
+1704153600000,44146.3,45865.2,44117.6,44915.6,0.455
+
+PASS

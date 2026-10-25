@@ -22,6 +22,7 @@ import urllib.request
 import zipfile
 
 from app_version import app_version, parse_version
+from screener_bundle import MANIFEST as SCREENER_MANIFEST, validate_inventory as validate_screener
 
 TARGETS = {"linux-amd64": ".tar.gz", "linux-amd64-portable": ".tar.gz", "windows-amd64": ".zip"}
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -312,6 +313,15 @@ def archive_manifest(path, target, version):
                         raise ValueError(f"Bundled Linux runtime is missing {directory}")
             else:
                 executable("cryptodesk")
+            screener_files = {entry.name.removeprefix(prefix + "screener-runtime/"): entry for entry in sorted(archive.getmembers(), key=lambda entry: entry.offset_data)
+                              if entry.name.startswith(prefix + "screener-runtime/") and entry.isfile()}
+            with archive.extractfile(regular("screener-runtime/" + SCREENER_MANIFEST)) as stream:
+                screener_manifest = json.load(stream)
+            def read_screener(name):
+                with archive.extractfile(screener_files[name]) as stream:
+                    return stream.read()
+            validate_screener(screener_manifest, "linux-amd64",
+                              {name: (entry.size, bool(entry.mode & 0o111)) for name, entry in screener_files.items()}, read_screener)
             with archive.extractfile(regular("version.json")) as stream:
                 return json.load(stream)
     with zipfile.ZipFile(path) as archive:
@@ -330,6 +340,14 @@ def archive_manifest(path, target, version):
             pe = stream.read(96)
             if len(pe) != 96 or pe[:4] != b"PE\0\0" or struct.unpack_from("<H", pe, 4)[0] != 0x8664 or struct.unpack_from("<H", pe, 24)[0] != 0x20B or struct.unpack_from("<H", pe, 92)[0] != 2:
                 raise ValueError("Expected a Windows x64 GUI executable")
+        screener_prefix = prefix + "screener-runtime/"
+        screener_files = {entry.filename.removeprefix(screener_prefix): (entry.file_size, True) for entry in archive.infolist()
+                          if entry.filename.startswith(screener_prefix) and not entry.is_dir()}
+        try:
+            screener_manifest = json.loads(archive.read(screener_prefix + SCREENER_MANIFEST))
+        except KeyError as error:
+            raise ValueError("Windows package is missing the preinstalled Screener runtime") from error
+        validate_screener(screener_manifest, "windows-amd64", screener_files, lambda name: archive.read(screener_prefix + name))
         return json.loads(archive.read(prefix + "version.json"))
 
 

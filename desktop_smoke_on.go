@@ -37,6 +37,20 @@ func (a *App) DesktopSmokeClose() { runtime.Quit(a.ctx) }
 func (a *App) DesktopSmokeCandleRows(key domain.FeedKey, from, to int64) ([]domain.Candle, error) {
 	return a.candles.Range(key, from, to, 1000)
 }
+func (a *App) DesktopSmokeScreenerCSV() (string, error) {
+	for _, job := range a.screener.Info().Jobs {
+		if job.Status == "completed" {
+			file, err := os.Open(job.OutputPath)
+			if err != nil {
+				return "", err
+			}
+			defer file.Close()
+			data, err := io.ReadAll(io.LimitReader(file, 1024*1024))
+			return string(data), err
+		}
+	}
+	return "", errors.New("no completed Screener download")
+}
 func (a *App) DesktopSmokeSignalExpectation() map[string]string {
 	return map[string]string{"workspaceId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_WORKSPACE"), "chartId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_CHART"), "timeframe": os.Getenv("CRYPTODESK_SMOKE_EXPECT_TIMEFRAME")}
 }
@@ -175,7 +189,7 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" {
 		return
 	}
 	encoded, _ := json.Marshal(phase)
@@ -196,7 +210,7 @@ const desktopSmokeJavaScript = `async function(phase) {
  const middleTab=async(element)=>{const rect=element.getBoundingClientRect();element.dispatchEvent(new MouseEvent('auxclick',{bubbles:true,cancelable:true,button:1,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));await sleep(100);};
  const bounds=element=>{const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height,centerY:(rect.top+rect.bottom)/2};};
  const verifyTabStrip=async(label,overflow)=>{
-  const strip=q('.tabs'),list=q('[role="tablist"]'),add=q('[aria-label="Add tab"]'),tabs=qa('[role="tab"]'),last=tabs.at(-1);
+  const strip=q('.tabs'),list=q('[role="tablist"]'),add=q('[aria-label="Add tab"]'),tabs=qa('[role="tab"][data-tab-id]'),last=tabs.at(-1);
   check(!q('.app-header [aria-label="Rename tab"]')&&!q('.app-header [aria-label="Close tab"]')&&!q('[aria-label="All tabs"]')&&!q('.tab-row .capacity'),'retired header tab actions, dropdown and tab counter are absent');
   check(list.parentElement===strip&&add.parentElement===strip&&list.nextElementSibling===add&&!list.contains(add),'Add tab follows the tab list inside the same scrollable content');
   const previousScroll=strip.scrollLeft;
@@ -230,7 +244,34 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='markets'||phase==='markets-restore'){
+  if(phase==='screener'){
+   await click('[role="tab"][aria-controls="screener-panel"]');
+   await wait(()=>!q('[data-testid="chart-cell"]'),'native Screener chart cleanup');
+   await click('#screener-downloader-tab');
+   await wait(()=>qa('.screener-instrument').length===1499,'full Dukascopy catalog');
+   const runtime=await api.GetScreener();
+   check(runtime.runtimeAvailable,'preinstalled native downloader is available',runtime);
+   await input('[aria-label="Search Dukascopy instruments"]','btcusd');
+   await click('.screener-instrument input');
+   await select('[aria-label="Download timeframe"]','d1');
+   await input('[aria-label="Download from date"]','2024-01-01');
+   await input('[aria-label="Download to date"]','2024-01-03');
+   await click('[aria-label="Download historical data"] button[type="submit"]');
+   const finished=await wait(async()=>{
+    const value=await api.GetScreener();
+    if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value.jobs));
+    return value.jobs.length&&value.jobs.every(job=>job.status==='completed')?value:false;
+   },'real native Dukascopy CSV download',90000);
+   await wait(()=>q('.screener-job.completed progress')?.value===100,'completed per-symbol native progress');
+   const csv=await api.DesktopSmokeScreenerCSV(),rows=csv.trim().split('\n');
+   check(finished.jobs.length===1&&finished.jobs[0].symbol==='btcusd'&&finished.jobs[0].timeframe==='d1'&&finished.jobs[0].progress===100,'download button runs exactly the selected symbol/timeframe',finished.jobs);
+   check(rows.length===3&&rows[0]==='timestamp,open,high,low,close,volume'&&rows[1].startsWith('1704067200000,')&&rows[2].startsWith('1704153600000,'),'downloaded CSV contains exactly two genuine ordered daily candles in the requested UTC range',csv);
+   check(finished.jobs[0].outputPath.startsWith(finished.directory+'/'),'downloaded file is published inside the applied Screener folder',finished.jobs[0].outputPath);
+   check((await api.GetDiagnostics()).market.activeLeases===0,'downloader operates without chart subscriptions');
+   await api.CancelScreenerDownload();
+   check((await api.DesktopSmokeScreenerCSV())===csv,'cancellation retains a completed CSV file');
+   report.screener={...finished,csv};
+  }else if(phase==='markets'||phase==='markets-restore'){
    const expected=await api.DesktopSmokeMarketExpectation(),diagnostics=await api.GetDiagnostics(),cell=q('[data-testid="chart-cell"]');
    check(initial.workspace.tabs.length===1&&initial.workspace.tabs[0].charts.length===1&&qa('[data-testid="chart-cell"]').length===1,'market smoke keeps exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'market smoke keeps the original 1×1 grid',initial.workspace.tabs[0].grid);
@@ -332,7 +373,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(restored.timeframe===expected.timeframe,'OS signal saved the pending timeframe to SQLite',{expected:expected.timeframe,actual:restored.timeframe});
    check(q('[data-testid="chart-cell"] [aria-label="Timeframe '+expected.timeframe+'"]').getAttribute('aria-pressed')==='true','signal restart renders the durable timeframe selection');
   }else if(phase==='fresh'){
-   check(qa('[role="tab"]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
+   check(qa('[role="tab"][data-tab-id]').length===1&&qa('[data-testid="chart-cell"]').length===1,'first launch exactly one tab and chart',report.initialCounts);
    check(initial.workspace.tabs[0].grid.rows===1&&initial.workspace.tabs[0].grid.columns===1,'initial 1×1 grid',initial.workspace.tabs[0].grid);
    check(initial.workspace.chartRightGap?.unit==='bars'&&initial.workspace.chartRightGap.value===10,'first launch defaults to a ten-bar right gap',initial.workspace.chartRightGap);
    report.initialTabStrip=await verifyTabStrip('first launch',false);
@@ -352,13 +393,35 @@ const desktopSmokeJavaScript = `async function(phase) {
    const savedGeometry=report.saveIndicatorGeometry.saved;
    check(['pending','saving','error','recovered'].every(state=>['save','previous','next'].every(control=>['left','right','width'].every(edge=>Math.abs(report.saveIndicatorGeometry[state][control][edge]-savedGeometry[control][edge])<.5))),'save indicator and neighboring controls keep the same geometry across saved, pending, saving and error states',report.saveIndicatorGeometry);
    q('[data-testid="chart-cell"] [aria-label="Timeframe '+originalPeriod+'"]').click();await flush();
-   q('[role="tab"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0}));
+   q('[role="tab"][data-tab-id]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0}));
    await wait(()=>q('[role="dialog"][aria-label="Rename tab"]'),'native double-click rename dialog');
    await input('[aria-label="Tab name"]','Native renamed tab');await click('[role="dialog"] button[type="submit"]');await flush();
    check((await api.LoadWorkspace()).workspace.tabs[0].name==='Native renamed tab','double-click tab rename persists through native SQLite');
-   q('[role="tab"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0}));
+   q('[role="tab"][data-tab-id]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,button:0}));
    await input('[aria-label="Tab name"]',initial.workspace.tabs[0].name);await click('[role="dialog"] button[type="submit"]');await flush();
+   const screenerTab=q('[role="tab"][aria-controls="screener-panel"]');
+   check(!!screenerTab&&!screenerTab.draggable&&!screenerTab.dataset.tabId,'Screener is a fixed tab outside the saved chart-tab list');
+   screenerTab.click();
+   await wait(()=>q('[id="screener-analysis"]')&&!q('[id="screener-analysis"]').hidden&&!q('[data-testid="chart-cell"]'),'native Screener opens empty Analysis and unmounts charts');
+   await wait(async()=>(await api.GetDiagnostics()).market.activeLeases===0,'Screener releases every chart lease');
+   check(q('[id="screener-analysis"]').childElementCount===0,'Analysis is empty');
+   await click('#screener-downloader-tab');
+   const screenerCatalog=await api.GetScreenerCatalog(),screenerCount=screenerCatalog.groups.reduce((count,group)=>count+group.instruments.length,0);
+   await wait(()=>qa('.screener-instrument').length===screenerCount,'complete native Dukascopy catalog');
+   check(screenerCount>1000&&screenerCatalog.groups.length>20&&screenerCatalog.timeframes.includes('tick')&&screenerCatalog.timeframes.includes('d1'),'native downloader exposes full grouped instrument catalog and supported timeframes',{version:screenerCatalog.version,groups:screenerCatalog.groups.length,instruments:screenerCount,timeframes:screenerCatalog.timeframes});
+   q('[aria-label="Select all symbols"]').click();await sleep(100);
+   check(qa('.screener-instrument input:checked').length===screenerCount,'native Select all includes every instrument');
+   q('[aria-label="Select all symbols"]').click();
+   const screenerDefault=await api.GetScreener();
+   check(screenerDefault.directory.endsWith('/screener')&&screenerDefault.jobs.length===0,'isolated native Screener defaults to its profile data folder',screenerDefault);
+   q('[role="tab"][data-tab-id]').click();await wait(()=>q('[data-testid="chart-cell"]'),'chart restored after Screener');
+   check((await api.LoadWorkspace()).workspace.activeTabId===initial.workspace.activeTabId,'Screener preserves the actual saved chart-tab selection');
    await click('[aria-label="Open settings"]');
+   await wait(()=>q('[aria-label="Screener download folder"]:not(:disabled)'),'native Screener settings');
+   await input('[aria-label="Screener download folder"]',screenerDefault.directory+'-selected');
+   await click('[aria-label="Apply Screener download folder"]');
+   await wait(async()=>(await api.GetScreener()).directory===screenerDefault.directory+'-selected','native Screener folder preference committed');
+   report.screener={directory:(await api.GetScreener()).directory,catalogVersion:screenerCatalog.version,instruments:screenerCount};
    await wait(()=>q('.candle-storage-toggle input:not(:disabled)'),'native candle storage settings');
    const storageDefault=await api.GetCandleStorage();
    check(!q('.candle-storage-toggle input').checked&&!storageDefault.enabled&&storageDefault.directory.endsWith('/candles'),'native candle storage defaults off in the isolated profile',storageDefault);
@@ -376,8 +439,8 @@ const desktopSmokeJavaScript = `async function(phase) {
    await click('[aria-label="Refresh candle storage size"]');
    check(q('[aria-label="Candle storage folder size"]').textContent!=='0 B','native Settings refreshes actual candle folder size',q('[aria-label="Candle storage folder size"]').textContent);
    await click('[aria-label="Close settings"]');
-   await middleTab(q('[role="tab"]'));
-   check(qa('[role="tab"]').length===1&&!q('[role="menu"]')&&!q('[role="dialog"]'),'middle-click protects the final tab without opening a menu or dialog');
+   await middleTab(q('[role="tab"][data-tab-id]'));
+   check(qa('[role="tab"][data-tab-id]').length===1&&!q('[role="menu"]')&&!q('[role="dialog"]'),'middle-click protects the final tab without opening a menu or dialog');
    check(q('[aria-label="Remove chart"]').disabled,'chart X protects the final chart');
    if(q('[aria-label="Dismiss notification"]'))await click('[aria-label="Dismiss notification"]');
    await wait(()=>chartShape(q('[data-testid="chart-cell"]')).canvases>0,'initial native chart canvases');
@@ -415,13 +478,13 @@ const desktopSmokeJavaScript = `async function(phase) {
    await click('[data-testid="chart-cell"] [aria-label="Timeframe 15m"]');
    await click('[data-testid="chart-cell"] [aria-label="Toggle volume"]');
    await click('[aria-label="Add tab"]');
-   await wait(()=>qa('[role="tab"]').length===2,'second tab');
+   await wait(()=>qa('[role="tab"][data-tab-id]').length===2,'second tab');
    check(qa('[data-testid="chart-cell"]').length===1&&q('[aria-label="Grid layout"]').value==='1x1','new tab has exactly one chart and 1×1 grid',{charts:qa('[data-testid="chart-cell"]').length,grid:q('[aria-label="Grid layout"]').value});
-   const keyboardTab=q('[role="tab"][aria-selected="true"]');keyboardTab.focus();keyboardTab.dispatchEvent(new KeyboardEvent('keydown',{key:'w',ctrlKey:true,bubbles:true,cancelable:true}));
+   const keyboardTab=q('[role="tab"][data-tab-id][aria-selected="true"]');keyboardTab.focus();keyboardTab.dispatchEvent(new KeyboardEvent('keydown',{key:'w',ctrlKey:true,bubbles:true,cancelable:true}));
    await wait(()=>q('[role="dialog"].confirmation'),'native Ctrl+W confirmation');
-   check(qa('[role="tab"]').length===2&&q('[role="dialog"]').textContent.includes('Remove this tab and all 1 chart'),'Ctrl+W keeps its whole-tab confirmation after removing the header Close button');
+   check(qa('[role="tab"][data-tab-id]').length===2&&q('[role="dialog"]').textContent.includes('Remove this tab and all 1 chart'),'Ctrl+W keeps its whole-tab confirmation after removing the header Close button');
    await click('[role="dialog"] button[type="button"]');
-   qa('[role="tab"]')[0].click();await wait(()=>qa('[data-testid="chart-cell"]').length===3,'restore first tab');
+   qa('[role="tab"][data-tab-id]')[0].click();await wait(()=>qa('[data-testid="chart-cell"]').length===3,'restore first tab');
    await flush();
    const saved=await api.LoadWorkspace();
    check(saved.workspace.tabs.length===2&&saved.workspace.tabs[0].charts.length===3&&saved.workspace.tabs[1].charts.length===1,'small workspace saved with exact counts',saved.workspace.tabs.map(tab=>tab.charts.length));
@@ -469,25 +532,25 @@ const desktopSmokeJavaScript = `async function(phase) {
    const pixelGapSaved=await api.LoadWorkspace();
    check(pixelGapSaved.workspace.chartRightGap?.unit==='pixels'&&pixelGapSaved.workspace.chartRightGap.value===79&&qa('[data-testid="chart-cell"]').length===3,'pixel gap persists without replacing chart instances or layout',pixelGapSaved.workspace.chartRightGap);
    report.gapRevision=pixelGapSaved.revision;
-   await click('[aria-label="Duplicate tab"]');await wait(()=>qa('[role="tab"]').length===3&&qa('[data-testid="chart-cell"]').length===3,'temporary duplicate with all three charts');
-   const chartCloseDuplicateID=q('[role="tab"][aria-selected="true"]').dataset.tabId,chartCloseTarget=q('[data-testid="chart-cell"]'),chartCloseID=chartCloseTarget.dataset.chartId;
+   await click('[aria-label="Duplicate tab"]');await wait(()=>qa('[role="tab"][data-tab-id]').length===3&&qa('[data-testid="chart-cell"]').length===3,'temporary duplicate with all three charts');
+   const chartCloseDuplicateID=q('[role="tab"][data-tab-id][aria-selected="true"]').dataset.tabId,chartCloseTarget=q('[data-testid="chart-cell"]'),chartCloseID=chartCloseTarget.dataset.chartId;
    await click('[data-testid="chart-cell"] [aria-label="Maximize chart"]');
    const chartCloseButton=chartCloseTarget.querySelector('[aria-label="Remove chart"]'),chartCloseRect=chartCloseButton.getBoundingClientRect();
    check(chartCloseRect.width>=30&&chartCloseRect.height>=30&&parseFloat(getComputedStyle(chartCloseButton).fontSize)>=22,'chart X uses a larger glyph and hit target',{width:chartCloseRect.width,height:chartCloseRect.height,fontSize:getComputedStyle(chartCloseButton).fontSize});
    chartCloseButton.click();await wait(()=>qa('[data-testid="chart-cell"]').length===2,'immediate native chart X removal');
    check(!q('[role="dialog"]')&&!q('.cell-wrapper.maximized')&&!q('.maximized-hidden')&&!qa('[data-testid="chart-cell"]').some(cell=>cell.dataset.chartId===chartCloseID),'chart X closes a maximized chart immediately and restores its siblings');
-   await middleTab(q('[role="tab"][aria-selected="true"]'));await wait(()=>qa('[role="tab"]').length===2&&qa('[data-testid="chart-cell"]').length===1,'middle-close temporary active tab');
+   await middleTab(q('[role="tab"][data-tab-id][aria-selected="true"]'));await wait(()=>qa('[role="tab"][data-tab-id]').length===2&&qa('[data-testid="chart-cell"]').length===1,'middle-close temporary active tab');
    check(!q('[role="dialog"]')&&!q('[role="menu"]'),'active tab middle-click closes its remaining charts without confirmation');
    await wait(()=>window.__cryptodeskDiagnostics?.().consumers===1,'active middle-close releases chart consumers');
    await flush();const activeClosed=await api.LoadWorkspace();
    check(!activeClosed.workspace.tabs.some(tab=>tab.id===chartCloseDuplicateID)&&activeClosed.workspace.tabs.map(tab=>tab.charts.length).join(',')==='3,1','chart X and active middle-close persist while preserving the original 3+1 workspace',activeClosed.workspace.tabs.map(tab=>({id:tab.id,charts:tab.charts.length})));
-   qa('[role="tab"]')[0].click();await wait(()=>qa('[data-testid="chart-cell"]').length===3,'original charts after active closure');
-   await click('[aria-label="Duplicate tab"]');await wait(()=>qa('[role="tab"]').length===3&&qa('[data-testid="chart-cell"]').length===3,'temporary inactive-close duplicate');
-   const duplicateID=q('[role="tab"][aria-selected="true"]').dataset.tabId;
-   qa('[role="tab"]')[0].click();await wait(()=>q('[role="tab"][aria-selected="true"]').dataset.tabId===pixelGapSaved.workspace.tabs[0].id,'original active tab before inactive closure');
+   qa('[role="tab"][data-tab-id]')[0].click();await wait(()=>qa('[data-testid="chart-cell"]').length===3,'original charts after active closure');
+   await click('[aria-label="Duplicate tab"]');await wait(()=>qa('[role="tab"][data-tab-id]').length===3&&qa('[data-testid="chart-cell"]').length===3,'temporary inactive-close duplicate');
+   const duplicateID=q('[role="tab"][data-tab-id][aria-selected="true"]').dataset.tabId;
+   qa('[role="tab"][data-tab-id]')[0].click();await wait(()=>q('[role="tab"][data-tab-id][aria-selected="true"]').dataset.tabId===pixelGapSaved.workspace.tabs[0].id,'original active tab before inactive closure');
    const mountedBeforeClose=qa('[data-testid="chart-cell"]').map(cell=>cell.dataset.chartId);
-   await middleTab(qa('[role="tab"]')[2]);
-   await wait(()=>qa('[role="tab"]').length===2,'remove inactive middle-click target');await flush();
+   await middleTab(qa('[role="tab"][data-tab-id]')[2]);
+   await wait(()=>qa('[role="tab"][data-tab-id]').length===2,'remove inactive middle-click target');await flush();
    const closedMiddle=await api.LoadWorkspace();
    check(!q('[role="menu"]')&&!q('[role="dialog"]')&&closedMiddle.workspace.tabs.length===2&&!closedMiddle.workspace.tabs.some(tab=>tab.id===duplicateID)&&closedMiddle.workspace.activeTabId===pixelGapSaved.workspace.activeTabId&&closedMiddle.workspace.tabs.map(tab=>tab.charts.length).join(',')==='3,1'&&JSON.stringify(qa('[data-testid="chart-cell"]').map(cell=>cell.dataset.chartId))===JSON.stringify(mountedBeforeClose),'inactive middle-click removes its whole tab without confirmation, preserves active charts and persists to SQLite',closedMiddle.workspace.tabs.map(tab=>({id:tab.id,charts:tab.charts.length})));
    const drawingCell=q('[data-testid="chart-cell"]');
@@ -530,6 +593,8 @@ const desktopSmokeJavaScript = `async function(phase) {
    }
    report.savedDrawings=resizedDrawings;
   } else if(phase==='restore') {
+   const screenerRestored=await api.GetScreener();
+   check(screenerRestored.directory.endsWith('/screener-selected')&&screenerRestored.jobs.length===0,'native restart restores Screener folder independently of chart workspace',screenerRestored);
    const storageRestored=await api.GetCandleStorage(),cacheKey={exchange:initial.workspace.tabs[0].charts[0].exchange,market:'spot',instrument:initial.workspace.tabs[0].charts[0].instrument,timeframe:'1h'},restoredBars=await api.DesktopSmokeCandleRows(cacheKey,0,0);
    check(storageRestored.enabled&&storageRestored.directory.endsWith('/candles-selected')&&storageRestored.sizeBytes>0&&restoredBars.length>=4,'native restart restores machine-local settings and the actual downloaded candle data',{storage:storageRestored,bars:restoredBars.length});
    check(initial.workspace.tabs.length===2&&initial.workspace.tabs[0].charts.length===3&&initial.workspace.tabs[1].charts.length===1,'restart restores actual 3+1 chart workspace',report.initialCounts);
@@ -563,9 +628,9 @@ const desktopSmokeJavaScript = `async function(phase) {
    report.switchMetrics=[];report.switchLatenciesMS=[];const switchStart=performance.now();
    for(let index=0;index<200;index++) {
     const target=(index+1)%20,started=performance.now();
-    qa('[role="tab"]')[target].scrollIntoView({block:'nearest',inline:'nearest'});
-    qa('[role="tab"]')[target].click();
-    await wait(()=>q('[role="tab"][aria-selected="true"]')===qa('[role="tab"]')[target]&&q('[data-testid="chart-cell"]')?.dataset.chartId===initial.workspace.tabs[target].charts[0].id,'native tab switch '+index);
+    qa('[role="tab"][data-tab-id]')[target].scrollIntoView({block:'nearest',inline:'nearest'});
+    qa('[role="tab"][data-tab-id]')[target].click();
+    await wait(()=>q('[role="tab"][data-tab-id][aria-selected="true"]')===qa('[role="tab"][data-tab-id]')[target]&&q('[data-testid="chart-cell"]')?.dataset.chartId===initial.workspace.tabs[target].charts[0].id,'native tab switch '+index);
     if(qa('[data-testid="chart-cell"]').length!==9)throw Error('Chart instance count after switch '+index);
     report.switchLatenciesMS.push(performance.now()-started);
     if((index+1)%50===0)report.switchMetrics.push({switches:index+1,...await api.DesktopSmokeMetrics(),backend:await api.GetDiagnostics(),frontend:window.__cryptodeskDiagnostics?.()});

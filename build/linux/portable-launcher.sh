@@ -2,6 +2,7 @@
 set -euo pipefail
 portable_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 portable_usr="$portable_dir/runtime/usr"
+export CRYPTODESK_SCREENER_RUNTIME="$portable_dir/screener-runtime"
 # External desktop applications must inherit the caller's environment, rather
 # than this bundle's GTK/GLib. Wails finds the scoped xdg-open wrapper on PATH.
 export CRYPTODESK_HOST_XDG_OPEN="$(command -v xdg-open || true)"

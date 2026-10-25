@@ -179,7 +179,7 @@ test('drawings remain independent per chart, and tab switches dispose hidden dra
  await expect(charts.getByLabel('OHLCV')).toContainText('61,000.00');
  await expect.poll(async()=>(await layers(page))[0]?.drawings).toEqual([]);
  await place(charts,'Horizontal line');await flush(page);const newTabDrawings=await savedDrawings(page,0,1);
- await page.getByRole('tab').first().click();await expect(charts).toHaveCount(2);
+ await page.locator('[role="tab"][data-tab-id]').first().click();await expect(charts).toHaveCount(2);
  await expect.poll(async()=>(await layers(page)).map(layer=>layer.id).sort()).toEqual(originalIds.toSorted());
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(2);
  expect(await savedDrawings(page)).toEqual(firstSaved);expect(await savedDrawings(page,1)).toEqual(secondSaved);
@@ -187,7 +187,7 @@ test('drawings remain independent per chart, and tab switches dispose hidden dra
  expect(await savedDrawings(page)).toEqual([]);expect(await savedDrawings(page,1)).toEqual(secondSaved);
  await page.reload();await expect(charts).toHaveCount(2);
  await expect.poll(async()=>(await layers(page)).map(layer=>layer.drawings.length)).toEqual([0,1]);
- await page.getByRole('tab').nth(1).click();
+ await page.locator('[role="tab"][data-tab-id]').nth(1).click();
  await expect.poll(async()=>(await layers(page))[0]?.drawings.map(drawing=>drawing.id)).toEqual(newTabDrawings.map(drawing=>drawing.id));
  expect(errors).toEqual([]);
 });

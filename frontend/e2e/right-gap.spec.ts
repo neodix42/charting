@@ -42,7 +42,7 @@ test('fresh and legacy workspaces display a ten-bar gap without expanding their 
  const workspace=structuredClone(intermediate) as Workspace;
  for(const tab of workspace.tabs)for(const chart of tab.charts)chart.view={...chart.view,mode:'live',fromSec:null,toSec:null};
  await page.evaluate(({key,workspace})=>sessionStorage.setItem(key,JSON.stringify(workspace)),{key:storageKey,workspace});
- await page.reload();await expect(page.getByRole('tab')).toHaveCount(2);await expect(page.getByTestId('chart-cell')).toHaveCount(3);await expectGap(page,3,'bars',10);
+ await page.reload();await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(2);await expect(page.getByTestId('chart-cell')).toHaveCount(3);await expectGap(page,3,'bars',10);
  expect((await saved(page)).chartRightGap).toBeUndefined();
 });
 
@@ -73,10 +73,10 @@ test('a gap change repaints every active chart and maximized sibling and persist
  expect(current.tabs.map(tab=>tab.charts.length)).toEqual([3,1]);
  expect(current.tabs.every(tab=>tab.charts.every(chart=>chart.view.mode==='live'))).toBe(true);
  expect(current.tabs[0].charts[0].indicators).toEqual(workspace.tabs[0].charts[0].indicators);
- await page.getByRole('tab').nth(1).click();await expectGap(page,1,'bars',23);
+ await page.locator('[role="tab"][data-tab-id]').nth(1).click();await expectGap(page,1,'bars',23);
  await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
  await page.reload();await expect(page.getByTestId('chart-cell')).toHaveCount(1);await expectGap(page,1,'bars',23);
- await page.getByRole('tab').first().click();await expectGap(page,3,'bars',23);
+ await page.locator('[role="tab"][data-tab-id]').first().click();await expectGap(page,3,'bars',23);
  await page.screenshot({path:'test-results/right-gap-all-charts.png'});
 });
 

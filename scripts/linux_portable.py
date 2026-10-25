@@ -107,7 +107,7 @@ class Runtime:
         return sorted(packages)
 
 
-def assemble_runtime(directory, binary=None):
+def assemble_runtime(directory, binary=None, extra_binaries=()):
     runtime = Runtime(directory)
     library_dir = Path("/usr/lib") / MULTIARCH
     runtime.directory.mkdir(parents=True, exist_ok=True)
@@ -123,6 +123,20 @@ def assemble_runtime(directory, binary=None):
     else:
         for name in ("libgtk-3.so.0", "libwebkit2gtk-4.1.so.0"):
             runtime.copy(library_dir / name)
+    # The downloader's private Chromium shares this process-local library path.
+    # Include its host dependency closure alongside the desktop's libraries.
+    for executable in extra_binaries:
+        for name, library in dependencies(executable).items():
+            if HOST_LIBRARIES.match(name):
+                runtime.external.add(name)
+            else:
+                runtime.copy(library, Path("usr/lib") / MULTIARCH / name)
+    if extra_binaries:
+        # NSS loads its PKCS#11 modules dynamically; ldd alone cannot discover
+        # these or the adjacent integrity records used by the soft-token module.
+        for pattern in ("libnssckbi.so", "libnssdbm3.so", "libsoftokn3.*", "libfreebl*.so", "libfreebl*.chk"):
+            for module in sorted(library_dir.glob(pattern)):
+                runtime.copy(module)
     webkit_dir = library_dir / "webkit2gtk-4.1"
     for name in ("WebKitNetworkProcess", "WebKitWebProcess"):
         runtime.copy(webkit_dir / name)
@@ -182,6 +196,13 @@ def assemble_runtime(directory, binary=None):
     return runtime, packages, relocated
 
 
+def screener_binaries(directory):
+    from screener_bundle import browser_path
+    directory = Path(directory)
+    chromium = directory / browser_path("linux-amd64")
+    return [directory / "node", chromium, chromium.with_name("chrome_crashpad_handler")]
+
+
 def create(root):
     from portable_sources import collect_sources
     version = app_version(root)
@@ -203,9 +224,13 @@ def create(root):
             shutil.copy2(standard / filename, directory / filename)
         shutil.copytree(standard / "icons", directory / "icons")
         shutil.copytree(standard / "docs", directory / "docs")
+        from screener_bundle import validate_directory
+        validate_directory(standard / "screener-runtime", "linux-amd64")
+        shutil.copytree(standard / "screener-runtime", directory / "screener-runtime")
         shutil.copy2(root / "build/linux/portable-launcher.sh", directory / "cryptodesk")
         (directory / "cryptodesk").chmod(0o755)
-        runtime, packages, relocated = assemble_runtime(directory / "runtime", binary)
+        runtime, packages, relocated = assemble_runtime(directory / "runtime", binary,
+                                                       screener_binaries(directory / "screener-runtime"))
         opener = directory / "runtime/usr/bin/xdg-open"
         shutil.copy2(root / "build/linux/portable-xdg-open.sh", opener)
         opener.chmod(0o755)
@@ -240,11 +265,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--list-packages", action="store_true", help="List installed runtime package names without an app build or source downloads")
+    parser.add_argument("--screener-runtime", type=Path, help="Include this prepared downloader's dependency closure when listing packages")
     arguments = parser.parse_args()
     try:
         if arguments.list_packages:
+            extra_binaries = ()
+            if arguments.screener_runtime:
+                from screener_bundle import validate_directory
+                validate_directory(arguments.screener_runtime, "linux-amd64", allow_runtime_state=True)
+                extra_binaries = screener_binaries(arguments.screener_runtime)
             with tempfile.TemporaryDirectory(prefix="cryptodesk-runtime-packages-") as temporary:
-                _, packages, _ = assemble_runtime(Path(temporary))
+                _, packages, _ = assemble_runtime(Path(temporary), extra_binaries=extra_binaries)
                 print("\n".join(packages))
         else:
             create(arguments.root.resolve())

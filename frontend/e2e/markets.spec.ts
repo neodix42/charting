@@ -39,7 +39,7 @@ test('silver perpetual selection persists across restart and tabs and uses perpe
  await page.getByRole('button',{name:'Return to live',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testHistoryKeys())).toContainEqual({exchange:'binance',market:'perpetual',instrument:'XAGUSDT',timeframe:'1h'});
  await page.getByRole('button',{name:'Add tab',exact:true}).click();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Spot');
- await page.getByRole('tab').first().click();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');
+ await page.locator('[role="tab"][data-tab-id]').first().click();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');
  await expect(page.locator('.save-indicator.saved')).toBeVisible();await page.reload();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');
  expect(await savedChart(page)).toMatchObject({market:'perpetual',instrument:'XAGUSDT'});
  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('coinbase');

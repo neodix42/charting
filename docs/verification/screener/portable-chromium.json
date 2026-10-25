@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "check": "Private Node and Chromium from actual portable archive with host NSS/NSPR/ALSA/CUPS modules hidden",
+  "maskedHostPaths": [
+    "/usr/lib/x86_64-linux-gnu/libnss3.so",
+    "/usr/lib/x86_64-linux-gnu/libnspr4.so",
+    "/usr/lib/x86_64-linux-gnu/libasound.so.2.0.0",
+    "/usr/lib/x86_64-linux-gnu/libcups.so.2",
+    "/usr/lib/x86_64-linux-gnu/libnssckbi.so",
+    "/usr/lib/x86_64-linux-gnu/libsoftokn3.so",
+    "/usr/lib/x86_64-linux-gnu/libfreeblpriv3.so"
+  ],
+  "versions": {
+    "node": "v24.19.0",
+    "dukascopy": "1.51.0",
+    "playwright": "1.64.1",
+    "chromium": "156.0.8078.4",
+    "title": "Portable Screener Chromium"
+  },
+  "nssDynamicModulesBundled": true
+}

@@ -1,0 +1,154 @@
+..............................................Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/tmp_3q1e0pb/.tools/node-test
+.....Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/cryptodesk install tools a4i023or/.tools/node-test
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+....Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+..................................Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Downloading pinned Screener runtime: https://cdn.playwright.dev/pinned
+.....Downloading pinned Screener runtime: https://nodejs.org/pinned
+.................Extracting all pinned WebView2 1.2.3.4 runtime files
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpn2ke72a1/first
+...Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmp_8fsgrii/first
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Extracting all pinned WebView2 1.2.3.4 runtime files
+.Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmp02l51x8p/first
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmp02l51x8p/second
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/cryptodesk runtime path 1e6tcf7f/portable package/WebView2
+......Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+....................
+----------------------------------------------------------------------
+Ran 153 tests in 5.079s
+
+OK
+English locales: kept 4, removed 1 packs (0.00 MiB unpacked)
+
+Portable Windows ZIP: /tmp/tmp5nld6zd8/cryptodesk-2.3.4-windows-amd64.zip
+Size: 0.0 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.
+English locales: kept 4, removed 1 packs (0.00 MiB unpacked)
+
+Portable Windows ZIP: /tmp/tmp_5fa3jg0/cryptodesk-2.3.4-windows-amd64.zip
+Size: 0.0 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.
+English locales: kept 4, removed 2 packs (0.00 MiB unpacked)
+Using Node v24.19.0 and npm 11.17.0
+
+added 23 packages in 347ms
+
+> cryptodesk-screener-runtime@1.0.0 test
+> node --test worker.test.cjs
+
+✔ ordered bounded batches retain OHLCV, use one CSV header and report real requests (29.67039ms)
+✔ empty ranges fail explicitly and do not confirm successful output (5.341039ms)
+✔ network failure propagates, never emits done, closes the output handle (2.852537ms)
+✔ one-second and tick data use tick sources; simultaneous tick timestamps survive (15.125537ms)
+✔ partial date boundaries filter complete upstream files without relabeling candles (2.69774ms)
+✔ invalid symbol and timeframe never reach the transport (3.631439ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 144.912451
+
+> cryptodesk-screener-runtime@1.0.0 catalog
+> node generate-catalog.cjs --check
+
+1.51.0: 1499 instruments in 39 groups
+ok  	cryptodesk/internal/candlecache	(cached)
+ok  	cryptodesk/internal/candlestorage	(cached)
+ok  	cryptodesk/internal/domain	(cached)
+ok  	cryptodesk/internal/exchange	(cached)
+ok  	cryptodesk/internal/market	(cached)
+ok  	cryptodesk/internal/screener	(cached)
+ok  	cryptodesk/internal/storage	(cached)
+ok  	cryptodesk/cmd/smoke	(cached)
+ok  	cryptodesk	0.059s
+
+added 137 packages, and audited 138 packages in 1s
+
+39 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> cryptodesk-frontend@1.0.0 typecheck
+> tsc --noEmit
+
+
+> cryptodesk-frontend@1.0.0 lint
+> eslint src vite.config.ts
+
+
+> cryptodesk-frontend@1.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/neodix/gitProjects/charting/frontend
+
+
+ Test Files  15 passed (15)
+      Tests  159 passed (159)
+   Start at  15:07:46
+   Duration  371ms (transform 72%, import 13%, tests 11%, worker 4%)
+
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 48 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/app-version.json                  0.03 kB │ gzip:   0.05 kB
+dist/assets/cryptodesk-D_A9QZBY.svg    0.36 kB │ gzip:   0.21 kB
+dist/index.html                        0.82 kB │ gzip:   0.47 kB
+dist/assets/index-BeVIs7vV.css        25.91 kB │ gzip:   5.86 kB
+dist/assets/index-B90OQDvz.js        500.48 kB │ gzip: 155.39 kB
+
+✓ built in 183ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+Deterministic tests complete. Browser E2E: cd frontend && npm run test:e2e
+Live provider smoke is separate: go run ./cmd/smoke
+Desktop smoke steps: docs/DESKTOP_SMOKE.md

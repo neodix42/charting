@@ -14,6 +14,7 @@ import tempfile
 import zipfile
 from app_version import app_version, verify_frontend_version
 from build_metadata import source_provenance
+from screener_bundle import assemble as assemble_screener
 
 ENGLISH_LOCALE_PAKS = frozenset({"en-US.pak", "en-GB.pak", "copilot_overlay_strings_en-US.pak", "copilot_overlay_strings_en-GB.pak"})
 
@@ -163,6 +164,7 @@ def run(root, cab=None):
             command.extend(["--cab", str(cab)])
         subprocess.run(command, check=True)
         locale_profile = keep_english_locales(package / "WebView2")
+        screener = assemble_screener(root, "windows-amd64", package / "screener-runtime")
         for document_name in ["APP_README.md", "LICENSE", "STATUS.md"]:
             shutil.copy2(root / document_name, package / document_name)
         shutil.copy2(root / "docs/WINDOWS_PORTABLE.md", package / "README-WINDOWS.md")
@@ -178,6 +180,7 @@ def run(root, cab=None):
             "npm": subprocess.check_output(["npm", "--version"], text=True).strip(),
             "wails": "v2.17.0", "webview2": pin,
             "webview2Packaging": locale_profile, "webview2LanguageOverride": language["manifest"],
+            "screener": {key: value for key, value in screener.items() if key != "files"},
             "executableSHA256": sha256(package / "cryptodesk.exe"),
             **provenance,
             "runtimeVerification": "Cross-compiled and package-verified on Ubuntu; Windows execution not verified by this build.",

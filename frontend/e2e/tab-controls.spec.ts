@@ -54,9 +54,9 @@ test('tab double-click and keyboard close preserve rename, grid and header dupli
  await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
  await header.getByRole('combobox',{name:'Grid layout',exact:true}).selectOption('2x2');await expect(page.getByTestId('chart-placeholder')).toHaveCount(1);
  await header.getByRole('button',{name:'Add chart',exact:true}).click();await expect(page.getByTestId('chart-cell')).toHaveCount(4);await expect(page.getByTestId('chart-placeholder')).toHaveCount(0);
- await header.getByRole('button',{name:'Duplicate tab',exact:true}).click();await expect(page.getByRole('tab')).toHaveCount(3);await expect(page.getByTestId('chart-cell')).toHaveCount(4);
+ await header.getByRole('button',{name:'Duplicate tab',exact:true}).click();await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(3);await expect(page.getByTestId('chart-cell')).toHaveCount(4);
  await page.keyboard.press('Control+w');dialog=page.getByRole('dialog',{name:/Close Header research/});await dialog.getByRole('button',{name:'Close tab',exact:true}).click();
- await expect(page.getByRole('tab')).toHaveCount(2);await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
+ await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(2);await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();
  await expect(header.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
  const saved=await savedWorkspace(page);expect(saved.tabs).toHaveLength(2);expect(saved.tabs[0].name).toBe('Header research');expect(saved.tabs[0].charts).toHaveLength(4);expect(saved.tabs[0].grid).toMatchObject({rows:2,columns:2});
  await page.reload();await expect(page.getByRole('tab',{name:/Header research/})).toBeVisible();await expectTopHeader(page);

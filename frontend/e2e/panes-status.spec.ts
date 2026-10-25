@@ -82,8 +82,8 @@ test('a dragged MACD height survives edits, tab switches, viewport resize and re
  await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
  expect((await savedChart(page)).indicators![0].paneStretchFactor).toBe(preferred);
  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
- await page.getByRole('button',{name:'Add tab',exact:true}).click();await expect(page.getByRole('tab')).toHaveCount(2);
- await page.getByRole('tab').first().click();chart=chartAt(page);await expectPaneRatio(chart,0,preferred);
+ await page.getByRole('button',{name:'Add tab',exact:true}).click();await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(2);
+ await page.locator('[role="tab"][data-tab-id]').first().click();chart=chartAt(page);await expectPaneRatio(chart,0,preferred);
  await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
  await page.reload();chart=chartAt(page);await expect(chart.getByRole('button',{name:'Edit MACD (8, 26, 9)',exact:true})).toBeVisible();await expectPaneRatio(chart,0,preferred);
  expect((await savedChart(page)).indicators![0].paneStretchFactor).toBe(preferred);

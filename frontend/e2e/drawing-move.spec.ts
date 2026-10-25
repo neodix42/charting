@@ -163,7 +163,7 @@ test('a move affects only its chart and leaving a tab discards its unplaced prev
  expect((await layers(page)).some(layer=>oldIds.includes(layer.id))).toBe(false);
  expect((await layers(page))[0].movingId).toBeNull();await flush(page);
  expect(await savedDrawings(page,0,0)).toEqual(moved);expect(await savedDrawings(page,1,0)).toEqual(untouched);expect(await savedDrawings(page,0,1)).toEqual([]);
- await page.getByRole('tab').first().click();await expect(charts).toHaveCount(2);
+ await page.locator('[role="tab"][data-tab-id]').first().click();await expect(charts).toHaveCount(2);
  await expect.poll(async()=>(await layer(page,first)).drawings[0]?.points).toEqual(moved[0].points);
  expect((await layer(page,first)).movingId).toBeNull();expect((await layer(page,second)).drawings[0].points).toEqual(untouched[0].points);
 });

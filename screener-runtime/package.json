@@ -1,0 +1,9 @@
+{
+  "name": "cryptodesk-screener-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned, bundled Dukascopy downloader for CryptoDesk",
+  "engines": { "node": ">=20" },
+  "dependencies": { "dukascopy-node": "1.51.0" },
+  "scripts": { "test": "node --test worker.test.cjs", "catalog": "node generate-catalog.cjs" }
+}
