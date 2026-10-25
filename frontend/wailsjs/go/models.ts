@@ -1,15 +1,15 @@
 export namespace candlestorage {
-
+	
 	export class Info {
 	    enabled: boolean;
 	    directory: string;
 	    sizeBytes: number;
 	    error?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -54,11 +54,11 @@ export namespace domain {
 	export class DrawingPoint {
 	    time: number;
 	    price: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DrawingPoint(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
@@ -72,11 +72,11 @@ export namespace domain {
 	    market: string;
 	    instrument: string;
 	    points: DrawingPoint[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Drawing(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -86,7 +86,7 @@ export namespace domain {
 	        this.instrument = source["instrument"];
 	        this.points = this.convertValues(source["points"], DrawingPoint);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -112,11 +112,11 @@ export namespace domain {
 	    color?: string;
 	    lineWidth?: number;
 	    paneStretchFactor?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Indicator(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -248,19 +248,19 @@ export namespace domain {
 	export class ChartRightGap {
 	    unit: string;
 	    value: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ChartRightGap(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.unit = source["unit"];
 	        this.value = source["value"];
 	    }
 	}
-
-
+	
+	
 	export class FeedKey {
 	    exchange: string;
 	    market: string;
@@ -315,7 +315,7 @@ export namespace domain {
 	        this.lastTradeAt = source["lastTradeAt"];
 	    }
 	}
-
+	
 	export class Instrument {
 	    nativeId: string;
 	    market: string;
@@ -526,16 +526,16 @@ export namespace market {
 }
 
 export namespace screener {
-
+	
 	export class Instrument {
 	    id: string;
 	    name: string;
 	    earliestDate: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Instrument(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -546,17 +546,17 @@ export namespace screener {
 	export class Group {
 	    name: string;
 	    instruments: Instrument[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Group(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.instruments = this.convertValues(source["instruments"], Instrument);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -579,18 +579,18 @@ export namespace screener {
 	    version: string;
 	    groups: Group[];
 	    timeframes: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Catalog(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
 	        this.groups = this.convertValues(source["groups"], Group);
 	        this.timeframes = source["timeframes"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -609,7 +609,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
 	export class Job {
 	    id: string;
 	    symbol: string;
@@ -620,11 +620,11 @@ export namespace screener {
 	    progress: number;
 	    message: string;
 	    outputPath?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -644,11 +644,13 @@ export namespace screener {
 	    runtimeError?: string;
 	    error?: string;
 	    jobs: Job[];
-
+	    concurrency: number;
+	    maxConcurrency: number;
+	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -656,8 +658,10 @@ export namespace screener {
 	        this.runtimeError = source["runtimeError"];
 	        this.error = source["error"];
 	        this.jobs = this.convertValues(source["jobs"], Job);
+	        this.concurrency = source["concurrency"];
+	        this.maxConcurrency = source["maxConcurrency"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -676,24 +680,26 @@ export namespace screener {
 		    return a;
 		}
 	}
-
-
+	
+	
 	export class Request {
 	    symbols: string[];
 	    timeframe: string;
 	    from: string;
 	    to: string;
-
+	    concurrency?: number;
+	
 	    static createFrom(source: any = {}) {
 	        return new Request(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.symbols = source["symbols"];
 	        this.timeframe = source["timeframe"];
 	        this.from = source["from"];
 	        this.to = source["to"];
+	        this.concurrency = source["concurrency"];
 	    }
 	}
 

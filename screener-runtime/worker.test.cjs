@@ -114,3 +114,31 @@ test('invalid symbol and timeframe never reach the transport', async t => {
   await assert.rejects(download({ ...request, symbol: 'not-a-pair' }, { api: never }), /Invalid Dukascopy request/);
   await assert.rejects(download({ ...request, timeframe: '1d' }, { api: never }), /Invalid Dukascopy request/);
 });
+
+test('manager source batch allowance bounds actual simultaneous fetches', async t => {
+  for (const size of [1, 2, 3, 4]) {
+    const request = { ...await fixture(t), sourceBatchSize: size };
+    const batches = [];
+    let active = 0;
+    let peak = 0;
+    const bounded = withTransport(async url => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 2));
+      active--;
+      return candlePayload(url);
+    }, batches);
+    assert.equal(await download(request, { api: bounded, pauseMs: 0, emit() {} }), 6);
+    assert.equal(peak, size);
+    assert.ok(batches.every(count => count <= size));
+    assert.equal(active, 0);
+  }
+});
+
+test('invalid internal source batch allowances fail before fetching', async t => {
+  const request = await fixture(t);
+  const never = withTransport(async () => assert.fail('invalid batch allowance reached transport'));
+  for (const sourceBatchSize of [0, -1, 5, 20, 1.5, '2']) {
+    await assert.rejects(download({ ...request, sourceBatchSize }, { api: never }), /batch size/);
+  }
+});

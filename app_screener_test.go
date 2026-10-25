@@ -25,6 +25,9 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	manager := screener.New(profile)
 	t.Cleanup(manager.Close)
 	app := &App{store: store, screener: manager}
+	if info := app.GetScreener(); info.Concurrency != 20 || info.MaxConcurrency != 20 {
+		t.Fatalf("unexpected parallel download defaults: %+v", info)
+	}
 	if got := app.GetScreener().Directory; got != filepath.Join(profile, "screener") {
 		t.Fatalf("default folder: %q", got)
 	}
@@ -35,6 +38,9 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	}
 	if _, err = app.StartScreenerDownload(screener.Request{Symbols: []string{"not-a-real-instrument"}, Timeframe: "d1", From: "2024-01-01", To: "2024-01-02"}); err == nil {
 		t.Fatal("facade accepted an unsupported instrument")
+	}
+	if _, err = app.StartScreenerDownload(screener.Request{Symbols: []string{"btcusd"}, Timeframe: "d1", From: "2024-01-01", To: "2024-01-02", Concurrency: 21}); err == nil {
+		t.Fatal("facade accepted more than twenty parallel downloads")
 	}
 	if jobs := app.CancelScreenerDownload().Jobs; len(jobs) != 0 {
 		t.Fatalf("invalid request created jobs: %+v", jobs)

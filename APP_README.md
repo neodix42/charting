@@ -143,11 +143,13 @@ The fixed **Screener** tab stays at the right of the chart tabs, independently o
 
 Open **Screener → Downloader** to browse the instruments supported by the bundled [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node), grouped by its README categories. Search for an instrument, select individual instruments, a category, or all instruments, and choose one common timeframe and UTC date range. The start date is included and the end date is excluded. Press **Download** to queue CSV downloads; each instrument shows its progress, result or provider error. You can leave the Screener while downloads continue, or cancel the batch. Application shutdown cancels unfinished downloads. Completed files are retained.
 
+**Parallel downloads** selects **1–20** simultaneous symbol downloads, default **20**. Additional symbols wait in the queue and start as workers finish. Results stay in selection order, and each symbol has its own progress and error. Choosing **1** downloads symbols sequentially. Internal source-file batches share a maximum of 20 simultaneous data requests across the active symbols. Cancel stops all active and queued downloads while retaining completed CSV files.
+
 **Settings → Screener download folder** changes the destination for future downloads. The Linux default is `~/.local/share/cryptodesk/screener` (`/home/neodix/.local/share/cryptodesk/screener` for this checkout's user). It follows `$XDG_DATA_HOME` or an explicit `--data-dir` profile. Windows portable builds use `data/screener` beside the executable. Choosing or typing a path takes effect only after **Apply** succeeds. Changing folders does not move or remove previous downloads. The machine-local preference stays outside workspace import, export and reset.
 
 Release archives include a private Node runtime, the pinned Dukascopy downloader and its browser support. Extract the complete archive and keep `screener-runtime` beside the application; no global Node/npm installation or runtime `npx` installation is needed. Downloads require network access to Dukascopy. Upstream restrictions and empty/unavailable ranges are reported as errors; chart data and synthetic fixtures are never substituted. Tick histories and selecting every instrument can produce substantial downloads.
 
-For an optional live desktop verification, run `scripts/smoke-screener.sh` after building the bundled runtime. It uses a temporary profile and downloads only two BTCUSD daily candles through the actual download button. Results are recorded under `docs/verification/screener/desktop-live`; no user workspace is opened.
+For an optional live desktop verification, run `scripts/smoke-screener.sh` after building the bundled runtime. It uses a temporary profile and downloads two BTCUSD and two ETHUSD daily candles in parallel through the actual download button. Set `CRYPTODESK_SCREENER_EVIDENCE` to choose the evidence folder; no user workspace is opened.
 
 ## Save, export and recover
 

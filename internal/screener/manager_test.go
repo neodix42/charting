@@ -11,18 +11,38 @@ import (
 	"time"
 )
 
+type helperRequest struct {
+	Symbol          string `json:"symbol"`
+	Output          string `json:"output"`
+	SourceBatchSize int    `json:"sourceBatchSize"`
+}
+
 // The helper is an actual separate process using the production stdin/progress/
 // file protocol. It cannot be selected in application operation.
 func TestMain(m *testing.M) {
 	if os.Getenv("CRYPTODESK_SCREENER_TEST_HELPER") == "1" {
-		var request struct{ Symbol, Output string }
+		var request helperRequest
 		if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
 			os.Exit(4)
 		}
 		fmt.Println(`{"type":"progress","progress":30,"message":"Fetched 1 of 3 source files"}`)
 		switch os.Getenv("CRYPTODESK_SCREENER_TEST_MODE") {
 		case "hold":
+			_ = os.WriteFile(filepath.Join(filepath.Dir(request.Output), ".dukascopy-waf-token.json"), []byte("owned token"), 0600)
+			_ = os.WriteFile(filepath.Join(filepath.Dir(request.Output), ".dukascopy-waf-token.json.helper.tmp"), []byte("owned atomic scratch"), 0600)
 			time.Sleep(time.Hour)
+		case "gated":
+			gates := os.Getenv("CRYPTODESK_SCREENER_TEST_GATES")
+			data, _ := json.Marshal(request)
+			if err := os.WriteFile(filepath.Join(gates, request.Symbol+".started"), data, 0600); err != nil {
+				os.Exit(6)
+			}
+			for {
+				if _, err := os.Stat(filepath.Join(gates, request.Symbol+".release")); err == nil {
+					break
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
 		case "malformed":
 			fmt.Println("unexpected non-JSON output")
 			os.Exit(1)
@@ -51,6 +71,8 @@ func testManager(t *testing.T) *Manager {
 	t.Helper()
 	manager := New(t.TempDir())
 	t.Setenv("CRYPTODESK_SCREENER_TEST_HELPER", "1")
+	t.Setenv("GORACE", "atexit_sleep_ms=0")
+	t.Setenv("GOMAXPROCS", "2")
 	manager.runtime = workerRuntime{node: os.Args[0], worker: filepath.Join(t.TempDir(), "worker")}
 	manager.runtimeError = ""
 	t.Cleanup(manager.Close)
@@ -91,6 +113,15 @@ func assertNoPartials(t *testing.T, directory string) {
 	files, err := filepath.Glob(filepath.Join(directory, ".*.part"))
 	if err != nil || len(files) > 0 {
 		t.Fatalf("owned partial files remain: %v %v", files, err)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".cryptodesk-screener-job-") {
+			t.Fatalf("owned job/token directory remains: %s", entry.Name())
+		}
 	}
 }
 
@@ -137,6 +168,8 @@ func TestRequestValidationBeforeMutation(t *testing.T) {
 		{"reversed", func(r *Request) { r.From = r.To }},
 		{"future", func(r *Request) { r.To = "2026-10-27" }},
 		{"ancient", func(r *Request) { r.From = "0001-01-01" }},
+		{"negative concurrency", func(r *Request) { r.Concurrency = -1 }},
+		{"concurrency above cap", func(r *Request) { r.Concurrency = MaxConcurrency + 1 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -163,6 +196,7 @@ func TestDownloadOrderingFailuresAndOutputPreservation(t *testing.T) {
 	manager := testManager(t)
 	request := validRequest()
 	request.Symbols = []string{"btcusd", "eurusd", "ethusd"}
+	request.Concurrency = 1
 	if _, err := manager.Start(request); err != nil {
 		t.Fatal(err)
 	}
@@ -208,6 +242,7 @@ func TestCancellationDrainsChildAndQueueBeforeReturn(t *testing.T) {
 	t.Setenv("CRYPTODESK_SCREENER_TEST_MODE", "hold")
 	request := validRequest()
 	request.Symbols = []string{"btcusd", "ethusd"}
+	request.Concurrency = 1
 	if _, err := manager.Start(request); err != nil {
 		t.Fatal(err)
 	}

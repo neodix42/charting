@@ -1,0 +1,7 @@
+{
+  "check": "Kill the Node process group while its real Playwright Chromium is open; observe detached descendants",
+  "nodeGroupExit": -9,
+  "capturedDescendants": 9,
+  "remainingLiveDescendants": [],
+  "passed": true
+}

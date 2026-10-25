@@ -37,9 +37,9 @@ func (a *App) DesktopSmokeClose() { runtime.Quit(a.ctx) }
 func (a *App) DesktopSmokeCandleRows(key domain.FeedKey, from, to int64) ([]domain.Candle, error) {
 	return a.candles.Range(key, from, to, 1000)
 }
-func (a *App) DesktopSmokeScreenerCSV() (string, error) {
+func (a *App) DesktopSmokeScreenerCSV(symbol string) (string, error) {
 	for _, job := range a.screener.Info().Jobs {
-		if job.Status == "completed" {
+		if job.Status == "completed" && job.Symbol == symbol {
 			file, err := os.Open(job.OutputPath)
 			if err != nil {
 				return "", err
@@ -253,23 +253,33 @@ const desktopSmokeJavaScript = `async function(phase) {
    check(runtime.runtimeAvailable,'preinstalled native downloader is available',runtime);
    await input('[aria-label="Search Dukascopy instruments"]','btcusd');
    await click('.screener-instrument input');
+   await input('[aria-label="Search Dukascopy instruments"]','ethusd');
+   await click('.screener-instrument input');
    await select('[aria-label="Download timeframe"]','d1');
+   check(q('[aria-label="Parallel downloads"]').options.length===20&&q('[aria-label="Parallel downloads"]').value==='20','parallel download control defaults to twenty and exposes one through twenty');
+   await select('[aria-label="Parallel downloads"]','2');
    await input('[aria-label="Download from date"]','2024-01-01');
    await input('[aria-label="Download to date"]','2024-01-03');
    await click('[aria-label="Download historical data"] button[type="submit"]');
+   let concurrentObserved=false;
    const finished=await wait(async()=>{
     const value=await api.GetScreener();
+    if(value.jobs.filter(job=>job.status==='running').length===2)concurrentObserved=true;
     if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value.jobs));
     return value.jobs.length&&value.jobs.every(job=>job.status==='completed')?value:false;
    },'real native Dukascopy CSV download',90000);
-   await wait(()=>q('.screener-job.completed progress')?.value===100,'completed per-symbol native progress');
-   const csv=await api.DesktopSmokeScreenerCSV(),rows=csv.trim().split('\n');
-   check(finished.jobs.length===1&&finished.jobs[0].symbol==='btcusd'&&finished.jobs[0].timeframe==='d1'&&finished.jobs[0].progress===100,'download button runs exactly the selected symbol/timeframe',finished.jobs);
-   check(rows.length===3&&rows[0]==='timestamp,open,high,low,close,volume'&&rows[1].startsWith('1704067200000,')&&rows[2].startsWith('1704153600000,'),'downloaded CSV contains exactly two genuine ordered daily candles in the requested UTC range',csv);
-   check(finished.jobs[0].outputPath.startsWith(finished.directory+'/'),'downloaded file is published inside the applied Screener folder',finished.jobs[0].outputPath);
+   await wait(()=>qa('.screener-job.completed progress').length===2&&qa('.screener-job.completed progress').every(progress=>progress.value===100),'completed per-symbol native progress');
+   check(concurrentObserved&&finished.concurrency===2&&finished.maxConcurrency===20,'two native worker processes download concurrently within the selected limit',finished);
+   check(finished.jobs.length===2&&finished.jobs.map(job=>job.symbol).join(',')==='btcusd,ethusd'&&finished.jobs.every(job=>job.timeframe==='d1'&&job.progress===100),'parallel download preserves selected symbols, timeframe and displayed order',finished.jobs);
+   const csv={};
+   for(const symbol of ['btcusd','ethusd']){
+    csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);const rows=csv[symbol].trim().split('\n');
+    check(rows.length===3&&rows[0]==='timestamp,open,high,low,close,volume'&&rows[1].startsWith('1704067200000,')&&rows[2].startsWith('1704153600000,'),symbol+' CSV contains exactly two genuine ordered daily candles in the requested UTC range',csv[symbol]);
+   }
+   check(finished.jobs.every(job=>job.outputPath.startsWith(finished.directory+'/')),'downloaded files are published inside the applied Screener folder',finished.jobs.map(job=>job.outputPath));
    check((await api.GetDiagnostics()).market.activeLeases===0,'downloader operates without chart subscriptions');
    await api.CancelScreenerDownload();
-   check((await api.DesktopSmokeScreenerCSV())===csv,'cancellation retains a completed CSV file');
+   check((await api.DesktopSmokeScreenerCSV('btcusd'))===csv.btcusd&&(await api.DesktopSmokeScreenerCSV('ethusd'))===csv.ethusd,'cancellation retains both completed CSV files');
    report.screener={...finished,csv};
   }else if(phase==='markets'||phase==='markets-restore'){
    const expected=await api.DesktopSmokeMarketExpectation(),diagnostics=await api.GetDiagnostics(),cell=q('[data-testid="chart-cell"]');

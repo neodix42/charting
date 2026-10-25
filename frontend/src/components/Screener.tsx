@@ -10,7 +10,7 @@ function Selection({label,checked,partial,disabled,onChange}:{label:string;check
 
 export function Screener({api,visible}:{api:Backend;visible:boolean}){
  const [tab,setTab]=useState<'analysis'|'downloader'>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
- const [selected,setSelected]=useState<Set<string>>(()=>new Set()),[query,setQuery]=useState(''),[timeframe,setTimeframe]=useState('d1'),[from,setFrom]=useState('2010-01-01'),[to,setTo]=useState(()=>new Date().toISOString().slice(0,10));
+ const [selected,setSelected]=useState<Set<string>>(()=>new Set()),[query,setQuery]=useState(''),[timeframe,setTimeframe]=useState('d1'),[concurrency,setConcurrency]=useState(20),[from,setFrom]=useState('2010-01-01'),[to,setTo]=useState(()=>new Date().toISOString().slice(0,10));
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false);
  useEffect(()=>{alive.current=true;lifetime.current++;return ()=>{alive.current=false;lifetime.current++;};},[]);
@@ -42,16 +42,18 @@ export function Screener({api,visible}:{api:Backend;visible:boolean}){
  };
  const search=query.trim().toLowerCase();
  const invalidDates=!from||!to||from>=to;
+ const invalidConcurrency=!Number.isInteger(concurrency)||concurrency<1||concurrency>20;
  return <section id="screener-panel" className="screener" role="tabpanel" aria-label="Screener" hidden={!visible}>
   <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button></div></div>
   <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"/>
   <div id="screener-downloader" role="tabpanel" aria-labelledby="screener-downloader-tab" hidden={tab!=='downloader'}>
    {(catalogError||infoError||actionError||info?.error||info&&!info.runtimeAvailable)&&<div className="screener-error" role="alert">{actionError||catalogError||infoError||info?.error||info?.runtimeError||'The Dukascopy downloader runtime is unavailable.'}{(catalogError||infoError||!info?.runtimeAvailable)&&<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry downloader</button>}</div>}
-   <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(selected.size&&!invalidDates&&!working&&info?.runtimeAvailable&&!busy)void run(()=>api.StartScreenerDownload({symbols:instruments.filter(instrument=>selected.has(instrument.id)).map(instrument=>instrument.id),timeframe,from,to}));}}>
+   <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(selected.size&&!invalidDates&&!invalidConcurrency&&!working&&info?.runtimeAvailable&&!busy)void run(()=>api.StartScreenerDownload({symbols:instruments.filter(instrument=>selected.has(instrument.id)).map(instrument=>instrument.id),timeframe,from,to,concurrency}));}}>
     <label>Timeframe<select aria-label="Download timeframe" value={timeframe} disabled={!catalog||working||busy} onChange={event=>setTimeframe(event.target.value)}>{(catalog?.timeframes??['d1']).map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+    <label>Parallel downloads<select aria-label="Parallel downloads" title="Maximum simultaneous symbol downloads (1–20 threads)" value={concurrency} disabled={!info||working||busy} onChange={event=>setConcurrency(Number(event.target.value))}>{Array.from({length:20},(_,index)=><option key={index+1} value={index+1}>{index+1}</option>)}</select></label>
     <label>From (UTC)<input type="date" aria-label="Download from date" value={from} max={to||undefined} required disabled={working||busy} onChange={event=>setFrom(event.target.value)}/></label>
     <label>To (UTC, exclusive)<input type="date" aria-label="Download to date" value={to} min={from||undefined} required disabled={working||busy} onChange={event=>setTo(event.target.value)}/></label>
-    <button type="submit" className="primary" disabled={!selected.size||invalidDates||working||busy||!info?.runtimeAvailable||!catalog}>{busy&&!working?'Starting…':`Download ${selected.size||''} ${selected.size===1?'symbol':'symbols'}`}</button>
+    <button type="submit" className="primary" disabled={!selected.size||invalidDates||invalidConcurrency||working||busy||!info?.runtimeAvailable||!catalog}>{busy&&!working?'Starting…':`Download ${selected.size||''} ${selected.size===1?'symbol':'symbols'}`}</button>
     {working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerDownload())}>Cancel downloads</button>}
     <small className="screener-download-directory">CSV destination: <span>{info?.directory||'Loading…'}</span><span>Change the folder in Settings.</span></small>
     {invalidDates&&<small className="screener-date-error">Choose a start date before the end date.</small>}
@@ -68,7 +70,7 @@ export function Screener({api,visible}:{api:Backend;visible:boolean}){
      {catalog&&!catalog.groups.some(group=>group.instruments.some(instrument=>!search||`${group.name} ${instrument.id} ${instrument.name}`.toLowerCase().includes(search)))&&<p className="screener-loading">No instruments match your search.</p>}
      {catalog&&<p className="screener-catalog-version muted">dukascopy-node {catalog.version} · {instruments.length} supported instruments</p>}
     </section>
-    <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted">{info?.jobs.filter(job=>job.status==='completed').length??0} / {info?.jobs.length??0} complete</span></div>
+    <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted">{info?.jobs.filter(job=>job.status==='completed').length??0} / {info?.jobs.length??0} complete · <span aria-label="Applied parallel download limit">Up to {info?.concurrency??20} parallel</span></span></div>
      {!info?.jobs.length&&<p className="screener-loading">Select symbols and a common timeframe, then download their CSV files.</p>}
      <div aria-live="polite" aria-relevant="additions text">{info?.jobs.map(job=><article className={`screener-job ${job.status}`} key={job.id} data-symbol={job.symbol} aria-label={`${job.symbol.toUpperCase()} download`}><div className="screener-job-title"><strong>{job.symbol.toUpperCase()}</strong><span>{job.timeframe}</span><span className="screener-job-status">{job.status}</span></div><progress aria-label={`${job.symbol.toUpperCase()} download progress`} max={100} value={Math.min(100,Math.max(0,job.progress||0))}/><div className="screener-job-details"><span>{job.from} → {job.to}</span><span>{Math.round(job.progress||0)}%</span></div>{job.message&&<p>{job.message}</p>}{job.outputPath&&<small className="screener-output">{job.outputPath}</small>}</article>)}</div>
     </section>

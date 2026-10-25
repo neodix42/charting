@@ -27,9 +27,9 @@ export interface SaveResult {revision:number;acceptedEditSequence:number}
 export interface CandleStorageInfo {enabled:boolean;directory:string;sizeBytes:number;error?:string}
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
-export interface ScreenerDownloadRequest {symbols:string[];timeframe:string;from:string;to:string}
+export interface ScreenerDownloadRequest {symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
 export interface ScreenerJob {id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
-export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;jobs:ScreenerJob[]}
+export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;jobs:ScreenerJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
 export interface Backend {
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;

@@ -9,6 +9,10 @@ const path = require('node:path');
 async function download(request, options = {}) {
   const api = options.api || require('dukascopy-node');
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));
+  const sourceBatchSize = request.sourceBatchSize ?? 4;
+  if (!Number.isInteger(sourceBatchSize) || sourceBatchSize < 1 || sourceBatchSize > 4) {
+    throw new Error('Source batch size must be an integer between 1 and 4.');
+  }
   const config = {
     instrument: request.symbol,
     dates: { from: request.from, to: request.to },
@@ -19,7 +23,7 @@ async function download(request, options = {}) {
     volumeUnits: 'millions',
     ignoreFlats: true,
     utcOffset: 0,
-    batchSize: 4,
+    batchSize: sourceBatchSize,
     pauseBetweenBatchesMs: 1000,
     requestIntervalMs: 250,
     rateLimitRetryCount: 2,
@@ -58,8 +62,8 @@ async function download(request, options = {}) {
     handle = await fs.promises.open(request.output, 'r+');
     await handle.truncate(0);
     emit({ type: 'progress', progress: 0, message: `Downloading ${urls.length} source files` });
-    for (let offset = 0; offset < urls.length; offset += 4) {
-      const buffers = await fetcher.fetch(urls.slice(offset, offset + 4));
+    for (let offset = 0; offset < urls.length; offset += sourceBatchSize) {
+      const buffers = await fetcher.fetch(urls.slice(offset, offset + sourceBatchSize));
       const data = api.processData({ ...input, requestedTimeframe: input.timeframe,
         bufferObjects: buffers.filter(item => item.buffer.length > 0) })
         .filter(row => row[0] >= +startDate && row[0] < +endDate);
@@ -83,7 +87,7 @@ async function download(request, options = {}) {
       }
       // Pacing between bounded batches protects the public endpoint. It does
       // not advance progress, which counts completed upstream requests only.
-      if (offset + 4 < urls.length) await new Promise(resolve => setTimeout(resolve, options.pauseMs ?? 1000));
+      if (offset + sourceBatchSize < urls.length) await new Promise(resolve => setTimeout(resolve, options.pauseMs ?? 1000));
     }
     if (!rows) throw new Error('Dukascopy returned no rows for this symbol and date range.');
     await handle.sync();

@@ -1,0 +1,30 @@
+
+> cryptodesk-frontend@1.0.0 test:e2e
+> playwright test e2e/screener.spec.ts
+
+[WebServer] (node:573232) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:573443) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] (node:573539) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:573795) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/screener.spec.ts:10:1 › Screener remains fixed beside twenty chart tabs, releases all charts and preserves the workspace (1.5s)
+  ✓  2 e2e/screener.spec.ts:23:1 › grouped symbols, global selection, shared timeframe and UTC dates produce per-symbol progress and errors (2.2s)
+  ✓  3 e2e/screener.spec.ts:38:1 › parallel download limits default to twenty, stay within bounds and survive panel switches (1.2s)
+  ✓  4 e2e/screener.spec.ts:46:1 › concurrent symbols keep independent progress, stable queue order and cancel every active job (2.4s)
+  ✓  5 e2e/screener.spec.ts:54:1 › Screener directory is applied separately from the workspace and restored after reload (1.6s)
+  ✓  6 e2e/screener.spec.ts:64:1 › runtime, catalog and start errors remain visible without creating fake downloads (1.5s)
+  ✓  7 e2e/screener.spec.ts:70:1 › polling stops while chart tabs are visible and cannot replace a newer start result (937ms)
+  ✓  8 e2e/screener.spec.ts:77:1 › the last navigation click wins when saving before opening Screener is delayed (712ms)
+
+  8 passed (16.0s)

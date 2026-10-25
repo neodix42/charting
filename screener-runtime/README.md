@@ -44,18 +44,31 @@ columns are `timestamp,askPrice,bidPrice,askVolume,bidVolume`.
 The worker reproduces the library's `getHistoricalRates` validation, date
 normalization, URL generation, fetching, processing and CSV formatting through
 public exports verified in the installed declarations and implementation. It
-fetches four source files at a time, keeping the price-data working set bounded
-for long tick ranges. Source files contain whole UTC aggregation buckets: hourly
+fetches at most four source files at a time, keeping the price-data working set
+bounded for long tick ranges. The manager assigns smaller source batches when
+several symbols run together: `min(4, floor(20 / effectiveSymbolWorkers))`.
+This limits the entire batch to at most 20 concurrent source requests. Direct
+worker calls without a manager allowance retain the four-file default.
+Source files contain whole UTC aggregation buckets: hourly
 tick sources, daily minute sources, monthly hourly sources, and yearly daily
 sources. Download progress counts actual completed source requests. CSV headers
 are written once, rows stay chronological, and an all-empty range fails visibly.
 
-Go owns sequential job ordering, cancellation of the child process tree,
-machine-local preferences, temporary files and final publication. A successful
+Go downloads symbols through a bounded worker pool with 1–20 workers, defaulting
+to 20. Fewer selected symbols use fewer workers; queued jobs start as slots
+become available. Job rows stay in selection order regardless of completion
+order, and a failed symbol does not stop the others. Concurrency is a per-batch
+request setting, not part of imported workspace state.
+
+Go owns cancellation of every child process tree, machine-local preferences,
+private job directories and final publication. Each child has a separate WAF
+token cache inside its exclusively-created temporary directory. Cancellation
+stops dispatch, drains active children and removes those owned directories,
+including token-cache scratch files, before returning. A successful
 download is published atomically using a same-directory hard link. Existing
 files are preserved; repeated requests receive numbered filenames. A filesystem
 without hard-link support returns an explicit publication error. Failed or
-cancelled jobs remove only their private partial files. Completed files remain.
+cancelled jobs remove only their private temporary directories. Completed files remain.
 The destination defaults to `<profile>/screener`; settings are atomically stored
 in `<profile>/screener.json` and do not enter workspace imports or exports.
 
@@ -70,6 +83,9 @@ go test -race ./internal/screener
 The deterministic worker tests inject only transport responses. Production
 decoder, aggregation and CSV formatting come from the pinned installed package.
 The Go tests run real child processes through the production protocol and cover
-validation, ordering, errors, cancellation, shutdown, preferences and preservation
-of existing output. Optional live checks are recorded separately from these
+validation, pool limits, slot refill, stable result ordering, independent errors,
+cancellation, shutdown, preferences and preservation of existing output. Twenty
+gated helper processes prove simultaneous execution while a 21st job stays queued.
+Transport tests check the worker's actual maximum simultaneous source requests.
+Optional live checks are recorded separately from these
 offline checks.

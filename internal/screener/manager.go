@@ -21,11 +21,15 @@ import (
 )
 
 type Request struct {
-	Symbols   []string `json:"symbols"`
-	Timeframe string   `json:"timeframe"`
-	From      string   `json:"from"`
-	To        string   `json:"to"`
+	Symbols     []string `json:"symbols"`
+	Timeframe   string   `json:"timeframe"`
+	From        string   `json:"from"`
+	To          string   `json:"to"`
+	Concurrency int      `json:"concurrency,omitempty"`
 }
+
+const MaxConcurrency = 20
+
 type Job struct {
 	ID         string  `json:"id"`
 	Symbol     string  `json:"symbol"`
@@ -43,11 +47,14 @@ type Info struct {
 	RuntimeError     string `json:"runtimeError,omitempty"`
 	Error            string `json:"error,omitempty"`
 	Jobs             []Job  `json:"jobs"`
+	Concurrency      int    `json:"concurrency"`
+	MaxConcurrency   int    `json:"maxConcurrency"`
 }
 
-// Manager serializes one selected batch at a time and downloads its symbols in
-// order. Each child has a process group/tree, bounded logs and private temporary
-// output. Preferences belong to the local profile, never imported workspaces.
+// Manager runs one selected batch at a time through a bounded symbol worker
+// pool while preserving its jobs in selection order. Each child has a process
+// group/tree, bounded logs and a private temporary directory, including WAF data.
+// Preferences belong to the local profile, never imported workspaces.
 type Manager struct {
 	mu                      sync.Mutex
 	wg                      sync.WaitGroup
@@ -58,6 +65,7 @@ type Manager struct {
 	active, closed          bool
 	cancel                  context.CancelFunc
 	batchDone               chan struct{}
+	concurrency             int
 }
 
 func New(profile string) *Manager {
@@ -65,7 +73,7 @@ func New(profile string) *Manager {
 	if err == nil {
 		profile = absolute
 	}
-	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}}
+	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: MaxConcurrency}
 	if err := m.loadPreferences(); err != nil {
 		m.lastError = "Load screener settings: " + err.Error()
 	}
@@ -79,7 +87,7 @@ func New(profile string) *Manager {
 func (m *Manager) infoLocked() Info {
 	jobs := make([]Job, len(m.jobs))
 	copy(jobs, m.jobs)
-	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: m.lastError, Jobs: jobs}
+	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: m.lastError, Jobs: jobs, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency}
 }
 func (m *Manager) Info() Info { m.mu.Lock(); defer m.mu.Unlock(); return m.infoLocked() }
 
@@ -132,6 +140,9 @@ func checkDirectory(directory string) error {
 }
 
 func validateRequest(request Request, now time.Time) error {
+	if request.Concurrency < 0 || request.Concurrency > MaxConcurrency {
+		return fmt.Errorf("download concurrency must be between 1 and %d (or omitted for the default)", MaxConcurrency)
+	}
 	catalog := loadCatalog()
 	known := make(map[string]bool)
 	for _, group := range catalog.Groups {
@@ -205,11 +216,16 @@ func (m *Manager) Start(request Request) (Info, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.jobs, m.active, m.cancel = jobs, true, cancel
+	m.concurrency = request.Concurrency
+	if m.concurrency == 0 {
+		m.concurrency = MaxConcurrency
+	}
+	workers := min(m.concurrency, len(jobs))
 	done := make(chan struct{})
 	m.batchDone = done
 	directory := m.directory
 	m.wg.Add(1)
-	go m.run(ctx, directory, done)
+	go m.run(ctx, directory, done, workers)
 	return m.infoLocked(), nil
 }
 
@@ -241,31 +257,46 @@ func (m *Manager) Close() {
 	m.wg.Wait()
 }
 
-func (m *Manager) run(ctx context.Context, directory string, done chan struct{}) {
+func (m *Manager) run(ctx context.Context, directory string, done chan struct{}, workers int) {
 	defer m.wg.Done()
 	defer func() { m.mu.Lock(); m.active, m.cancel = false, nil; close(done); m.mu.Unlock() }()
-	for i := 0; ; i++ {
-		m.mu.Lock()
-		if i >= len(m.jobs) || ctx.Err() != nil {
-			m.mu.Unlock()
-			return
-		}
-		m.jobs[i].Status, m.jobs[i].Message = "running", "Starting Dukascopy downloader"
-		job := m.jobs[i]
-		m.mu.Unlock()
-		output, message, err := m.download(ctx, i, job, directory)
-		m.mu.Lock()
-		if m.jobs[i].Status == "completed" {
-			// Publication already committed atomically with its completed status.
-		} else if ctx.Err() != nil {
-			m.jobs[i].Status, m.jobs[i].Message = "cancelled", "Download cancelled"
-		} else if err != nil {
-			m.jobs[i].Status, m.jobs[i].Message = "failed", cleanMessage(err.Error())
-		} else {
-			m.jobs[i].Status, m.jobs[i].Progress, m.jobs[i].Message, m.jobs[i].OutputPath = "completed", 100, message, output
-		}
-		m.mu.Unlock()
+	// The batch's aggregate upstream request budget stays at twenty, including
+	// the library's per-symbol fetching parallelism. A single symbol retains its
+	// existing four-file bound; twenty symbols fetch one source file each.
+	sourceBatchSize := min(4, MaxConcurrency/workers)
+	next := 0
+	var pool sync.WaitGroup
+	pool.Add(workers)
+	for range workers {
+		go func() {
+			defer pool.Done()
+			for {
+				m.mu.Lock()
+				if next >= len(m.jobs) || ctx.Err() != nil {
+					m.mu.Unlock()
+					return
+				}
+				i := next
+				next++
+				m.jobs[i].Status, m.jobs[i].Message = "running", "Starting Dukascopy downloader"
+				job := m.jobs[i]
+				m.mu.Unlock()
+				output, message, err := m.download(ctx, i, job, directory, sourceBatchSize)
+				m.mu.Lock()
+				if m.jobs[i].Status == "completed" {
+					// Publication already committed atomically with its completed status.
+				} else if ctx.Err() != nil {
+					m.jobs[i].Status, m.jobs[i].Message = "cancelled", "Download cancelled"
+				} else if err != nil {
+					m.jobs[i].Status, m.jobs[i].Message = "failed", cleanMessage(err.Error())
+				} else {
+					m.jobs[i].Status, m.jobs[i].Progress, m.jobs[i].Message, m.jobs[i].OutputPath = "completed", 100, message, output
+				}
+				m.mu.Unlock()
+			}
+		}()
 	}
+	pool.Wait()
 }
 
 type workerEvent struct {
@@ -275,20 +306,32 @@ type workerEvent struct {
 	Rows     int64   `json:"rows"`
 }
 
-func (m *Manager) download(ctx context.Context, index int, job Job, directory string) (string, string, error) {
-	f, err := os.CreateTemp(directory, "."+job.Symbol+"-*.part")
+func (m *Manager) download(ctx context.Context, index int, job Job, directory string, sourceBatchSize int) (string, string, error) {
+	// Each worker has private WAF/session files. Removing this exclusively-owned
+	// directory also cleans atomic token-cache scratch files after cancellation.
+	jobDirectory, err := os.MkdirTemp(directory, ".cryptodesk-screener-job-"+job.ID+"-*")
+	if err != nil {
+		return "", "", err
+	}
+	defer os.RemoveAll(jobDirectory)
+	f, err := os.CreateTemp(jobDirectory, job.Symbol+"-*.part")
 	if err != nil {
 		return "", "", err
 	}
 	partial := f.Name()
-	defer os.Remove(partial)
 	if err = f.Close(); err != nil {
 		return "", "", err
 	}
-	request := struct{ Symbol, Timeframe, From, To, Output string }{job.Symbol, job.Timeframe, job.From, job.To, partial}
 	// JSON tags in this internal protocol are lowercase; no shell ever interprets
 	// symbols, dates, executable paths or destination directories.
-	input, _ := json.Marshal(map[string]string{"symbol": request.Symbol, "timeframe": request.Timeframe, "from": request.From, "to": request.To, "output": request.Output})
+	input, _ := json.Marshal(struct {
+		Symbol          string `json:"symbol"`
+		Timeframe       string `json:"timeframe"`
+		From            string `json:"from"`
+		To              string `json:"to"`
+		Output          string `json:"output"`
+		SourceBatchSize int    `json:"sourceBatchSize"`
+	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
 	cmd.Stdin = bytes.NewReader(input)
