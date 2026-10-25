@@ -62,6 +62,8 @@ export function GetScreenerIndicators():Promise<screener.IndicatorCatalog>;
 
 export function GetScreenerRefresh(arg1:Array<string>):Promise<screener.RefreshInfo>;
 
+export function GetScreenerSavedConditions():Promise<Array<screener.SavedAnalysisCondition>>;
+
 export function GetScreenerView():Promise<screener.ViewState>;
 
 export function ImportWorkspace():Promise<storage.Loaded>;
@@ -77,6 +79,8 @@ export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 export function ResetWorkspace():Promise<storage.Loaded>;
 
 export function ResumeScreenerDownload():Promise<screener.Info>;
+
+export function SaveScreenerAnalysisCondition(arg1:string,arg2:screener.AnalysisRequest):Promise<screener.SavedAnalysisCondition>;
 
 export function SaveScreenerAnalysisView(arg1:screener.AnalysisRequest):Promise<screener.AnalysisRequest>;
 

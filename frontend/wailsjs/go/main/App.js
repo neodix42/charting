@@ -114,6 +114,10 @@ export function GetScreenerRefresh(arg1) {
   return window['go']['main']['App']['GetScreenerRefresh'](arg1);
 }
 
+export function GetScreenerSavedConditions() {
+  return window['go']['main']['App']['GetScreenerSavedConditions']();
+}
+
 export function GetScreenerView() {
   return window['go']['main']['App']['GetScreenerView']();
 }
@@ -144,6 +148,10 @@ export function ResetWorkspace() {
 
 export function ResumeScreenerDownload() {
   return window['go']['main']['App']['ResumeScreenerDownload']();
+}
+
+export function SaveScreenerAnalysisCondition(arg1, arg2) {
+  return window['go']['main']['App']['SaveScreenerAnalysisCondition'](arg1, arg2);
 }
 
 export function SaveScreenerAnalysisView(arg1) {

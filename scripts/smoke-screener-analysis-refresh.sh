@@ -31,6 +31,7 @@ else:
     initial=json.loads((evidence/'analysis-refresh.json').read_text())['analysisRefresh']
     assert data['csv']==initial['csv']
     assert data['view']==initial['view']
+    assert data['named']==initial['named']
     assert data['result']['totalMatches']==initial['analysis']['totalMatches']
     (evidence/'restart-comparison.json').write_text(json.dumps({'passed':True,'refreshedCSVsUnchanged':True,'rulesRestored':True,'allMatchCountsPreserved':True,'sha256':{symbol:hashlib.sha256(csv.encode()).hexdigest() for symbol,csv in data['csv'].items()}},indent=2)+'\n')
 print(f"{phase}: PASS ({len(report['checks'])} native assertions)")

@@ -1,4 +1,4 @@
-import type {AnalysisCatalog,AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {AnalysisCatalog,AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {initialAnalysisView} from '../workspace/screenerAnalysis';
 import {analysisChartResources} from '../components/ScreenerAnalysisChart';
 
@@ -6,8 +6,10 @@ import {analysisChartResources} from '../components/ScreenerAnalysisChart';
 export function screenerAnalysisBridge(directory:()=>string):ScreenerAnalysisBackend{
  const viewKey='cryptodesk-explicit-test-analysis-view';
  let view:AnalysisRequest=JSON.parse(sessionStorage.getItem(viewKey)||'null')??initialAnalysisView();
+ const savedKey='cryptodesk-explicit-test-saved-conditions';
+ let savedConditions:SavedAnalysisCondition[]=JSON.parse(sessionStorage.getItem(savedKey)||'[]');
  let catalogOverride:Partial<AnalysisCatalog>={},request:AnalysisRequest|null=null,reads=0,chartDelay=0;
- let errors:Partial<Record<'catalog'|'view'|'save'|'start'|'status'|'chart',string>>={};
+ let errors:Partial<Record<'catalog'|'view'|'save'|'start'|'status'|'chart'|'savedList'|'savedWrite',string>>={};
  const saves:AnalysisRequest[]=[],chartRequests:Array<{resultID:string;occurrence:number;before:number;after:number}>=[];
  let info:AnalysisInfo={active:false,phase:'idle',total:0,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],offset:0,limit:50,totalResults:0};
  let charts:Record<string,AnalysisChart>={},saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined;
@@ -28,6 +30,14 @@ export function screenerAnalysisBridge(directory:()=>string):ScreenerAnalysisBac
   async GetScreenerAnalysisCatalog(){if(errors.catalog)throw Error(errors.catalog);return catalog();},
   async GetScreenerAnalysisView(){if(errors.view)throw Error(errors.view);return structuredClone(view);},
   async SaveScreenerAnalysisView(value){saves.push(structuredClone(value));if(saveGate)await saveGate;if(errors.save)throw Error(errors.save);view=structuredClone(value);sessionStorage.setItem(viewKey,JSON.stringify(view));return structuredClone(view);},
+  async GetScreenerSavedConditions(){if(errors.savedList)throw Error(errors.savedList);return structuredClone(savedConditions);},
+  async SaveScreenerAnalysisCondition(name,value){
+   if(errors.savedWrite)throw Error(errors.savedWrite);
+   name=name.trim();if(!name)throw Error('Enter a condition name.');
+   if(savedConditions.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw Error('A condition with this name already exists; choose another name.');
+   const saved={id:crypto.randomUUID().replaceAll('-',''),name,request:structuredClone(value)};
+   savedConditions.push(saved);sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));return structuredClone(saved);
+  },
   async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,active:true,phase:'indexing',total:files().length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,50);},
   async GetScreenerAnalysis(offset,limit){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit);},
   async CancelScreenerAnalysis(){info={...info,active:false,phase:'cancelled',currentFile:''};return page(0,50);},
@@ -42,6 +52,7 @@ export function screenerAnalysisBridge(directory:()=>string):ScreenerAnalysisBac
   __testSetAnalysisInfo:(value:Partial<AnalysisInfo>)=>{info={...info,...structuredClone(value)};},
   __testAnalysisInfo:()=>structuredClone(info),__testAnalysisRequest:()=>structuredClone(request),__testAnalysisReads:()=>reads,
   __testAnalysisView:()=>structuredClone(view),__testAnalysisSaves:()=>structuredClone(saves),
+  __testSavedAnalysisConditions:()=>structuredClone(savedConditions),
   __testSetAnalysisView:(value:AnalysisRequest)=>{view=structuredClone(value);sessionStorage.setItem(viewKey,JSON.stringify(view));},
   __testAnalysisErrors:(value:typeof errors)=>{errors=structuredClone(value);},
   __testSetAnalysisCharts:(value:Record<string,AnalysisChart>)=>{charts=structuredClone(value);},

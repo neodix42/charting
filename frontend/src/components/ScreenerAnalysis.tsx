@@ -4,6 +4,7 @@ import type {AnalysisCatalog,AnalysisInfo,AnalysisRequest,ScreenerAnalysisBacken
 import {AnalysisViewWriter,analysisDate,analysisInputError,initialAnalysisView,newAnalysisCondition} from '../workspace/screenerAnalysis';
 import {ScreenerAnalysisCondition} from './ScreenerAnalysisCondition';
 import {ScreenerAnalysisChart,type AnalysisSelection} from './ScreenerAnalysisChart';
+import {ScreenerSavedConditions,type ScreenerSavedConditionsHandle} from './ScreenerSavedConditions';
 import './ScreenerAnalysis.css';
 
 const pageSize=50;
@@ -14,9 +15,10 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[showEmpty,setShowEmpty]=useState(false),[selection,setSelection]=useState<AnalysisSelection|null>(null);
  const draft=useRef(view),mounted=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false),selectionRef=useRef(selection),chartEpoch=useRef(0),writer=useRef<AnalysisViewWriter|null>(null);
  const panelVisible=useRef(visible);panelVisible.current=visible;
+ const savedConditions=useRef<ScreenerSavedConditionsHandle>(null);
  selectionRef.current=selection;
  if(!writer.current)writer.current=new AnalysisViewWriter(async value=>{const saved=await api.SaveScreenerAnalysisView(value);if(mounted.current)setSaveError('');return saved;},error=>{if(mounted.current)setSaveError(errorText(error));});
- useImperativeHandle(ref,()=>({flush:()=>writer.current!.flush()}),[]);
+ useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await savedConditions.current?.flush();}}),[]);
  useEffect(()=>{mounted.current=true;lifetime.current++;return ()=>{mounted.current=false;lifetime.current++;chartEpoch.current++;};},[]);
  useEffect(()=>{
   if(!visible||ready)return;
@@ -75,7 +77,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const results=info?.results??[],groups=new Map<string,Array<{result:typeof results[number];offset:number}>>();
  results.forEach((result,index)=>{if(!showEmpty&&!result.matches&&!result.error)return;const asset=result.symbol||result.name;groups.set(asset,[...(groups.get(asset)??[]),{result,offset:(info?.offset??page*pageSize)+index}]);});
  const working=info?.active??false,invalid=analysisInputError(view),error=loadError||catalogError||saveError||actionError||scanError||info?.error;
- return <div className="screener-analysis-content">
+ return <div className="screener-analysis-layout"><div className="screener-analysis-content">
   <section className="analysis-builder" aria-label="Visual condition builder">
    <header><div><span className="analysis-eyebrow">HISTORICAL SCREENER</span><h2>Visual condition rows</h2><p>All rows must match (AND). Every closed bar in every downloaded CSV file is checked.</p></div><span className="analysis-and-badge">ALL CONDITIONS · AND</span></header>
    {error&&<div className="analysis-error" role="alert">{error}<button type="button" onClick={()=>{if(saveError)void writer.current!.flush().then(()=>{setSaveError('');setActionError('');}).catch(error=>setSaveError(errorText(error)));else{setActionError('');setReload(value=>value+1);}}}>{saveError?'Retry saving rules':'Retry analysis'}</button></div>}
@@ -99,6 +101,8 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
    ])}</tbody></table></div>}
    {!!info?.totalResults&&<nav className="analysis-pagination" aria-label="Analysis file pages"><button type="button" disabled={page===0} onClick={()=>setPage(value=>value-1)}>Previous files</button><span>Files {page*pageSize+1}–{Math.min((page+1)*pageSize,info.totalResults)} of {info.totalResults}</span><button type="button" disabled={(page+1)*pageSize>=info.totalResults} onClick={()=>setPage(value=>value+1)}>Next files</button></nav>}
   </section>
+  </div>
+  <ScreenerSavedConditions ref={savedConditions} api={api} visible={visible} disabled={!ready||working||busy} canSave={!invalid} request={view} onLoad={request=>{closeChart();change(request);setActionError('');}}/>
   {visible&&selection&&<ScreenerAnalysisChart api={api} selection={selection} onClose={closeChart} onNavigate={navigate}/>}
  </div>;
 });

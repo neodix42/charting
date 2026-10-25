@@ -82,6 +82,14 @@ func (a *App) SaveScreenerAnalysisView(request screener.AnalysisRequest) (screen
 	return a.screener.SaveAnalysisView(request)
 }
 
+func (a *App) GetScreenerSavedConditions() ([]screener.SavedAnalysisCondition, error) {
+	return a.screener.SavedAnalysisConditions()
+}
+
+func (a *App) SaveScreenerAnalysisCondition(name string, request screener.AnalysisRequest) (screener.SavedAnalysisCondition, error) {
+	return a.screener.SaveAnalysisCondition(name, request)
+}
+
 func (a *App) StartScreenerAnalysis(request screener.AnalysisRequest) (screener.AnalysisInfo, error) {
 	return a.screener.StartAnalysis(request)
 }

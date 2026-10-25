@@ -290,6 +290,14 @@ const desktopSmokeJavaScript = `async function(phase) {
     check(refreshed.jobs.every(job=>job.addedRows>0&&job.columns.includes('sma_2')&&job.backupPath),'all refreshed files report appends, applied indicators and retained originals',refreshed.jobs);
     await click('#screener-analysis-tab');await wait(()=>q('[aria-label="Analysis conditions"] button[type="submit"]:not(:disabled)'),'native visual conditions ready');
     await click('.analysis-add');await select('[aria-label="Condition 2 left field"]','sma_2');
+    await wait(()=>q('.analysis-save-condition:not(:disabled)'),'native Safe Condition button');await click('.analysis-save-condition');
+    await input('[aria-label="Condition name"]','Native two-row condition');await click('[aria-label="Save named condition"] button[type="submit"]');
+    await wait(()=>!q('[aria-label="Save named condition"]')&&q('[aria-label="Load condition Native two-row condition"]'),'native named condition saved on the right');
+    const named=await api.GetScreenerSavedConditions();
+    check(named.length===1&&named[0].request.conditions.length===2&&named[0].request.conditions[1].left.field==='sma_2','Safe Condition saves the complete native row set',named);
+    await click('[aria-label="Remove condition 2"]');await click('[aria-label="Load condition Native two-row condition"]');
+    await wait(()=>q('[aria-label="Condition 2 left field"]')?.value==='sma_2','native saved condition restores all rows');
+    check(!(await api.GetScreenerAnalysis(0,50)).active&&(await api.GetScreenerAnalysis(0,50)).total===0,'loading a named condition waits for Apply');
     await click('[aria-label="Analysis conditions"] button[type="submit"]');
     const analysis=await wait(async()=>{const value=await api.GetScreenerAnalysis(0,50);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.total===2&&value.completed===2?value:false;},'every downloaded bar evaluated against both AND conditions');
     check(analysis.results.every(result=>result.matches===counts[result.symbol]-1)&&analysis.totalMatches===counts.btcusd+counts.ethusd-2,'matching asset table counts every occurrence of both conditions',analysis);
@@ -304,9 +312,15 @@ const desktopSmokeJavaScript = `async function(phase) {
     await click('[aria-label="Matching occurrences"] button:first-child');await wait(()=>q('.analysis-chart-modal nav strong')?.textContent.includes('Occurrence 1 of'),'previous occurrence label');
     await click('[aria-label="Close analysis chart"]');await wait(()=>!q('.analysis-chart-modal')&&!q('.tv-lightweight-charts'),'native chart popup unmounts');
     check((await api.GetDiagnostics()).market.activeLeases===0,'historical rule scanning and chart popup create no live chart subscriptions');
-    report.analysisRefresh={originals,csv,counts,refreshed,analysis,view:await api.GetScreenerAnalysisView()};
+    report.analysisRefresh={originals,csv,counts,refreshed,analysis,view:await api.GetScreenerAnalysisView(),named};
+    await click('[aria-label="Remove condition 2"]');await wait(async()=>(await api.GetScreenerAnalysisView()).conditions.length===1,'changed draft saved independently of the named snapshot');
    }else{
-    await wait(()=>qa('.analysis-condition').length===2&&q('[aria-label="Condition 2 left field"]')?.value==='sma_2','native restored condition rows');
+    await wait(()=>qa('.analysis-condition').length===1&&q('[aria-label="Load condition Native two-row condition"]'),'native restored saved-condition list and independent draft');
+    const named=await api.GetScreenerSavedConditions();
+    check(named.length===1&&named[0].request.conditions.length===2,'restart preserves named conditions independently of draft edits',named);
+    await click('[aria-label="Load condition Native two-row condition"]');await wait(()=>q('[aria-label="Condition 2 left field"]')?.value==='sma_2','native named condition reload after restart');
+    await wait(async()=>(await api.GetScreenerAnalysisView()).conditions.length===2,'loaded named condition becomes the editable draft');
+    check(!(await api.GetScreenerAnalysis(0,50)).active&&(await api.GetScreenerAnalysis(0,50)).total===0,'restarted named-condition load does not apply automatically');
     const view=await api.GetScreenerAnalysisView(),files=await api.GetScreenerFiles(0,50);
     check(view.conditions.length===2&&view.conditions[0].left.field==='close'&&view.conditions[1].left.field==='sma_2','restart restores both visual AND rows and operands',view);
     check(files.files.length===2&&files.files.every(file=>file.fields.includes('sma_2')&&file.firstTimestamp&&file.lastTimestamp),'restart discovers refreshed periods and saved indicator columns',files);
@@ -314,7 +328,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     const result=await wait(async()=>{const value=await api.GetScreenerAnalysis(0,50);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2?value:false;},'restarted rule scan');
     check(result.results.every(file=>file.matches>1),'restored conditions scan all saved historical occurrences',result);
     const csv={};for(const symbol of ['btcusd','ethusd'])csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
-    report.analysisRefresh={view,files,result,csv};
+    report.analysisRefresh={view,files,result,csv,named};
    }
   }else if(phase==='enrichment'||phase==='enrichment-restore'){
    await click('[role="tab"][aria-controls="screener-panel"]');

@@ -54,6 +54,16 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	if jobs := app.CancelScreenerDownload().Jobs; len(jobs) != 0 {
 		t.Fatalf("invalid request created jobs: %+v", jobs)
 	}
+	draft, err := app.GetScreenerAnalysisView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.SaveScreenerAnalysisCondition("My condition", draft); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := app.GetScreenerSavedConditions(); err != nil || len(saved) != 1 || !reflect.DeepEqual(saved[0].Request, draft) {
+		t.Fatalf("facade lost saved condition rows: %+v %v", saved, err)
+	}
 	after, err := store.Load()
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("machine-local configuration changed saved workspace: %v", err)
@@ -62,6 +72,9 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	defer reopened.Close()
 	if got := reopened.Info().Directory; got != destination {
 		t.Fatalf("preference did not restore: %q", got)
+	}
+	if saved, err := reopened.SavedAnalysisConditions(); err != nil || len(saved) != 1 || saved[0].Name != "My condition" {
+		t.Fatalf("named condition did not restore: %+v %v", saved, err)
 	}
 	configured, err = app.ConfigureScreenerDirectory("  ")
 	if err != nil || configured.Directory != filepath.Join(profile, "screener") {

@@ -2,6 +2,7 @@ export type AnalysisOperator='above'|'below'|'crossesAbove'|'crossesBelow'|'betw
 export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:number;timeframe?:string;offset?:number;aggregate?:'value'|'highest'|'lowest'|'';window?:number}
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
 export interface AnalysisRequest {conditions:AnalysisCondition[]}
+export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest}
 export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string}
 export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[]}
 export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number}
@@ -12,6 +13,8 @@ export interface ScreenerAnalysisBackend {
  GetScreenerAnalysisCatalog():Promise<AnalysisCatalog>;
  GetScreenerAnalysisView():Promise<AnalysisRequest>;
  SaveScreenerAnalysisView(request:AnalysisRequest):Promise<AnalysisRequest>;
+ GetScreenerSavedConditions():Promise<SavedAnalysisCondition[]>;
+ SaveScreenerAnalysisCondition(name:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
  StartScreenerAnalysis(request:AnalysisRequest):Promise<AnalysisInfo>;
  GetScreenerAnalysis(offset:number,limit:number):Promise<AnalysisInfo>;
  CancelScreenerAnalysis():Promise<AnalysisInfo>;
