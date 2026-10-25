@@ -1,8 +1,0 @@
-{
-  "passed": true,
-  "enrichedFilesUnchanged": true,
-  "sha256": {
-    "btcusd": "dd8b144284c83474227633afdf881fe82e9efaee872deb2de373789973ee9c19",
-    "ethusd": "f1c0dad659ab784b7f45ef9d5a8e966bc0b3a7ca8a8e05b7495a9e563a475b1a"
-  }
-}

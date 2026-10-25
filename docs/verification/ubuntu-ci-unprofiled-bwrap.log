@@ -1,5 +1,0 @@
-Portable runtime smoke failed: Portable desktop exited during startup (exit code 1); inspect its log
-Process exit code: 1
-Process log tail (bounded, sensitive lines omitted):
-bwrap: setting up uid map: Permission denied
-Evidence: /home/neodix/gitProjects/charting/docs/verification/ubuntu-ci-unprofiled-bwrap

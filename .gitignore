@@ -53,3 +53,4 @@ release/
 *.sqlite-shm
 *.lockfile
 __pycache__/
+/docs/verification/

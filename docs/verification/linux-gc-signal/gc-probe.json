@@ -1,9 +1,0 @@
-{
-  "allocatedObjects": 1600000,
-  "gcSignal": 34,
-  "goGCCollections": 64,
-  "goSIGUSR1SIGURGSIGPROFUnchanged": true,
-  "jscAllocationAndCollectionRounds": 64,
-  "jscEnvironmentUnchanged": true,
-  "passed": true
-}
