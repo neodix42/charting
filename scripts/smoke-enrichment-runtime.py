@@ -10,6 +10,124 @@ import subprocess
 import tempfile
 
 
+def calendar_smoke(runtime, node, directory):
+    """Calendar columns use UTC even when the bundled Node process does not."""
+    environment = {**os.environ, "TZ": "Pacific/Honolulu"}
+    worker = runtime / "enrich-worker.cjs"
+    sunday, monday = 1704067140000, 1704067200000
+    probe = subprocess.run(
+        [str(node), "-e", "const d=new Date(1704067200000);process.stdout.write(JSON.stringify({"
+         "zone:Intl.DateTimeFormat().resolvedOptions().timeZone,hour:d.getHours(),"
+         "weekday:d.getDay(),offset:d.getTimezoneOffset()}))"],
+        text=True, capture_output=True, cwd=directory, env=environment, timeout=20, check=True)
+    local = json.loads(probe.stdout)
+    if local.get("offset") == 0 or local.get("hour") == 0 or local.get("weekday") != 0:
+        raise ValueError(f"Calendar smoke did not exercise a non-UTC Sunday local clock: {probe.stdout[:1000]}")
+
+    def enrich(source, output, indicator):
+        before = source.read_bytes()
+        request = {"input": str(source), "output": str(output), "indicator": indicator,
+                   "parameters": {}, "source": "auto"}
+        result = subprocess.run([str(node), str(worker)], input=json.dumps(request) + "\n", text=True,
+                                capture_output=True, cwd=directory, env=environment, timeout=20, check=True)
+        events = [json.loads(line) for line in result.stdout.splitlines()]
+        if (not events or events[-1].get("type") != "done" or events[-1].get("rows") != 2
+                or events[-1].get("columns") != [indicator] or source.read_bytes() != before):
+            raise ValueError(f"Packaged {indicator} enrichment did not preserve and confirm its input: {result.stdout[:2000]}")
+        with output.open(newline="") as stream:
+            return list(csv.reader(stream))
+
+    original = f"timestamp\n{sunday}\n{monday}\n"
+    source = directory / "calendar-original.csv"
+    source.write_bytes(original.encode())
+    weekday, hour = directory / "calendar-weekday.csv", directory / "calendar-hour.csv"
+    if enrich(source, weekday, "weekday") != [["timestamp", "weekday"], [str(sunday), "7"], [str(monday), "1"]]:
+        raise ValueError("Packaged Weekday did not calculate Sunday=7 and Monday=1 without warm-up")
+    expected = [["timestamp", "weekday", "hour"], [str(sunday), "7", "23"], [str(monday), "1", "0"]]
+    if enrich(weekday, hour, "hour") != expected:
+        raise ValueError("Packaged Hour did not calculate UTC 23 to 0 while preserving Weekday")
+    repeated_weekday, repeated_hour = directory / "calendar-weekday-repeat.csv", directory / "calendar-hour-repeat.csv"
+    if enrich(hour, repeated_weekday, "weekday") != expected or enrich(repeated_weekday, repeated_hour, "hour") != expected:
+        raise ValueError("Repeating calendar enrichment duplicated columns or changed row alignment")
+    if repeated_hour.read_bytes() != hour.read_bytes() or source.read_bytes() != original.encode():
+        raise ValueError("Repeated calendar enrichment changed its previous result or the original CSV")
+
+    # A separate candle file lets the actual downloader/decoder append the
+    # first closed Monday candle and replay both previously applied columns.
+    raw = directory / "calendar-candles-original.csv"
+    raw_text = ("timestamp,open,high,low,close,volume\n"
+                "1704067080000,10,11,9,10,3\n1704067140000,20,21,19,20,4\n")
+    raw.write_bytes(raw_text.encode())
+    candle_weekday, candle_hour = directory / "calendar-candles-weekday.csv", directory / "calendar-candles-hour.csv"
+    enrich(raw, candle_weekday, "weekday")
+    originals = enrich(candle_weekday, candle_hour, "hour")
+    if [row[-2:] for row in originals[1:]] != [["7", "23"], ["7", "23"]]:
+        raise ValueError("Calendar Refresh fixture did not start with two enriched Sunday candles")
+    before = candle_hour.read_bytes()
+    output = directory / "calendar-refreshed.csv"
+    now = monday + 60000
+    recipes = [{"indicator": indicator, "parameters": {}, "source": "auto"} for indicator in ["weekday", "hour"]]
+    request = {"runtime": str(runtime), "now": now,
+               "request": {"input": str(candle_hour), "output": str(output), "symbol": "eurusd",
+                           "timeframe": "m1", "from": "2023-12-31", "recipes": recipes}}
+    script = r"""
+const fs = require('node:fs');
+const path = require('node:path');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const {refresh} = require(path.join(input.runtime, 'refresh-worker.cjs'));
+const api = require(path.join(input.runtime, 'node_modules', 'dukascopy-node'));
+const sources = [];
+const localApi = {...api, BufferFetcher: class extends api.BufferFetcher {
+  constructor(options) {
+    super({...options, fetcherFn: async url => {
+      const pathname = new URL(url).pathname;
+      if (!pathname.includes('/v1/candles/minute/')) throw Error('Unexpected calendar source interval.');
+      sources.push(pathname);
+      const sunday = pathname.endsWith('/2023/12/31');
+      if (!sunday && !pathname.endsWith('/2024/1/1')) throw Error('Unexpected calendar source day.');
+      const price = sunday ? 10 : 30;
+      return Buffer.from(JSON.stringify({timestamp: sunday ? 1704067080000 : 1704067200000,
+        shift: 60000, multiplier: 1, open: price, high: price+1, low: price-1, close: price,
+        times: [0,1], opens: [0,10], highs: [0,10], lows: [0,10], closes: [0,10],
+        volumes: sunday ? [3,4] : [5,6]}));
+    }});
+  }
+}};
+(async () => {
+  const events = [];
+  const result = await refresh(input.request, {api: localApi, now: input.now,
+    pauseMs: 0, emit: event => events.push(event)});
+  process.stdout.write(JSON.stringify({result, events, sources}) + '\n');
+})().catch(error => {console.error(error); process.exitCode = 1;});
+"""
+    result = subprocess.run([str(node), "-e", script], input=json.dumps(request) + "\n", text=True,
+                            capture_output=True, cwd=directory, env=environment, timeout=20, check=True)
+    actual = json.loads(result.stdout)
+    completed, events, sources = actual.get("result", {}), actual.get("events", []), actual.get("sources", [])
+    if (completed.get("type") != "done" or completed.get("rows") != 3 or completed.get("addedRows") != 1
+            or completed.get("updatedRows") != 0 or completed.get("columns") != ["weekday", "hour"]
+            or completed.get("recipes") != recipes or completed.get("checkedThrough") != now
+            or completed.get("firstTimestamp") != sunday - 60000 or completed.get("lastTimestamp") != monday
+            or len(sources) != 2 or not events or events[-1].get("type") != "done"):
+        raise ValueError(f"Packaged Refresh did not append and replay calendar fields: {result.stdout[:4000]}")
+    with output.open(newline="") as stream:
+        refreshed = list(csv.reader(stream))
+    if (refreshed != originals + [[str(monday), "30", "31", "29", "30", "5", "1", "0"]]
+            or candle_hour.read_bytes() != before or raw.read_bytes() != raw_text.encode()):
+        raise ValueError("Calendar Refresh changed its originals, included an open candle or miscalculated UTC fields")
+    return {"passed": True, "timeZoneEnvironment": environment["TZ"], "resolvedTimeZone": local["zone"],
+            "localHourAtMondayUTC": local["hour"], "localWeekdayAtMondayUTC": local["weekday"],
+            "timestampOnly": {"passed": True, "rows": 2, "columns": ["weekday", "hour"],
+                              "weekdays": [7, 1], "hours": [23, 0], "warmupRequired": False,
+                              "repeatIsIdempotent": True, "originalPreserved": True},
+            "refresh": {"passed": True, "rows": 3, "addedRows": 1, "updatedRows": 0,
+                        "columns": ["weekday", "hour"], "savedRecipesRecalculated": True,
+                        "onlyClosedCandlesAppended": True, "exactValues": True,
+                        "originalsPreserved": True, "localTransportFetches": len(sources),
+                        "injectedNowUTC": "2024-01-01T00:01:00.000Z", "networkRequired": False},
+            "networkRequired": False}
+
+
 def refresh_smoke(runtime, node, directory, enriched):
     """Use the real downloader/decoder and Refresh merger; replace transport only."""
     output = directory / "refreshed.csv"
@@ -102,11 +220,12 @@ def smoke(runtime):
         if source.read_bytes() != original.encode() or any(row[:-1] != old for row, old in zip(rows[1:], originals[1:])):
             raise ValueError("Packaged enrichment changed original data fields")
         refresh = refresh_smoke(runtime, node, directory, output)
+        calendar = calendar_smoke(runtime, node, directory)
         if source.read_bytes() != original.encode():
             raise ValueError("Packaged Refresh changed the original raw CSV")
         return {"passed": True, "runtime": str(runtime), "columns": ["sma_3"], "rows": 4,
                 "warmupBlank": True, "exactValues": True, "originalFieldsPreserved": True,
-                "privateNode": str(node), "networkRequired": False, "refresh": refresh}
+                "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar}
 
 
 def main():

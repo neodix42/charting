@@ -327,7 +327,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     const downloaded=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'two real daily downloads',90000);
     const originals={};for(const symbol of ['btcusd','ethusd'])originals[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
     await click('#screener-enrichment-tab');
-    await wait(()=>qa('#screener-enrichment tbody tr').length===2&&q('[aria-label="Enrichment indicator"]').options.length===40,'native file list and indicator catalog');
+    await wait(()=>qa('#screener-enrichment tbody tr').length===2&&q('[aria-label="Enrichment indicator"]').options.length===42,'native file list and indicator catalog');
     const page=await api.GetScreenerFiles(0,50),ids=page.files.map(file=>file.id),runtime=await api.GetScreenerEnrichment(ids);
     check(runtime.runtimeAvailable&&page.files.every(file=>file.from==='2024-01-01'&&file.to==='2024-01-10'&&file.timeframe==='d1'&&file.fields.join(',')==='timestamp,open,high,low,close,volume'),'native Enrichment lists genuine files, periods and CSV headers with preinstalled trading-signals',{runtime,page});
     await input('[aria-label="Period"]','3');await click('[aria-label="Enrich downloaded data"] button[type="submit"]');
@@ -348,14 +348,27 @@ const desktopSmokeJavaScript = `async function(phase) {
      const old=smaCSV[symbol].trim().split('\n').slice(1).map(line=>line.split(',')),next=finalCSV[symbol].trim().split('\n');
      check(next[0]==='timestamp,open,high,low,close,volume,sma_3,tenkan_9'&&next.slice(1).every((line,i)=>{const row=line.split(',');return row.slice(0,7).join(',')===old[i].join(',')&&(i<8?row[7]==='':Math.abs(Number(row[7])-(Math.max(...old.slice(i-8,i+1).map(item=>Number(item[2])))+Math.min(...old.slice(i-8,i+1).map(item=>Number(item[3]))))/2)<1e-8);}),symbol+' Tenkan values preserve prior enrichment and use only current/past highs and lows',finalCSV[symbol]);
     }
-    check(sma.jobs.every(job=>job.backupPath)&&tenkan.jobs.every(job=>job.backupPath),'each successful enrichment reports an original backup',{sma:sma.jobs,tenkan:tenkan.jobs});
+    const tenkanCSV={...finalCSV},weekdayCSV={},calendar={};
+    for(const indicator of ['weekday','hour']){
+     await select('[aria-label="Enrichment indicator"]',indicator);
+     await wait(()=>!q('[aria-label="Period"]')&&q('[aria-label="Enrichment price source"]').disabled,'timestamp-only calendar controls');
+     await click('[aria-label="Enrich downloaded data"] button[type="submit"]');
+     calendar[indicator]=await wait(async()=>{const value=await api.GetScreenerEnrichment(ids);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2&&value.indicator===indicator?value:false;},'native '+indicator+' enrichment');
+     await wait(()=>qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes(indicator)&&row.querySelector('progress')?.value===100),'native '+indicator+' headers');
+     for(const symbol of ['btcusd','ethusd']){
+      const old=finalCSV[symbol].trim().split('\n'),next=(await api.DesktopSmokeScreenerCSV(symbol)).trim().split('\n');
+      check(next[0]===old[0]+','+indicator&&next.length===old.length&&next.slice(1).every((line,i)=>{const cells=line.split(','),date=new Date(Number(cells[0])),expected=indicator==='weekday'?((date.getUTCDay()+6)%7)+1:date.getUTCHours();return cells.slice(0,-1).join(',')===old[i+1]&&Number(cells.at(-1))===expected;}),symbol+' '+indicator+' derives exact UTC timestamp values and preserves all prior fields');
+      finalCSV[symbol]=next.join('\n')+'\n';if(indicator==='weekday')weekdayCSV[symbol]=finalCSV[symbol];
+     }
+    }
+    check(sma.jobs.every(job=>job.backupPath)&&tenkan.jobs.every(job=>job.backupPath)&&Object.values(calendar).every(info=>info.jobs.every(job=>job.backupPath)),'each successful enrichment reports an original backup',{sma:sma.jobs,tenkan:tenkan.jobs});
     check((await api.GetDiagnostics()).market.activeLeases===0,'enrichment runs without chart subscriptions');
-    report.enrichment={directory:downloaded.directory,originals,smaCSV,finalCSV,sma,tenkan};
+    report.enrichment={directory:downloaded.directory,originals,smaCSV,tenkanCSV,weekdayCSV,finalCSV,sma,tenkan,calendar};
    }else{
     await click('#screener-enrichment-tab');await wait(()=>qa('#screener-enrichment tbody tr').length===2,'native restored enrichment list');
     const page=await api.GetScreenerFiles(0,50);
-    check(page.files.length===2&&page.files.every(file=>file.fields.join(',')==='timestamp,open,high,low,close,volume,sma_3,tenkan_9'),'restart discovers all enriched files and persisted columns',page);
-    check(qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('sma_3, tenkan_9')),'native restarted file table shows both persisted indicators');
+    check(page.files.length===2&&page.files.every(file=>file.fields.join(',')==='timestamp,open,high,low,close,volume,sma_3,tenkan_9,weekday,hour'),'restart discovers all enriched files and persisted columns',page);
+    check(qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('sma_3, tenkan_9, weekday, hour')),'native restarted file table shows price and calendar indicators');
     const csv={};for(const symbol of ['btcusd','ethusd'])csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
     report.enrichment={page,csv};
    }

@@ -1,5 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import type {ScreenerDataFile,ScreenerEnrichmentInfo} from '../src/types';
+import type {AnalysisRequest} from '../src/workspace/screenerAnalysis';
 
 const fields=['timestamp','open','high','low','close','volume'];
 const file=(index:number):ScreenerDataFile=>({id:`file-${index}`,name:`symbol${String(index).padStart(3,'0')}-d1-2024-01-01-2024-02-01.csv`,symbol:`symbol${index}`,timeframe:'d1',from:'2024-01-01',to:'2024-02-01',fields:[...fields],bytes:2048});
@@ -25,7 +26,7 @@ test('Enrichment loads CSV periods and comma separated headers only when opened,
  await expect(panel(page).locator('tbody tr')).toContainText('2024-01-01 → 2024-02-01');
  await expect(panel(page).locator('tbody tr code')).toHaveText(fields.join(', '));
  await expect(panel(page).getByText('/explicit-test/screener',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(40);
+ await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(42);
  await expect(page.getByLabel('Period',{exact:true})).toHaveValue('200');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);
 });
@@ -75,6 +76,45 @@ test('indicator changes reset parameter controls, validate periods and expose ti
  await page.getByLabel('Enrichment indicator',{exact:true}).selectOption('ichimoku');
  await expect(page.getByLabel('Tenkan period',{exact:true})).toHaveValue('9');
  await expect(panel(page)).toContainText('no future or displaced rows');
+});
+
+test('UTC Weekday and Hour use timestamps without price parameters and become Analysis fields',async({page})=>{
+ await page.goto('/');
+ await page.evaluate(value=>(window as any).__testSetEnrichmentFiles([value]),{...file(0),fields:['timestamp']});
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['Weekday','Hour']);
+ await expect(panel(page)).toContainText('40 indicators + 2 UTC calendar fields');
+ await page.getByLabel('Enrichment price source',{exact:true}).selectOption('askprice');
+ for(const indicator of ['weekday','hour']){
+  await page.getByLabel('Enrichment indicator',{exact:true}).selectOption(indicator);
+  await expect(page.getByLabel('Period',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Enrichment price source',{exact:true})).toBeDisabled();
+  await expect(page.getByLabel('Enrichment price source',{exact:true})).toHaveValue('auto');
+  await expect(page.getByLabel('Enrichment price source',{exact:true}).locator('option:checked')).toHaveText('Not applicable (timestamp only)');
+  await expect(panel(page)).toContainText('Requires: timestamp (UTC); no price fields required.');
+  if(indicator==='weekday'){await expect(panel(page)).toContainText(/Monday.*1.*Sunday.*7/);}
+  else await expect(panel(page)).toContainText(/0.*23/);
+  await expect(panel(page)).toContainText('UTC');
+  await page.getByRole('button',{name:'Enrich 1 file',exact:true}).click();
+  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toEqual({indicator,parameters:{},source:'auto'});
+  await page.evaluate(indicator=>{
+   const info=(window as any).__testEnrichment() as ScreenerEnrichmentInfo;
+   const files=(window as any).__testEnrichmentFiles() as ScreenerDataFile[];
+   (window as any).__testSetEnrichmentFiles(files.map(file=>({...file,fields:[...file.fields,indicator]})));
+   (window as any).__testSetEnrichment({...info,active:false,completed:1,currentFile:'',currentProgress:0,jobs:info.jobs.map(job=>({...job,status:'completed',progress:100,rows:100,columns:[indicator],message:`Added UTC ${indicator}`}))});
+  },indicator);
+  await expect(page.getByRole('button',{name:'Enrich 1 file',exact:true})).toBeEnabled();
+  await expect(panel(page).locator('tbody tr td').nth(2)).toContainText(indicator);
+ }
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(page.getByLabel('Condition 1 left field',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['Weekday','Hour']);
+ await page.getByLabel('Condition 1 left field',{exact:true}).selectOption('weekday');await page.getByLabel('Condition 1 operator',{exact:true}).selectOption('between');
+ await page.getByLabel('Condition 1 right constant',{exact:true}).fill('1');await page.getByLabel('Condition 1 upper constant',{exact:true}).fill('5');
+ await page.getByRole('button',{name:'Add condition',exact:false}).click();await page.getByLabel('Condition 2 left field',{exact:true}).selectOption('hour');await page.getByLabel('Condition 2 operator',{exact:true}).selectOption('between');
+ await page.getByLabel('Condition 2 right constant',{exact:true}).fill('8');await page.getByLabel('Condition 2 upper constant',{exact:true}).fill('17');
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ const request=await page.evaluate(()=>(window as any).__testAnalysisRequest()) as AnalysisRequest;
+ expect(request.conditions).toEqual([expect.objectContaining({operator:'between',left:expect.objectContaining({field:'weekday'}),right:expect.objectContaining({value:1}),upper:expect.objectContaining({value:5})}),expect.objectContaining({operator:'between',left:expect.objectContaining({field:'hour'}),right:expect.objectContaining({value:8}),upper:expect.objectContaining({value:17})})]);
 });
 
 test('file pagination keeps the entire batch in scope and shows progress beyond the first page',async({page})=>{

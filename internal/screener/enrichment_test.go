@@ -278,7 +278,7 @@ func TestCSVInventoryBoundsPagesAndExcludesNonPublishedData(t *testing.T) {
 func TestIndicatorValidationUsesReviewedBoundsAndCopiesCallerParameters(t *testing.T) {
 	m := &Manager{}
 	catalog := m.Indicators()
-	if catalog.Version != "8.3.0" || len(catalog.Indicators) != 40 {
+	if catalog.Version != "8.3.0" || len(catalog.Indicators) != 42 {
 		t.Fatal("incorrect catalog")
 	}
 	for _, indicator := range catalog.Indicators {
@@ -310,5 +310,63 @@ func TestIndicatorValidationUsesReviewedBoundsAndCopiesCallerParameters(t *testi
 	data, _ := json.Marshal(request)
 	if !strings.Contains(string(data), `"source":"auto"`) {
 		t.Fatal("default source missing")
+	}
+}
+
+func TestCalendarFieldCatalogValidationUsesTimestampOnlyAndCanonicalSource(t *testing.T) {
+	m := &Manager{}
+	catalog := m.Indicators()
+	technical, calendar := 0, 0
+	for _, indicator := range catalog.Indicators {
+		if indicator.Input != "timestamp" {
+			technical++
+			continue
+		}
+		calendar++
+		if (indicator.ID != "weekday" && indicator.ID != "hour") || indicator.Category != "Time" || len(indicator.Parameters) != 0 || !strings.Contains(indicator.Note, "UTC") {
+			t.Fatalf("incorrect time field catalog: %+v", indicator)
+		}
+		for _, source := range []string{"", "auto", "close", "open", "bidprice", "askprice"} {
+			request, err := m.validateEnrichment(EnrichmentRequest{Indicator: indicator.ID, Source: source})
+			if err != nil || request.Source != "auto" || len(request.Parameters) != 0 {
+				t.Fatalf("calendar source is not canonical: %+v %v", request, err)
+			}
+		}
+		if _, err := m.validateEnrichment(EnrichmentRequest{Indicator: indicator.ID, Parameters: map[string]float64{"period": 1}}); err == nil {
+			t.Fatal("parameterless calendar field accepted period")
+		}
+	}
+	if technical != 40 || calendar != 2 {
+		t.Fatalf("catalog must retain 40 technical indicators plus 2 time fields: %d/%d", technical, calendar)
+	}
+}
+
+func TestCalendarEnrichmentUsesRealUTCValuesWithoutPricesAndPersistsRecipes(t *testing.T) {
+	m := sourceEnrichmentManager(t, false)
+	const original = "timestamp,notes\n-1,early\n0,epoch\n1704067140000,sunday\n1704067200000,monday\n"
+	name := "calendar.csv"
+	path := writeDataFile(t, m, name, original)
+	id := dataFileID(m.directory, name)
+	for _, indicator := range []string{"weekday", "hour", "weekday"} {
+		if _, err := m.StartEnrichment(EnrichmentRequest{Indicator: indicator, Source: "close"}); err != nil {
+			t.Fatal(err)
+		}
+		info := waitEnrichment(t, m, []string{id})
+		if info.Completed != 1 || info.Failed != 0 || info.Jobs[0].Rows != 4 || !reflect.DeepEqual(info.Jobs[0].Columns, []string{indicator}) {
+			t.Fatalf("calendar field failed without price columns: %+v", info)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
+	want := [][]string{{"timestamp", "notes", "weekday", "hour"}, {"-1", "early", "3", "23"}, {"0", "epoch", "4", "0"}, {"1704067140000", "sunday", "7", "23"}, {"1704067200000", "monday", "1", "0"}}
+	if err != nil || !reflect.DeepEqual(rows, want) {
+		t.Fatalf("UTC values: %+v %v", rows, err)
+	}
+	metadata, err := readFileMetadata(m.directory, name)
+	if err != nil || len(metadata.Recipes) != 2 || metadata.Recipes[0].Indicator != "weekday" || metadata.Recipes[1].Indicator != "hour" || metadata.Recipes[0].Source != "auto" || metadata.Recipes[1].Source != "auto" {
+		t.Fatalf("calendar recipes were lost or duplicated: %+v %v", metadata, err)
 	}
 }

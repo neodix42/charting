@@ -34,7 +34,7 @@ export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategori
 export interface ScreenerJob {id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
 export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[]}
 export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
-export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'hl'|'hlc'|'hlcv'|'ohlcv';parameters:IndicatorParameter[];note?:string}
+export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string}
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
 export interface ScreenerDataFile {id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
 export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;offset:number;limit:number}

@@ -72,6 +72,7 @@ async function recipesFor(headers,saved=[]) {
     else if((match=name.match(/^senkou_a_([0-9.e+\-]+)_([0-9.e+\-]+)$/)))request=parameterRequest('ichimoku',[match[1],match[2],52],source);
     else if((match=name.match(/^senkou_b_([0-9.e+\-]+)$/)))request=parameterRequest('ichimoku',[9,26,match[1]],source);
     else if(['tr','vwap','ad','pvt'].includes(name))request=parameterRequest(name,[],source);
+    else if(['weekday','hour'].includes(name))request=parameterRequest(name,[],'auto');
     if(!request)throw Error(`Cannot refresh unrecognized derived column "${column}". Original CSV kept; restore its applied indicator recipe first.`);
     await add(request);
     if(!covered.has(column))throw Error(`Cannot reproduce derived column "${column}" from its saved parameters. Original CSV kept.`);

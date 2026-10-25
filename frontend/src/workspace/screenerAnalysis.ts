@@ -30,10 +30,10 @@ export const analysisOperators:Array<{id:AnalysisOperator;label:string}>=[
  {id:'highest',label:'Highest in window'},{id:'lowest',label:'Lowest in window'},
 ];
 const priceFields=new Set(['open','high','low','close','price','bidprice','askprice']);
-const fieldNames:Record<string,string>={open:'Open',high:'High',low:'Low',close:'Close',price:'Price',bidprice:'Bid price',askprice:'Ask price',volume:'Volume',askvolume:'Ask volume',bidvolume:'Bid volume'};
+const fieldNames:Record<string,string>={open:'Open',high:'High',low:'Low',close:'Close',price:'Price',bidprice:'Bid price',askprice:'Ask price',volume:'Volume',askvolume:'Ask volume',bidvolume:'Bid volume',weekday:'Weekday',hour:'Hour'};
 const families:Record<string,string>={bb:'Bollinger Bands',bbw:'Bollinger Band Width',donchian:'Donchian Channels',stochastic:'Stochastic',tenkan:'Ichimoku',kijun:'Ichimoku',senkou:'Ichimoku',force:'Force Index'};
 function fieldParts(field:string){const [qualified,qualifiers='']=field.split(/(?=\[)/,2),colon=qualified.indexOf(':');return{base:(colon<0?qualified:qualified.slice(colon+1)).trim(),timeframe:colon<0?'':qualified.slice(0,colon),qualifiers:field.includes('[')?field.slice(field.indexOf('[')):qualifiers};}
-export function analysisFieldGroup(field:string){const {base,timeframe}=fieldParts(field),key=base.toLowerCase(),family=key.split('_')[0];const group=priceFields.has(key)?'Price / OHLC':/volume$/.test(key)?'Volume':families[family]??family.toUpperCase();return`${group}${timeframe?` · ${timeframe}`:''}`;}
+export function analysisFieldGroup(field:string){const {base,timeframe}=fieldParts(field),key=base.toLowerCase(),family=key.split('_')[0];const group=priceFields.has(key)?'Price / OHLC':['weekday','hour'].includes(key)?'Time':/volume$/.test(key)?'Volume':families[family]??family.toUpperCase();return`${group}${timeframe?` · ${timeframe}`:''}`;}
 export function analysisFieldLabel(field:string){
  const {base,timeframe,qualifiers}=fieldParts(field),key=base.toLowerCase(),suffix=`${timeframe?` · ${timeframe}`:''}${qualifiers?` ${qualifiers}`:''}`;if(fieldNames[key])return fieldNames[key]+suffix;
  const parts=key.split('_'),family=parts.shift()!,parameters=parts.filter(part=>/^\d+(?:\.\d+)?$/.test(part)),component=parts.filter(part=>!/^\d+(?:\.\d+)?$/.test(part)).map(part=>part.charAt(0).toUpperCase()+part.slice(1)).join(' ');

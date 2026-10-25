@@ -1,0 +1,191 @@
+..............................................Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/tmpys4jfb47/.tools/node-test
+.....Node/npm missing or incompatible; downloading Node 24.19.0 into /tmp/cryptodesk install tools jwu8to9m/.tools/node-test
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+....Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+..Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Collecting exact Ubuntu source demo-source=2:1.0-1
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+.Refreshing isolated Ubuntu source indexes (no system APT changes)
+Refreshing isolated Ubuntu source indexes (no system APT changes)
+..................................Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+v0.1.0 already published for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; existing assets preserved
+Published CryptoDesk v0.1.0 for aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Downloading pinned Screener runtime: https://cdn.playwright.dev/pinned
+.......Downloading pinned Screener runtime: https://nodejs.org/pinned
+.................Extracting all pinned WebView2 1.2.3.4 runtime files
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpkuztp03j/first
+...Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpizsg9jh9/first
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Extracting all pinned WebView2 1.2.3.4 runtime files
+.Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpu1el7w41/first
+Copying verified WebView2 1.2.3.4 x64 to /tmp/tmpu1el7w41/second
+.Extracting all pinned WebView2 1.2.3.4 runtime files
+Copying verified WebView2 1.2.3.4 x64 to /tmp/cryptodesk runtime path 16t97tzc/portable package/WebView2
+......Downloading pinned WebView2 1.2.3.4 x64 (2,788 bytes)
+....................
+----------------------------------------------------------------------
+Ran 155 tests in 5.060s
+
+OK
+English locales: kept 4, removed 1 packs (0.00 MiB unpacked)
+
+Portable Windows ZIP: /tmp/tmphabmsqfe/cryptodesk-2.3.4-windows-amd64.zip
+Size: 0.0 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.
+English locales: kept 4, removed 1 packs (0.00 MiB unpacked)
+
+Portable Windows ZIP: /tmp/tmp219vwvno/cryptodesk-2.3.4-windows-amd64.zip
+Size: 0.0 MiB
+Extract the complete ZIP to a writable local Windows folder and run cryptodesk.exe.
+No Windows GUI execution was performed on this Ubuntu host.
+English locales: kept 4, removed 2 packs (0.00 MiB unpacked)
+Using Node v24.19.0 and npm 11.17.0
+
+added 25 packages in 425ms
+
+> cryptodesk-screener-runtime@1.0.0 test
+> node --test worker.test.cjs enrich-worker.test.cjs refresh-worker.test.cjs
+
+✔ all 40 reviewed indicators and 2 UTC time fields produce finite, aligned values (132.686437ms)
+✔ every indicator also works at its minimum supported period instead of accepting unusable library inputs (19.061115ms)
+✔ SMA 200 appends exact values on the right rows, preserves other fields and reports progress (42.653473ms)
+✔ matching indicator columns are replaced without duplicates and prior enrichment survives (6.062983ms)
+✔ MACD uses EMA inputs and waits for the signal EMA warm-up (1.425321ms)
+✔ Ichimoku lines are causal, with independent warm-up periods and readable names (1.740129ms)
+✔ tick prices support automatic bid and explicit ask sources; candle indicators reject tick files (0.508297ms)
+✔ UTC Weekday and Hour stream timestamp-only CSVs across every weekday and midnight without warm-up or duplicate columns (7.316685ms)
+✔ time fields normalize price source, accept tick timestamps and reject missing, malformed or out-of-range dates (20.263257ms)
+✔ UTC calendar values remain independent of the child process timezone (145.33707ms)
+✔ invalid requests, duplicate headers and unknown parameters are rejected (0.435858ms)
+▶ malformed data, missing prices, invalid candles and descending timestamps leave the input intact
+  ✔ bad-row (3.076991ms)
+  ✔ blank-price (2.276786ms)
+  ✔ bad-candle (1.550001ms)
+  ✔ bad-time (1.390441ms)
+  ✔ header-only (1.252732ms)
+✔ malformed data, missing prices, invalid candles and descending timestamps leave the input intact (10.233809ms)
+✔ exclusive output, interruption and missing input never overwrite source data (2.779993ms)
+✔ large files stream through bounded batches instead of loading the CSV into memory (377.958492ms)
+✔ first refresh repairs an internal hole, revises overlap and enriches all appended rows using real public library decoding (91.804805ms)
+✔ all 42 indicator and time field headers can migrate their complete applied recipes and reproduce columns (12.133846ms)
+✔ verified coverage fetches bounded overlap only, preserves earlier data and does not add an open candle (9.751861ms)
+✔ a changed CSV digest invalidates coverage even when a saved size and modification time are reused (5.157889ms)
+✔ an already present incomplete candle is revised while a newly supplied open candle is excluded (5.955194ms)
+✔ repeat refresh is idempotent and tick multiplicities survive same-timestamp merges (7.816623ms)
+✔ Refresh migrates mixed calendar and SMA columns and populates appended Sunday-to-Monday rows (8.166391ms)
+✔ market closures with no new provider rows preserve history and still replay indicators (2.864732ms)
+✔ unknown derived columns, invalid recipes and transport errors leave the source unchanged (4.257794ms)
+✔ future timestamps and malformed original market data cannot be marked as verified (3.27448ms)
+✔ closed boundaries use UTC month transitions and exact daily/minute intervals (0.125229ms)
+✔ ordered bounded batches retain OHLCV, use one CSV header and report real requests (31.997937ms)
+✔ empty ranges fail explicitly and do not confirm successful output (5.730685ms)
+✔ network failure propagates, never emits done, closes the output handle (2.584094ms)
+✔ one-second and tick data use tick sources; simultaneous tick timestamps survive (10.928154ms)
+✔ partial date boundaries filter complete upstream files without relabeling candles (2.861703ms)
+✔ invalid symbol and timeframe never reach the transport (3.34054ms)
+✔ manager source batch allowance bounds actual simultaneous fetches (53.633075ms)
+✔ invalid internal source batch allowances fail before fetching (1.500551ms)
+✔ restart skips committed source batches, truncates uncommitted tails and keeps exact ordered CSV (18.789016ms)
+✔ truncated or mismatched saved data fails without silently restarting or changing prior rows (8.243161ms)
+✔ an owned worker exits when its app pipe closes, including abrupt parent shutdown (28.810976ms)
+✔ malformed protocol exits even when the parent still owns an open input pipe (29.988558ms)
+ℹ tests 42
+ℹ suites 0
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 844.192351
+
+> cryptodesk-screener-runtime@1.0.0 catalog
+> node generate-catalog.cjs --check
+
+1.51.0: 1499 instruments in 39 groups
+ok  	cryptodesk/internal/candlecache	(cached)
+ok  	cryptodesk/internal/candlestorage	(cached)
+ok  	cryptodesk/internal/domain	(cached)
+ok  	cryptodesk/internal/exchange	(cached)
+ok  	cryptodesk/internal/market	(cached)
+ok  	cryptodesk/internal/screener	7.150s
+ok  	cryptodesk/internal/storage	(cached)
+ok  	cryptodesk/cmd/smoke	(cached)
+ok  	cryptodesk	0.065s
+
+added 137 packages, and audited 138 packages in 1s
+
+39 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> cryptodesk-frontend@1.0.0 typecheck
+> tsc --noEmit
+
+
+> cryptodesk-frontend@1.0.0 lint
+> eslint src vite.config.ts
+
+
+> cryptodesk-frontend@1.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /home/neodix/gitProjects/charting/frontend
+
+
+ Test Files  17 passed (17)
+      Tests  168 passed (168)
+   Start at  23:02:44
+   Duration  340ms (transform 75%, import 11%, tests 11%, worker 3%)
+
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 56 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/app-version.json                  0.03 kB │ gzip:   0.05 kB
+dist/assets/cryptodesk-D_A9QZBY.svg    0.36 kB │ gzip:   0.21 kB
+dist/index.html                        0.82 kB │ gzip:   0.47 kB
+dist/assets/index-DajAfSr8.css        37.10 kB │ gzip:   7.61 kB
+dist/assets/index-CNzbImIu.js        550.32 kB │ gzip: 169.67 kB
+
+✓ built in 218ms
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+Deterministic tests complete. Browser E2E: cd frontend && npm run test:e2e
+Live provider smoke is separate: go run ./cmd/smoke
+Desktop smoke steps: docs/DESKTOP_SMOKE.md

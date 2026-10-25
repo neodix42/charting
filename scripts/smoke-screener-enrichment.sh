@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real native controls -> downloaded public data -> indicators -> CSV -> restart.
+# Real native controls -> public data -> price/calendar indicators -> CSV -> restart.
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 require_node
@@ -21,13 +21,13 @@ report=json.loads((evidence/f'{phase}.json').read_text())
 if not report['passed']: raise SystemExit(report.get('error','Native enrichment failed'))
 if phase=='enrichment':
     data=report['enrichment']; backups=pathlib.Path(data['directory'])/'.cryptodesk-enrichment-backups'
-    metadata=list(backups.glob('*.json')); assert len(metadata)==4
+    metadata=list(backups.glob('*.json')); assert len(metadata)==8
     for path in metadata:
         saved=json.loads(path.read_text()); symbol=saved['filename'].split('-')[0]
-        original=data['originals' if saved['request']['indicator']=='sma' else 'smaCSV'][symbol]
+        original=data[{'sma':'originals','tenkan':'smaCSV','weekday':'tenkanCSV','hour':'weekdayCSV'}[saved['request']['indicator']]][symbol]
         assert path.with_suffix('.csv').read_text()==original
     assert not any(path.name.startswith('.cryptodesk-enrichment-') and path.name!='.cryptodesk-enrichment-backups' for path in pathlib.Path(data['directory']).iterdir())
-    (evidence/'backups.json').write_text(json.dumps({'passed':True,'exactOriginalBackups':4,'ownedScratchRemoved':True},indent=2)+'\n')
+    (evidence/'backups.json').write_text(json.dumps({'passed':True,'exactOriginalBackups':8,'ownedScratchRemoved':True},indent=2)+'\n')
 else:
     initial=json.loads((evidence/'enrichment.json').read_text())['enrichment']['finalCSV']
     assert report['enrichment']['csv']==initial

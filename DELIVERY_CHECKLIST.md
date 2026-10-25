@@ -18,6 +18,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Double-click drawing selection, preview movement, click placement and cancellation; preserve IDs/scopes and restore moved anchors through native SQLite restart. All 85 browser tests pass, including 17 drawing cases with physical 2× backing stores (2026-10-22).
 - [x] Screener downloader runs 1–20 parallel symbols and resumes saved checkpoints after native close/restart, restoring selection/timeframe/category state; committed separately as 059f7a1 (2026-10-25).
 - [x] Screener Enrichment uses pinned trading-signals for 40 indicators, with CSV header/period discovery, parameters, progress, per-file errors, exact original backups and restart discovery. Native Ubuntu verifies real downloaded SMA/Tenkan values and preserved data (2026-10-25).
+- [x] Screener Enrichment adds timestamp-based UTC Weekday (Monday=1 through Sunday=7) and Hour (0–23), with Refresh recipe replay and Analysis fields (2026-10-25).
 - [ ] Full native manual header/splitter dragging and historical/manual-price viewport matrix (code/tests exist; manual pass not asserted).
 
 ## Reliability

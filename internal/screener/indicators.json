@@ -709,6 +709,22 @@
           "step": 1
         }
       ]
+    },
+    {
+      "id": "weekday",
+      "name": "Weekday",
+      "category": "Time",
+      "input": "timestamp",
+      "parameters": [],
+      "note": "UTC weekday from the row timestamp: Monday = 1 through Sunday = 7. No warm-up."
+    },
+    {
+      "id": "hour",
+      "name": "Hour",
+      "category": "Time",
+      "input": "timestamp",
+      "parameters": [],
+      "note": "UTC hour from the row timestamp: 0 through 23. No warm-up."
     }
   ]
 }

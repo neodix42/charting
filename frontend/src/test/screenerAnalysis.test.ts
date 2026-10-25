@@ -32,6 +32,13 @@ describe('Analysis field selection and validation',()=>{
   for(const field of ['ema_200','bb_upper_20_2','senkou_a_9_26','d1:sma_200[offset 1][highest 20]','d1:close'])expect(analysisPriceOverlay(field)).toBe(true);
   for(const field of ['atr_14','macd_signal_12_26_9','rsi_14','d1:macd_histogram_12_26_9'])expect(analysisPriceOverlay(field)).toBe(false);
  });
+ it('groups calendar fields as UTC time values, including qualified timeframe fields',()=>{
+  expect(analysisFieldGroup('weekday')).toBe('Time');expect(analysisFieldGroup('hour')).toBe('Time');
+  expect(analysisFieldLabel('weekday')).toBe('Weekday');expect(analysisFieldLabel('hour')).toBe('Hour');
+  expect(analysisFieldGroup('d1:weekday[offset 1]')).toBe('Time · d1');
+  expect(analysisFieldLabel('d1:weekday[offset 1]')).toBe('Weekday · d1 [offset 1]');
+  expect(analysisPriceOverlay('hour')).toBe(false);
+ });
  it('requires both sides of highest/lowest, permits negative constants and checks distance/window bounds',()=>{
   expect(analysisInputError(initialAnalysisView())).toBe('');
   const rule={...newAnalysisCondition('1'),operator:'highest' as const,bars:20,right:fieldOperand('high')};

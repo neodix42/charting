@@ -4,7 +4,7 @@ import {errorText} from '../types';
 import './ScreenerRefresh.css';
 
 const pageSize=50;
-const requirements={price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume'};
+const requirements={price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume',timestamp:'timestamp (UTC); no price fields required'};
 function size(bytes:number){return bytes<1024?`${bytes} B`:bytes<1024*1024?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1024/1024).toFixed(1)} MiB`;}
 function utcTime(value:number){return new Date(value).toISOString().replace('T',' ').replace('.000Z',' UTC');}
 
@@ -80,6 +80,7 @@ export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
  const showRefresh=refreshInfo?.active||(lastAction==='refresh'&&!!refreshInfo?.total);
  const jobs=new Map((showRefresh?refreshInfo?.jobs:info?.jobs)?.map(job=>[job.fileId,job])??[]),working=!!(info?.active||refreshInfo?.active);
  const categories=[...new Set(catalog?.indicators.map(item=>item.category)??[])];
+ const calendarFields=catalog?.indicators.filter(item=>item.input==='timestamp').length??0;
  const error=actionError||catalogError||fileError||infoError||refreshError||info?.runtimeError||refreshInfo?.runtimeError;
  const finished=(info?.completed??0)+(info?.failed??0)+(info?.cancelled??0);
  const refreshFinished=(refreshInfo?.completed??0)+(refreshInfo?.failed??0)+(refreshInfo?.cancelled??0);
@@ -90,10 +91,10 @@ export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
   }}>
    <label>Indicator<select aria-label="Enrichment indicator" value={indicator} disabled={!catalog||working||busy} onChange={event=>{setIndicator(event.target.value);setParameters({});}}>{categories.map(category=><optgroup key={category} label={category}>{catalog?.indicators.filter(item=>item.category===category).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>)}</select></label>
    {definition?.parameters.map(param=><label key={param.key}>{param.label}<input type="number" aria-label={param.label} min={param.min} max={param.max} step={param.step} required value={values[param.key]} disabled={working||busy} onChange={event=>setParameters(current=>({...current,[param.key]:event.target.value}))}/></label>)}
-   <label>Price source<select aria-label="Enrichment price source" value={definition?.input==='price'?source:'auto'} disabled={working||busy||definition?.input!=='price'} onChange={event=>setSource(event.target.value)}><option value="auto">Auto (close / bid / ask)</option><option value="close">Close</option><option value="open">Open</option><option value="high">High</option><option value="low">Low</option><option value="bidprice">Bid price (ticks)</option><option value="askprice">Ask price (ticks)</option></select></label>
+   <label>Price source<select aria-label="Enrichment price source" value={definition?.input==='price'?source:'auto'} disabled={working||busy||definition?.input!=='price'} onChange={event=>setSource(event.target.value)}><option value="auto">{definition?.input==='timestamp'?'Not applicable (timestamp only)':'Auto (close / bid / ask)'}</option><option value="close">Close</option><option value="open">Open</option><option value="high">High</option><option value="low">Low</option><option value="bidprice">Bid price (ticks)</option><option value="askprice">Ask price (ticks)</option></select></label>
    <button type="submit" className="primary" disabled={!definition||invalid||invalidPeriods||!files?.total||working||busy||!info?.runtimeAvailable}>{busy&&!working?'Starting…':`Enrich ${files?.total??0} ${files?.total===1?'file':'files'}`}</button>
    {info?.active&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerEnrichment())}>Cancel enrichment</button>}
-   <div className="enrichment-help"><span>Requires: {definition?requirements[definition.input]:'Loading indicators…'}. Applies to all CSV files currently in this folder.</span><span>Originals are backed up. Matching indicator columns are recalculated; warm-up and undefined values stay blank.</span>{definition?.note&&<span>{definition.note}</span>}<span className="muted">{catalog&&`trading-signals ${catalog.version} · ${catalog.indicators.length} indicators`}</span></div>
+   <div className="enrichment-help"><span>Requires: {definition?requirements[definition.input]:'Loading indicators…'}. Applies to all CSV files currently in this folder.</span><span>Originals are backed up. Matching indicator columns are recalculated; warm-up and undefined values stay blank.</span>{definition?.note&&<span>{definition.note}</span>}<span className="muted">{catalog&&`trading-signals ${catalog.version} · ${catalog.indicators.length-calendarFields} indicators${calendarFields?` + ${calendarFields} UTC calendar fields`:''}`}</span></div>
    {invalidPeriods&&<small className="screener-date-error">Fast period must be smaller than slow period.</small>}
   </form>
   {info&&info.total>0&&!showRefresh&&<section className="enrichment-progress" aria-label="Enrichment progress" aria-live="polite"><div><strong>{info.active?'Enriching files':'Enrichment finished'}</strong><span>{info.completed} / {info.total} complete · {info.failed} failed{info.cancelled?` · ${info.cancelled} cancelled`:''}</span></div><progress aria-label="Overall enrichment progress" max={100} value={(finished+(info.currentProgress||0)/100)/info.total*100}/>{info.currentFile&&<p>{info.currentFile} · {Math.round(info.currentProgress)}%</p>}</section>}

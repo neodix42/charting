@@ -17,7 +17,7 @@ const line = values => `${values.map(value => cell(String(value))).join(',')}\n`
 
 function validate(request) {
   const definition = catalog.indicators.find(item => item.id === request.indicator);
-  if (!definition) throw new Error('Unsupported trading-signals indicator.');
+  if (!definition) throw new Error('Unsupported enrichment indicator or time field.');
   const parameters = {};
   for (const spec of definition.parameters) {
     const value = request.parameters?.[spec.key] ?? spec.default;
@@ -30,16 +30,30 @@ function validate(request) {
     if (!Object.hasOwn(parameters, name)) throw new Error(`Unsupported parameter: ${name}.`);
   }
   if ('fast' in parameters && parameters.fast >= parameters.slow) throw new Error('Fast period must be smaller than slow period.');
-  const source = request.source || 'auto';
+  let source = request.source || 'auto';
   if (!['auto', 'close', 'open', 'high', 'low', 'bidprice', 'askprice'].includes(source)) throw new Error('Unsupported price source.');
+  if(definition.input==='timestamp')source='auto';
   return {definition, parameters, source};
 }
 
 async function calculator(request, headers) {
   const {definition, parameters: p, source} = validate(request);
-  const api = await import('trading-signals');
   const normalized = headers.map(key);
   if (normalized.some(value => !value) || new Set(normalized).size !== headers.length) throw new Error('CSV contains empty or duplicate field names.');
+  if(definition.input==='timestamp'){
+    const timestampIndex=normalized.indexOf('timestamp');
+    if(timestampIndex<0)throw new Error('Requires timestamp field containing numeric Dukascopy Unix milliseconds.');
+    if(!['weekday','hour'].includes(definition.id))throw new Error('Unsupported timestamp enrichment field.');
+    return {
+      columns:[definition.id],
+      next(row,rowNumber){
+        const raw=String(row[timestampIndex]??'').trim(),timestamp=raw===''?NaN:Number(raw),date=new Date(timestamp);
+        if(!Number.isFinite(timestamp)||!Number.isFinite(date.getTime()))throw new Error(`Row ${rowNumber}: timestamp must be valid numeric Unix milliseconds within the JavaScript Date range.`);
+        return [String(definition.id==='weekday'?(date.getUTCDay()||7):date.getUTCHours())];
+      },
+    };
+  }
+  const api = await import('trading-signals');
   const price = source === 'auto' ? ['close', 'bidprice', 'askprice'].find(name => normalized.includes(name)) : source;
   let required;
   switch (definition.input) {

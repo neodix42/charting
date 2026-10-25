@@ -47,7 +47,7 @@ test('first refresh repairs an internal hole, revises overlap and enriches all a
   assert.equal(events.at(-1).type,'done');
 });
 
-test('all 40 parameterized indicator headers can migrate their complete applied recipes and reproduce columns',async()=>{
+test('all 42 indicator and time field headers can migrate their complete applied recipes and reproduce columns',async()=>{
   for(const definition of catalog.indicators){
     const original=await calculator({indicator:definition.id,source:'auto'},header);
     const recipes=await recipesFor([...header,...original.columns]);
@@ -113,6 +113,25 @@ test('repeat refresh is idempotent and tick multiplicities survive same-timestam
   const second=await refresh(request,{now:start+1000,download,emit:()=>{}});
   assert.equal(second.rows,5);assert.equal(second.addedRows,0);
   assert.equal(await fs.readFile(request.input,'utf8'),await fs.readFile(request.output,'utf8'));
+});
+
+test('Refresh migrates mixed calendar and SMA columns and populates appended Sunday-to-Monday rows',async t=>{
+  const sunday=Date.UTC(2023,11,31,23,59),monday=sunday+60000;
+  const original=`${header.join(',')},sma_2,weekday,hour\n${row(sunday,10).join(',')},,7,23\n`;
+  const request={...await fixture(t,original),timeframe:'m1',from:'2023-12-31'};
+  const download=async input=>fs.writeFile(input.output,csv([row(sunday,10),row(monday,20),row(monday+60000,30)]));
+  const result=await refresh(request,{now:monday+180000,download,emit:()=>{}});
+  assert.equal(result.addedRows,2);assert.equal(result.rows,3);
+  assert.deepEqual(result.columns,['sma_2','weekday','hour']);
+  assert.deepEqual(result.recipes.map(recipe=>recipe.indicator),['sma','weekday','hour']);
+  assert.ok(result.recipes.filter(recipe=>recipe.indicator!=='sma').every(recipe=>recipe.source==='auto'&&Object.keys(recipe.parameters).length===0));
+  const actual=parse(await fs.readFile(request.output),{columns:true});
+  assert.deepEqual(actual.map(value=>[value.sma_2,value.weekday,value.hour]),[['','7','23'],['15','1','0'],['25','1','0']]);
+  assert.equal(await fs.readFile(request.input,'utf8'),original);
+  const repeat={...request,input:request.output,output:path.join(path.dirname(request.output),'again.csv'),recipes:result.recipes,coverageVerified:true,coverageDigest:result.checksum};
+  const again=await refresh(repeat,{now:monday+180000,download,emit:()=>{}});
+  assert.equal(again.addedRows,0);assert.equal(again.recipes.length,3);
+  assert.equal(await fs.readFile(repeat.output,'utf8'),await fs.readFile(request.output,'utf8'));
 });
 
 test('market closures with no new provider rows preserve history and still replay indicators',async t=>{

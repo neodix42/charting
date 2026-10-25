@@ -48,7 +48,8 @@ type IndicatorCatalog struct {
 }
 
 // Indicators returns independent values; the same reviewed catalog is packaged
-// beside the Node worker. Only these constructors and parameters are accepted.
+// beside the Node worker. Only these indicator constructors, UTC time fields
+// and reviewed parameters are accepted.
 func (m *Manager) Indicators() IndicatorCatalog {
 	var catalog IndicatorCatalog
 	if err := json.Unmarshal(indicatorJSON, &catalog); err != nil {
@@ -66,7 +67,7 @@ type EnrichmentRequest struct {
 func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentRequest, error) {
 	indicator, known := indicatorDefinitions()[request.Indicator]
 	if !known {
-		return request, errors.New("choose a supported trading-signals indicator")
+		return request, errors.New("choose a supported enrichment indicator or time field")
 	}
 	switch request.Source {
 	case "", "auto":
@@ -74,6 +75,9 @@ func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentReque
 	case "close", "open", "high", "low", "bidprice", "askprice":
 	default:
 		return request, errors.New("unsupported price source")
+	}
+	if indicator.Input == "timestamp" {
+		request.Source = "auto"
 	}
 	parameters := make(map[string]float64, len(indicator.Parameters))
 	for _, param := range indicator.Parameters {

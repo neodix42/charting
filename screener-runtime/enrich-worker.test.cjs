@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const {spawnSync}=require('node:child_process');
 const {parse} = require('csv-parse/sync');
 const {enrich,calculator,catalog,validate} = require('./enrich-worker.cjs');
 
@@ -23,9 +24,10 @@ async function fixture(t, csv) {
 }
 const request=(indicator,parameters={})=>({indicator,parameters,source:'auto'});
 
-test('all 40 reviewed indicators use real public constructors and produce finite, aligned values',async()=>{
+test('all 40 reviewed indicators and 2 UTC time fields produce finite, aligned values',async()=>{
   assert.equal(catalog.version,'8.3.0');
-  assert.equal(catalog.indicators.length,40);
+  assert.equal(catalog.indicators.length,42);
+  assert.equal(catalog.indicators.filter(item=>item.input==='timestamp').length,2);
   const rows=candles(500);
   for (const item of catalog.indicators) {
     const calculate=await calculator(request(item.id),header);
@@ -130,6 +132,66 @@ test('tick prices support automatic bid and explicit ask sources; candle indicat
   assert.deepEqual(bid.next(second,3),['10.5']);assert.deepEqual(ask.next(second,3),['13']);
   await assert.rejects(calculator(request('tenkan'),tickHeader),/Requires high, low/);
   await assert.rejects(calculator({...request('sma'),source:'close'},tickHeader),/Requires close/);
+});
+
+test('UTC Weekday and Hour stream timestamp-only CSVs across every weekday and midnight without warm-up or duplicate columns',async t=>{
+  const monday=Date.UTC(2024,0,1);
+  const rows=[[-8640000000000000,2,0],[-1,3,23],[0,4,0],[Date.UTC(1973,2,1),4,0],
+    ...Array.from({length:7},(_,i)=>[[monday+i*86400000,i+1,0],[monday+i*86400000+23*3600000,i+1,23]]).flat(),
+    [Date.UTC(2024,0,7,23,59,59,999),7,23],[Date.UTC(2024,0,8),1,0],[8640000000000000,6,0]];
+  const original=`timestamp,notes\n${rows.map(([timestamp],i)=>`${timestamp},"row, ${i}"`).join('\n')}\n`;
+  const paths=await fixture(t,original);
+  const events=[];
+  const weekday=await enrich({...paths,...request('weekday')},{emit:event=>events.push(event)});
+  assert.deepEqual(weekday.columns,['weekday']);assert.equal(weekday.rows,rows.length);
+  const output=path.join(path.dirname(paths.output),'both.csv');
+  await enrich({input:paths.output,output,...request('hour')},{emit:()=>{}});
+  const actual=parse(await fs.readFile(output),{columns:true});
+  assert.deepEqual(Object.keys(actual[0]),['timestamp','notes','weekday','hour']);
+  actual.forEach((row,i)=>{
+    assert.equal(row.timestamp,String(rows[i][0]));assert.equal(row.weekday,String(rows[i][1]));assert.equal(row.hour,String(rows[i][2]));assert.equal(row.notes,`row, ${i}`);
+  });
+  const repeated=path.join(path.dirname(paths.output),'repeated.csv');
+  await enrich({input:output,output:repeated,...request('weekday')},{emit:()=>{}});
+  assert.equal(await fs.readFile(repeated,'utf8'),await fs.readFile(output,'utf8'));
+  assert.equal(await fs.readFile(paths.input,'utf8'),original);
+  assert.ok(events.some(event=>event.type==='progress'));
+});
+
+test('time fields normalize price source, accept tick timestamps and reject missing, malformed or out-of-range dates',async t=>{
+  for(const indicator of ['weekday','hour']){
+    const definition=catalog.indicators.find(item=>item.id===indicator);
+    assert.equal(definition.input,'timestamp');assert.equal(definition.category,'Time');assert.deepEqual(definition.parameters,[]);
+    for(const source of ['auto','close','bidprice'])assert.equal(validate({...request(indicator),source}).source,'auto');
+    const calculate=await calculator({...request(indicator),source:'bidprice'},['timestamp','askPrice','bidPrice','askVolume','bidVolume']);
+    assert.deepEqual(calculate.columns,[indicator]);
+    assert.deepEqual(calculate.next([String(Date.UTC(2023,11,31,23,59)),'10','9','1','2'],2),[indicator==='weekday'?'7':'23']);
+    const tickPaths=await fixture(t,`timestamp,askPrice,bidPrice,askVolume,bidVolume\n${Date.UTC(2023,11,31,23,59)},10,9,1,2\n${Date.UTC(2023,11,31,23,59)},11,10,2,3\n${Date.UTC(2024,0,1)},12,11,3,4\n`);
+    await enrich({...tickPaths,...request(indicator)},{emit:()=>{}});
+    const ticks=parse(await fs.readFile(tickPaths.output),{columns:true});
+    assert.deepEqual(ticks.map(row=>row[indicator]),indicator==='weekday'?['7','7','1']:['23','23','0']);
+    assert.deepEqual(ticks.map(row=>row.bidPrice),['9','10','11']);
+    for(const value of ['', ' ', 'not-a-date','Infinity','NaN','2024-01-01T00:00:00Z','8640000000000001','-8640000000000001']){
+      assert.throws(()=>calculate.next([value],2),/timestamp/);
+      const paths=await fixture(t,`timestamp\n${value===''?'""':value}\n`);
+      await assert.rejects(enrich({...paths,...request(indicator)},{emit:()=>{}}),/timestamp/);
+      assert.equal(await fs.readFile(paths.input,'utf8'),`timestamp\n${value===''?'""':value}\n`);
+    }
+    await assert.rejects(calculator(request(indicator),['close']),/Requires timestamp/);
+    const paths=await fixture(t,'close\n10\n');
+    await assert.rejects(enrich({...paths,...request(indicator)},{emit:()=>{}}),/Requires timestamp/);
+    assert.throws(()=>validate({...request(indicator),parameters:{period:1}}),/Unsupported parameter/);
+  }
+});
+
+test('UTC calendar values remain independent of the child process timezone',()=>{
+  const worker=path.join(__dirname,'enrich-worker.cjs');
+  const source=`const {calculator}=require(${JSON.stringify(worker)});(async()=>{const result=[];for(const indicator of ['weekday','hour']){const c=await calculator({indicator,source:'auto'},['timestamp']);result.push(c.next(['${Date.UTC(2023,11,31,23,59)}'],2),c.next(['${Date.UTC(2024,0,1)}'],3));}process.stdout.write(JSON.stringify(result));})().catch(error=>{process.stderr.write(error.stack);process.exitCode=1;});`;
+  for(const timezone of ['UTC','Pacific/Honolulu','Asia/Dubai','Pacific/Kiritimati']){
+    const child=spawnSync(process.execPath,['-e',source],{encoding:'utf8',env:{...process.env,TZ:timezone}});
+    assert.equal(child.status,0,child.stderr);
+    assert.deepEqual(JSON.parse(child.stdout),[['7'],['1'],['23'],['0']],timezone);
+  }
 });
 
 test('invalid requests, duplicate headers and unknown parameters are rejected',async()=>{
