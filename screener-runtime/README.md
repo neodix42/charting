@@ -67,8 +67,7 @@ stops dispatch, drains active children and removes those owned directories,
 including token-cache scratch files, before returning. A successful
 download is published atomically using a same-directory hard link. Existing
 files are preserved; repeated requests receive numbered filenames. A filesystem
-without hard-link support returns an explicit publication error. Failed or
-cancelled jobs remove only their private temporary directories. Completed files remain.
+without hard-link support returns an explicit publication error. Cancelled jobs remove their owned temporary directories. Failed jobs retain a valid checkpoint for explicit retry. Completed files remain.
 The destination defaults to `<profile>/screener`; settings are atomically stored
 in `<profile>/screener.json` and do not enter workspace imports or exports.
 
@@ -87,5 +86,19 @@ validation, pool limits, slot refill, stable result ordering, independent errors
 cancellation, shutdown, preferences and preservation of existing output. Twenty
 gated helper processes prove simultaneous execution while a 21st job stays queued.
 Transport tests check the worker's actual maximum simultaneous source requests.
-Optional live checks are recorded separately from these
-offline checks.
+The worker syncs each complete source batch and atomically commits checkpoint.json
+with its CSV byte offset, row count, header, last timestamp, frozen UTC range
+and next source index. Normal app close leaves queued jobs and checkpoints for
+automatic restart; explicit Cancel remains cancelled. Restart truncates only
+uncommitted tails and skips completed source files. A completed checkpoint can
+publish without another network request. Invalid/truncated checkpoints fail
+without silently discarding existing data. Go records publication intent before
+linking, so a crash during final publication cannot produce a duplicate CSV.
+The parent-owned stdin pipe stays open while Go owns the worker; EOF terminates
+an orphan worker after an abrupt app exit, including on Windows.
+
+UI choices are stored separately in screener-view.json and the durable queue in
+screener-downloads.json. They stay outside chart workspace exports. The native
+scripts/smoke-screener-resume.sh verifies actual UI close/restart, automatic
+continuation, preserved CSV prefixes, job identity and restored category state.
+Optional live checks are recorded separately from offline checks.

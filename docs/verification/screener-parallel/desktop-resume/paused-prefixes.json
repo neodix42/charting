@@ -1,0 +1,42 @@
+{
+  "btcusd": {
+    "id": "91ef24762323f165699f6a05e0759a18",
+    "bytes": 241347,
+    "sha256": "0e2d7b2d4c3b758937772e6349897edb46fd0eeab00fc5734168e3d07099e5f6",
+    "checkpoint": {
+      "version": 1,
+      "symbol": "btcusd",
+      "timeframe": "m1",
+      "from": "2024-01-01",
+      "to": "2024-01-10",
+      "start": 1704067200000,
+      "end": 1704844800000,
+      "nextIndex": 4,
+      "totalSources": 9,
+      "bytes": 241347,
+      "rows": 4448,
+      "lastTimestamp": 1704412740000,
+      "header": "timestamp,open,high,low,close,volume"
+    }
+  },
+  "ethusd": {
+    "id": "f0833fff48e38648b65f67bff5c2df34",
+    "bytes": 221818,
+    "sha256": "a46c8e7a0574bd7767bc157e8b048e51b3ad2a01b6467877d9404d7a16d83120",
+    "checkpoint": {
+      "version": 1,
+      "symbol": "ethusd",
+      "timeframe": "m1",
+      "from": "2024-01-01",
+      "to": "2024-01-10",
+      "start": 1704067200000,
+      "end": 1704844800000,
+      "nextIndex": 4,
+      "totalSources": 9,
+      "bytes": 221818,
+      "rows": 4425,
+      "lastTimestamp": 1704412740000,
+      "header": "timestamp,open,high,low,close,volume"
+    }
+  }
+}

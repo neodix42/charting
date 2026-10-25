@@ -213,12 +213,14 @@ func TestShutdownDrainsTwentyWorkersAndLeavesQueuedJobsUnstarted(t *testing.T) {
 	}
 	manager.Close()
 	for _, job := range manager.Info().Jobs {
-		if job.Status != "cancelled" {
-			t.Fatalf("shutdown left active job %+v", job)
+		if job.Status != "queued" {
+			t.Fatalf("shutdown did not leave a resumable job %+v", job)
 		}
 	}
 	assertNotStarted(t, gates, request.Symbols[20])
-	assertNoPartials(t, manager.Info().Directory)
+	if manager.Info().Active {
+		t.Fatal("shutdown left the pool active")
+	}
 	if _, err := manager.Start(request); err == nil {
 		t.Fatal("closed pool accepted work")
 	}

@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "sameJobIDs": true,
+  "committedPrefixesPreserved": true,
+  "noDuplicateCSVs": true
+}

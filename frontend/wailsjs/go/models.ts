@@ -646,6 +646,7 @@ export namespace screener {
 	    jobs: Job[];
 	    concurrency: number;
 	    maxConcurrency: number;
+	    active: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
@@ -660,6 +661,7 @@ export namespace screener {
 	        this.jobs = this.convertValues(source["jobs"], Job);
 	        this.concurrency = source["concurrency"];
 	        this.maxConcurrency = source["maxConcurrency"];
+	        this.active = source["active"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -700,6 +702,28 @@ export namespace screener {
 	        this.from = source["from"];
 	        this.to = source["to"];
 	        this.concurrency = source["concurrency"];
+	    }
+	}
+	export class ViewState {
+	    symbols: string[];
+	    timeframe: string;
+	    from: string;
+	    to: string;
+	    concurrency: number;
+	    collapsedCategories: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ViewState(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.symbols = source["symbols"];
+	        this.timeframe = source["timeframe"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.concurrency = source["concurrency"];
+	        this.collapsedCategories = source["collapsedCategories"];
 	    }
 	}
 

@@ -1,16 +1,10 @@
 {
+  "target": "windows-amd64",
   "archive": "cryptodesk-0.1.0-windows-amd64.zip",
-  "bytes": 530719236,
-  "sha256": "e15faefb2d5da5cd07cd69eeb9c47b1d6f5dd2100ed0af45611722fa8540a2bc",
-  "workerSHA256": "17ea27ffd7bb4acb18a9ec039f1b98829196323ffa9e32b0e901973db4688db5",
-  "sourceWorkerSHA256": "17ea27ffd7bb4acb18a9ec039f1b98829196323ffa9e32b0e901973db4688db5",
-  "checks": {
-    "archiveValidated": true,
-    "workerMatchesCurrentSource": true,
-    "workerSupportsBoundedSourceBatches": true,
-    "executableContainsConcurrencyProtocol": true,
-    "frontendContainsParallelControl": true
-  },
-  "passed": true,
-  "windowsExecuted": false
+  "bytes": 530741529,
+  "archiveValidated": true,
+  "workerSHA256": "c6771a141f61558c141180ef8aa52c8c4b414565383092f7cd9f86028696819b",
+  "workerCurrent": true,
+  "version": "0.1.0",
+  "nativeWindowsExecuted": false
 }

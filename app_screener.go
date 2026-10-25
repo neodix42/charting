@@ -35,3 +35,11 @@ func (a *App) StartScreenerDownload(request screener.Request) (screener.Info, er
 }
 
 func (a *App) CancelScreenerDownload() screener.Info { return a.screener.Cancel() }
+
+func (a *App) ResumeScreenerDownload() (screener.Info, error) { return a.screener.Resume() }
+
+func (a *App) GetScreenerView() (screener.ViewState, error) { return a.screener.View() }
+
+func (a *App) SaveScreenerView(view screener.ViewState) (screener.ViewState, error) {
+	return a.screener.SaveView(view)
+}

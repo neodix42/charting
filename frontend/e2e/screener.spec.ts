@@ -7,6 +7,34 @@ const mainTab=(page:Page)=>page.getByRole('tab',{name:'Screener',exact:true});
 const saved=(page:Page):Promise<Workspace>=>page.evaluate(()=>(window as any).__testWorkspace());
 async function downloader(page:Page){await mainTab(page).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(page.getByRole('checkbox',{name:'Select all symbols',exact:true})).toBeEnabled();}
 
+test('reopening restores selected symbols, timeframe, dates, parallelism and every category expansion',async({page})=>{
+ await page.goto('/');await downloader(page);
+ await page.getByRole('checkbox',{name:'Select all Cryptocurrencies',exact:true}).check();
+ await page.getByRole('combobox',{name:'Download timeframe',exact:true}).selectOption('m15');
+ await page.getByRole('combobox',{name:'Parallel downloads',exact:true}).selectOption('7');
+ await page.getByLabel('Download from date',{exact:true}).fill('2021-01-01');await page.getByLabel('Download to date',{exact:true}).fill('2024-01-01');
+ const forex=page.locator('details').filter({has:page.locator('summary',{hasText:'Forex'})}),crypto=page.locator('details').filter({has:page.locator('summary',{hasText:'Cryptocurrencies'})});
+ await forex.locator('summary').click();await expect(forex).not.toHaveAttribute('open','');
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null'))).toMatchObject({symbols:['btcusd','ethusd'],timeframe:'m15',concurrency:7,collapsedCategories:['Forex']});
+ await page.reload();await downloader(page);
+ await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m15');await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toHaveValue('7');
+ await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue('2024-01-01');
+ await expect(forex).not.toHaveAttribute('open','');await expect(crypto).toHaveAttribute('open','');
+ await expect(page.getByRole('checkbox',{name:'BTCUSD — Bitcoin vs US Dollar',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'ETHUSD — Ethereum vs US Dollar',exact:true})).toBeChecked();
+ await forex.locator('summary').click();await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null').collapsedCategories)).toEqual([]);
+ await page.reload();await downloader(page);await expect(forex).toHaveAttribute('open','');
+});
+
+test('normal close waits for the latest Screener choices and reports a failed preference write',async({page})=>{
+ await page.goto('/');await downloader(page);
+ await page.evaluate(()=>{window.go!.main!.App!.SaveScreenerView=async()=>{throw Error('Explicit Screener preference write failure');};});
+ await page.getByRole('combobox',{name:'Download timeframe',exact:true}).selectOption('h4');
+ await expect(page.getByRole('alert')).toContainText('Explicit Screener preference write failure');
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'screener-save-test'}));
+ await expect(page.getByText('Save failed during shutdown. Your changes remain open.')).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+});
+
 test('Screener remains fixed beside twenty chart tabs, releases all charts and preserves the workspace',async({page})=>{
  await page.addInitScript(workspace=>sessionStorage.setItem('cryptodesk-explicit-test-workspace',JSON.stringify(workspace)),capacity);
  await page.goto('/');await expect(chartTabs(page)).toHaveCount(20);await expect(page.getByTestId('chart-cell')).toHaveCount(9);

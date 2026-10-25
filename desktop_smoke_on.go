@@ -51,6 +51,24 @@ func (a *App) DesktopSmokeScreenerCSV(symbol string) (string, error) {
 	}
 	return "", errors.New("no completed Screener download")
 }
+func (a *App) DesktopSmokeScreenerCheckpoints() map[string]any {
+	info := a.screener.Info()
+	result := map[string]any{}
+	for _, job := range info.Jobs {
+		path := filepath.Join(info.Directory, ".cryptodesk-screener-job-"+job.ID, "checkpoint.json")
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(file, 16384))
+		_ = file.Close()
+		var checkpoint map[string]any
+		if err == nil && json.Unmarshal(data, &checkpoint) == nil {
+			result[job.Symbol] = checkpoint
+		}
+	}
+	return result
+}
 func (a *App) DesktopSmokeSignalExpectation() map[string]string {
 	return map[string]string{"workspaceId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_WORKSPACE"), "chartId": os.Getenv("CRYPTODESK_SMOKE_EXPECT_CHART"), "timeframe": os.Getenv("CRYPTODESK_SMOKE_EXPECT_TIMEFRAME")}
 }
@@ -189,7 +207,7 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" {
 		return
 	}
 	encoded, _ := json.Marshal(phase)
@@ -244,7 +262,34 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='screener'){
+  if(phase==='screener-resume'||phase==='screener-resume-restore'){
+   await click('[role="tab"][aria-controls="screener-panel"]');await click('#screener-downloader-tab');
+   await wait(()=>qa('.screener-instrument').length===1499,'native resumed catalog');
+   if(phase==='screener-resume'){
+    for(const symbol of ['btcusd','ethusd']){await input('[aria-label="Search Dukascopy instruments"]',symbol);await click('.screener-instrument input');}
+    await input('[aria-label="Search Dukascopy instruments"]','');
+    await select('[aria-label="Download timeframe"]','m1');await select('[aria-label="Parallel downloads"]','2');
+    await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-10');
+    q('.screener-instrument-group summary').click();await sleep(100);
+    await click('[aria-label="Download historical data"] button[type="submit"]');
+    const checkpoints=await wait(async()=>{const values=await api.DesktopSmokeScreenerCheckpoints();return ['btcusd','ethusd'].every(symbol=>values[symbol]?.nextIndex>0&&values[symbol].nextIndex<values[symbol].totalSources)?values:false;},'both downloads have committed partial CSV checkpoints',90000);
+    const info=await api.GetScreener();
+    check(info.active&&info.jobs.every(job=>job.status==='running'),'close while both actual parallel downloads are unfinished',info);
+    check(Object.values(checkpoints).every(value=>value.bytes>0&&value.rows>0),'real CSV prefixes committed before closing',checkpoints);
+    report.checkpoints=checkpoints;report.jobs=info.jobs;report.view=await api.GetScreenerView();
+   }else{
+    const view=await api.GetScreenerView();
+    check(view.symbols.join(',')==='btcusd,ethusd'&&view.timeframe==='m1'&&view.concurrency===2&&view.from==='2024-01-01'&&view.to==='2024-01-10'&&view.collapsedCategories.length===1,'native restart restores exact selections, period, dates, parallelism and category state',view);
+    check(q('[aria-label="Download timeframe"]').value==='m1'&&q('[aria-label="Parallel downloads"]').value==='2'&&!q('.screener-instrument-group').open&&qa('.screener-instrument input:checked').length===2,'native restored controls and closed category are rendered correctly');
+    const info=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'saved real downloads resume automatically and finish',90000);
+    report.jobs=info.jobs;report.view=view;report.csv={};
+    for(const symbol of ['btcusd','ethusd']){
+     const csv=await api.DesktopSmokeScreenerCSV(symbol),lines=csv.trim().split('\n'),times=lines.slice(1).map(line=>Number(line.split(',')[0]));
+     check(lines[0]==='timestamp,open,high,low,close,volume'&&lines.length>100&&times.every((time,index)=>Number.isInteger(time)&&time>=1704067200000&&time<1704844800000&&(index===0||time>times[index-1])),symbol+' resumed CSV has one header and strictly ordered unique minute candles',{rows:times.length,first:lines[1],last:lines.at(-1)});
+     report.csv[symbol]={rows:times.length,first:lines[1],last:lines.at(-1)};
+    }
+   }
+  }else if(phase==='screener'){
    await click('[role="tab"][aria-controls="screener-panel"]');
    await wait(()=>!q('[data-testid="chart-cell"]'),'native Screener chart cleanup');
    await click('#screener-downloader-tab');

@@ -1,3 +1,64 @@
+Converting type screener.Catalog
+- simple field Catalog.Version
+- struct slice Catalog.Groups ([]screener.Group)
+   Converting type screener.Group
+   - simple field Group.Name
+   - struct slice Group.Instruments ([]screener.Instrument)
+      Converting type screener.Instrument
+      - simple field Instrument.ID
+      - simple field Instrument.Name
+      - simple field Instrument.EarliestDate
+- slice field Catalog.Timeframes
+Converting type screener.Info
+- simple field Info.Directory
+- simple field Info.RuntimeAvailable
+- simple field Info.RuntimeError
+- simple field Info.Error
+- struct slice Info.Jobs ([]screener.Job)
+   Converting type screener.Job
+   - simple field Job.ID
+   - simple field Job.Symbol
+   - simple field Job.Timeframe
+   - simple field Job.From
+   - simple field Job.To
+   - simple field Job.Status
+   - simple field Job.Progress
+   - simple field Job.Message
+   - simple field Job.OutputPath
+- simple field Info.Concurrency
+- simple field Info.MaxConcurrency
+- simple field Info.Active
+Converting type screener.Request
+- slice field Request.Symbols
+- simple field Request.Timeframe
+- simple field Request.From
+- simple field Request.To
+- simple field Request.Concurrency
+Converting type screener.ViewState
+- slice field ViewState.Symbols
+- simple field ViewState.Timeframe
+- simple field ViewState.From
+- simple field ViewState.To
+- simple field ViewState.Concurrency
+- slice field ViewState.CollapsedCategories
+Converting type candlestorage.Info
+- simple field Info.Enabled
+- simple field Info.Directory
+- simple field Info.SizeBytes
+- simple field Info.Error
+Converting type storage.Ack
+- simple field Ack.Revision
+- simple field Ack.AcceptedEditSequence
+Converting type storage.Backup
+- simple field Backup.ID
+- simple field Backup.Revision
+- simple field Backup.CreatedAt
+- simple field Backup.Reason
+Converting type storage.Loaded
+- struct Loaded.Workspace (domain.Workspace)
+   Converting type domain.Workspace
+- simple field Loaded.Revision
+- simple field Loaded.Recovery
 Converting type domain.Candle
 - simple field Candle.Time
 - simple field Candle.Open
@@ -111,56 +172,3 @@ Converting type market.Snapshot
    Converting type domain.Candle
 - struct Snapshot.Health (domain.Health)
    Converting type domain.Health
-Converting type screener.Catalog
-- simple field Catalog.Version
-- struct slice Catalog.Groups ([]screener.Group)
-   Converting type screener.Group
-   - simple field Group.Name
-   - struct slice Group.Instruments ([]screener.Instrument)
-      Converting type screener.Instrument
-      - simple field Instrument.ID
-      - simple field Instrument.Name
-      - simple field Instrument.EarliestDate
-- slice field Catalog.Timeframes
-Converting type screener.Info
-- simple field Info.Directory
-- simple field Info.RuntimeAvailable
-- simple field Info.RuntimeError
-- simple field Info.Error
-- struct slice Info.Jobs ([]screener.Job)
-   Converting type screener.Job
-   - simple field Job.ID
-   - simple field Job.Symbol
-   - simple field Job.Timeframe
-   - simple field Job.From
-   - simple field Job.To
-   - simple field Job.Status
-   - simple field Job.Progress
-   - simple field Job.Message
-   - simple field Job.OutputPath
-- simple field Info.Concurrency
-- simple field Info.MaxConcurrency
-Converting type screener.Request
-- slice field Request.Symbols
-- simple field Request.Timeframe
-- simple field Request.From
-- simple field Request.To
-- simple field Request.Concurrency
-Converting type candlestorage.Info
-- simple field Info.Enabled
-- simple field Info.Directory
-- simple field Info.SizeBytes
-- simple field Info.Error
-Converting type storage.Ack
-- simple field Ack.Revision
-- simple field Ack.AcceptedEditSequence
-Converting type storage.Backup
-- simple field Backup.ID
-- simple field Backup.Revision
-- simple field Backup.CreatedAt
-- simple field Backup.Reason
-Converting type storage.Loaded
-- struct Loaded.Workspace (domain.Workspace)
-   Converting type domain.Workspace
-- simple field Loaded.Revision
-- simple field Loaded.Recovery

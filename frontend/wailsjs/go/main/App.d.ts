@@ -40,6 +40,8 @@ export function GetScreener():Promise<screener.Info>;
 
 export function GetScreenerCatalog():Promise<screener.Catalog>;
 
+export function GetScreenerView():Promise<screener.ViewState>;
+
 export function ImportWorkspace():Promise<storage.Loaded>;
 
 export function ListInstruments(arg1:string):Promise<Array<domain.Instrument>>;
@@ -51,6 +53,10 @@ export function OpenTradingView():Promise<void>;
 export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 
 export function ResetWorkspace():Promise<storage.Loaded>;
+
+export function ResumeScreenerDownload():Promise<screener.Info>;
+
+export function SaveScreenerView(arg1:screener.ViewState):Promise<screener.ViewState>;
 
 export function SaveWorkspace(arg1:number,arg2:string,arg3:number,arg4:domain.Workspace):Promise<storage.Ack>;
 

@@ -1,0 +1,24 @@
+
+> cryptodesk-screener-runtime@1.0.0 test
+> node --test worker.test.cjs
+
+✔ ordered bounded batches retain OHLCV, use one CSV header and report real requests (26.95173ms)
+✔ empty ranges fail explicitly and do not confirm successful output (4.958578ms)
+✔ network failure propagates, never emits done, closes the output handle (2.609326ms)
+✔ one-second and tick data use tick sources; simultaneous tick timestamps survive (11.444459ms)
+✔ partial date boundaries filter complete upstream files without relabeling candles (2.861583ms)
+✔ invalid symbol and timeframe never reach the transport (3.228316ms)
+✔ manager source batch allowance bounds actual simultaneous fetches (48.675669ms)
+✔ invalid internal source batch allowances fail before fetching (1.157371ms)
+✔ restart skips committed source batches, truncates uncommitted tails and keeps exact ordered CSV (14.677385ms)
+✔ truncated or mismatched saved data fails without silently restarting or changing prior rows (8.490059ms)
+✔ an owned worker exits when its app pipe closes, including abrupt parent shutdown (31.572703ms)
+✔ malformed protocol exits even when the parent still owns an open input pipe (28.226749ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 267.140425

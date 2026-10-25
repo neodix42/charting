@@ -49,6 +49,7 @@ type Info struct {
 	Jobs             []Job  `json:"jobs"`
 	Concurrency      int    `json:"concurrency"`
 	MaxConcurrency   int    `json:"maxConcurrency"`
+	Active           bool   `json:"active"`
 }
 
 // Manager runs one selected batch at a time through a bounded symbol worker
@@ -66,9 +67,17 @@ type Manager struct {
 	cancel                  context.CancelFunc
 	batchDone               chan struct{}
 	concurrency             int
+	batchDirectory          string
+	publication             map[string]string
+	stateError, viewError   string
+	invalidDownloads        bool
+	view                    ViewState
 }
 
 func New(profile string) *Manager {
+	return newManager(profile, discoverRuntime)
+}
+func newManager(profile string, discover func() (workerRuntime, error)) *Manager {
 	absolute, err := filepath.Abs(profile)
 	if err == nil {
 		profile = absolute
@@ -77,9 +86,29 @@ func New(profile string) *Manager {
 	if err := m.loadPreferences(); err != nil {
 		m.lastError = "Load screener settings: " + err.Error()
 	}
-	m.runtime, err = discoverRuntime()
+	if err := m.loadView(); err != nil {
+		m.viewError = "Restore Screener selection: " + err.Error()
+	}
+	if err := m.loadDownloads(); err != nil {
+		m.stateError, m.invalidDownloads = "Restore download queue: "+err.Error(), true
+	}
+	m.runtime, err = discover()
 	if err != nil {
 		m.runtimeError = err.Error()
+	}
+	if !m.invalidDownloads && len(m.jobs) > 0 {
+		m.mu.Lock()
+		if m.saveDownloadsLocked() {
+			for _, job := range m.jobs {
+				if job.Status == "completed" || job.Status == "cancelled" {
+					m.cleanupJobAt(m.batchDirectory, job)
+				}
+			}
+			if m.runtimeError == "" && m.pendingLocked() {
+				m.beginLocked()
+			}
+		}
+		m.mu.Unlock()
 	}
 	return m
 }
@@ -87,7 +116,7 @@ func New(profile string) *Manager {
 func (m *Manager) infoLocked() Info {
 	jobs := make([]Job, len(m.jobs))
 	copy(jobs, m.jobs)
-	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: m.lastError, Jobs: jobs, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency}
+	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError}, " ")), Jobs: jobs, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active}
 }
 func (m *Manager) Info() Info { m.mu.Lock(); defer m.mu.Unlock(); return m.infoLocked() }
 
@@ -112,7 +141,7 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	if m.closed {
 		return m.infoLocked(), errors.New("screener is closed")
 	}
-	if m.active {
+	if m.active || m.pendingLocked() {
 		return m.infoLocked(), errors.New("cancel or finish the current downloads before changing their folder")
 	}
 	if err = checkDirectory(directory); err != nil {
@@ -200,6 +229,9 @@ func (m *Manager) Start(request Request) (Info, error) {
 	if m.active {
 		return m.infoLocked(), errors.New("a screener download batch is already running")
 	}
+	if m.invalidDownloads || m.pendingLocked() {
+		return m.infoLocked(), errors.New("resume or cancel the saved download queue before starting another batch: " + m.stateError)
+	}
 	if m.runtimeError != "" {
 		return m.infoLocked(), errors.New(m.runtimeError)
 	}
@@ -214,18 +246,22 @@ func (m *Manager) Start(request Request) (Info, error) {
 		}
 		jobs[i] = Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: request.Timeframe, From: request.From, To: request.To, Status: "queued", Message: "Waiting for download"}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.jobs, m.active, m.cancel = jobs, true, cancel
+	oldJobs, oldDirectory, oldConcurrency, oldPublication := m.jobs, m.batchDirectory, m.concurrency, m.publication
+	m.jobs, m.batchDirectory, m.publication = jobs, m.directory, map[string]string{}
 	m.concurrency = request.Concurrency
 	if m.concurrency == 0 {
 		m.concurrency = MaxConcurrency
 	}
-	workers := min(m.concurrency, len(jobs))
-	done := make(chan struct{})
-	m.batchDone = done
-	directory := m.directory
-	m.wg.Add(1)
-	go m.run(ctx, directory, done, workers)
+	if !m.saveDownloadsLocked() {
+		m.jobs, m.batchDirectory, m.concurrency, m.publication = oldJobs, oldDirectory, oldConcurrency, oldPublication
+		return m.infoLocked(), errors.New(m.stateError)
+	}
+	// A replacement batch discards only this application's old failed scratch
+	// files, after its new queue has committed. Completed CSVs are separate links.
+	for _, old := range oldJobs {
+		m.cleanupJobAt(oldDirectory, old)
+	}
+	m.beginLocked()
 	return m.infoLocked(), nil
 }
 
@@ -242,19 +278,40 @@ func (m *Manager) cancelLocked() {
 func (m *Manager) Cancel() Info {
 	m.mu.Lock()
 	m.cancelLocked()
+	m.saveDownloadsLocked()
 	done := m.batchDone
 	m.mu.Unlock()
 	if done != nil {
 		<-done
 	}
+	m.mu.Lock()
+	if m.saveDownloadsLocked() {
+		for _, job := range m.jobs {
+			if job.Status == "cancelled" {
+				m.cleanupJobAt(m.batchDirectory, job)
+			}
+		}
+	}
+	m.mu.Unlock()
 	return m.Info()
 }
 func (m *Manager) Close() {
 	m.mu.Lock()
 	m.closed = true
-	m.cancelLocked()
+	if m.cancel != nil {
+		m.cancel()
+	}
+	for i := range m.jobs {
+		if m.jobs[i].Status == "running" || m.jobs[i].Status == "queued" {
+			m.jobs[i].Status, m.jobs[i].Message = "queued", "Paused; resumes when CryptoDesk starts"
+		}
+	}
+	m.saveDownloadsLocked()
 	m.mu.Unlock()
 	m.wg.Wait()
+	m.mu.Lock()
+	m.saveDownloadsLocked()
+	m.mu.Unlock()
 }
 
 func (m *Manager) run(ctx context.Context, directory string, done chan struct{}, workers int) {
@@ -278,6 +335,10 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 				}
 				i := next
 				next++
+				if m.jobs[i].Status != "queued" {
+					m.mu.Unlock()
+					continue
+				}
 				m.jobs[i].Status, m.jobs[i].Message = "running", "Starting Dukascopy downloader"
 				job := m.jobs[i]
 				m.mu.Unlock()
@@ -286,13 +347,25 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 				if m.jobs[i].Status == "completed" {
 					// Publication already committed atomically with its completed status.
 				} else if ctx.Err() != nil {
-					m.jobs[i].Status, m.jobs[i].Message = "cancelled", "Download cancelled"
+					if m.jobs[i].Status != "cancelled" {
+						m.jobs[i].Status, m.jobs[i].Message = "queued", "Paused; resumes from its saved checkpoint"
+					}
 				} else if err != nil {
 					m.jobs[i].Status, m.jobs[i].Message = "failed", cleanMessage(err.Error())
 				} else {
 					m.jobs[i].Status, m.jobs[i].Progress, m.jobs[i].Message, m.jobs[i].OutputPath = "completed", 100, message, output
 				}
+				saved := m.saveDownloadsLocked()
+				terminal := m.jobs[i].Status == "completed" || m.jobs[i].Status == "cancelled"
+				if m.jobs[i].Status == "failed" {
+					if _, checkpointErr := os.Stat(filepath.Join(m.jobDirectory(job), "checkpoint.json")); errors.Is(checkpointErr, os.ErrNotExist) {
+						terminal = true
+					}
+				}
 				m.mu.Unlock()
+				if saved && terminal {
+					m.cleanupJobAt(directory, job)
+				}
 			}
 		}()
 	}
@@ -309,16 +382,20 @@ type workerEvent struct {
 func (m *Manager) download(ctx context.Context, index int, job Job, directory string, sourceBatchSize int) (string, string, error) {
 	// Each worker has private WAF/session files. Removing this exclusively-owned
 	// directory also cleans atomic token-cache scratch files after cancellation.
-	jobDirectory, err := os.MkdirTemp(directory, ".cryptodesk-screener-job-"+job.ID+"-*")
+	jobDirectory, err := m.prepareJob(job)
 	if err != nil {
 		return "", "", err
 	}
-	defer os.RemoveAll(jobDirectory)
-	f, err := os.CreateTemp(jobDirectory, job.Symbol+"-*.part")
+	partial := filepath.Join(jobDirectory, "data.part")
+	if info, e := os.Lstat(partial); e == nil && !info.Mode().IsRegular() {
+		return "", "", errors.New("saved download partial must be a regular file")
+	} else if e != nil && !errors.Is(e, os.ErrNotExist) {
+		return "", "", e
+	}
+	f, err := os.OpenFile(partial, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return "", "", err
 	}
-	partial := f.Name()
 	if err = f.Close(); err != nil {
 		return "", "", err
 	}
@@ -331,10 +408,16 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		To              string `json:"to"`
 		Output          string `json:"output"`
 		SourceBatchSize int    `json:"sourceBatchSize"`
-	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize})
+		Resume          bool   `json:"resume"`
+		OwnerPipe       bool   `json:"ownerPipe"`
+	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
-	cmd.Stdin = bytes.NewReader(input)
+	owner, err := cmd.StdinPipe()
+	if err != nil {
+		return "", "", err
+	}
+	defer owner.Close()
 	cmd.WaitDelay = 2 * time.Second
 	configureProcess(cmd)
 	var stderr tailBuffer
@@ -345,6 +428,11 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	}
 	if err = cmd.Start(); err != nil {
 		return "", "", fmt.Errorf("start downloader: %w", err)
+	}
+	if _, err = owner.Write(append(input, '\n')); err != nil {
+		_ = cmd.Cancel()
+		_ = cmd.Wait()
+		return "", "", err
 	}
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 1024), 16384)
@@ -372,6 +460,7 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 			done, finalMessage = event.Rows > 0, cleanMessage(event.Message)
 		case "error":
 			workerError = cleanMessage(event.Message)
+			_ = cmd.Cancel()
 		default:
 			workerError = "Downloader returned an unknown progress event"
 			_ = cmd.Cancel()
@@ -414,10 +503,15 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 			name = fmt.Sprintf("%s-%d", base, suffix+1)
 		}
 		output := filepath.Join(directory, name+".csv")
+		m.publication[job.ID] = name + ".csv"
+		if !m.saveDownloadsLocked() {
+			return "", "", errors.New(m.stateError)
+		}
 		// Link publishes atomically on the same filesystem without replacing an
 		// existing name. Repeated downloads receive a fresh numbered filename.
 		if err = os.Link(partial, output); err == nil {
 			m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, finalMessage, output
+			m.saveDownloadsLocked()
 			return output, finalMessage, nil
 		}
 		if !errors.Is(err, os.ErrExist) {

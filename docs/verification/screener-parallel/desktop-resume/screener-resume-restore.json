@@ -1,0 +1,151 @@
+{
+  "phase": "screener-resume-restore",
+  "startedAt": "2026-10-25T12:38:50.663Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "native restart restores exact selections, period, dates, parallelism and category state",
+      "passed": true,
+      "actual": {
+        "symbols": [
+          "btcusd",
+          "ethusd"
+        ],
+        "timeframe": "m1",
+        "from": "2024-01-01",
+        "to": "2024-01-10",
+        "concurrency": 2,
+        "collapsedCategories": [
+          "Bonds 📊"
+        ]
+      }
+    },
+    {
+      "name": "native restored controls and closed category are rendered correctly",
+      "passed": true
+    },
+    {
+      "name": "btcusd resumed CSV has one header and strictly ordered unique minute candles",
+      "passed": true,
+      "actual": {
+        "rows": 11618,
+        "first": "1704143520000,43712.4,43719.5,43712.4,43719.5,0.000035",
+        "last": "1704844740000,46078.1,46088,46050.6,46058.2,0.002521"
+      }
+    },
+    {
+      "name": "ethusd resumed CSV has one header and strictly ordered unique minute candles",
+      "passed": true,
+      "actual": {
+        "rows": 11530,
+        "first": "1704142860000,2338.2,2339.2,2337.6,2338.7,0.00843",
+        "last": "1704844740000,2341.9,2342.8,2341.6,2341.8,0.04914"
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-25T12:38:51.121489179Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 3031832,
+    "goHeapInUseBytes": 4825088,
+    "goVersion": "go1.26.8",
+    "goroutines": 25,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 1.29,
+    "processTreeRSSBytes": 771751936,
+    "processTreeRootPID": 649392,
+    "processes": 9,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "jobs": [
+    {
+      "id": "91ef24762323f165699f6a05e0759a18",
+      "symbol": "btcusd",
+      "timeframe": "m1",
+      "from": "2024-01-01",
+      "to": "2024-01-10",
+      "status": "completed",
+      "progress": 100,
+      "message": "Downloaded 11,618 rows",
+      "outputPath": "/tmp/cryptodesk-screener-resume.NKLjSW/screener/btcusd-m1-2024-01-01-2024-01-10.csv"
+    },
+    {
+      "id": "f0833fff48e38648b65f67bff5c2df34",
+      "symbol": "ethusd",
+      "timeframe": "m1",
+      "from": "2024-01-01",
+      "to": "2024-01-10",
+      "status": "completed",
+      "progress": 100,
+      "message": "Downloaded 11,530 rows",
+      "outputPath": "/tmp/cryptodesk-screener-resume.NKLjSW/screener/ethusd-m1-2024-01-01-2024-01-10.csv"
+    }
+  ],
+  "view": {
+    "symbols": [
+      "btcusd",
+      "ethusd"
+    ],
+    "timeframe": "m1",
+    "from": "2024-01-01",
+    "to": "2024-01-10",
+    "concurrency": 2,
+    "collapsedCategories": [
+      "Bonds 📊"
+    ]
+  },
+  "csv": {
+    "btcusd": {
+      "rows": 11618,
+      "first": "1704143520000,43712.4,43719.5,43712.4,43719.5,0.000035",
+      "last": "1704844740000,46078.1,46088,46050.6,46058.2,0.002521"
+    },
+    "ethusd": {
+      "rows": 11530,
+      "first": "1704142860000,2338.2,2339.2,2337.6,2338.7,0.00843",
+      "last": "1704844740000,2341.9,2342.8,2341.6,2341.8,0.04914"
+    }
+  },
+  "frontend": {
+    "chartInstances": 0,
+    "consumers": 0,
+    "bufferedEvents": 0,
+    "savedTabs": 1,
+    "savedCharts": 1,
+    "revision": 1
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 0,
+      "uniqueFeeds": 0,
+      "cachedFeeds": 1,
+      "cachedCandles": 500,
+      "historyRequests": 1,
+      "queueDepth": 0,
+      "resyncs": 1,
+      "sockets": 0,
+      "reconnects": 1,
+      "restRequests": 5
+    },
+    "mode": "public live data",
+    "persistedRevision": 1,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [],
+  "finishedAt": "2026-10-25T12:39:52.278Z"
+}

@@ -70,6 +70,10 @@ export function GetScreenerCatalog() {
   return window['go']['main']['App']['GetScreenerCatalog']();
 }
 
+export function GetScreenerView() {
+  return window['go']['main']['App']['GetScreenerView']();
+}
+
 export function ImportWorkspace() {
   return window['go']['main']['App']['ImportWorkspace']();
 }
@@ -92,6 +96,14 @@ export function RecoverWorkspace(arg1) {
 
 export function ResetWorkspace() {
   return window['go']['main']['App']['ResetWorkspace']();
+}
+
+export function ResumeScreenerDownload() {
+  return window['go']['main']['App']['ResumeScreenerDownload']();
+}
+
+export function SaveScreenerView(arg1) {
+  return window['go']['main']['App']['SaveScreenerView'](arg1);
 }
 
 export function SaveWorkspace(arg1, arg2, arg3, arg4) {

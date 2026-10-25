@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const {spawn} = require('node:child_process');
+const {once} = require('node:events');
 const api = require('dukascopy-node');
 const { download } = require('./worker.cjs');
 
@@ -141,4 +143,65 @@ test('invalid internal source batch allowances fail before fetching', async t =>
   for (const sourceBatchSize of [0, -1, 5, 20, 1.5, '2']) {
     await assert.rejects(download({ ...request, sourceBatchSize }, { api: never }), /batch size/);
   }
+});
+
+test('restart skips committed source batches, truncates uncommitted tails and keeps exact ordered CSV', async t => {
+  const request = {...await fixture(t), resume:true, sourceBatchSize:2};
+  const firstFetches=[];
+  const interrupted=withTransport(async url=>{
+    firstFetches.push(url);
+    if(Number(new URL(url).pathname.split('/').at(-1))>=3)throw new Error('Explicit interrupted transport');
+    return candlePayload(url);
+  });
+  await assert.rejects(download(request,{api:interrupted,pauseMs:0,emit(){}}),/interrupted/);
+  const checkpoint=JSON.parse(await fs.promises.readFile(path.join(path.dirname(request.output),'checkpoint.json'),'utf8'));
+  assert.equal(checkpoint.nextIndex,2);assert.equal(checkpoint.rows,2);
+  const prefix=await fs.promises.readFile(request.output,'utf8');
+  await fs.promises.appendFile(request.output,'an incomplete uncommitted CSV tail');
+  const fetched=[],events=[];
+  const resumed=withTransport(async url=>{fetched.push(url);return candlePayload(url);});
+  assert.equal(await download({...request,sourceBatchSize:1},{api:resumed,pauseMs:0,emit:event=>events.push(event)}),6);
+  assert.deepEqual(fetched.map(url=>Number(new URL(url).pathname.split('/').at(-1))),[3,4,5,6]);
+  const csv=await fs.promises.readFile(request.output,'utf8');
+  assert.ok(csv.startsWith(prefix));assert.equal(csv.includes('uncommitted'),false);
+  const lines=csv.trim().split('\n');assert.equal(lines.length,7);
+  assert.deepEqual(lines.slice(1).map(line=>Number(line.split(',')[0])),Array.from({length:6},(_,i)=>Date.UTC(2024,0,i+1)));
+  assert.equal(events[0].progress,2/6*95);assert.match(events[0].message,/Resuming/);
+  assert.equal(await download(request,{api:withTransport(async()=>assert.fail('completed sources were fetched twice')),emit(){}}),6);
+  assert.equal(await fs.promises.readFile(request.output,'utf8'),csv);
+});
+
+test('truncated or mismatched saved data fails without silently restarting or changing prior rows', async t=>{
+  const request={...await fixture(t),resume:true};
+  await download(request,{api:withTransport(async url=>candlePayload(url)),pauseMs:0,emit(){}});
+  const checkpointFile=path.join(path.dirname(request.output),'checkpoint.json');
+  const checkpoint=JSON.parse(await fs.promises.readFile(checkpointFile,'utf8'));
+  const bytes=await fs.promises.readFile(request.output);
+  await fs.promises.truncate(request.output,3);
+  await assert.rejects(download(request,{api:withTransport(async()=>assert.fail('corrupt data reached transport')),emit(){}}),/shorter/);
+  assert.equal((await fs.promises.stat(request.output)).size,3);
+  await fs.promises.writeFile(request.output,bytes);
+  await fs.promises.writeFile(checkpointFile,JSON.stringify({...checkpoint,symbol:'btcusd'}));
+  await assert.rejects(download(request,{emit(){}}),/another request/);
+  assert.deepEqual(await fs.promises.readFile(request.output),bytes);
+});
+
+test('an owned worker exits when its app pipe closes, including abrupt parent shutdown', async t=>{
+  const worker=path.join(__dirname,'worker.cjs');
+  const code=`require(${JSON.stringify(worker)}).main(async()=>{process.stdout.write('READY\\n');await new Promise(()=>{});}).catch(error=>{process.stderr.write(error.message);process.exit(1);});`;
+  const child=spawn(process.execPath,['-e',code],{stdio:['pipe','pipe','pipe']});
+  t.after(()=>{if(child.exitCode===null)child.kill();});
+  const ready=once(child.stdout,'data');const exit=once(child,'exit');
+  child.stdin.write(JSON.stringify({ownerPipe:true})+'\n');
+  await ready;child.stdin.end();
+  const result=await Promise.race([exit,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('orphan worker survived owner exit')),3000);timer.unref();})]);
+  assert.equal(result[0],1);
+});
+
+test('malformed protocol exits even when the parent still owns an open input pipe',async t=>{
+  const child=spawn(process.execPath,[path.join(__dirname,'worker.cjs')],{stdio:['pipe','pipe','pipe']});
+  t.after(()=>{if(child.exitCode===null)child.kill();});
+  const exit=once(child,'exit');child.stdin.write('{not valid JSON}\n');
+  const result=await Promise.race([exit,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('invalid protocol left a hanging worker')),3000);timer.unref();})]);
+  assert.equal(result[0],1);
 });

@@ -280,10 +280,12 @@ func TestShutdownCancelsAndRejectsFutureWork(t *testing.T) {
 	}
 	waitRunning(t, manager)
 	manager.Close()
-	if manager.Info().Jobs[0].Status != "cancelled" {
-		t.Fatal("shutdown did not cancel")
+	if manager.Info().Jobs[0].Status != "queued" {
+		t.Fatal("shutdown did not pause the resumable download")
 	}
-	assertNoPartials(t, manager.Info().Directory)
+	if _, err := os.Stat(filepath.Join(manager.profile, "screener-downloads.json")); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := manager.Start(validRequest()); err == nil {
 		t.Fatal("closed manager accepted work")
 	}

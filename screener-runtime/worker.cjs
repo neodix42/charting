@@ -2,6 +2,29 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const readline = require('node:readline');
+
+async function writeCheckpoint(file, value) {
+  const temporary = `${file}.pending`;
+  const handle = await fs.promises.open(temporary, 'w', 0o600);
+  try { await handle.writeFile(JSON.stringify(value)); await handle.sync(); }
+  finally { await handle.close(); }
+  await fs.promises.rename(temporary, file);
+  // Directory fsync is supported on Unix; Windows still gets atomic rename.
+  try { const directory = await fs.promises.open(path.dirname(file), 'r'); try { await directory.sync(); } finally { await directory.close(); } }
+  catch (error) { if (!['EINVAL','EPERM','EISDIR','EACCES'].includes(error.code)) throw error; }
+}
+
+async function writeAll(handle, text, position) {
+  const buffer = Buffer.from(text);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const {bytesWritten} = await handle.write(buffer, offset, buffer.length-offset, position+offset);
+    if (!bytesWritten) throw new Error('CSV write made no progress.');
+    offset += bytesWritten;
+  }
+  return position+offset;
+}
 
 // Match getHistoricalRates using only dukascopy-node's public exports. Fetch
 // small, ordered batches so years of ticks never accumulate in memory. Each
@@ -39,30 +62,60 @@ async function download(request, options = {}) {
   const checked = api.validateConfigNode(config);
   if (!checked.isValid) throw new Error(`Invalid Dukascopy request: ${JSON.stringify(checked.validationErrors)}`);
   const input = checked.input;
-  const [startDate, endDate] = api.normaliseDates({
+  let [startDate, endDate] = api.normaliseDates({
     instrument: input.instrument, timeframe: input.timeframe,
     startDate: input.dates.from, endDate: input.dates.to, utcOffset: 0,
   });
+  const checkpointPath = path.join(path.dirname(request.output), 'checkpoint.json');
+  let checkpoint;
+  if (request.resume) {
+    try { checkpoint = JSON.parse(await fs.promises.readFile(checkpointPath, 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw new Error(`Cannot read saved download checkpoint: ${error.message}`); }
+    if (checkpoint) {
+      if (checkpoint.version !== 1 || checkpoint.symbol !== request.symbol || checkpoint.timeframe !== request.timeframe ||
+          checkpoint.from !== request.from || checkpoint.to !== request.to ||
+          !Number.isFinite(checkpoint.start) || !Number.isFinite(checkpoint.end) || checkpoint.start >= checkpoint.end ||
+          checkpoint.start < +input.dates.from || checkpoint.end > Math.min(+input.dates.to, Date.now()) ||
+          !Number.isSafeInteger(checkpoint.nextIndex) || checkpoint.nextIndex < 0 ||
+          !Number.isSafeInteger(checkpoint.bytes) || checkpoint.bytes < 0 ||
+          !Number.isSafeInteger(checkpoint.rows) || checkpoint.rows < 0 ||
+          !(checkpoint.lastTimestamp === null || Number.isFinite(checkpoint.lastTimestamp)) ||
+          !(checkpoint.header === null || typeof checkpoint.header === 'string')) {
+        throw new Error('Saved download checkpoint is invalid or belongs to another request.');
+      }
+      const expectedHeader=request.timeframe==='tick'?'timestamp,askPrice,bidPrice,askVolume,bidVolume':'timestamp,open,high,low,close,volume';
+      if(checkpoint.rows===0?(checkpoint.bytes!==0||checkpoint.header!==null||checkpoint.lastTimestamp!==null):
+        (checkpoint.bytes===0||checkpoint.header!==expectedHeader||checkpoint.nextIndex===0||checkpoint.lastTimestamp<checkpoint.start||checkpoint.lastTimestamp>=checkpoint.end)) {
+        throw new Error('Saved download checkpoint has inconsistent CSV metadata.');
+      }
+      startDate = new Date(checkpoint.start); endDate = new Date(checkpoint.end);
+    }
+  }
   const urls = api.generateUrls({ instrument: input.instrument, timeframe: input.timeframe,
     priceType: input.priceType, startDate, endDate });
   if (!urls.length) throw new Error('No available history in the requested UTC date range.');
-  const completed = new Set();
+  if (checkpoint && (checkpoint.totalSources !== urls.length || checkpoint.nextIndex > urls.length)) throw new Error('Saved checkpoint source plan changed.');
+  const completed = new Set(urls.slice(0, checkpoint?.nextIndex ?? 0));
   const fetcher = new api.BufferFetcher({ ...input, onItemFetch(url) {
     completed.add(url);
     emit({ type: 'progress', progress: Math.min(95, completed.size / urls.length * 95),
       message: `Fetched ${completed.size} of ${urls.length} source files` });
   } });
   let handle;
-  let rows = 0;
-  let previous = -Infinity;
-  let header;
+  let rows = checkpoint?.rows ?? 0;
+  let previous = checkpoint?.lastTimestamp ?? -Infinity;
+  let header = checkpoint?.header;
+  let position = checkpoint?.bytes ?? 0;
   try {
     // The Go owner created this private temporary path. It owns publication and
     // cleanup; a worker never writes a final destination or removes user files.
     handle = await fs.promises.open(request.output, 'r+');
-    await handle.truncate(0);
-    emit({ type: 'progress', progress: 0, message: `Downloading ${urls.length} source files` });
-    for (let offset = 0; offset < urls.length; offset += sourceBatchSize) {
+    if ((await handle.stat()).size < position) throw new Error('Saved CSV is shorter than its committed checkpoint. Original files retained.');
+    // Discard only an uncommitted tail. Completed source batches are never
+    // fetched or appended twice, even when the app died during the next write.
+    await handle.truncate(position);
+    emit({ type: 'progress', progress: completed.size/urls.length*95, message: `${checkpoint?'Resuming':'Downloading'} ${completed.size} of ${urls.length} source files` });
+    for (let offset = checkpoint?.nextIndex ?? 0; offset < urls.length; offset += sourceBatchSize) {
       const buffers = await fetcher.fetch(urls.slice(offset, offset + sourceBatchSize));
       const data = api.processData({ ...input, requestedTimeframe: input.timeframe,
         bufferObjects: buffers.filter(item => item.buffer.length > 0) })
@@ -81,9 +134,16 @@ async function download(request, options = {}) {
         const newline = csv.indexOf('\n');
         const nextHeader = csv.slice(0, newline);
         if (header && header !== nextHeader) throw new Error('Dukascopy changed the CSV columns during download.');
-        await handle.writeFile(`${header ? csv.slice(newline + 1) : csv}\n`);
+        position = await writeAll(handle, `${header ? csv.slice(newline + 1) : csv}\n`, position);
         header = nextHeader;
         rows += data.length;
+      }
+      if (request.resume) {
+        await handle.sync();
+        await writeCheckpoint(checkpointPath, {version:1, symbol:request.symbol, timeframe:request.timeframe,
+          from:request.from, to:request.to, start:+startDate, end:+endDate,
+          nextIndex:Math.min(offset+sourceBatchSize,urls.length),totalSources:urls.length,
+          bytes:position,rows,lastTimestamp:Number.isFinite(previous)?previous:null,header:header??null});
       }
       // Pacing between bounded batches protects the public endpoint. It does
       // not advance progress, which counts completed upstream requests only.
@@ -98,15 +158,28 @@ async function download(request, options = {}) {
   }
 }
 
-async function main() {
+async function main(downloadFn = download) {
   const browsers = path.join(__dirname, 'browsers');
   if (fs.existsSync(browsers)) process.env.PLAYWRIGHT_BROWSERS_PATH = browsers;
-  let input = '';
-  for await (const part of process.stdin) {
-    input += part;
-    if (input.length > 16384) throw new Error('Worker request exceeds the input limit.');
+  const lines = readline.createInterface({input:process.stdin,crlfDelay:Infinity});
+  let ownerRequired=false,ended=false,finished=false;
+  lines.on('close',()=>{
+    ended=true;
+    // EOF on a parent-owned pipe works on Ubuntu and Windows, including an
+    // abruptly terminated app. Chromium exits when its Node transport closes.
+    if(ownerRequired&&!finished) process.exit(1);
+  });
+  try {
+    const input = await new Promise((resolve,reject)=>{
+      lines.once('line',resolve); lines.once('error',reject);
+      lines.once('close',()=>reject(new Error('Missing worker request.')));
+    });
+    if(input.length>16384)throw new Error('Worker request exceeds the input limit.');
+    const request=JSON.parse(input);ownerRequired=request.ownerPipe===true;
+    if(ownerRequired&&ended)throw new Error('Downloader owner disconnected.');
+    await downloadFn(request);
   }
-  await download(JSON.parse(input));
+  finally { finished=true;lines.close();process.stdin.destroy(); }
 }
 
 if (require.main === module) main().catch(error => {
@@ -115,4 +188,4 @@ if (require.main === module) main().catch(error => {
   process.exitCode = 1;
 });
 
-module.exports = { download };
+module.exports = { download, main };
