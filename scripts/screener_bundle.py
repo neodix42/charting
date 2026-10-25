@@ -96,7 +96,7 @@ def browser_path(target):
 
 
 def required_files(target):
-    return {PINS[target]["executable"], "worker.cjs", "enrich-worker.cjs", "indicators.json", "package.json", "package-lock.json", "NODE-LICENSE",
+    return {PINS[target]["executable"], "worker.cjs", "enrich-worker.cjs", "refresh-worker.cjs", "indicators.json", "package.json", "package-lock.json", "NODE-LICENSE",
             "licenses/trading-signals-LICENSE", "node_modules/trading-signals/package.json", "node_modules/trading-signals/dist/index.js",
             "node_modules/csv-parse/package.json", "node_modules/csv-parse/dist/cjs/index.cjs", "node_modules/csv-parse/LICENSE",
             "THIRD_PARTY_NOTICES.md", "node_modules/dukascopy-node/package.json", "node_modules/dukascopy-node/dist/index.js",
@@ -196,7 +196,7 @@ def assemble(root, target, destination):
         stage = Path(temporary)
         runtime = stage / "runtime"
         runtime.mkdir()
-        for name in ("worker.cjs", "enrich-worker.cjs", "package.json", "package-lock.json"):
+        for name in ("worker.cjs", "enrich-worker.cjs", "refresh-worker.cjs", "package.json", "package-lock.json"):
             shutil.copy2(source / name, runtime / name)
         shutil.copy2(root / "internal/screener/indicators.json", runtime / "indicators.json")
         shutil.copytree(source / "licenses", runtime / "licenses")

@@ -3,6 +3,7 @@ import type {Backend,ScreenerCatalog,ScreenerInfo,ScreenerView} from '../types';
 import {errorText} from '../types';
 import {initialScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
 import {ScreenerEnrichment} from './ScreenerEnrichment';
+import {ScreenerAnalysis,type ScreenerAnalysisHandle} from './ScreenerAnalysis';
 
 function Selection({label,checked,partial,disabled,onChange}:{label:string;checked:boolean;partial:boolean;disabled?:boolean;onChange(value:boolean):void}){
  const input=useRef<HTMLInputElement>(null);
@@ -15,11 +16,12 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const [tab,setTab]=useState<'analysis'|'downloader'|'enrichment'>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
  const [view,setView]=useState<ScreenerView>(initialScreenerView),[viewReady,setViewReady]=useState(false),[viewError,setViewError]=useState(''),[viewReload,setViewReload]=useState(0),[query,setQuery]=useState('');
  const draft=useRef(view),writer=useRef<ScreenerViewWriter|null>(null);
+ const analysis=useRef<ScreenerAnalysisHandle>(null);
  const selected=new Set(view.symbols),collapsed=new Set(view.collapsedCategories),{timeframe,concurrency,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false);
  if(!writer.current)writer.current=new ScreenerViewWriter(value=>api.SaveScreenerView(value),error=>{if(alive.current)setViewError(errorText(error));});
- useImperativeHandle(ref,()=>({flush:()=>writer.current!.flush()}),[]);
+ useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await analysis.current?.flush();}}),[]);
  useEffect(()=>{alive.current=true;lifetime.current++;return ()=>{alive.current=false;lifetime.current++;};},[]);
  useEffect(()=>{if(!visible||viewReady)return;let active=true;void Promise.resolve().then(()=>api.GetScreenerView()).then(value=>{if(active){draft.current=value;setView(value);setViewReady(true);setViewError('');}}).catch(error=>{if(active)setViewError(errorText(error));});return ()=>{active=false;};},[api,visible,viewReady,viewReload]);
  const changeView=(patch:Partial<ScreenerView>)=>{const next={...draft.current,...patch};draft.current=next;setView(next);setViewError('');writer.current!.edit(next);};
@@ -54,7 +56,7 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const invalidConcurrency=!Number.isInteger(concurrency)||concurrency<1||concurrency>20;
  return <section id="screener-panel" className="screener" role="tabpanel" aria-label="Screener" hidden={!visible}>
   <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>setTab('enrichment')}>Enrichment</button></div></div>
-  <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"/>
+  <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"><ScreenerAnalysis ref={analysis} api={api} visible={visible&&tab==='analysis'}/></div>
   <div id="screener-enrichment" role="tabpanel" aria-labelledby="screener-enrichment-tab" hidden={tab!=='enrichment'}><ScreenerEnrichment api={api} visible={visible&&tab==='enrichment'}/></div>
   <div id="screener-downloader" role="tabpanel" aria-labelledby="screener-downloader-tab" hidden={tab!=='downloader'}>
    {(catalogError||infoError||actionError||viewError||info?.error||info&&!info.runtimeAvailable)&&<div className="screener-error" role="alert">{actionError||catalogError||infoError||viewError||info?.error||info?.runtimeError||'The Dukascopy downloader runtime is unavailable.'}{viewError&&<button type="button" onClick={()=>{if(viewReady)void writer.current!.flush().then(()=>setViewError('')).catch(error=>setViewError(errorText(error)));else setViewReload(value=>value+1);}}>Retry saving Screener choices</button>}{(catalogError||infoError||!info?.runtimeAvailable)&&<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry downloader</button>}</div>}

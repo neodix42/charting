@@ -16,15 +16,17 @@ import (
 )
 
 type DataFile struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Symbol    string   `json:"symbol,omitempty"`
-	Timeframe string   `json:"timeframe,omitempty"`
-	From      string   `json:"from,omitempty"`
-	To        string   `json:"to,omitempty"`
-	Fields    []string `json:"fields"`
-	Bytes     int64    `json:"bytes"`
-	Error     string   `json:"error,omitempty"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Symbol         string   `json:"symbol,omitempty"`
+	Timeframe      string   `json:"timeframe,omitempty"`
+	From           string   `json:"from,omitempty"`
+	To             string   `json:"to,omitempty"`
+	FirstTimestamp int64    `json:"firstTimestamp,omitempty"`
+	LastTimestamp  int64    `json:"lastTimestamp,omitempty"`
+	Fields         []string `json:"fields"`
+	Bytes          int64    `json:"bytes"`
+	Error          string   `json:"error,omitempty"`
 }
 
 type FilePage struct {
@@ -107,6 +109,9 @@ func describeFile(directory, name string) DataFile {
 		seen[normalized], header[i] = true, field
 	}
 	file.Fields = header
+	if metadata, err := readFileMetadata(directory, name); err == nil && metadataMatches(metadata, info) {
+		file.FirstTimestamp, file.LastTimestamp = metadata.FirstTimestamp, metadata.LastTimestamp
+	}
 	return file
 }
 

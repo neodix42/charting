@@ -6,12 +6,20 @@ export function AttachChart(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AttachChart'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CancelScreenerAnalysis() {
+  return window['go']['main']['App']['CancelScreenerAnalysis']();
+}
+
 export function CancelScreenerDownload() {
   return window['go']['main']['App']['CancelScreenerDownload']();
 }
 
 export function CancelScreenerEnrichment() {
   return window['go']['main']['App']['CancelScreenerEnrichment']();
+}
+
+export function CancelScreenerRefresh() {
+  return window['go']['main']['App']['CancelScreenerRefresh']();
 }
 
 export function ChooseCandleStorageDirectory() {
@@ -70,6 +78,22 @@ export function GetScreener() {
   return window['go']['main']['App']['GetScreener']();
 }
 
+export function GetScreenerAnalysis(arg1, arg2) {
+  return window['go']['main']['App']['GetScreenerAnalysis'](arg1, arg2);
+}
+
+export function GetScreenerAnalysisCatalog() {
+  return window['go']['main']['App']['GetScreenerAnalysisCatalog']();
+}
+
+export function GetScreenerAnalysisChart(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetScreenerAnalysisChart'](arg1, arg2, arg3, arg4);
+}
+
+export function GetScreenerAnalysisView() {
+  return window['go']['main']['App']['GetScreenerAnalysisView']();
+}
+
 export function GetScreenerCatalog() {
   return window['go']['main']['App']['GetScreenerCatalog']();
 }
@@ -84,6 +108,10 @@ export function GetScreenerFiles(arg1, arg2) {
 
 export function GetScreenerIndicators() {
   return window['go']['main']['App']['GetScreenerIndicators']();
+}
+
+export function GetScreenerRefresh(arg1) {
+  return window['go']['main']['App']['GetScreenerRefresh'](arg1);
 }
 
 export function GetScreenerView() {
@@ -118,6 +146,10 @@ export function ResumeScreenerDownload() {
   return window['go']['main']['App']['ResumeScreenerDownload']();
 }
 
+export function SaveScreenerAnalysisView(arg1) {
+  return window['go']['main']['App']['SaveScreenerAnalysisView'](arg1);
+}
+
 export function SaveScreenerView(arg1) {
   return window['go']['main']['App']['SaveScreenerView'](arg1);
 }
@@ -126,10 +158,18 @@ export function SaveWorkspace(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveWorkspace'](arg1, arg2, arg3, arg4);
 }
 
+export function StartScreenerAnalysis(arg1) {
+  return window['go']['main']['App']['StartScreenerAnalysis'](arg1);
+}
+
 export function StartScreenerDownload(arg1) {
   return window['go']['main']['App']['StartScreenerDownload'](arg1);
 }
 
 export function StartScreenerEnrichment(arg1) {
   return window['go']['main']['App']['StartScreenerEnrichment'](arg1);
+}
+
+export function StartScreenerRefresh() {
+  return window['go']['main']['App']['StartScreenerRefresh']();
 }

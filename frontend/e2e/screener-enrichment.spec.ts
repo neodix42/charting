@@ -17,7 +17,7 @@ test('Enrichment loads CSV periods and comma separated headers only when opened,
  await page.goto('/');
  expect(await page.evaluate(()=>(window as any).__testEnrichmentReads())).toBe(0);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
- await expect(page.locator('#screener-analysis')).toBeEmpty();
+ await expect(page.locator('#screener-analysis').getByRole('heading',{name:'Visual condition rows',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>(window as any).__testEnrichmentReads())).toBe(0);
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles([value]),file(0));
  await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
@@ -41,14 +41,14 @@ test('SMA enrichment submits parameters for all files and displays per-file prog
  await expect(row.getByRole('progressbar')).toHaveAttribute('value','42');
  await expect(row).toContainText('Calculated 100 rows');
  await expect(page.getByLabel('Period',{exact:true})).toBeDisabled();
- await page.getByRole('tab',{name:'Analysis',exact:true}).click();await expect(page.locator('#screener-analysis')).toBeEmpty();
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();await expect(page.locator('#screener-analysis').getByRole('heading',{name:'Visual condition rows',exact:true})).toBeVisible();
  await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(row.getByRole('progressbar')).toHaveAttribute('value','42');
  await page.evaluate(()=>{const files=(window as any).__testEnrichmentFiles() as ScreenerDataFile[];(window as any).__testSetEnrichmentFiles(files.map(file=>({...file,fields:[...file.fields,'sma_3']})));});
  await progress(page,{active:false,completed:2,currentFile:'',currentProgress:0,jobs:info.jobs.map(job=>({...job,status:'completed',progress:100,rows:200,columns:['sma_3'],message:'Enriched 200 rows',backupPath:'/explicit-test/screener/.cryptodesk-enrichment-backups/original.csv'}))});
  await expect(panel(page).getByText('2 / 2 complete · 0 failed',{exact:true})).toBeVisible();
  await expect(row.locator('td').nth(2)).toContainText('volume, sma_3');
- await expect(row).toContainText('Original saved in .cryptodesk-enrichment-backups');
+ await expect(row).toContainText('Original backup retained');
  await expect(page.getByRole('button',{name:'Enrich 2 files',exact:true})).toBeEnabled();
  await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(panel(page).locator('tbody tr').first().locator('td').nth(2)).toContainText('volume, sma_3');
@@ -119,12 +119,12 @@ test('missing runtime, folder errors and start failures are reported without cha
  await expect(panel(page).getByRole('alert')).toContainText('Explicit read-only folder');
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toBeNull();
  await page.evaluate(()=>(window as any).__testEnrichmentErrors('Explicit folder unavailable',''));
- await page.getByRole('button',{name:'Refresh files',exact:true}).click();
+ await page.getByRole('button',{name:'Reload file list',exact:true}).click();
  await expect(panel(page).getByRole('alert')).toContainText('Explicit read-only folder');
- await page.getByRole('button',{name:'Refresh enrichment',exact:true}).click();
+ await page.getByRole('button',{name:'Retry loading',exact:true}).click();
  await expect(panel(page).getByRole('alert')).toContainText('Explicit folder unavailable');
  await page.evaluate(()=>(window as any).__testEnrichmentErrors('',''));
- await page.getByRole('button',{name:'Refresh enrichment',exact:true}).click();
+ await page.getByRole('button',{name:'Retry loading',exact:true}).click();
  await expect(panel(page).getByRole('alert')).toHaveCount(0);
 });
 

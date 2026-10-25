@@ -1,0 +1,199 @@
+{
+  "phase": "screener-resume",
+  "startedAt": "2026-10-25T16:29:53.392Z",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15 wails.io/605.1.15",
+  "checks": [
+    {
+      "name": "production public-data mode",
+      "passed": true,
+      "actual": false
+    },
+    {
+      "name": "close while both actual parallel downloads are unfinished",
+      "passed": true,
+      "actual": {
+        "directory": "/tmp/cryptodesk-screener-resume.y5UBZJ/screener",
+        "runtimeAvailable": true,
+        "jobs": [
+          {
+            "id": "21f13540f8d3ca0ef66663d79b236ccc",
+            "symbol": "btcusd",
+            "timeframe": "m1",
+            "from": "2024-01-01",
+            "to": "2024-01-10",
+            "status": "running",
+            "progress": 42.22222222222222,
+            "message": "Fetched 4 of 9 source files"
+          },
+          {
+            "id": "526bc9962a25339187c890cc30084c08",
+            "symbol": "ethusd",
+            "timeframe": "m1",
+            "from": "2024-01-01",
+            "to": "2024-01-10",
+            "status": "running",
+            "progress": 42.22222222222222,
+            "message": "Fetched 4 of 9 source files"
+          }
+        ],
+        "concurrency": 2,
+        "maxConcurrency": 20,
+        "active": true
+      }
+    },
+    {
+      "name": "real CSV prefixes committed before closing",
+      "passed": true,
+      "actual": {
+        "btcusd": {
+          "bytes": 241347,
+          "end": 1704844800000,
+          "from": "2024-01-01",
+          "header": "timestamp,open,high,low,close,volume",
+          "lastTimestamp": 1704412740000,
+          "nextIndex": 4,
+          "rows": 4448,
+          "start": 1704067200000,
+          "symbol": "btcusd",
+          "timeframe": "m1",
+          "to": "2024-01-10",
+          "totalSources": 9,
+          "version": 1
+        },
+        "ethusd": {
+          "bytes": 221818,
+          "end": 1704844800000,
+          "from": "2024-01-01",
+          "header": "timestamp,open,high,low,close,volume",
+          "lastTimestamp": 1704412740000,
+          "nextIndex": 4,
+          "rows": 4425,
+          "start": 1704067200000,
+          "symbol": "ethusd",
+          "timeframe": "m1",
+          "to": "2024-01-10",
+          "totalSources": 9,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "passed": true,
+  "initialCounts": {
+    "tabs": 1,
+    "charts": [
+      1
+    ]
+  },
+  "initialMetrics": {
+    "at": "2026-10-25T16:29:53.842544013Z",
+    "cpuAccounting": "active process CPU plus waited-child CPU",
+    "display": ":0",
+    "goHeapBytes": 2943024,
+    "goHeapInUseBytes": 4505600,
+    "goVersion": "go1.26.8",
+    "goroutines": 18,
+    "logicalCPUs": 32,
+    "processTreeCPUSeconds": 0.93,
+    "processTreeRSSBytes": 591245312,
+    "processTreeRootPID": 1278837,
+    "processes": 7,
+    "rssAccounting": "sum of all OS-thread descendants; shared pages counted per process",
+    "sessionType": "wayland",
+    "waylandDisplay": "wayland-0"
+  },
+  "checkpoints": {
+    "btcusd": {
+      "bytes": 241347,
+      "end": 1704844800000,
+      "from": "2024-01-01",
+      "header": "timestamp,open,high,low,close,volume",
+      "lastTimestamp": 1704412740000,
+      "nextIndex": 4,
+      "rows": 4448,
+      "start": 1704067200000,
+      "symbol": "btcusd",
+      "timeframe": "m1",
+      "to": "2024-01-10",
+      "totalSources": 9,
+      "version": 1
+    },
+    "ethusd": {
+      "bytes": 221818,
+      "end": 1704844800000,
+      "from": "2024-01-01",
+      "header": "timestamp,open,high,low,close,volume",
+      "lastTimestamp": 1704412740000,
+      "nextIndex": 4,
+      "rows": 4425,
+      "start": 1704067200000,
+      "symbol": "ethusd",
+      "timeframe": "m1",
+      "to": "2024-01-10",
+      "totalSources": 9,
+      "version": 1
+    }
+  },
+  "jobs": [
+    {
+      "id": "21f13540f8d3ca0ef66663d79b236ccc",
+      "symbol": "btcusd",
+      "timeframe": "m1",
+      "from": "2024-01-01",
+      "to": "2024-01-10",
+      "status": "running",
+      "progress": 42.22222222222222,
+      "message": "Fetched 4 of 9 source files"
+    },
+    {
+      "id": "526bc9962a25339187c890cc30084c08",
+      "symbol": "ethusd",
+      "timeframe": "m1",
+      "from": "2024-01-01",
+      "to": "2024-01-10",
+      "status": "running",
+      "progress": 42.22222222222222,
+      "message": "Fetched 4 of 9 source files"
+    }
+  ],
+  "view": {
+    "symbols": [
+      "btcusd",
+      "ethusd"
+    ],
+    "timeframe": "m1",
+    "from": "2024-01-01",
+    "to": "2024-01-10",
+    "concurrency": 2,
+    "collapsedCategories": [
+      "Bonds 📊"
+    ]
+  },
+  "frontend": {
+    "chartInstances": 0,
+    "consumers": 0,
+    "bufferedEvents": 0,
+    "savedTabs": 1,
+    "savedCharts": 1,
+    "revision": 1
+  },
+  "backend": {
+    "market": {
+      "activeLeases": 0,
+      "uniqueFeeds": 0,
+      "cachedFeeds": 1,
+      "cachedCandles": 500,
+      "historyRequests": 1,
+      "queueDepth": 0,
+      "resyncs": 1,
+      "sockets": 0,
+      "reconnects": 1,
+      "restRequests": 5
+    },
+    "mode": "public live data",
+    "persistedRevision": 1,
+    "version": "0.1.0"
+  },
+  "feedStatuses": [],
+  "finishedAt": "2026-10-25T16:30:38.487Z"
+}

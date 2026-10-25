@@ -110,6 +110,12 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if m.enrichmentActive {
 		return m.enrichmentInfoLocked(nil), errors.New("an enrichment batch is already running")
 	}
+	if m.refreshActive {
+		return m.enrichmentInfoLocked(nil), errors.New("finish or cancel the data refresh before enriching files")
+	}
+	if m.analysisActiveLocked() {
+		return m.enrichmentInfoLocked(nil), errors.New("finish or cancel Analysis before changing its data files")
+	}
 	if message := m.enrichmentRuntimeError(); message != "" {
 		return m.enrichmentInfoLocked(nil), errors.New(message)
 	}
@@ -189,6 +195,10 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	if err != nil || !original.Mode().IsRegular() {
 		return errors.New("source CSV is no longer a regular file")
 	}
+	metadataState, err := readFileMetadata(directory, job.Name)
+	if err != nil {
+		return err
+	}
 	work, err := os.MkdirTemp(directory, ".cryptodesk-enrichment-*")
 	if err != nil {
 		return fmt.Errorf("create enrichment temporary folder: %w", err)
@@ -227,11 +237,13 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 		return err
 	}
 	var result struct {
-		Type     string   `json:"type"`
-		Progress float64  `json:"progress"`
-		Rows     int64    `json:"rows"`
-		Columns  []string `json:"columns"`
-		Message  string   `json:"message"`
+		Type          string   `json:"type"`
+		Progress      float64  `json:"progress"`
+		Rows          int64    `json:"rows"`
+		Columns       []string `json:"columns"`
+		Message       string   `json:"message"`
+		Checksum      string   `json:"checksum"`
+		InputChecksum string   `json:"inputChecksum"`
 	}
 	var done bool
 	var workerError string
@@ -318,6 +330,20 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	}
 	if err = unchangedFile(source, original); err != nil {
 		return err
+	}
+	outputInfo, err := os.Stat(output)
+	if err != nil {
+		return err
+	}
+	metadataState.Verified = metadataState.Verified && metadataMatches(metadataState, original) && metadataState.Checksum != "" && metadataState.Checksum == result.InputChecksum
+	if !metadataState.Verified {
+		metadataState.CheckedThrough = 0
+	}
+	metadataState.Bytes, metadataState.Modified = outputInfo.Size(), outputInfo.ModTime().UnixNano()
+	metadataState.Checksum = result.Checksum
+	metadataState.Recipes = addRecipe(metadataState.Recipes, request)
+	if err = writeFileMetadata(directory, job.Name, metadataState); err != nil {
+		return fmt.Errorf("save applied indicator recipe (original kept): %w", err)
 	}
 	if err = os.Rename(output, source); err != nil {
 		return fmt.Errorf("publish enriched CSV (original kept): %w", err)

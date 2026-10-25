@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const {createHash}=require('node:crypto');
 const { parse } = require('csv-parse');
 const { main } = require('./worker.cjs');
 
@@ -134,11 +135,14 @@ async function enrich(request, options = {}) {
   const info = await fsp.lstat(request.input);
   if (!info.isFile()) throw new Error('CSV input must be a regular file.');
   const stream = fs.createReadStream(request.input);
+  const inputChecksum=createHash('sha256');
+  stream.on('data',chunk=>inputChecksum.update(chunk));
   const parser = parse({bom:true,max_record_size:1024*1024,skip_empty_lines:true,info:true});
   stream.on('error', error => parser.destroy(error));
   stream.pipe(parser);
   let handle, calculate, headers, positions, timestampIndex = -1, previous = -Infinity, rows = 0, usable = 0;
   let buffer = '', bufferedBytes = 0, lastProgress = 0;
+  const checksum=createHash('sha256');
   try {
     // Exclusive output creation cannot overwrite the original or an existing
     // temporary file. Go publishes only after a successful exit and fsync.
@@ -153,6 +157,7 @@ async function enrich(request, options = {}) {
         const nextHeader = [...headers];
         positions = positions.map((index,i) => index < 0 ? nextHeader.push(calculate.columns[i]) - 1 : index);
         buffer = line(nextHeader);
+        checksum.update(buffer);
         bufferedBytes = Buffer.byteLength(buffer);
         report({type:'progress',progress:0,rows:0,columns:calculate.columns,message:`Adding ${calculate.columns.join(', ')}`});
         continue;
@@ -168,6 +173,7 @@ async function enrich(request, options = {}) {
       const next = [...record];
       positions.forEach((index,i) => {next[index] = values[i];});
       const serialized = line(next);
+      checksum.update(serialized);
       buffer += serialized;
       bufferedBytes += Buffer.byteLength(serialized);
       rows++;
@@ -181,7 +187,7 @@ async function enrich(request, options = {}) {
     if (!headers || !rows) throw new Error('CSV has no data rows.');
     if (buffer) await writeAll(handle, buffer);
     await handle.sync();
-    const result = {type:'done',rows,columns:calculate.columns,message:`Enriched ${rows.toLocaleString('en-US')} rows; ${usable.toLocaleString('en-US')} rows with values${usable ? '' : ' (warm-up or undefined indicator results)'}`};
+    const result = {type:'done',rows,columns:calculate.columns,checksum:checksum.digest('hex'),inputChecksum:inputChecksum.digest('hex'),message:`Enriched ${rows.toLocaleString('en-US')} rows; ${usable.toLocaleString('en-US')} rows with values${usable ? '' : ' (warm-up or undefined indicator results)'}`};
     report(result);
     return result;
   } finally {
@@ -196,4 +202,4 @@ if (require.main === module) main(enrich).catch(error => {
   process.exitCode=1;
 });
 
-module.exports = {enrich,calculator,validate,catalog};
+module.exports = {enrich,calculator,validate,catalog,key,line,writeAll};

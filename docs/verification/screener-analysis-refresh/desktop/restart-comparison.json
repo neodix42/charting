@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "refreshedCSVsUnchanged": true,
+  "rulesRestored": true,
+  "allMatchCountsPreserved": true,
+  "sha256": {
+    "btcusd": "5ed25570c98fff86ee03b46d5efb09b4c609c85e9cb527fa427f07db2a503a07",
+    "ethusd": "0abd557651a69580a93b7627e21aec6527ade4aac5a89e5ed3c98b67cec1a3c5"
+  }
+}

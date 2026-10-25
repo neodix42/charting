@@ -1,0 +1,4812 @@
+{
+  "config": {
+    "argv": [
+      "/home/neodix/gitProjects/charting/.tools/node-v24.19.0-linux-x64/bin/node",
+      "/home/neodix/gitProjects/charting/frontend/node_modules/.bin/playwright",
+      "test"
+    ],
+    "configFile": "/home/neodix/gitProjects/charting/frontend/playwright.config.ts",
+    "rootDir": "/home/neodix/gitProjects/charting/frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/neodix/gitProjects/charting/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/home/neodix/gitProjects/charting/frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 180000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/home/neodix/gitProjects/charting/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "/home/neodix/gitProjects/charting/frontend/e2e",
+        "snapshotDir": "/home/neodix/gitProjects/charting/frontend/e2e",
+        "testIgnore": [],
+        "testMatch": "**/*.@(spec|test).?(c|m)[jt]s?(x)",
+        "timeout": 180000,
+        "use": {
+          "baseURL": "http://127.0.0.1:4173",
+          "viewport": {
+            "width": 1600,
+            "height": 1000
+          },
+          "headless": true,
+          "screenshot": "only-on-failure",
+          "trace": "retain-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "app-version.spec.ts",
+      "file": "app-version.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "release version sits beside the brand without overlapping header controls at 1600px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 986,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:10.074Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "68e08d9d75d8323759c8-efca11951c9243e96545",
+          "file": "app-version.spec.ts",
+          "line": 22,
+          "column": 74
+        },
+        {
+          "title": "release version sits beside the brand without overlapping header controls at 1100px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 643,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:11.157Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "68e08d9d75d8323759c8-4ae69ae5a7701743b591",
+          "file": "app-version.spec.ts",
+          "line": 22,
+          "column": 74
+        },
+        {
+          "title": "production header and build metadata contain the same resolved release tag",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 331,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:11.810Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "68e08d9d75d8323759c8-7fbd105d855eaa88a234",
+          "file": "app-version.spec.ts",
+          "line": 27,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "candle-storage.spec.ts",
+      "file": "candle-storage.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "local candle storage defaults off, applies a selected folder explicitly, refreshes size and restores outside workspace JSON",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1962,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:12.157Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a40b7fe6f97f386bcca4-3e2d4149a041c9a8d4cf",
+          "file": "candle-storage.spec.ts",
+          "line": 6,
+          "column": 1
+        },
+        {
+          "title": "storage errors stay visible and a failed apply preserves the applied configuration",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1507,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:14.130Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a40b7fe6f97f386bcca4-187cdfa0585be79cedc3",
+          "file": "candle-storage.spec.ts",
+          "line": 18,
+          "column": 1
+        },
+        {
+          "title": "size polling runs only for enabled visible settings and never overwrites pending folder edits",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1471,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:15.648Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a40b7fe6f97f386bcca4-bc2e6a124d4598e52da2",
+          "file": "candle-storage.spec.ts",
+          "line": 26,
+          "column": 1
+        },
+        {
+          "title": "a delayed size response cannot replace a newer applied folder or a reopened settings session",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1726,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:17.127Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a40b7fe6f97f386bcca4-69a4ab0ba256ad2ba324",
+          "file": "candle-storage.spec.ts",
+          "line": 32,
+          "column": 1
+        },
+        {
+          "title": "an applied storage startup error can retry the same configuration without editing the folder",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1289,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:18.866Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a40b7fe6f97f386bcca4-5b64cdb439888af80365",
+          "file": "candle-storage.spec.ts",
+          "line": 38,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "chart-close.spec.ts",
+      "file": "chart-close.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "chart X has a larger hit target and removes one chart immediately with persistence and lease cleanup",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2106,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:20.168Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "cd3aba065b9752e6dd6a-cd497f473252f88bdc26",
+          "file": "chart-close.spec.ts",
+          "line": 14,
+          "column": 1
+        },
+        {
+          "title": "closing the maximized chart immediately restores its remaining siblings and protects the final chart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3056,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:22.284Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "cd3aba065b9752e6dd6a-d2466b22921501e2192a",
+          "file": "chart-close.spec.ts",
+          "line": 30,
+          "column": 1
+        },
+        {
+          "title": "rapid chart X clicks stay immediate during a pending save and retain the final chart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1925,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:25.347Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "cd3aba065b9752e6dd6a-19253749002818bce765",
+          "file": "chart-close.spec.ts",
+          "line": 45,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "drawing-move.spec.ts",
+      "file": "drawing-move.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "double-click moves a arrowUp without jumping and saves its existing identity and anchors across restart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2977,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:34.369Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-e5e95fc703ec7d77759c",
+          "file": "drawing-move.spec.ts",
+          "line": 70,
+          "column": 2
+        },
+        {
+          "title": "double-click moves a arrowDown without jumping and saves its existing identity and anchors across restart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2385,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:37.427Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-26b37194bdff6f351ebb",
+          "file": "drawing-move.spec.ts",
+          "line": 70,
+          "column": 2
+        },
+        {
+          "title": "double-click moves a horizontal without jumping and saves its existing identity and anchors across restart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2427,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:39.824Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-b832e5db3bcb1076dac4",
+          "file": "drawing-move.spec.ts",
+          "line": 70,
+          "column": 2
+        },
+        {
+          "title": "double-click moves a trendline without jumping and saves its existing identity and anchors across restart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2446,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:42.260Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-43c04c1aa78f90135e81",
+          "file": "drawing-move.spec.ts",
+          "line": 70,
+          "column": 2
+        },
+        {
+          "title": "Escape, Cursor, and choosing another drawing tool cancel movement without saving a preview",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4110,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:44.715Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-bd658c536b50fd945e53",
+          "file": "drawing-move.spec.ts",
+          "line": 104,
+          "column": 1
+        },
+        {
+          "title": "ordinary dragging pans the chart and a double-click away from a drawing never selects it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2597,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:48.834Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-acedfc46ff739351b9a0",
+          "file": "drawing-move.spec.ts",
+          "line": 120,
+          "column": 1
+        },
+        {
+          "title": "a new live candle preserves an active move and only placing commits its final anchors",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2003,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:51.442Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-405e601aa758349ea9d0",
+          "file": "drawing-move.spec.ts",
+          "line": 131,
+          "column": 1
+        },
+        {
+          "title": "a move affects only its chart and leaving a tab discards its unplaced preview and drawing layer",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3220,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:53.457Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-6775121c898b9f2b0dfa",
+          "file": "drawing-move.spec.ts",
+          "line": 150,
+          "column": 1
+        },
+        {
+          "title": "instrument and timeframe changes cancel movement and preserve the drawing in its original market scope",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2860,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:56.686Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "137494581a3b49559108-0c30c5ebf3dc06706b14",
+          "file": "drawing-move.spec.ts",
+          "line": 171,
+          "column": 1
+        }
+      ],
+      "suites": [
+        {
+          "title": "drawing movement through transformed price panes",
+          "file": "drawing-move.spec.ts",
+          "line": 189,
+          "column": 6,
+          "specs": [
+            {
+              "title": "a midpoint grab translates a trendline in a logarithmic line chart with a MACD pane",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3652,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-25T16:26:59.554Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "137494581a3b49559108-b3b74a9c673cc4dd1da3",
+              "file": "drawing-move.spec.ts",
+              "line": 190,
+              "column": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "drawing-selection.spec.ts",
+      "file": "drawing-selection.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "a single click selects arrowUp without moving it and Delete removes only that item permanently",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2163,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:03.668Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-67625125e9eb45611ca0",
+          "file": "drawing-selection.spec.ts",
+          "line": 83,
+          "column": 2
+        },
+        {
+          "title": "a single click selects arrowDown without moving it and Delete removes only that item permanently",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1932,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:05.909Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-7116d7e9effaaeaa36a8",
+          "file": "drawing-selection.spec.ts",
+          "line": 83,
+          "column": 2
+        },
+        {
+          "title": "a single click selects horizontal without moving it and Delete removes only that item permanently",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2036,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:07.852Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-ace13e73c1c7fd4787a1",
+          "file": "drawing-selection.spec.ts",
+          "line": 83,
+          "column": 2
+        },
+        {
+          "title": "a single click selects trendline without moving it and Delete removes only that item permanently",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2067,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:09.898Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-0c8333d197d06583db2a",
+          "file": "drawing-selection.spec.ts",
+          "line": 83,
+          "column": 2
+        },
+        {
+          "title": "the toolbar deletes the selected arrow, while Delete in a text input or open dialog preserves it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3036,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:11.972Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-de72e7718f01558805ae",
+          "file": "drawing-selection.spec.ts",
+          "line": 101,
+          "column": 1
+        },
+        {
+          "title": "toolbar and legacy Del key deletion preserve other drawings on the same chart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3035,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:15.015Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-80a615f0c92029a8c781",
+          "file": "drawing-selection.spec.ts",
+          "line": 121,
+          "column": 1
+        },
+        {
+          "title": "dragging trendline endpoint 1 changes only that anchor and restores its new position",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2497,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:18.057Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-124185395fe4d895a3b8",
+          "file": "drawing-selection.spec.ts",
+          "line": 133,
+          "column": 26
+        },
+        {
+          "title": "dragging trendline endpoint 2 changes only that anchor and restores its new position",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2496,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:20.561Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-273c427c03f6a2175258",
+          "file": "drawing-selection.spec.ts",
+          "line": 133,
+          "column": 26
+        },
+        {
+          "title": "horizontal line endpoint handles shorten the full-width line to a saved finite horizontal segment",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4504,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:23.065Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-5017425996690a224c9f",
+          "file": "drawing-selection.spec.ts",
+          "line": 158,
+          "column": 1
+        },
+        {
+          "title": "Escape and pointer cancellation discard endpoint previews without saving or leaving chart interactions blocked",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3996,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:27.576Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-344c200ba33b8b2dd588",
+          "file": "drawing-selection.spec.ts",
+          "line": 197,
+          "column": 1
+        },
+        {
+          "title": "dragging a selected line body pans normally and clicking empty space clears selection",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2297,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:31.584Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-7f4370f0e4dd0d247d0c",
+          "file": "drawing-selection.spec.ts",
+          "line": 216,
+          "column": 1
+        },
+        {
+          "title": "only one chart owns selection and keyboard deletion, and tab switches dispose endpoint edits",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3420,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:33.890Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-055432a8ae80578d6dae",
+          "file": "drawing-selection.spec.ts",
+          "line": 228,
+          "column": 1
+        },
+        {
+          "title": "changing market or timeframe clears line selection and removing a selected chart leaves no keyboard owner",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4104,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:37.317Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7a96ed4669311e41d5ff-ddb62c73839135e78182",
+          "file": "drawing-selection.spec.ts",
+          "line": 249,
+          "column": 1
+        }
+      ],
+      "suites": [
+        {
+          "title": "endpoint interaction at physical display density 2",
+          "file": "drawing-selection.spec.ts",
+          "line": 275,
+          "column": 6,
+          "specs": [
+            {
+              "title": "a trendline handle in a lower grid row with a MACD pane stays under the pointer",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3168,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-25T16:27:41.429Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "7a96ed4669311e41d5ff-65317400b1cf32cbf261",
+              "file": "drawing-selection.spec.ts",
+              "line": 276,
+              "column": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "drawings.spec.ts",
+      "file": "drawings.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "drawing previews and committed arrow tips and line anchors stay at the pointer position",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3278,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:45.026Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "551ec5222796f095c0ec-bce08d9a54c215a135fd",
+          "file": "drawings.spec.ts",
+          "line": 74,
+          "column": 1
+        },
+        {
+          "title": "each chart draws both arrows, a horizontal line and a two-point trendline, and restores their price/time anchors",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3078,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:53.131Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "551ec5222796f095c0ec-e435d6107e85674530a8",
+          "file": "drawings.spec.ts",
+          "line": 113,
+          "column": 1
+        },
+        {
+          "title": "Escape cancels an unfinished trendline and returns the chart to ordinary cursor interaction",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1942,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:56.216Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "551ec5222796f095c0ec-3d59dc1f689e09ee3a2e",
+          "file": "drawings.spec.ts",
+          "line": 146,
+          "column": 1
+        },
+        {
+          "title": "drawings remain independent per chart, and tab switches dispose hidden drawing layers and market consumers",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4423,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:27:58.166Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "551ec5222796f095c0ec-a3d365cef6eb5fc3d83e",
+          "file": "drawings.spec.ts",
+          "line": 163,
+          "column": 1
+        },
+        {
+          "title": "drawings follow time and price through zoom and resize while market changes preserve their original scope",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3462,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:28:02.599Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "551ec5222796f095c0ec-acfb63f339751171944f",
+          "file": "drawings.spec.ts",
+          "line": 195,
+          "column": 1
+        },
+        {
+          "title": "a line chart accepts drawings in future whitespace and keeps their anchors when a new candle arrives",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2045,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:28:06.069Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "551ec5222796f095c0ec-f418a116d58aaa44f96d",
+          "file": "drawings.spec.ts",
+          "line": 231,
+          "column": 1
+        }
+      ],
+      "suites": [
+        {
+          "title": "high-density chart drawing pointer alignment",
+          "file": "drawings.spec.ts",
+          "line": 83,
+          "column": 6,
+          "specs": [
+            {
+              "title": "a lower grid row with multiple MACD panes keeps previews and saved drawings under the pointer",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4739,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-25T16:27:48.383Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "551ec5222796f095c0ec-4856521911850f77a062",
+              "file": "drawings.spec.ts",
+              "line": 84,
+              "column": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "header-stability.spec.ts",
+      "file": "header-stability.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "save state changes keep header actions stationary at 1600px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1002,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:27.285Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d38166c9421b6381f2ee-c7ae6b1c69ee989c07df",
+          "file": "header-stability.spec.ts",
+          "line": 26,
+          "column": 2
+        },
+        {
+          "title": "add-tab plus stays adjacent through editing and reaches twenty tabs at 1600px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5078,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:28.294Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d38166c9421b6381f2ee-33b76d1537c93276c972",
+          "file": "header-stability.spec.ts",
+          "line": 37,
+          "column": 2
+        },
+        {
+          "title": "save state changes keep header actions stationary at 1100px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 970,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:33.381Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d38166c9421b6381f2ee-f14b45810d9e1b9ab0ce",
+          "file": "header-stability.spec.ts",
+          "line": 26,
+          "column": 2
+        },
+        {
+          "title": "add-tab plus stays adjacent through editing and reaches twenty tabs at 1100px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4532,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:34.358Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d38166c9421b6381f2ee-e3acb68f49268b97beff",
+          "file": "header-stability.spec.ts",
+          "line": 37,
+          "column": 2
+        }
+      ]
+    },
+    {
+      "title": "indicator-width.spec.ts",
+      "file": "indicator-width.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "SMA and EMA widths create, edit, cancel and reload without changing feeds or a resized MACD pane",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4683,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:38.902Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "753fd203e4150f3626ec-14cc9fc7d59d9f1e8bfa",
+          "file": "indicator-width.spec.ts",
+          "line": 17,
+          "column": 1
+        },
+        {
+          "title": "shared SMA and EMA width selections persist independently on every actual chart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3810,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:43.593Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "753fd203e4150f3626ec-eb478e3358936a85229d",
+          "file": "indicator-width.spec.ts",
+          "line": 31,
+          "column": 1
+        },
+        {
+          "title": "restored legacy averages use width 2 without rewriting omitted widths or exposing controls on other indicators",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1120,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:47.411Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "753fd203e4150f3626ec-defe0caebed035b393ae",
+          "file": "indicator-width.spec.ts",
+          "line": 38,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "indicators.spec.ts",
+      "file": "indicators.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "horizontal timeframe buttons include weekly and restore the saved selection",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2254,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:48.543Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fc1fccedec3691500de-dcc90af171ae2d5e6a77",
+          "file": "indicators.spec.ts",
+          "line": 5,
+          "column": 1
+        },
+        {
+          "title": "all four indicators configure, render, edit, remove and persist independently",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3939,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:50.808Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fc1fccedec3691500de-5edd45849837a688d3a5",
+          "file": "indicators.spec.ts",
+          "line": 17,
+          "column": 1
+        },
+        {
+          "title": "indicator controls stay in the header row in a three by three grid",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1923,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:54.755Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fc1fccedec3691500de-e50069ec57440141fa04",
+          "file": "indicators.spec.ts",
+          "line": 33,
+          "column": 1
+        },
+        {
+          "title": "long indicator periods load earlier history in bounded pages without a new feed lease",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 869,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:56.687Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fc1fccedec3691500de-0211e8f99f27dbfdd9a7",
+          "file": "indicators.spec.ts",
+          "line": 39,
+          "column": 1
+        },
+        {
+          "title": "insufficient indicator history explains the required bars and can retry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 941,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:57.564Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fc1fccedec3691500de-1c9353b5f9235bab836d",
+          "file": "indicators.spec.ts",
+          "line": 50,
+          "column": 1
+        },
+        {
+          "title": "a delayed indicator history response cannot enter a different timeframe",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 924,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:58.513Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fc1fccedec3691500de-eeea4f79e673ccebf8f3",
+          "file": "indicators.spec.ts",
+          "line": 55,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "markets.spec.ts",
+      "file": "markets.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "one symbol list labels and selects identical spot/perpetual names at 1600px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2853,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:22:59.449Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "77f1568ad22b16faaf13-34073a9f0e20ff2d5ee3",
+          "file": "markets.spec.ts",
+          "line": 14,
+          "column": 74
+        },
+        {
+          "title": "one symbol list labels and selects identical spot/perpetual names at 1100px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2741,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:02.310Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "77f1568ad22b16faaf13-b174ffaa32c5e1cfde8d",
+          "file": "markets.spec.ts",
+          "line": 14,
+          "column": 74
+        },
+        {
+          "title": "silver perpetual selection persists across restart and tabs and uses perpetual history",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3437,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:05.058Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "77f1568ad22b16faaf13-1887e2edcb41ff12f3cd",
+          "file": "markets.spec.ts",
+          "line": 34,
+          "column": 1
+        },
+        {
+          "title": "the complete catalog remains selectable beyond seventy rows and supports Unicode symbols",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1887,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:08.503Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "77f1568ad22b16faaf13-e20486a3e697a9460110",
+          "file": "markets.spec.ts",
+          "line": 50,
+          "column": 1
+        },
+        {
+          "title": "partial discovery shows its warning while working markets stay selectable and retries without reconnecting the chart",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 10769,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByLabel('Instruments', { exact: true }).getByRole('alert')\nExpected substring: \u001b[32m\"Explicit linear catalog restriction\"\u001b[39m\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" getByLabel('Instruments', { exact: true }).getByRole('alert') with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByLabel('Instruments', { exact: true }).getByRole('alert')\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByLabel('Instruments', { exact: true }).getByRole('alert')\nExpected substring: \u001b[32m\"Explicit linear catalog restriction\"\u001b[39m\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" getByLabel('Instruments', { exact: true }).getByRole('alert') with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByLabel('Instruments', { exact: true }).getByRole('alert')\u001b[22m\n\n    at /home/neodix/gitProjects/charting/frontend/e2e/markets.spec.ts:69:48",
+                    "location": {
+                      "file": "/home/neodix/gitProjects/charting/frontend/e2e/markets.spec.ts",
+                      "column": 48,
+                      "line": 69
+                    },
+                    "snippet": "  67 |  });\n  68 |  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('bybit');await openPicker(page);\n> 69 |  await expect(picker(page).getByRole('alert')).toContainText('Explicit linear catalog restriction');await expect(picker(page).getByRole('button',{name:'BTCUSDT Spot',exact:true})).toBeEnabled();\n     |                                                ^\n  70 |  const attachments=await page.evaluate(()=>(window as any).__testAttachCount());\n  71 |  await picker(page).getByRole('button',{name:'Retry discovery',exact:true}).click();await expect(picker(page).getByRole('alert')).toHaveCount(0);await expect(picker(page).getByRole('button',{name:'XAGUSDT Perpetual',exact:true})).toBeVisible();\n  72 |  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/home/neodix/gitProjects/charting/frontend/e2e/markets.spec.ts",
+                        "column": 48,
+                        "line": 69
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByLabel('Instruments', { exact: true }).getByRole('alert')\nExpected substring: \u001b[32m\"Explicit linear catalog restriction\"\u001b[39m\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" getByLabel('Instruments', { exact: true }).getByRole('alert') with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByLabel('Instruments', { exact: true }).getByRole('alert')\u001b[22m\n\n\n  67 |  });\n  68 |  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('bybit');await openPicker(page);\n> 69 |  await expect(picker(page).getByRole('alert')).toContainText('Explicit linear catalog restriction');await expect(picker(page).getByRole('button',{name:'BTCUSDT Spot',exact:true})).toBeEnabled();\n     |                                                ^\n  70 |  const attachments=await page.evaluate(()=>(window as any).__testAttachCount());\n  71 |  await picker(page).getByRole('button',{name:'Retry discovery',exact:true}).click();await expect(picker(page).getByRole('alert')).toHaveCount(0);await expect(picker(page).getByRole('button',{name:'XAGUSDT Perpetual',exact:true})).toBeVisible();\n  72 |  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);\n    at /home/neodix/gitProjects/charting/frontend/e2e/markets.spec.ts:69:48"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:10.398Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/home/neodix/gitProjects/charting/frontend/test-results/markets-partial-discovery--a9a98-hout-reconnecting-the-chart/test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/home/neodix/gitProjects/charting/frontend/test-results/markets-partial-discovery--a9a98-hout-reconnecting-the-chart/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/neodix/gitProjects/charting/frontend/test-results/markets-partial-discovery--a9a98-hout-reconnecting-the-chart/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/home/neodix/gitProjects/charting/frontend/e2e/markets.spec.ts",
+                    "column": 48,
+                    "line": 69
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "77f1568ad22b16faaf13-b09d55b78472d545532a",
+          "file": "markets.spec.ts",
+          "line": 63,
+          "column": 1
+        },
+        {
+          "title": "a delayed perpetual history result cannot replace candles after switching the same symbol to spot",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2743,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:21.708Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "77f1568ad22b16faaf13-af5d74e50ff1a906d3a8",
+          "file": "markets.spec.ts",
+          "line": 76,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "notifications.spec.ts",
+      "file": "notifications.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "notifications float for seven seconds without moving any charts at 1600px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1005,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:24.559Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "be7d0958780d1a4666e5-ba2c5935526867fe8dac",
+          "file": "notifications.spec.ts",
+          "line": 20,
+          "column": 2
+        },
+        {
+          "title": "notifications float for seven seconds without moving any charts at 1100px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 946,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:25.575Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "be7d0958780d1a4666e5-c5a1bbed908e9bf80780",
+          "file": "notifications.spec.ts",
+          "line": 20,
+          "column": 2
+        },
+        {
+          "title": "repeated and replacement notifications each get seven seconds and can be dismissed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1121,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:26.534Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "be7d0958780d1a4666e5-4006b3093404d265b9aa",
+          "file": "notifications.spec.ts",
+          "line": 32,
+          "column": 1
+        },
+        {
+          "title": "save failure toast expires or dismisses while unsaved state and retry remain available",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1460,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:27.664Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "be7d0958780d1a4666e5-7abb52d9648c594fddc8",
+          "file": "notifications.spec.ts",
+          "line": 47,
+          "column": 1
+        },
+        {
+          "title": "shutdown save choices float without moving charts and remain until resolved",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1175,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:29.132Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "be7d0958780d1a4666e5-40984ebdc45a3c7f4200",
+          "file": "notifications.spec.ts",
+          "line": 62,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "panes-status.spec.ts",
+      "file": "panes-status.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "healthy public-data details stay in the footer while the crosshair is over future cloud space",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 951,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:30.321Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7161905348e40fde9afa-878bbc8c321761005f91",
+          "file": "panes-status.spec.ts",
+          "line": 31,
+          "column": 1
+        },
+        {
+          "title": "loading and failed feeds keep their central connection and retry messages",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 741,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:31.280Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7161905348e40fde9afa-edd27eff759cd3e5ba69",
+          "file": "panes-status.spec.ts",
+          "line": 54,
+          "column": 1
+        },
+        {
+          "title": "a dragged MACD height survives edits, tab switches, viewport resize and restart without new feed leases",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4818,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:32.029Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7161905348e40fde9afa-ffecd92cd1546ba87e6b",
+          "file": "panes-status.spec.ts",
+          "line": 67,
+          "column": 1
+        },
+        {
+          "title": "multiple MACD panes retain their own sizes when an earlier pane is removed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3965,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:36.854Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7161905348e40fde9afa-e46ec4acef03575bacd0",
+          "file": "panes-status.spec.ts",
+          "line": 93,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "price-scale.spec.ts",
+      "file": "price-scale.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "manual price ranges save and restore while a range crossing zero preserves the last valid setting",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2249,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:40.832Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "16edb97c51d625656086-c18c8817f1dda9fb09ed",
+          "file": "price-scale.spec.ts",
+          "line": 24,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "production.spec.ts",
+      "file": "production.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "production browser preview visibly rejects missing Wails bridge without fixtures",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 328,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:43.091Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ed69554c53210704c98c-f882cb8772fd9463a8e2",
+          "file": "production.spec.ts",
+          "line": 2,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "right-gap.spec.ts",
+      "file": "right-gap.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "fresh and legacy workspaces display a ten-bar gap without expanding their layouts",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1116,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:43.433Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc8501578cdb8ab0d438-8d6a679d9ba3a3c755c4",
+          "file": "right-gap.spec.ts",
+          "line": 35,
+          "column": 1
+        },
+        {
+          "title": "a gap change repaints every active chart and maximized sibling and persists for hidden tabs",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4779,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:44.558Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc8501578cdb8ab0d438-8aa3e6631514c328e85f",
+          "file": "right-gap.spec.ts",
+          "line": 49,
+          "column": 1
+        },
+        {
+          "title": "pixel gaps stay fixed through zoom, resize, future Ichimoku spans and a new live candle",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2998,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:49.347Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc8501578cdb8ab0d438-21ef263598f9eb102bd5",
+          "file": "right-gap.spec.ts",
+          "line": 83,
+          "column": 1
+        },
+        {
+          "title": "invalid and unapplied gap drafts preserve the saved rule and zero is accepted",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2666,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:52.354Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc8501578cdb8ab0d438-7590817d1338c6ed7e7a",
+          "file": "right-gap.spec.ts",
+          "line": 109,
+          "column": 1
+        },
+        {
+          "title": "Apply refreshes a full older window and a late older page cannot evict the latest candle",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1812,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:55.029Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc8501578cdb8ab0d438-ee305f075daff22d14cd",
+          "file": "right-gap.spec.ts",
+          "line": 123,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "screener-analysis.spec.ts",
+      "file": "screener-analysis.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Analysis loads only when visible and exposes grouped enriched fields plus every comparison",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 678,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:56.855Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-f3499e9ab92c814ff3a5",
+          "file": "screener-analysis.spec.ts",
+          "line": 20,
+          "column": 1
+        },
+        {
+          "title": "visual AND rows submit MACD, cross-timeframe candle and ATR distance operands",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1123,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:57.540Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-313f5e858f08e97aa3cb",
+          "file": "screener-analysis.spec.ts",
+          "line": 32,
+          "column": 1
+        },
+        {
+          "title": "temporal/window operators retain both operand sides, allow between bounds and remove rows",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1110,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:58.670Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-de5f07cf6761c88bf184",
+          "file": "screener-analysis.spec.ts",
+          "line": 53,
+          "column": 1
+        },
+        {
+          "title": "advanced operators initialize unused Go zero-value operands and comparisons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2246,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:23:59.787Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-15c80bc589065742b72a",
+          "file": "screener-analysis.spec.ts",
+          "line": 70,
+          "column": 1
+        },
+        {
+          "title": "draft edits coalesce durably and restore after reload without being applied",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1222,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:02.042Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-ce6914982c4a7ddbc2d4",
+          "file": "screener-analysis.spec.ts",
+          "line": 88,
+          "column": 1
+        },
+        {
+          "title": "matching assets show exact counts/errors and chart navigation traverses every occurrence with cleanup",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2193,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:03.273Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-16e0cafa9382b3a0a7c0",
+          "file": "screener-analysis.spec.ts",
+          "line": 101,
+          "column": 1
+        },
+        {
+          "title": "match navigation crosses paginated zero-match files rather than truncating the occurrence list",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1992,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:05.473Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-4e93a2fea19c1323c68f",
+          "file": "screener-analysis.spec.ts",
+          "line": 118,
+          "column": 1
+        },
+        {
+          "title": "save errors block Apply, retries preserve the draft and hidden Analysis stops polling and chart listeners",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2806,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:07.473Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-80046bb1f65d0279af9b",
+          "file": "screener-analysis.spec.ts",
+          "line": 128,
+          "column": 1
+        },
+        {
+          "title": "closing an in-flight chart ignores its stale response and tick timestamps are displayed honestly",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3042,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:10.286Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "945cb9f915e0a2044d61-0872cb679eabad18e2e0",
+          "file": "screener-analysis.spec.ts",
+          "line": 140,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "screener-enrichment.spec.ts",
+      "file": "screener-enrichment.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Enrichment loads CSV periods and comma separated headers only when opened, with all reviewed indicators",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 717,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:13.344Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-8cd32706669cb793dea8",
+          "file": "screener-enrichment.spec.ts",
+          "line": 16,
+          "column": 1
+        },
+        {
+          "title": "SMA enrichment submits parameters for all files and displays per-file progress, columns and durable headers",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2969,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:14.069Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-f7efb469037aec146ecb",
+          "file": "screener-enrichment.spec.ts",
+          "line": 33,
+          "column": 1
+        },
+        {
+          "title": "indicator changes reset parameter controls, validate periods and expose tick price sources",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1018,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:17.045Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-da314459a834d2a75fda",
+          "file": "screener-enrichment.spec.ts",
+          "line": 57,
+          "column": 1
+        },
+        {
+          "title": "file pagination keeps the entire batch in scope and shows progress beyond the first page",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1117,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:18.070Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-f59abcf9c278ec68faf4",
+          "file": "screener-enrichment.spec.ts",
+          "line": 80,
+          "column": 1
+        },
+        {
+          "title": "failed files stay visible beside completed files and cancellation preserves completed results",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2359,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:19.195Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-f17e7a2796cc9d5f4813",
+          "file": "screener-enrichment.spec.ts",
+          "line": 99,
+          "column": 1
+        },
+        {
+          "title": "missing runtime, folder errors and start failures are reported without changing files",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2500,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:21.560Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-959d716c02888a4d6cda",
+          "file": "screener-enrichment.spec.ts",
+          "line": 110,
+          "column": 1
+        },
+        {
+          "title": "empty folders show a clear download prompt and never enable enrichment",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 696,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:24.067Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-570586b0114053c6674a",
+          "file": "screener-enrichment.spec.ts",
+          "line": 131,
+          "column": 1
+        },
+        {
+          "title": "fast consecutive batches refresh headers when their completed file counts match",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2411,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:24.770Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f9c0a4d297441fac6f20-7257afeffa9ac790acf6",
+          "file": "screener-enrichment.spec.ts",
+          "line": 138,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "screener-refresh.spec.ts",
+      "file": "screener-refresh.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Refresh updates all existing files and applied indicators, independently of the new indicator controls",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2024,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:27.193Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1b0847ac7bd630eedf56-ea8bfa9c915991f5642f",
+          "file": "screener-refresh.spec.ts",
+          "line": 13,
+          "column": 1
+        },
+        {
+          "title": "completed refresh shows new row counts, recalculated columns and the available UTC period",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1611,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:29.224Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1b0847ac7bd630eedf56-b6fc79e5d20a189d2700",
+          "file": "screener-refresh.spec.ts",
+          "line": 33,
+          "column": 1
+        },
+        {
+          "title": "a stale refresh poll cannot replace a newer started batch",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1658,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:30.843Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1b0847ac7bd630eedf56-592e1a1a51d815489449",
+          "file": "screener-refresh.spec.ts",
+          "line": 50,
+          "column": 1
+        },
+        {
+          "title": "refresh runtime and write errors are visible and leave listed data intact",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2323,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:32.508Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1b0847ac7bd630eedf56-294ece4c8bb115e58188",
+          "file": "screener-refresh.spec.ts",
+          "line": 65,
+          "column": 1
+        },
+        {
+          "title": "reloading the file list performs no download or indicator calculation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 742,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:34.838Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1b0847ac7bd630eedf56-787e2f2f63b41a755176",
+          "file": "screener-refresh.spec.ts",
+          "line": 78,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "screener.spec.ts",
+      "file": "screener.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "reopening restores selected symbols, timeframe, dates, parallelism and every category expansion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1984,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:35.596Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-84792da35a354427a052",
+          "file": "screener.spec.ts",
+          "line": 10,
+          "column": 1
+        },
+        {
+          "title": "normal close waits for the latest Screener choices and reports a failed preference write",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 779,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:37.587Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-077e77556e3c942f2be7",
+          "file": "screener.spec.ts",
+          "line": 28,
+          "column": 1
+        },
+        {
+          "title": "Screener remains fixed beside twenty chart tabs, releases all charts and preserves the workspace",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1647,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:38.373Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-e055cea58295c5391768",
+          "file": "screener.spec.ts",
+          "line": 38,
+          "column": 1
+        },
+        {
+          "title": "grouped symbols, global selection, shared timeframe and UTC dates produce per-symbol progress and errors",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2251,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:40.030Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-760b5ef58c5b9d0fbdbf",
+          "file": "screener.spec.ts",
+          "line": 51,
+          "column": 1
+        },
+        {
+          "title": "parallel download limits default to twenty, stay within bounds and survive panel switches",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1367,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:42.288Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-484c08b2049c2e792d05",
+          "file": "screener.spec.ts",
+          "line": 66,
+          "column": 1
+        },
+        {
+          "title": "concurrent symbols keep independent progress, stable queue order and cancel every active job",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2533,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:43.662Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-c400a1845f36e447031b",
+          "file": "screener.spec.ts",
+          "line": 74,
+          "column": 1
+        },
+        {
+          "title": "Screener directory is applied separately from the workspace and restored after reload",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1587,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:46.202Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-a7f1d0d9434ee4140994",
+          "file": "screener.spec.ts",
+          "line": 82,
+          "column": 1
+        },
+        {
+          "title": "runtime, catalog and start errors remain visible without creating fake downloads",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1614,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:47.796Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-5eca0aa6109eb4b60fc3",
+          "file": "screener.spec.ts",
+          "line": 92,
+          "column": 1
+        },
+        {
+          "title": "polling stops while chart tabs are visible and cannot replace a newer start result",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 964,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:49.417Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-c71bf8e452bfcf2cf99f",
+          "file": "screener.spec.ts",
+          "line": 98,
+          "column": 1
+        },
+        {
+          "title": "the last navigation click wins when saving before opening Screener is delayed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 743,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:50.389Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c899891a691a77a1ca4e-6c8a799381a9560c9f47",
+          "file": "screener.spec.ts",
+          "line": 105,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "tab-controls.spec.ts",
+      "file": "tab-controls.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "chart controls and tab actions share the top logo row at 1600px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 734,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:51.148Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-c67487c456518f9e3e49",
+          "file": "tab-controls.spec.ts",
+          "line": 44,
+          "column": 74
+        },
+        {
+          "title": "chart controls and tab actions share the top logo row at 1100px",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1564,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:51.890Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-d32335d8c5f19a01d5e7",
+          "file": "tab-controls.spec.ts",
+          "line": 44,
+          "column": 74
+        },
+        {
+          "title": "tab double-click and keyboard close preserve rename, grid and header duplication behavior",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2756,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:53.462Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-9a26e118501164958510",
+          "file": "tab-controls.spec.ts",
+          "line": 50,
+          "column": 1
+        },
+        {
+          "title": "top-center tab controls display mixed periods and apply weekly to every current chart",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3284,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:56.226Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-d092d0dcece89c3101a6",
+          "file": "tab-controls.spec.ts",
+          "line": 65,
+          "column": 1
+        },
+        {
+          "title": "one tab indicator dialog applies custom settings independently to visible and maximized sibling charts",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4857,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:24:59.519Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-fc78e5e0af0c8b68deee",
+          "file": "tab-controls.spec.ts",
+          "line": 76,
+          "column": 1
+        },
+        {
+          "title": "tab period selection tracks per-chart edits and affects hidden maximized siblings",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1990,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:04.384Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-5e3e1e5f084dc6244b67",
+          "file": "tab-controls.spec.ts",
+          "line": 86,
+          "column": 1
+        },
+        {
+          "title": "a chart at indicator capacity disables the tab dropdown without partially applying settings",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3200,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:06.384Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ae6f265f5f19b5f3fe1-4754b17b07f21b87d4a4",
+          "file": "tab-controls.spec.ts",
+          "line": 92,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "tab-middle-click.spec.ts",
+      "file": "tab-middle-click.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "middle-click closes an inactive whole tab without selecting it or opening a menu or confirmation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1907,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:09.602Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-5c577ee1eb3d55ea03b4",
+          "file": "tab-middle-click.spec.ts",
+          "line": 20,
+          "column": 1
+        },
+        {
+          "title": "middle-clicking the active tab removes all its charts and releases their leases",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2514,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:11.517Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-232386b2dc055b65aadd",
+          "file": "tab-middle-click.spec.ts",
+          "line": 36,
+          "column": 1
+        },
+        {
+          "title": "middle-clicking an inactive tab preserves the active maximized chart and its siblings",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2592,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:14.038Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-bf90f58e041b4a9dd82e",
+          "file": "tab-middle-click.spec.ts",
+          "line": 48,
+          "column": 1
+        },
+        {
+          "title": "middle-clicking an inactive tab preserves the focused chart search input",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 793,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:16.639Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-7c3e4de76f9877ce36cf",
+          "file": "tab-middle-click.spec.ts",
+          "line": 62,
+          "column": 1
+        },
+        {
+          "title": "left and right mouse buttons do not close tabs and the final tab cannot be middle-closed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1072,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:17.440Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-d6fbe266e3868c5e0b5f",
+          "file": "tab-middle-click.spec.ts",
+          "line": 71,
+          "column": 1
+        },
+        {
+          "title": "Ctrl+W continues to require confirmation after header Close is removed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1106,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:18.520Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-810e536468eb45f7c62b",
+          "file": "tab-middle-click.spec.ts",
+          "line": 82,
+          "column": 1
+        },
+        {
+          "title": "failed save before middle-click closure preserves its target and all chart configurations",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 963,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:19.634Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-2ebfc272b8676ccceb3e",
+          "file": "tab-middle-click.spec.ts",
+          "line": 93,
+          "column": 1
+        },
+        {
+          "title": "repeated middle-clicks waiting on one save close only the captured target",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1770,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:20.605Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ae0889c48f2f5422f3e1-01e57c658671d966303d",
+          "file": "tab-middle-click.spec.ts",
+          "line": 104,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "workspace.spec.ts",
+      "file": "workspace.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "first launch is exactly one chart; larger grid creates placeholders only",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 859,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:22.389Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-f35a85f388c23ae9475e",
+          "file": "workspace.spec.ts",
+          "line": 5,
+          "column": 1
+        },
+        {
+          "title": "chart and tab caps, one-chart new tab, disable final removal",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4429,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:23.256Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-b3d7ad7046fbaa28e132",
+          "file": "workspace.spec.ts",
+          "line": 6,
+          "column": 1
+        },
+        {
+          "title": "small saved workspace restores exact counts, selections and independent duplication",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2521,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:27.693Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-98bb8e6782b7f1f22cba",
+          "file": "workspace.spec.ts",
+          "line": 7,
+          "column": 1
+        },
+        {
+          "title": "restart retains actual smaller workspace and layout rather than expanding capacity",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2501,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:30.224Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-9fa10d584d27f65118c0",
+          "file": "workspace.spec.ts",
+          "line": 9,
+          "column": 1
+        },
+        {
+          "title": "full capacity workspace mounts at most nine charts; 200 switches release resources",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 58784,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "{\"scenario\":\"explicit fixtures 180 configurations, 9 active charts, 200 switches\",\"totalMs\":58621,\"switchMedianMs\":270,\"switchP95Ms\":400,\"before\":[{\"name\":\"ScriptDuration\",\"value\":0},{\"name\":\"TaskDuration\",\"value\":0.036643},{\"name\":\"JSHeapUsedSize\",\"value\":14881760}],\"after\":{\"metrics\":[{\"name\":\"ScriptDuration\",\"value\":26.120001},{\"name\":\"TaskDuration\",\"value\":51.599048},{\"name\":\"JSHeapUsedSize\",\"value\":17862544}],\"leases\":9}}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:25:32.733Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-51d7007a0470c17e59a3",
+          "file": "workspace.spec.ts",
+          "line": 10,
+          "column": 1
+        },
+        {
+          "title": "maximize restores grid; keyboard shortcuts do not fire in search input",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1300,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:31.526Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-4e0db2d83e3c3d51dc6e",
+          "file": "workspace.spec.ts",
+          "line": 11,
+          "column": 1
+        },
+        {
+          "title": "controlled close flushes the final selection; a save failure stays open until explicit retry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 180000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 994,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-25T16:26:32.835Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b163ed09f68681248ada-698b0cb5f2acd1ff6e06",
+          "file": "workspace.spec.ts",
+          "line": 12,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-25T16:22:04.980Z",
+    "duration": 363282.581,
+    "expected": 130,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

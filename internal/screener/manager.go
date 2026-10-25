@@ -77,6 +77,11 @@ type Manager struct {
 	enrichmentActive        bool
 	enrichmentCancel        context.CancelFunc
 	enrichmentDone          chan struct{}
+	refreshJobs             []RefreshJob
+	refreshActive           bool
+	refreshCancel           context.CancelFunc
+	refreshDone             chan struct{}
+	analysis                *analysisState
 }
 
 func New(profile string) *Manager {
@@ -152,6 +157,12 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	if m.enrichmentActive {
 		return m.infoLocked(), errors.New("cancel or finish enrichment before changing the Screener folder")
 	}
+	if m.refreshActive {
+		return m.infoLocked(), errors.New("cancel or finish the data refresh before changing the Screener folder")
+	}
+	if m.analysisActiveLocked() {
+		return m.infoLocked(), errors.New("cancel or finish analysis before changing the Screener folder")
+	}
 	if err = checkDirectory(directory); err != nil {
 		return m.infoLocked(), err
 	}
@@ -159,7 +170,9 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 		return m.infoLocked(), fmt.Errorf("save screener settings: %w", err)
 	}
 	if directory != m.directory {
+		m.cleanupAnalysisLocked()
 		m.enrichmentJobs, m.enrichmentRequest = nil, EnrichmentRequest{}
+		m.refreshJobs = nil
 	}
 	m.directory, m.lastError = directory, ""
 	return m.infoLocked(), nil
@@ -240,6 +253,9 @@ func (m *Manager) Start(request Request) (Info, error) {
 	if m.active {
 		return m.infoLocked(), errors.New("a screener download batch is already running")
 	}
+	if m.refreshActive {
+		return m.infoLocked(), errors.New("finish or cancel the data refresh before starting downloads")
+	}
 	if m.invalidDownloads || m.pendingLocked() {
 		return m.infoLocked(), errors.New("resume or cancel the saved download queue before starting another batch: " + m.stateError)
 	}
@@ -309,6 +325,12 @@ func (m *Manager) Cancel() Info {
 func (m *Manager) Close() {
 	m.mu.Lock()
 	m.closed = true
+	if m.refreshCancel != nil {
+		m.refreshCancel()
+	}
+	if m.analysis != nil && m.analysis.cancel != nil {
+		m.analysis.cancel()
+	}
 	if m.enrichmentCancel != nil {
 		m.enrichmentCancel()
 	}
@@ -324,6 +346,7 @@ func (m *Manager) Close() {
 	m.mu.Unlock()
 	m.wg.Wait()
 	m.mu.Lock()
+	m.cleanupAnalysisLocked()
 	m.saveDownloadsLocked()
 	m.mu.Unlock()
 }

@@ -6,10 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 )
 
 //go:embed indicators.json
 var indicatorJSON []byte
+
+var indicatorDefinitions = sync.OnceValue(func() map[string]Indicator {
+	var catalog IndicatorCatalog
+	if err := json.Unmarshal(indicatorJSON, &catalog); err != nil {
+		panic(err)
+	}
+	definitions := make(map[string]Indicator, len(catalog.Indicators))
+	for _, indicator := range catalog.Indicators {
+		definitions[indicator.ID] = indicator
+	}
+	return definitions
+})
 
 type IndicatorParameter struct {
 	Key     string  `json:"key"`
@@ -51,14 +64,8 @@ type EnrichmentRequest struct {
 }
 
 func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentRequest, error) {
-	var indicator *Indicator
-	for _, item := range m.Indicators().Indicators {
-		if item.ID == request.Indicator {
-			indicator = &item
-			break
-		}
-	}
-	if indicator == nil {
+	indicator, known := indicatorDefinitions()[request.Indicator]
+	if !known {
 		return request, errors.New("choose a supported trading-signals indicator")
 	}
 	switch request.Source {

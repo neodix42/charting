@@ -37,7 +37,7 @@ class ScreenerBundleTests(unittest.TestCase):
     def test_enrichment_worker_catalog_libraries_and_licenses_are_required_on_both_targets(self):
         for target in bundle.PINS:
             required = bundle.required_files(target)
-            self.assertTrue({"enrich-worker.cjs", "indicators.json", "licenses/trading-signals-LICENSE",
+            self.assertTrue({"enrich-worker.cjs", "refresh-worker.cjs", "indicators.json", "licenses/trading-signals-LICENSE",
                              "node_modules/trading-signals/dist/index.js", "node_modules/csv-parse/LICENSE"}.issubset(required))
             for dependency, expected in (("trading-signals", bundle.TRADING_SIGNALS_VERSION), ("csv-parse", bundle.CSV_PARSE_VERSION)):
                 with self.subTest(target=target, dependency=dependency), tempfile.TemporaryDirectory() as temporary:

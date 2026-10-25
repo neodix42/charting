@@ -1,0 +1,28 @@
+actionlint 1.7.12
+Current workflow: exit 1 (known baseline queue diagnostic)
+[
+  {
+    "message": "unexpected key \"queue\" for \"concurrency\" section. expected one of \"cancel-in-progress\", \"group\"",
+    "filepath": ".github/workflows/release.yml",
+    "line": 11,
+    "column": 3,
+    "kind": "syntax-check",
+    "snippet": "  queue: max\n  ^~~~~~",
+    "end_column": 8
+  }
+]
+Committed baseline: exit 1 (same diagnostic)
+[
+  {
+    "message": "unexpected key \"queue\" for \"concurrency\" section. expected one of \"cancel-in-progress\", \"group\"",
+    "filepath": "../../../../tmp/cryptodesk-workflow-lint-3kfui4io/baseline.yml",
+    "line": 11,
+    "column": 3,
+    "kind": "syntax-check",
+    "snippet": "  queue: max\n  ^~~~~~",
+    "end_column": 8
+  }
+]
+Temporary current copy, only baseline queue line removed: exit 0
+Original workflow preserved: True
+Passed with known tool limitation: True

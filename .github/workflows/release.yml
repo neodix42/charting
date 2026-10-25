@@ -103,7 +103,7 @@ jobs:
       - name: Build Ubuntu x64 standard archive
         if: matrix.target == 'linux-amd64'
         run: ./build.sh
-      - name: Verify packaged enrichment with private Node and local CSV
+      - name: Verify packaged enrichment and Refresh offline with private Node and local CSV
         if: matrix.target == 'linux-amd64'
         run: python3 scripts/smoke-enrichment-runtime.py "release/cryptodesk-$CRYPTODESK_VERSION-linux-amd64/screener-runtime" --report "$RUNNER_TEMP/portable-smoke/enrichment-runtime.json"
       - name: Build Linux x64 archive with bundled runtime
@@ -125,7 +125,7 @@ jobs:
       - name: Build Windows x64 portable ZIP with WebView2
         if: matrix.target == 'windows-amd64'
         run: ./win-build.sh
-      - name: Verify preinstalled Screener downloader and enrichment in each release archive
+      - name: Verify preinstalled Screener downloader, enrichment and Refresh in each release archive
         env:
           RELEASE_TARGET: ${{ matrix.target }}
         run: |

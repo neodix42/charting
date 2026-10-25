@@ -61,3 +61,37 @@ func (a *App) StartScreenerEnrichment(request screener.EnrichmentRequest) (scree
 func (a *App) CancelScreenerEnrichment() screener.EnrichmentInfo {
 	return a.screener.CancelEnrichment()
 }
+
+func (a *App) GetScreenerRefresh(fileIDs []string) (screener.RefreshInfo, error) {
+	return a.screener.Refresh(fileIDs)
+}
+
+func (a *App) StartScreenerRefresh() (screener.RefreshInfo, error) { return a.screener.StartRefresh() }
+
+func (a *App) CancelScreenerRefresh() screener.RefreshInfo { return a.screener.CancelRefresh() }
+
+func (a *App) GetScreenerAnalysisCatalog() (screener.AnalysisCatalog, error) {
+	return a.screener.AnalysisCatalog()
+}
+
+func (a *App) GetScreenerAnalysisView() (screener.AnalysisRequest, error) {
+	return a.screener.AnalysisView()
+}
+
+func (a *App) SaveScreenerAnalysisView(request screener.AnalysisRequest) (screener.AnalysisRequest, error) {
+	return a.screener.SaveAnalysisView(request)
+}
+
+func (a *App) StartScreenerAnalysis(request screener.AnalysisRequest) (screener.AnalysisInfo, error) {
+	return a.screener.StartAnalysis(request)
+}
+
+func (a *App) GetScreenerAnalysis(offset, limit int) (screener.AnalysisInfo, error) {
+	return a.screener.Analysis(offset, limit)
+}
+
+func (a *App) CancelScreenerAnalysis() screener.AnalysisInfo { return a.screener.CancelAnalysis() }
+
+func (a *App) GetScreenerAnalysisChart(resultID string, occurrence, before, after int) (screener.AnalysisChart, error) {
+	return a.screener.AnalysisChart(resultID, occurrence, before, after)
+}

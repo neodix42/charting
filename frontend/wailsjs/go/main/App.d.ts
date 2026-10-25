@@ -8,9 +8,13 @@ import {storage} from '../models';
 
 export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:number,arg5:number):Promise<market.Snapshot>;
 
+export function CancelScreenerAnalysis():Promise<screener.AnalysisInfo>;
+
 export function CancelScreenerDownload():Promise<screener.Info>;
 
 export function CancelScreenerEnrichment():Promise<screener.EnrichmentInfo>;
+
+export function CancelScreenerRefresh():Promise<screener.RefreshInfo>;
 
 export function ChooseCandleStorageDirectory():Promise<string>;
 
@@ -40,6 +44,14 @@ export function GetHistory(arg1:string,arg2:domain.FeedKey,arg3:number,arg4:numb
 
 export function GetScreener():Promise<screener.Info>;
 
+export function GetScreenerAnalysis(arg1:number,arg2:number):Promise<screener.AnalysisInfo>;
+
+export function GetScreenerAnalysisCatalog():Promise<screener.AnalysisCatalog>;
+
+export function GetScreenerAnalysisChart(arg1:string,arg2:number,arg3:number,arg4:number):Promise<screener.AnalysisChart>;
+
+export function GetScreenerAnalysisView():Promise<screener.AnalysisRequest>;
+
 export function GetScreenerCatalog():Promise<screener.Catalog>;
 
 export function GetScreenerEnrichment(arg1:Array<string>):Promise<screener.EnrichmentInfo>;
@@ -47,6 +59,8 @@ export function GetScreenerEnrichment(arg1:Array<string>):Promise<screener.Enric
 export function GetScreenerFiles(arg1:number,arg2:number):Promise<screener.FilePage>;
 
 export function GetScreenerIndicators():Promise<screener.IndicatorCatalog>;
+
+export function GetScreenerRefresh(arg1:Array<string>):Promise<screener.RefreshInfo>;
 
 export function GetScreenerView():Promise<screener.ViewState>;
 
@@ -64,10 +78,16 @@ export function ResetWorkspace():Promise<storage.Loaded>;
 
 export function ResumeScreenerDownload():Promise<screener.Info>;
 
+export function SaveScreenerAnalysisView(arg1:screener.AnalysisRequest):Promise<screener.AnalysisRequest>;
+
 export function SaveScreenerView(arg1:screener.ViewState):Promise<screener.ViewState>;
 
 export function SaveWorkspace(arg1:number,arg2:string,arg3:number,arg4:domain.Workspace):Promise<storage.Ack>;
 
+export function StartScreenerAnalysis(arg1:screener.AnalysisRequest):Promise<screener.AnalysisInfo>;
+
 export function StartScreenerDownload(arg1:screener.Request):Promise<screener.Info>;
 
 export function StartScreenerEnrichment(arg1:screener.EnrichmentRequest):Promise<screener.EnrichmentInfo>;
+
+export function StartScreenerRefresh():Promise<screener.RefreshInfo>;

@@ -207,7 +207,7 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" && phase != "enrichment" && phase != "enrichment-restore" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" && phase != "enrichment" && phase != "enrichment-restore" && phase != "analysis-refresh" && phase != "analysis-refresh-restore" {
 		return
 	}
 	encoded, _ := json.Marshal(phase)
@@ -262,7 +262,61 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='enrichment'||phase==='enrichment-restore'){
+  if(phase==='analysis-refresh'||phase==='analysis-refresh-restore'){
+   await click('[role="tab"][aria-controls="screener-panel"]');
+   if(phase==='analysis-refresh'){
+    await click('#screener-downloader-tab');await wait(()=>qa('.screener-instrument').length===1499,'complete native instrument catalog');
+    for(const symbol of ['btcusd','ethusd']){await input('[aria-label="Search Dukascopy instruments"]',symbol);await click('.screener-instrument input');}
+    await select('[aria-label="Download timeframe"]','d1');await select('[aria-label="Parallel downloads"]','2');
+    await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-02');
+    await click('[aria-label="Download historical data"] button[type="submit"]');
+    await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed');},'two genuine original daily CSVs',90000);
+    await click('#screener-enrichment-tab');await wait(()=>q('[aria-label="Enrich downloaded data"] button[type="submit"]:not(:disabled)'),'native enrichment ready');
+    await input('[aria-label="Period"]','2');await click('[aria-label="Enrich downloaded data"] button[type="submit"]');
+    const page=await api.GetScreenerFiles(0,50),ids=page.files.map(file=>file.id);
+    await wait(async()=>{const value=await api.GetScreenerEnrichment(ids);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2;},'initial native SMA 2');
+    const originals={};for(const symbol of ['btcusd','ethusd'])originals[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+    await wait(()=>Array.from(q('#screener-enrichment').querySelectorAll('button')).find(button=>button.textContent==='Refresh data and indicators'&&!button.disabled),'native Refresh action ready');
+    const refreshButton=Array.from(q('#screener-enrichment').querySelectorAll('button')).find(button=>button.textContent==='Refresh data and indicators');refreshButton.click();
+    const refreshed=await wait(async()=>{const value=await api.GetScreenerRefresh(ids);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2?value:false;},'real missing/new public data and saved indicator refresh',180000);
+    await wait(()=>qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('Available bar open times')&&row.querySelector('progress')?.value===100),'native refreshed periods and per-file completion');
+    const csv={},counts={};
+    for(const symbol of ['btcusd','ethusd']){
+     csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+     const rows=csv[symbol].trim().split('\n'),values=rows.slice(1).map(line=>line.split(','));counts[symbol]=values.length;
+     check(rows[0]==='timestamp,open,high,low,close,volume,sma_2'&&values.length>2&&values[0][6]===''&&values.every((row,i)=>i===0||Math.abs(Number(row[6])-(Number(values[i-1][4])+Number(row[4]))/2)<1e-8),symbol+' refresh appends real missing/new bars and calculates the existing SMA column for each new row',{rows:values.length,last:values.at(-1)});
+     check(values.every((row,i)=>Number(row[0])+86400000<=Date.now()&&(i===0||Number(row[0])>Number(values[i-1][0]))),symbol+' refreshed candles are closed, unique and chronological');
+    }
+    check(refreshed.jobs.every(job=>job.addedRows>0&&job.columns.includes('sma_2')&&job.backupPath),'all refreshed files report appends, applied indicators and retained originals',refreshed.jobs);
+    await click('#screener-analysis-tab');await wait(()=>q('[aria-label="Analysis conditions"] button[type="submit"]:not(:disabled)'),'native visual conditions ready');
+    await click('.analysis-add');await select('[aria-label="Condition 2 left field"]','sma_2');
+    await click('[aria-label="Analysis conditions"] button[type="submit"]');
+    const analysis=await wait(async()=>{const value=await api.GetScreenerAnalysis(0,50);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.total===2&&value.completed===2?value:false;},'every downloaded bar evaluated against both AND conditions');
+    check(analysis.results.every(result=>result.matches===counts[result.symbol]-1)&&analysis.totalMatches===counts.btcusd+counts.ethusd-2,'matching asset table counts every occurrence of both conditions',analysis);
+    await wait(()=>qa('.analysis-file-match').length===2,'native matching asset rows');await click('.analysis-file-match');
+    await wait(()=>q('[role="dialog"][aria-label="Analysis match chart"] [data-testid="analysis-chart"] canvas'),'native bars and enriched indicator chart');
+    const first=analysis.results[0],chart=await api.GetScreenerAnalysisChart(first.id,0,120,80);
+    check(chart.matchIndex===1&&chart.fields.includes('sma_2')&&chart.bars.length<=201&&chart.bars.some(bar=>bar.index===chart.matchIndex&&Number.isFinite(bar.values.sma_2)),'native popup receives bounded genuine bars and existing enriched values',chart);
+    await click('[aria-label="Matching occurrences"] button:last-child');await wait(()=>q('.analysis-chart-modal nav strong')?.textContent.includes('Occurrence 2 of'),'next occurrence label');
+    const next=await api.GetScreenerAnalysisChart(first.id,1,120,80);
+    await wait(()=>q('.analysis-chart-readout strong')?.textContent.includes(new Date(next.matchTime).toISOString().slice(0,10)),'chart moves to the next occurrence');
+    check(next.matchIndex===2&&next.matchTime>chart.matchTime,'Next navigates chronologically to the second match');
+    await click('[aria-label="Matching occurrences"] button:first-child');await wait(()=>q('.analysis-chart-modal nav strong')?.textContent.includes('Occurrence 1 of'),'previous occurrence label');
+    await click('[aria-label="Close analysis chart"]');await wait(()=>!q('.analysis-chart-modal')&&!q('.tv-lightweight-charts'),'native chart popup unmounts');
+    check((await api.GetDiagnostics()).market.activeLeases===0,'historical rule scanning and chart popup create no live chart subscriptions');
+    report.analysisRefresh={originals,csv,counts,refreshed,analysis,view:await api.GetScreenerAnalysisView()};
+   }else{
+    await wait(()=>qa('.analysis-condition').length===2&&q('[aria-label="Condition 2 left field"]')?.value==='sma_2','native restored condition rows');
+    const view=await api.GetScreenerAnalysisView(),files=await api.GetScreenerFiles(0,50);
+    check(view.conditions.length===2&&view.conditions[0].left.field==='close'&&view.conditions[1].left.field==='sma_2','restart restores both visual AND rows and operands',view);
+    check(files.files.length===2&&files.files.every(file=>file.fields.includes('sma_2')&&file.firstTimestamp&&file.lastTimestamp),'restart discovers refreshed periods and saved indicator columns',files);
+    await click('[aria-label="Analysis conditions"] button[type="submit"]');
+    const result=await wait(async()=>{const value=await api.GetScreenerAnalysis(0,50);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2?value:false;},'restarted rule scan');
+    check(result.results.every(file=>file.matches>1),'restored conditions scan all saved historical occurrences',result);
+    const csv={};for(const symbol of ['btcusd','ethusd'])csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+    report.analysisRefresh={view,files,result,csv};
+   }
+  }else if(phase==='enrichment'||phase==='enrichment-restore'){
    await click('[role="tab"][aria-controls="screener-panel"]');
    if(phase==='enrichment'){
     await click('#screener-downloader-tab');await wait(()=>qa('.screener-instrument').length===1499,'full download catalog');
@@ -500,9 +554,9 @@ const desktopSmokeJavaScript = `async function(phase) {
    const screenerTab=q('[role="tab"][aria-controls="screener-panel"]');
    check(!!screenerTab&&!screenerTab.draggable&&!screenerTab.dataset.tabId,'Screener is a fixed tab outside the saved chart-tab list');
    screenerTab.click();
-   await wait(()=>q('[id="screener-analysis"]')&&!q('[id="screener-analysis"]').hidden&&!q('[data-testid="chart-cell"]'),'native Screener opens empty Analysis and unmounts charts');
+   await wait(()=>q('[id="screener-analysis"]')&&!q('[id="screener-analysis"]').hidden&&!q('[data-testid="chart-cell"]'),'native Screener opens Analysis and unmounts charts');
    await wait(async()=>(await api.GetDiagnostics()).market.activeLeases===0,'Screener releases every chart lease');
-   check(q('[id="screener-analysis"]').childElementCount===0,'Analysis is empty');
+   check(q('[id="screener-analysis"]').textContent.includes('Visual condition rows'),'Analysis exposes the visual condition builder');
    await click('#screener-downloader-tab');
    const screenerCatalog=await api.GetScreenerCatalog(),screenerCount=screenerCatalog.groups.reduce((count,group)=>count+group.instruments.length,0);
    await wait(()=>qa('.screener-instrument').length===screenerCount,'complete native Dukascopy catalog');

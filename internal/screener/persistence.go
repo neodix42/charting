@@ -322,6 +322,9 @@ func (m *Manager) Resume() (Info, error) {
 	if m.closed || m.active {
 		return m.infoLocked(), errors.New("downloads are closed or already active")
 	}
+	if m.refreshActive {
+		return m.infoLocked(), errors.New("finish or cancel the data refresh before resuming downloads")
+	}
 	if m.invalidDownloads {
 		return m.infoLocked(), errors.New(m.stateError)
 	}

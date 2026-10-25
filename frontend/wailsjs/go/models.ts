@@ -527,6 +527,336 @@ export namespace market {
 
 export namespace screener {
 	
+	export class AnalysisBar {
+	    index: number;
+	    time: number;
+	    values: Record<string, number>;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisBar(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.time = source["time"];
+	        this.values = source["values"];
+	    }
+	}
+	export class DataFile {
+	    id: string;
+	    name: string;
+	    symbol?: string;
+	    timeframe?: string;
+	    from?: string;
+	    to?: string;
+	    firstTimestamp?: number;
+	    lastTimestamp?: number;
+	    fields: string[];
+	    bytes: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DataFile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.firstTimestamp = source["firstTimestamp"];
+	        this.lastTimestamp = source["lastTimestamp"];
+	        this.fields = source["fields"];
+	        this.bytes = source["bytes"];
+	        this.error = source["error"];
+	    }
+	}
+	export class AnalysisCatalog {
+	    directory: string;
+	    fields: string[];
+	    timeframes: string[];
+	    files: DataFile[];
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisCatalog(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.directory = source["directory"];
+	        this.fields = source["fields"];
+	        this.timeframes = source["timeframes"];
+	        this.files = this.convertValues(source["files"], DataFile);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AnalysisChart {
+	    resultId: string;
+	    name: string;
+	    symbol: string;
+	    timeframe: string;
+	    occurrence: number;
+	    totalMatches: number;
+	    matchTime: number;
+	    matchIndex: number;
+	    startIndex: number;
+	    fields: string[];
+	    bars: AnalysisBar[];
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisChart(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.resultId = source["resultId"];
+	        this.name = source["name"];
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.occurrence = source["occurrence"];
+	        this.totalMatches = source["totalMatches"];
+	        this.matchTime = source["matchTime"];
+	        this.matchIndex = source["matchIndex"];
+	        this.startIndex = source["startIndex"];
+	        this.fields = source["fields"];
+	        this.bars = this.convertValues(source["bars"], AnalysisBar);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AnalysisOperand {
+	    kind: string;
+	    field: string;
+	    value: number;
+	    timeframe: string;
+	    offset: number;
+	    aggregate: string;
+	    window: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisOperand(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.field = source["field"];
+	        this.value = source["value"];
+	        this.timeframe = source["timeframe"];
+	        this.offset = source["offset"];
+	        this.aggregate = source["aggregate"];
+	        this.window = source["window"];
+	    }
+	}
+	export class AnalysisCondition {
+	    id: string;
+	    operator: string;
+	    comparison: string;
+	    left: AnalysisOperand;
+	    right: AnalysisOperand;
+	    upper: AnalysisOperand;
+	    distance: AnalysisOperand;
+	    multiplier: number;
+	    bars: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisCondition(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.operator = source["operator"];
+	        this.comparison = source["comparison"];
+	        this.left = this.convertValues(source["left"], AnalysisOperand);
+	        this.right = this.convertValues(source["right"], AnalysisOperand);
+	        this.upper = this.convertValues(source["upper"], AnalysisOperand);
+	        this.distance = this.convertValues(source["distance"], AnalysisOperand);
+	        this.multiplier = source["multiplier"];
+	        this.bars = source["bars"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AnalysisResult {
+	    id: string;
+	    fileId: string;
+	    name: string;
+	    symbol: string;
+	    timeframe: string;
+	    status: string;
+	    error?: string;
+	    rows: number;
+	    matches: number;
+	    assetMatches: number;
+	    assetFiles: number;
+	    firstTime?: number;
+	    lastTime?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.fileId = source["fileId"];
+	        this.name = source["name"];
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.status = source["status"];
+	        this.error = source["error"];
+	        this.rows = source["rows"];
+	        this.matches = source["matches"];
+	        this.assetMatches = source["assetMatches"];
+	        this.assetFiles = source["assetFiles"];
+	        this.firstTime = source["firstTime"];
+	        this.lastTime = source["lastTime"];
+	    }
+	}
+	export class AnalysisInfo {
+	    active: boolean;
+	    phase: string;
+	    total: number;
+	    completed: number;
+	    failed: number;
+	    currentFile: string;
+	    progress: number;
+	    rows: number;
+	    totalMatches: number;
+	    matchedFiles: number;
+	    results: AnalysisResult[];
+	    offset: number;
+	    limit: number;
+	    totalResults: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.phase = source["phase"];
+	        this.total = source["total"];
+	        this.completed = source["completed"];
+	        this.failed = source["failed"];
+	        this.currentFile = source["currentFile"];
+	        this.progress = source["progress"];
+	        this.rows = source["rows"];
+	        this.totalMatches = source["totalMatches"];
+	        this.matchedFiles = source["matchedFiles"];
+	        this.results = this.convertValues(source["results"], AnalysisResult);
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	        this.totalResults = source["totalResults"];
+	        this.error = source["error"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class AnalysisRequest {
+	    conditions: AnalysisCondition[];
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class Instrument {
 	    id: string;
 	    name: string;
@@ -609,34 +939,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-	export class DataFile {
-	    id: string;
-	    name: string;
-	    symbol?: string;
-	    timeframe?: string;
-	    from?: string;
-	    to?: string;
-	    fields: string[];
-	    bytes: number;
-	    error?: string;
 
-	    static createFrom(source: any = {}) {
-	        return new DataFile(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.symbol = source["symbol"];
-	        this.timeframe = source["timeframe"];
-	        this.from = source["from"];
-	        this.to = source["to"];
-	        this.fields = source["fields"];
-	        this.bytes = source["bytes"];
-	        this.error = source["error"];
-	    }
-	}
 	export class EnrichmentJob {
 	    id: string;
 	    fileId: string;
@@ -942,6 +1245,89 @@ export namespace screener {
 	}
 	
 	
+	export class RefreshJob {
+	    id: string;
+	    fileId: string;
+	    name: string;
+	    status: string;
+	    progress: number;
+	    rows: number;
+	    addedRows: number;
+	    updatedRows: number;
+	    message: string;
+	    columns: string[];
+	    backupPath?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RefreshJob(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.fileId = source["fileId"];
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.progress = source["progress"];
+	        this.rows = source["rows"];
+	        this.addedRows = source["addedRows"];
+	        this.updatedRows = source["updatedRows"];
+	        this.message = source["message"];
+	        this.columns = source["columns"];
+	        this.backupPath = source["backupPath"];
+	    }
+	}
+	export class RefreshInfo {
+	    directory: string;
+	    active: boolean;
+	    runtimeAvailable: boolean;
+	    runtimeError?: string;
+	    total: number;
+	    completed: number;
+	    failed: number;
+	    cancelled: number;
+	    currentFile: string;
+	    currentProgress: number;
+	    jobs: RefreshJob[];
+
+	    static createFrom(source: any = {}) {
+	        return new RefreshInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.directory = source["directory"];
+	        this.active = source["active"];
+	        this.runtimeAvailable = source["runtimeAvailable"];
+	        this.runtimeError = source["runtimeError"];
+	        this.total = source["total"];
+	        this.completed = source["completed"];
+	        this.failed = source["failed"];
+	        this.cancelled = source["cancelled"];
+	        this.currentFile = source["currentFile"];
+	        this.currentProgress = source["currentProgress"];
+	        this.jobs = this.convertValues(source["jobs"], RefreshJob);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class Request {
 	    symbols: string[];
 	    timeframe: string;

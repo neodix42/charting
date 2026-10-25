@@ -62,8 +62,8 @@ test('the complete catalog remains selectable beyond seventy rows and supports U
 
 test('partial discovery shows its warning while working markets stay selectable and retries without reconnecting the chart',async({page})=>{
  await page.goto('/');await page.evaluate(()=>{
-  const api=window.go!.main!.App!,original=api.ListInstruments;let calls=0;
-  api.ListInstruments=async exchange=>{calls++;const items=await original(exchange);return calls===1?[{...items[0],providerMetadata:{catalogWarning:'Explicit linear catalog restriction; spot remains available'}}]:items;};
+  const api=window.go!.main!.App!,original=api.ListInstruments;let bybitCalls=0;
+  api.ListInstruments=async exchange=>{const restrict=exchange==='bybit'&&++bybitCalls===1;const items=await original(exchange);return restrict?[{...items[0],providerMetadata:{catalogWarning:'Explicit linear catalog restriction; spot remains available'}}]:items;};
  });
  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('bybit');await openPicker(page);
  await expect(picker(page).getByRole('alert')).toContainText('Explicit linear catalog restriction');await expect(picker(page).getByRole('button',{name:'BTCUSDT Spot',exact:true})).toBeEnabled();

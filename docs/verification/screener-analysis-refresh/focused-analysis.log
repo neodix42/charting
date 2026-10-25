@@ -1,0 +1,30 @@
+
+> cryptodesk-frontend@1.0.0 test:e2e
+> playwright test screener-analysis.spec.ts
+
+[WebServer] (node:1224830) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1224990) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter]
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] (node:1225097) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:1225172) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/screener-analysis.spec.ts:20:1 › Analysis loads only when visible and exposes grouped enriched fields plus every comparison (855ms)
+  ✓  2 e2e/screener-analysis.spec.ts:32:1 › visual AND rows submit MACD, cross-timeframe candle and ATR distance operands (1.3s)
+  ✓  3 e2e/screener-analysis.spec.ts:53:1 › temporal/window operators retain both operand sides, allow between bounds and remove rows (1.2s)
+  ✓  4 e2e/screener-analysis.spec.ts:68:1 › draft edits coalesce durably and restore after reload without being applied (1.3s)
+  ✓  5 e2e/screener-analysis.spec.ts:81:1 › matching assets show exact counts/errors and chart navigation traverses every occurrence with cleanup (2.2s)
+  ✓  6 e2e/screener-analysis.spec.ts:98:1 › match navigation crosses paginated zero-match files rather than truncating the occurrence list (2.2s)
+  ✓  7 e2e/screener-analysis.spec.ts:108:1 › save errors block Apply, retries preserve the draft and hidden Analysis stops polling and chart listeners (2.9s)
+  ✓  8 e2e/screener-analysis.spec.ts:120:1 › closing an in-flight chart ignores its stale response and tick timestamps are displayed honestly (3.1s)
+
+  8 passed (20.1s)

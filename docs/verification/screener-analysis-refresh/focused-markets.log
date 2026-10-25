@@ -1,0 +1,24 @@
+[WebServer] (node:1277121) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:1277377) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter]
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] (node:1277514) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:1277629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/markets.spec.ts:14:74 › one symbol list labels and selects identical spot/perpetual names at 1600px (2.9s)
+  ✓  2 e2e/markets.spec.ts:14:74 › one symbol list labels and selects identical spot/perpetual names at 1100px (2.7s)
+  ✓  3 e2e/markets.spec.ts:34:1 › silver perpetual selection persists across restart and tabs and uses perpetual history (3.4s)
+  ✓  4 e2e/markets.spec.ts:50:1 › the complete catalog remains selectable beyond seventy rows and supports Unicode symbols (1.9s)
+  ✓  5 e2e/markets.spec.ts:63:1 › partial discovery shows its warning while working markets stay selectable and retries without reconnecting the chart (905ms)
+  ✓  6 e2e/markets.spec.ts:76:1 › a delayed perpetual history result cannot replace candles after switching the same symbol to spot (2.7s)
+
+  6 passed (19.5s)
