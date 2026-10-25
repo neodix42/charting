@@ -43,3 +43,21 @@ func (a *App) GetScreenerView() (screener.ViewState, error) { return a.screener.
 func (a *App) SaveScreenerView(view screener.ViewState) (screener.ViewState, error) {
 	return a.screener.SaveView(view)
 }
+
+func (a *App) GetScreenerIndicators() screener.IndicatorCatalog { return a.screener.Indicators() }
+
+func (a *App) GetScreenerFiles(offset, limit int) (screener.FilePage, error) {
+	return a.screener.Files(offset, limit)
+}
+
+func (a *App) GetScreenerEnrichment(fileIDs []string) (screener.EnrichmentInfo, error) {
+	return a.screener.Enrichment(fileIDs)
+}
+
+func (a *App) StartScreenerEnrichment(request screener.EnrichmentRequest) (screener.EnrichmentInfo, error) {
+	return a.screener.StartEnrichment(request)
+}
+
+func (a *App) CancelScreenerEnrichment() screener.EnrichmentInfo {
+	return a.screener.CancelEnrichment()
+}

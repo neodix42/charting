@@ -1,5 +1,7 @@
 # Native desktop verification
 
+`scripts/smoke-screener-enrichment.sh` adds an isolated production Wails/WebKit check for Enrichment. It downloads real BTCUSD/ETHUSD daily data, drives SMA and Tenkan parameters through the native UI, verifies numeric row alignment, preserved fields and previous indicators, checks exact original backups, then restarts to discover unchanged enriched CSVs. Evidence defaults to `docs/verification/screener-enrichment/desktop/`. Windows execution remains a separate native check.
+
 Run `scripts/smoke-desktop.sh` in a logged-in Ubuntu graphical session after building prerequisites. It compiles the real local production bundle with an additional `desktop_smoke` build tag. The tag contributes UI-driving/reporting methods absent from the normal release. No Vite server, injected fixture prices, separate Go daemon or live user workspace is used.
 
 The script creates an isolated temporary SQLite profile and runs three actual Wails/WebKit application launches:

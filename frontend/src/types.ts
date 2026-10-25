@@ -31,6 +31,14 @@ export interface ScreenerDownloadRequest {symbols:string[];timeframe:string;from
 export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategories:string[]}
 export interface ScreenerJob {id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
 export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[]}
+export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
+export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'hl'|'hlc'|'hlcv'|'ohlcv';parameters:IndicatorParameter[];note?:string}
+export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
+export interface ScreenerDataFile {id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;fields:string[];bytes:number;error?:string}
+export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;offset:number;limit:number}
+export interface ScreenerEnrichmentRequest {indicator:string;parameters:Record<string,number>;source:string}
+export interface ScreenerEnrichmentJob {id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}
+export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;indicator:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;jobs:ScreenerEnrichmentJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
 export interface Backend {
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
@@ -42,6 +50,8 @@ export interface Backend {
  GetScreenerCatalog():Promise<ScreenerCatalog>;GetScreener():Promise<ScreenerInfo>;ConfigureScreenerDirectory(directory:string):Promise<ScreenerInfo>;ChooseScreenerDirectory():Promise<string>;
  StartScreenerDownload(request:ScreenerDownloadRequest):Promise<ScreenerInfo>;CancelScreenerDownload():Promise<ScreenerInfo>;
  ResumeScreenerDownload():Promise<ScreenerInfo>;GetScreenerView():Promise<ScreenerView>;SaveScreenerView(view:ScreenerView):Promise<ScreenerView>;
+ GetScreenerIndicators():Promise<ScreenerIndicators>;GetScreenerFiles(offset:number,limit:number):Promise<ScreenerFilePage>;
+ GetScreenerEnrichment(fileIDs:string[]):Promise<ScreenerEnrichmentInfo>;StartScreenerEnrichment(request:ScreenerEnrichmentRequest):Promise<ScreenerEnrichmentInfo>;CancelScreenerEnrichment():Promise<ScreenerEnrichmentInfo>;
  GetDiagnostics():Promise<Record<string,unknown>>; ImportWorkspace():Promise<LoadResult>;ExportWorkspace():Promise<string>;ResetWorkspace():Promise<LoadResult>;
  GetBackups():Promise<Array<{id:number;reason:string;createdAt:string}>>;RecoverWorkspace(id:number):Promise<LoadResult>;
  FrontendReady():Promise<void>; ConfirmClose(token:string,discard:boolean):Promise<void>;OpenTradingView():Promise<void>;

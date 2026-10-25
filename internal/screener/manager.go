@@ -72,6 +72,11 @@ type Manager struct {
 	stateError, viewError   string
 	invalidDownloads        bool
 	view                    ViewState
+	enrichmentJobs          []EnrichmentJob
+	enrichmentRequest       EnrichmentRequest
+	enrichmentActive        bool
+	enrichmentCancel        context.CancelFunc
+	enrichmentDone          chan struct{}
 }
 
 func New(profile string) *Manager {
@@ -144,11 +149,17 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	if m.active || m.pendingLocked() {
 		return m.infoLocked(), errors.New("cancel or finish the current downloads before changing their folder")
 	}
+	if m.enrichmentActive {
+		return m.infoLocked(), errors.New("cancel or finish enrichment before changing the Screener folder")
+	}
 	if err = checkDirectory(directory); err != nil {
 		return m.infoLocked(), err
 	}
 	if err = m.savePreferences(directory); err != nil {
 		return m.infoLocked(), fmt.Errorf("save screener settings: %w", err)
+	}
+	if directory != m.directory {
+		m.enrichmentJobs, m.enrichmentRequest = nil, EnrichmentRequest{}
 	}
 	m.directory, m.lastError = directory, ""
 	return m.infoLocked(), nil
@@ -298,6 +309,9 @@ func (m *Manager) Cancel() Info {
 func (m *Manager) Close() {
 	m.mu.Lock()
 	m.closed = true
+	if m.enrichmentCancel != nil {
+		m.enrichmentCancel()
+	}
 	if m.cancel != nil {
 		m.cancel()
 	}

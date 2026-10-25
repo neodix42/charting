@@ -10,4 +10,6 @@ The standard Linux release uses OS-provided GTK3/WebKitGTK shared libraries. The
 
 All release variants also include the Screener's private Node.js 24.19.0, MIT-licensed dukascopy-node 1.51.0 and its locked dependencies, Playwright Core 1.64.1 and Chromium 156.0.8078.4. Their licenses, notices and browser credits are retained inside `screener-runtime`; `SCREENER-PROVENANCE.json` records the verified source archives and complete packaged inventory. `scripts/screener_bundle.py` assembles and verifies these files without installing global packages.
 
+Screener enrichment uses MIT-licensed trading-signals 8.3.0 and csv-parse 7.0.3, pinned with npm integrity values and included in every runtime inventory. csv-parse includes its LICENSE under `node_modules/csv-parse`. The trading-signals npm tarball omits its MIT license; `screener-runtime/licenses/trading-signals-LICENSE` retains the exact file from published gitHead [a6893630d0565483bb6b12f7a55f2dee0cfd378e](https://github.com/bennycode/trading-signals/blob/a6893630d0565483bb6b12f7a55f2dee0cfd378e/packages/trading-signals/LICENSE). Packaging verifies that file's reviewed SHA-256.
+
 Provider data is fetched directly for local display or user-requested CSV downloads; workspace exports contain configuration only. There are no trading, account-key, telemetry or hosted data redistribution components.

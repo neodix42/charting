@@ -15,6 +15,9 @@ import zipfile
 
 NODE_VERSION = "24.19.0"
 DUKASCOPY_VERSION = "1.51.0"
+TRADING_SIGNALS_VERSION = "8.3.0"
+CSV_PARSE_VERSION = "7.0.3"
+TRADING_SIGNALS_LICENSE_SHA256 = "5d06e6f5a46da619bccc57de12276808f764a438b94c3b4c39c1e527b5f6fb32"
 PLAYWRIGHT_VERSION = "1.64.1"
 CHROMIUM_VERSION = "156.0.8078.4"
 CHROMIUM_REVISION = "1248"
@@ -93,7 +96,9 @@ def browser_path(target):
 
 
 def required_files(target):
-    return {PINS[target]["executable"], "worker.cjs", "package.json", "package-lock.json", "NODE-LICENSE",
+    return {PINS[target]["executable"], "worker.cjs", "enrich-worker.cjs", "indicators.json", "package.json", "package-lock.json", "NODE-LICENSE",
+            "licenses/trading-signals-LICENSE", "node_modules/trading-signals/package.json", "node_modules/trading-signals/dist/index.js",
+            "node_modules/csv-parse/package.json", "node_modules/csv-parse/dist/cjs/index.cjs", "node_modules/csv-parse/LICENSE",
             "THIRD_PARTY_NOTICES.md", "node_modules/dukascopy-node/package.json", "node_modules/dukascopy-node/dist/index.js",
             "node_modules/dukascopy-node/LICENSE", "node_modules/playwright-core/package.json",
             "node_modules/playwright-core/LICENSE", "node_modules/playwright-core/NOTICE", "node_modules/playwright-core/ThirdPartyNotices.txt",
@@ -104,7 +109,8 @@ def validate_inventory(manifest, target, files, read):
     """Check an unpacked directory or release archive against its complete inventory."""
     if (manifest.get("target") != target or manifest.get("nodeVersion") != NODE_VERSION
             or manifest.get("dukascopyVersion") != DUKASCOPY_VERSION or manifest.get("playwrightVersion") != PLAYWRIGHT_VERSION
-            or manifest.get("chromiumVersion") != CHROMIUM_VERSION or manifest.get("chromiumRevision") != CHROMIUM_REVISION):
+            or manifest.get("chromiumVersion") != CHROMIUM_VERSION or manifest.get("chromiumRevision") != CHROMIUM_REVISION
+            or manifest.get("tradingSignalsVersion") != TRADING_SIGNALS_VERSION or manifest.get("csvParseVersion") != CSV_PARSE_VERSION):
         raise ValueError("Screener runtime versions/target differ from the reviewed pins")
     inventory = manifest.get("files")
     if not isinstance(inventory, dict) or set(inventory) != set(files) - {MANIFEST} or not required_files(target).issubset(inventory):
@@ -112,6 +118,8 @@ def validate_inventory(manifest, target, files, read):
     if any(files[name][0] <= 0 for name in required_files(target)):
         raise ValueError("Screener runtime contains an empty required file")
     versions = {"node_modules/dukascopy-node/package.json": DUKASCOPY_VERSION,
+                "node_modules/trading-signals/package.json": TRADING_SIGNALS_VERSION,
+                "node_modules/csv-parse/package.json": CSV_PARSE_VERSION,
                 "node_modules/playwright-core/package.json": PLAYWRIGHT_VERSION}
     # The archive reader supplies physical tar order, avoiding repeated backward
     # seeks/decompression across the much larger Node and browser binaries.
@@ -170,8 +178,13 @@ def assemble(root, target, destination):
     if destination.resolve() == source.resolve():
         raise ValueError("Refusing to replace the Screener source directory")
     package = json.loads((source / "package.json").read_text())
-    if package.get("dependencies", {}).get("dukascopy-node") != DUKASCOPY_VERSION:
-        raise ValueError("Screener package must pin the reviewed dukascopy-node version")
+    for name, version in {"dukascopy-node": DUKASCOPY_VERSION, "trading-signals": TRADING_SIGNALS_VERSION, "csv-parse": CSV_PARSE_VERSION}.items():
+        if package.get("dependencies", {}).get(name) != version:
+            raise ValueError(f"Screener package must pin the reviewed {name} version")
+    # The npm trading-signals tarball omits its license. Retain the exact MIT
+    # license from its published gitHead commit in our reviewed source tree.
+    if sha256(source / "licenses/trading-signals-LICENSE") != TRADING_SIGNALS_LICENSE_SHA256:
+        raise ValueError("Screener trading-signals license differs from the reviewed upstream file")
     cache = root / ".tools/screener-downloads"
     node_url = f"https://nodejs.org/dist/v{NODE_VERSION}/{pin['nodeArchive']}"
     browser_archive = f"chrome-{pin['browserPlatform']}.zip"
@@ -183,8 +196,10 @@ def assemble(root, target, destination):
         stage = Path(temporary)
         runtime = stage / "runtime"
         runtime.mkdir()
-        for name in ("worker.cjs", "package.json", "package-lock.json"):
+        for name in ("worker.cjs", "enrich-worker.cjs", "package.json", "package-lock.json"):
             shutil.copy2(source / name, runtime / name)
+        shutil.copy2(root / "internal/screener/indicators.json", runtime / "indicators.json")
+        shutil.copytree(source / "licenses", runtime / "licenses")
         # Exact lockfile integrity is enforced by npm. No lifecycle hooks,
         # global installs, runtime npx or target-native addons are required.
         lock_hash = sha256(source / "package-lock.json")
@@ -209,14 +224,17 @@ def assemble(root, target, destination):
         (runtime / "THIRD_PARTY_NOTICES.md").write_text(
             "# Screener runtime notices\n\n"
             f"dukascopy-node {DUKASCOPY_VERSION}: https://github.com/Leo4815162342/dukascopy-node (MIT).\n"
+            f"trading-signals {TRADING_SIGNALS_VERSION}: https://github.com/bennycode/trading-signals (MIT); licenses/trading-signals-LICENSE from published commit a6893630d0565483bb6b12f7a55f2dee0cfd378e, packages/trading-signals/LICENSE.\n"
+            f"csv-parse {CSV_PARSE_VERSION}: https://csv.js.org/parse/ (MIT); node_modules/csv-parse/LICENSE.\n"
             f"Node.js {NODE_VERSION}: {node_url}; license and dependency notices: NODE-LICENSE.\n"
             f"Playwright {PLAYWRIGHT_VERSION}: https://github.com/microsoft/playwright (Apache-2.0).\n"
             f"Chrome for Testing {CHROMIUM_VERSION}: {browser_url}. Chromium and third-party credits are embedded in the browser (chrome://credits).\n"
-            "All npm package license/notice files are retained under node_modules.\n"
+            "All license/notice files present in npm packages are retained under node_modules; the omitted trading-signals license is retained under licenses.\n"
             "Runtime archives are SHA-256 pinned in scripts/screener_bundle.py; npm packages use package-lock.json integrity values.\n")
         files = {path.relative_to(runtime).as_posix(): {"bytes": path.stat().st_size, "sha256": sha256(path)}
                  for path in sorted(runtime.rglob("*")) if path.is_file()}
         manifest = {"target": target, "nodeVersion": NODE_VERSION, "dukascopyVersion": DUKASCOPY_VERSION,
+                    "tradingSignalsVersion": TRADING_SIGNALS_VERSION, "csvParseVersion": CSV_PARSE_VERSION,
                     "playwrightVersion": PLAYWRIGHT_VERSION, "chromiumVersion": CHROMIUM_VERSION,
                     "chromiumRevision": CHROMIUM_REVISION, "npmLockSHA256": lock_hash,
                     "nodeArchive": {"url": node_url, "sha256": pin["nodeSHA256"]},

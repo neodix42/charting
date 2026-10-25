@@ -18,13 +18,15 @@ def fixture(directory, target="linux-amd64"):
         path = directory / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"Pinned runtime fixture")
-    for name, version in (("dukascopy-node", bundle.DUKASCOPY_VERSION), ("playwright-core", bundle.PLAYWRIGHT_VERSION)):
+    for name, version in (("dukascopy-node", bundle.DUKASCOPY_VERSION), ("playwright-core", bundle.PLAYWRIGHT_VERSION),
+                          ("trading-signals", bundle.TRADING_SIGNALS_VERSION), ("csv-parse", bundle.CSV_PARSE_VERSION)):
         (directory / f"node_modules/{name}/package.json").write_text(json.dumps({"version": version}))
     for name in (bundle.PINS[target]["executable"], bundle.browser_path(target)):
         (directory / name).chmod(0o755)
     files = {path.relative_to(directory).as_posix(): {"bytes": path.stat().st_size, "sha256": bundle.sha256(path)}
              for path in directory.rglob("*") if path.is_file()}
     manifest = {"target": target, "nodeVersion": bundle.NODE_VERSION, "dukascopyVersion": bundle.DUKASCOPY_VERSION,
+                "tradingSignalsVersion": bundle.TRADING_SIGNALS_VERSION, "csvParseVersion": bundle.CSV_PARSE_VERSION,
                 "playwrightVersion": bundle.PLAYWRIGHT_VERSION, "chromiumVersion": bundle.CHROMIUM_VERSION,
                 "chromiumRevision": bundle.CHROMIUM_REVISION, "files": files}
     (directory / bundle.MANIFEST).write_text(json.dumps(manifest))
@@ -32,6 +34,23 @@ def fixture(directory, target="linux-amd64"):
 
 
 class ScreenerBundleTests(unittest.TestCase):
+    def test_enrichment_worker_catalog_libraries_and_licenses_are_required_on_both_targets(self):
+        for target in bundle.PINS:
+            required = bundle.required_files(target)
+            self.assertTrue({"enrich-worker.cjs", "indicators.json", "licenses/trading-signals-LICENSE",
+                             "node_modules/trading-signals/dist/index.js", "node_modules/csv-parse/LICENSE"}.issubset(required))
+            for dependency, expected in (("trading-signals", bundle.TRADING_SIGNALS_VERSION), ("csv-parse", bundle.CSV_PARSE_VERSION)):
+                with self.subTest(target=target, dependency=dependency), tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary) / "runtime"
+                    manifest = fixture(directory, target)
+                    path = directory / f"node_modules/{dependency}/package.json"
+                    path.write_text(json.dumps({"version": "0.0.0"}))
+                    # Updating its hash cannot conceal an incorrect package version.
+                    manifest["files"][path.relative_to(directory).as_posix()] = {"bytes": path.stat().st_size, "sha256": bundle.sha256(path)}
+                    (directory / bundle.MANIFEST).write_text(json.dumps(manifest))
+                    with self.assertRaisesRegex(ValueError, "Incorrect packaged Screener dependency"):
+                        bundle.validate_directory(directory, target)
+
     def test_private_node_pin_matches_the_build_toolchain(self):
         self.assertEqual(bundle.NODE_VERSION, node_toolchain.NODE_VERSION)
 

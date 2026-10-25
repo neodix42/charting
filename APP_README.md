@@ -157,6 +157,20 @@ For an optional live desktop verification, run `scripts/smoke-screener.sh` after
 
 `scripts/smoke-screener-resume.sh` performs a real close/restart during two minute-history downloads. It verifies automatic continuation, identical job IDs, unchanged committed CSV prefixes, no duplicate files, ordered candles, and restored selections/category state in an isolated profile.
 
+### Enrichment
+
+Open **Screener → Enrichment** to list published CSV files in the configured Screener folder. The table shows filenames, timeframes, requested UTC date ranges from download filenames, sizes and comma separated header fields. The range is the requested interval, not a claim that every date has data. Custom filenames without a download period show **Period unavailable**. All files are accessible through pagination, including earlier sessions' downloads; hidden partials, backups, directories and symlinks are excluded. **Refresh files** discovers newly completed downloads.
+
+Choose an indicator and its parameters, then press **Enrich** to process all CSV files currently in that folder, including other pages. The bundled [trading-signals](https://github.com/bennycode/trading-signals) **8.3.0** integration supports **40 indicators**: twelve moving averages, RSI, MACD, ROC, momentum, AO, AC, CCI, stochastic oscillators, ADX/ADXR/DX, Ichimoku/Tenkan/Kijun, ATR, true range, Bollinger bands/bandwidth, Donchian channels, OBV, VWAP/VWMA, MFI, CMF, accumulation/distribution, price volume trend and force index.
+
+Columns have readable names such as `sma_200`, `tenkan_9`, `macd_12_26`, `macd_signal_12_26_9` and `macd_histogram_12_26_9`. All defining parameters distinguish configurations. Repeating a calculation replaces its matching columns without duplicates; original fields and other indicators are preserved. Periods count input rows. Warm-up and mathematically undefined results stay empty. The library's initialization conventions can differ from chart indicators. Ichimoku stores unshifted values on calculation rows, with independent line warm-ups and no future/displaced rows.
+
+Price indicators default to **close**, then **bidPrice**, then **askPrice** for tick files. Choose another source explicitly when needed; non-close names include their source, such as `sma_200_bidprice`. Candle and volume indicators require the fields shown in the form. Tick data is not converted into artificial candles. Missing fields, invalid numbers, malformed CSV or descending timestamps fail that file visibly while other files continue. Original volume units are retained.
+
+Enrichment streams one file at a time with overall and per-file progress. Each successful calculation preserves the exact original in `.cryptodesk-enrichment-backups/<job-id>.csv`, with matching JSON identifying its original filename and parameters, before atomically replacing the CSV. It requires filesystem hard links, as downloads do. Backups accumulate and are never deleted automatically. Cancel or normal app close stops unfinished enrichment and retains completed files. Columns persist after restart; unfinished enrichment is not resumed automatically. Run the indicator again to recalculate it. A forced termination may leave a hidden temporary enrichment folder; the published CSV remains the previous or the fully enriched file.
+
+The indicator library and streaming CSV parser are preinstalled in Ubuntu and Windows release archives. Local enrichment needs no network or global Node/npm installation. `scripts/smoke-screener-enrichment.sh` verifies native buttons, real Dukascopy downloads, SMA/Tenkan values, exact backups, progress and restart discovery in an isolated profile.
+
 ## Save, export and recover
 
 Workspace data lives at `$XDG_DATA_HOME/cryptodesk/workspace.sqlite`, normally `~/.local/share/cryptodesk/workspace.sqlite`, with user-only permissions. A local lock prevents another process from editing the same store. For an isolated profile use `./cryptodesk --data-dir /absolute/test-directory`.

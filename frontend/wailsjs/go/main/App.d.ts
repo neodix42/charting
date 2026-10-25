@@ -10,6 +10,8 @@ export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:num
 
 export function CancelScreenerDownload():Promise<screener.Info>;
 
+export function CancelScreenerEnrichment():Promise<screener.EnrichmentInfo>;
+
 export function ChooseCandleStorageDirectory():Promise<string>;
 
 export function ChooseScreenerDirectory():Promise<string>;
@@ -40,6 +42,12 @@ export function GetScreener():Promise<screener.Info>;
 
 export function GetScreenerCatalog():Promise<screener.Catalog>;
 
+export function GetScreenerEnrichment(arg1:Array<string>):Promise<screener.EnrichmentInfo>;
+
+export function GetScreenerFiles(arg1:number,arg2:number):Promise<screener.FilePage>;
+
+export function GetScreenerIndicators():Promise<screener.IndicatorCatalog>;
+
 export function GetScreenerView():Promise<screener.ViewState>;
 
 export function ImportWorkspace():Promise<storage.Loaded>;
@@ -61,3 +69,5 @@ export function SaveScreenerView(arg1:screener.ViewState):Promise<screener.ViewS
 export function SaveWorkspace(arg1:number,arg2:string,arg3:number,arg4:domain.Workspace):Promise<storage.Ack>;
 
 export function StartScreenerDownload(arg1:screener.Request):Promise<screener.Info>;
+
+export function StartScreenerEnrichment(arg1:screener.EnrichmentRequest):Promise<screener.EnrichmentInfo>;

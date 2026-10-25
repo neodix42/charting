@@ -23,9 +23,11 @@ OTHER = "b" * 40
 def screener_entries(target):
     """A structurally complete runtime with real inventory checks, without downloads."""
     entries = {name: b"Pinned runtime fixture" for name in screener.required_files(target)}
-    for name, version in (("dukascopy-node", screener.DUKASCOPY_VERSION), ("playwright-core", screener.PLAYWRIGHT_VERSION)):
+    for name, version in (("dukascopy-node", screener.DUKASCOPY_VERSION), ("playwright-core", screener.PLAYWRIGHT_VERSION),
+                          ("trading-signals", screener.TRADING_SIGNALS_VERSION), ("csv-parse", screener.CSV_PARSE_VERSION)):
         entries[f"node_modules/{name}/package.json"] = json.dumps({"version": version}).encode()
     manifest = {"target": target, "nodeVersion": screener.NODE_VERSION, "dukascopyVersion": screener.DUKASCOPY_VERSION,
+                "tradingSignalsVersion": screener.TRADING_SIGNALS_VERSION, "csvParseVersion": screener.CSV_PARSE_VERSION,
                 "playwrightVersion": screener.PLAYWRIGHT_VERSION, "chromiumVersion": screener.CHROMIUM_VERSION,
                 "chromiumRevision": screener.CHROMIUM_REVISION,
                 "files": {name: {"bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()} for name, content in entries.items()}}

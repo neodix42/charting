@@ -1,0 +1,24 @@
+Using Node v24.19.0 and npm 11.17.0
+
+> cryptodesk-frontend@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 50 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/app-version.json                  0.03 kB │ gzip:   0.05 kB
+dist/assets/cryptodesk-D_A9QZBY.svg    0.36 kB │ gzip:   0.21 kB
+dist/index.html                        0.82 kB │ gzip:   0.47 kB
+dist/assets/index-DH1WIR2v.css        28.22 kB │ gzip:   6.23 kB
+dist/assets/index-BpO4g5zF.js        511.74 kB │ gzip: 158.34 kB
+
+✓ built in 190ms
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+enrichment: PASS (8 native assertions)
+enrichment-restore: PASS (3 native assertions)

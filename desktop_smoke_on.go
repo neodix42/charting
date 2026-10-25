@@ -207,7 +207,7 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" && phase != "enrichment" && phase != "enrichment-restore" {
 		return
 	}
 	encoded, _ := json.Marshal(phase)
@@ -262,7 +262,50 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='screener-resume'||phase==='screener-resume-restore'){
+  if(phase==='enrichment'||phase==='enrichment-restore'){
+   await click('[role="tab"][aria-controls="screener-panel"]');
+   if(phase==='enrichment'){
+    await click('#screener-downloader-tab');await wait(()=>qa('.screener-instrument').length===1499,'full download catalog');
+    for(const symbol of ['btcusd','ethusd']){await input('[aria-label="Search Dukascopy instruments"]',symbol);await click('.screener-instrument input');}
+    await select('[aria-label="Download timeframe"]','d1');await select('[aria-label="Parallel downloads"]','2');
+    await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-10');
+    await click('[aria-label="Download historical data"] button[type="submit"]');
+    const downloaded=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'two real daily downloads',90000);
+    const originals={};for(const symbol of ['btcusd','ethusd'])originals[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+    await click('#screener-enrichment-tab');
+    await wait(()=>qa('#screener-enrichment tbody tr').length===2&&q('[aria-label="Enrichment indicator"]').options.length===40,'native file list and indicator catalog');
+    const page=await api.GetScreenerFiles(0,50),ids=page.files.map(file=>file.id),runtime=await api.GetScreenerEnrichment(ids);
+    check(runtime.runtimeAvailable&&page.files.every(file=>file.from==='2024-01-01'&&file.to==='2024-01-10'&&file.timeframe==='d1'&&file.fields.join(',')==='timestamp,open,high,low,close,volume'),'native Enrichment lists genuine files, periods and CSV headers with preinstalled trading-signals',{runtime,page});
+    await input('[aria-label="Period"]','3');await click('[aria-label="Enrich downloaded data"] button[type="submit"]');
+    const sma=await wait(async()=>{const value=await api.GetScreenerEnrichment(ids);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2?value:false;},'native SMA enrichment');
+    await wait(()=>qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('sma_3')&&row.querySelector('progress')?.value===100),'native completed enrichment progress and refreshed headers');
+    const smaCSV={};
+    for(const symbol of ['btcusd','ethusd']){
+     smaCSV[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+     const old=originals[symbol].trim().split('\n').slice(1).map(line=>line.split(',')),next=smaCSV[symbol].trim().split('\n');
+     check(next[0]==='timestamp,open,high,low,close,volume,sma_3'&&next.length===old.length+1&&next.slice(1).every((line,i)=>{const row=line.split(',');return row.slice(0,6).join(',')===old[i].join(',')&&(i<2?row[6]==='':Math.abs(Number(row[6])-old.slice(i-2,i+1).reduce((sum,item)=>sum+Number(item[4]),0)/3)<1e-8);}),symbol+' SMA values align to unchanged original rows and warm-up cells stay blank',smaCSV[symbol]);
+    }
+    await select('[aria-label="Enrichment indicator"]','tenkan');await wait(()=>q('[aria-label="Period"]').value==='9','Tenkan default');await click('[aria-label="Enrich downloaded data"] button[type="submit"]');
+    const tenkan=await wait(async()=>{const value=await api.GetScreenerEnrichment(ids);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2&&value.indicator==='tenkan'?value:false;},'native Tenkan enrichment');
+    await wait(()=>qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('tenkan_9')&&row.querySelector('progress')?.value===100),'native second enrichment headers');
+    const finalCSV={};
+    for(const symbol of ['btcusd','ethusd']){
+     finalCSV[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+     const old=smaCSV[symbol].trim().split('\n').slice(1).map(line=>line.split(',')),next=finalCSV[symbol].trim().split('\n');
+     check(next[0]==='timestamp,open,high,low,close,volume,sma_3,tenkan_9'&&next.slice(1).every((line,i)=>{const row=line.split(',');return row.slice(0,7).join(',')===old[i].join(',')&&(i<8?row[7]==='':Math.abs(Number(row[7])-(Math.max(...old.slice(i-8,i+1).map(item=>Number(item[2])))+Math.min(...old.slice(i-8,i+1).map(item=>Number(item[3]))))/2)<1e-8);}),symbol+' Tenkan values preserve prior enrichment and use only current/past highs and lows',finalCSV[symbol]);
+    }
+    check(sma.jobs.every(job=>job.backupPath)&&tenkan.jobs.every(job=>job.backupPath),'each successful enrichment reports an original backup',{sma:sma.jobs,tenkan:tenkan.jobs});
+    check((await api.GetDiagnostics()).market.activeLeases===0,'enrichment runs without chart subscriptions');
+    report.enrichment={directory:downloaded.directory,originals,smaCSV,finalCSV,sma,tenkan};
+   }else{
+    await click('#screener-enrichment-tab');await wait(()=>qa('#screener-enrichment tbody tr').length===2,'native restored enrichment list');
+    const page=await api.GetScreenerFiles(0,50);
+    check(page.files.length===2&&page.files.every(file=>file.fields.join(',')==='timestamp,open,high,low,close,volume,sma_3,tenkan_9'),'restart discovers all enriched files and persisted columns',page);
+    check(qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('sma_3, tenkan_9')),'native restarted file table shows both persisted indicators');
+    const csv={};for(const symbol of ['btcusd','ethusd'])csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
+    report.enrichment={page,csv};
+   }
+  }else if(phase==='screener-resume'||phase==='screener-resume-restore'){
    await click('[role="tab"][aria-controls="screener-panel"]');await click('#screener-downloader-tab');
    await wait(()=>qa('.screener-instrument').length===1499,'native resumed catalog');
    if(phase==='screener-resume'){

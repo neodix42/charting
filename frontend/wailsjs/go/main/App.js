@@ -10,6 +10,10 @@ export function CancelScreenerDownload() {
   return window['go']['main']['App']['CancelScreenerDownload']();
 }
 
+export function CancelScreenerEnrichment() {
+  return window['go']['main']['App']['CancelScreenerEnrichment']();
+}
+
 export function ChooseCandleStorageDirectory() {
   return window['go']['main']['App']['ChooseCandleStorageDirectory']();
 }
@@ -70,6 +74,18 @@ export function GetScreenerCatalog() {
   return window['go']['main']['App']['GetScreenerCatalog']();
 }
 
+export function GetScreenerEnrichment(arg1) {
+  return window['go']['main']['App']['GetScreenerEnrichment'](arg1);
+}
+
+export function GetScreenerFiles(arg1, arg2) {
+  return window['go']['main']['App']['GetScreenerFiles'](arg1, arg2);
+}
+
+export function GetScreenerIndicators() {
+  return window['go']['main']['App']['GetScreenerIndicators']();
+}
+
 export function GetScreenerView() {
   return window['go']['main']['App']['GetScreenerView']();
 }
@@ -112,4 +128,8 @@ export function SaveWorkspace(arg1, arg2, arg3, arg4) {
 
 export function StartScreenerDownload(arg1) {
   return window['go']['main']['App']['StartScreenerDownload'](arg1);
+}
+
+export function StartScreenerEnrichment(arg1) {
+  return window['go']['main']['App']['StartScreenerEnrichment'](arg1);
 }

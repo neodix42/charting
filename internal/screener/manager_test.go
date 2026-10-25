@@ -14,6 +14,8 @@ import (
 type helperRequest struct {
 	Symbol          string `json:"symbol"`
 	Output          string `json:"output"`
+	Input           string `json:"input"`
+	Indicator       string `json:"indicator"`
 	SourceBatchSize int    `json:"sourceBatchSize"`
 }
 
@@ -24,6 +26,23 @@ func TestMain(m *testing.M) {
 		var request helperRequest
 		if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
 			os.Exit(4)
+		}
+		if request.Indicator != "" {
+			fmt.Println(`{"type":"progress","progress":40,"rows":1,"columns":["sma_3"],"message":"Calculating test rows"}`)
+			if os.Getenv("CRYPTODESK_SCREENER_TEST_MODE") == "enrich-gated" {
+				gates := os.Getenv("CRYPTODESK_SCREENER_TEST_GATES")
+				data, _ := json.Marshal(request)
+				_ = os.WriteFile(filepath.Join(gates, "started"), data, 0600)
+				for {
+					if _, err := os.Stat(filepath.Join(gates, "release")); err == nil {
+						break
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+			}
+			_ = os.WriteFile(request.Output, []byte("timestamp,open,high,low,close,volume,sma_3\n1704067200000,1,2,0,1,3,\n"), 0600)
+			fmt.Println(`{"type":"done","rows":1,"columns":["sma_3"],"message":"Enriched test rows"}`)
+			os.Exit(0)
 		}
 		fmt.Println(`{"type":"progress","progress":30,"message":"Fetched 1 of 3 source files"}`)
 		switch os.Getenv("CRYPTODESK_SCREENER_TEST_MODE") {

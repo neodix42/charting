@@ -609,6 +609,264 @@ export namespace screener {
 		    return a;
 		}
 	}
+	export class DataFile {
+	    id: string;
+	    name: string;
+	    symbol?: string;
+	    timeframe?: string;
+	    from?: string;
+	    to?: string;
+	    fields: string[];
+	    bytes: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DataFile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.fields = source["fields"];
+	        this.bytes = source["bytes"];
+	        this.error = source["error"];
+	    }
+	}
+	export class EnrichmentJob {
+	    id: string;
+	    fileId: string;
+	    name: string;
+	    status: string;
+	    progress: number;
+	    rows: number;
+	    message: string;
+	    columns: string[];
+	    backupPath?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new EnrichmentJob(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.fileId = source["fileId"];
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.progress = source["progress"];
+	        this.rows = source["rows"];
+	        this.message = source["message"];
+	        this.columns = source["columns"];
+	        this.backupPath = source["backupPath"];
+	    }
+	}
+	export class EnrichmentInfo {
+	    directory: string;
+	    active: boolean;
+	    runtimeAvailable: boolean;
+	    runtimeError?: string;
+	    indicator: string;
+	    total: number;
+	    completed: number;
+	    failed: number;
+	    cancelled: number;
+	    currentFile: string;
+	    currentProgress: number;
+	    jobs: EnrichmentJob[];
+
+	    static createFrom(source: any = {}) {
+	        return new EnrichmentInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.directory = source["directory"];
+	        this.active = source["active"];
+	        this.runtimeAvailable = source["runtimeAvailable"];
+	        this.runtimeError = source["runtimeError"];
+	        this.indicator = source["indicator"];
+	        this.total = source["total"];
+	        this.completed = source["completed"];
+	        this.failed = source["failed"];
+	        this.cancelled = source["cancelled"];
+	        this.currentFile = source["currentFile"];
+	        this.currentProgress = source["currentProgress"];
+	        this.jobs = this.convertValues(source["jobs"], EnrichmentJob);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class EnrichmentRequest {
+	    indicator: string;
+	    parameters: Record<string, number>;
+	    source: string;
+
+	    static createFrom(source: any = {}) {
+	        return new EnrichmentRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.indicator = source["indicator"];
+	        this.parameters = source["parameters"];
+	        this.source = source["source"];
+	    }
+	}
+	export class FilePage {
+	    directory: string;
+	    files: DataFile[];
+	    total: number;
+	    offset: number;
+	    limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new FilePage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.directory = source["directory"];
+	        this.files = this.convertValues(source["files"], DataFile);
+	        this.total = source["total"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class IndicatorParameter {
+	    key: string;
+	    label: string;
+	    default: number;
+	    min: number;
+	    max: number;
+	    step: number;
+
+	    static createFrom(source: any = {}) {
+	        return new IndicatorParameter(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.default = source["default"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	        this.step = source["step"];
+	    }
+	}
+	export class Indicator {
+	    id: string;
+	    name: string;
+	    category: string;
+	    input: string;
+	    parameters: IndicatorParameter[];
+	    note?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Indicator(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.category = source["category"];
+	        this.input = source["input"];
+	        this.parameters = this.convertValues(source["parameters"], IndicatorParameter);
+	        this.note = source["note"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class IndicatorCatalog {
+	    version: string;
+	    indicators: Indicator[];
+
+	    static createFrom(source: any = {}) {
+	        return new IndicatorCatalog(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.indicators = this.convertValues(source["indicators"], Indicator);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class Job {
 	    id: string;

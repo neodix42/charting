@@ -1,0 +1,714 @@
+{
+  "version": "8.3.0",
+  "indicators": [
+    {
+      "id": "sma",
+      "name": "Simple moving average (SMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 200,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "ema",
+      "name": "Exponential moving average (EMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "wma",
+      "name": "Weighted moving average (WMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "wsma",
+      "name": "Wilder smoothed moving average (WSMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "rma",
+      "name": "Running moving average (RMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "dema",
+      "name": "Double exponential moving average (DEMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "tema",
+      "name": "Triple exponential moving average (TEMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "trima",
+      "name": "Triangular moving average (TRIMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "zlema",
+      "name": "Zero lag exponential moving average (ZLEMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "hma",
+      "name": "Hull moving average (HMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 2,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "kama",
+      "name": "Kaufman adaptive moving average (KAMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "alma",
+      "name": "Arnaud Legoux moving average (ALMA)",
+      "category": "Moving averages",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "offset",
+          "label": "Offset",
+          "default": 0.85,
+          "min": 0,
+          "max": 1,
+          "step": 0.01
+        },
+        {
+          "key": "sigma",
+          "label": "Sigma",
+          "default": 6,
+          "min": 0.01,
+          "max": 100,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "id": "rsi",
+      "name": "Relative strength index (RSI)",
+      "category": "Momentum",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 2,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "roc",
+      "name": "Rate of change (ROC)",
+      "category": "Momentum",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 12,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "mom",
+      "name": "Momentum (MOM)",
+      "category": "Momentum",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 10,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "macd",
+      "name": "Moving average convergence divergence (MACD)",
+      "category": "Momentum",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "fast",
+          "label": "Fast period",
+          "default": 12,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "slow",
+          "label": "Slow period",
+          "default": 26,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "signal",
+          "label": "Signal period",
+          "default": 9,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "ao",
+      "name": "Awesome oscillator (AO)",
+      "category": "Momentum",
+      "input": "hl",
+      "parameters": [
+        {
+          "key": "fast",
+          "label": "Fast period",
+          "default": 5,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "slow",
+          "label": "Slow period",
+          "default": 34,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "ac",
+      "name": "Accelerator oscillator (AC)",
+      "category": "Momentum",
+      "input": "hl",
+      "parameters": [
+        {
+          "key": "fast",
+          "label": "Fast period",
+          "default": 5,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "slow",
+          "label": "Slow period",
+          "default": 34,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "signal",
+          "label": "Signal period",
+          "default": 5,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "cci",
+      "name": "Commodity channel index (CCI)",
+      "category": "Momentum",
+      "input": "hlc",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 2,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "stochastic",
+      "name": "Stochastic oscillator",
+      "category": "Momentum",
+      "input": "hlc",
+      "parameters": [
+        {
+          "key": "k",
+          "label": "K period",
+          "default": 14,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "slowing",
+          "label": "K slowing",
+          "default": 3,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "d",
+          "label": "D period",
+          "default": 3,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "stochrsi",
+      "name": "Stochastic RSI",
+      "category": "Momentum",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 2,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "adx",
+      "name": "Average directional index (ADX)",
+      "category": "Trend",
+      "input": "hlc",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "adxr",
+      "name": "Average directional index rating (ADXR)",
+      "category": "Trend",
+      "input": "hlc",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "dx",
+      "name": "Directional movement index (DX)",
+      "category": "Trend",
+      "input": "hlc",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "tenkan",
+      "name": "Ichimoku Tenkan (conversion line)",
+      "category": "Trend",
+      "input": "hl",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 9,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "kijun",
+      "name": "Ichimoku Kijun (base line)",
+      "category": "Trend",
+      "input": "hl",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 26,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "ichimoku",
+      "name": "Ichimoku cloud",
+      "category": "Trend",
+      "input": "hl",
+      "parameters": [
+        {
+          "key": "conversion",
+          "label": "Tenkan period",
+          "default": 9,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "base",
+          "label": "Kijun period",
+          "default": 26,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "spanB",
+          "label": "Span B period",
+          "default": 52,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ],
+      "note": "Unshifted values on the calculation row; no future or displaced rows. Each line has its own warm-up."
+    },
+    {
+      "id": "atr",
+      "name": "Average true range (ATR)",
+      "category": "Volatility",
+      "input": "hlc",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "tr",
+      "name": "True range (TR)",
+      "category": "Volatility",
+      "input": "hlc",
+      "parameters": []
+    },
+    {
+      "id": "bb",
+      "name": "Bollinger bands",
+      "category": "Volatility",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "deviation",
+          "label": "Standard deviations",
+          "default": 2,
+          "min": 0.01,
+          "max": 100,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "id": "bbw",
+      "name": "Bollinger bandwidth",
+      "category": "Volatility",
+      "input": "price",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        },
+        {
+          "key": "deviation",
+          "label": "Standard deviations",
+          "default": 2,
+          "min": 0.01,
+          "max": 100,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "id": "donchian",
+      "name": "Donchian channels",
+      "category": "Volatility",
+      "input": "hl",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "obv",
+      "name": "On balance volume (OBV)",
+      "category": "Volume",
+      "input": "ohlcv",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 2,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "vwap",
+      "name": "Volume weighted average price (VWAP)",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": []
+    },
+    {
+      "id": "vwma",
+      "name": "Volume weighted moving average (VWMA)",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "mfi",
+      "name": "Money flow index (MFI)",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 14,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "cmf",
+      "name": "Chaikin money flow (CMF)",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 20,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "ad",
+      "name": "Accumulation / distribution (AD)",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": []
+    },
+    {
+      "id": "pvt",
+      "name": "Price volume trend (PVT)",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": []
+    },
+    {
+      "id": "force",
+      "name": "Force index",
+      "category": "Volume",
+      "input": "hlcv",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 13,
+          "min": 1,
+          "max": 10000,
+          "step": 1
+        }
+      ]
+    }
+  ]
+}

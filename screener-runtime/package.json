@@ -2,8 +2,17 @@
   "name": "cryptodesk-screener-runtime",
   "version": "1.0.0",
   "private": true,
-  "description": "Pinned, bundled Dukascopy downloader for CryptoDesk",
-  "engines": { "node": ">=20" },
-  "dependencies": { "dukascopy-node": "1.51.0" },
-  "scripts": { "test": "node --test worker.test.cjs", "catalog": "node generate-catalog.cjs" }
+  "description": "Pinned, bundled Dukascopy downloader and trading-signals enrichment for CryptoDesk",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "csv-parse": "7.0.3",
+    "dukascopy-node": "1.51.0",
+    "trading-signals": "8.3.0"
+  },
+  "scripts": {
+    "test": "node --test worker.test.cjs enrich-worker.test.cjs",
+    "catalog": "node generate-catalog.cjs"
+  }
 }
