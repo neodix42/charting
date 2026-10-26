@@ -2,13 +2,13 @@ import {Fragment,useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import './ThemedSelectMenus.css';
 
-interface Choice {index:number;label:string;disabled:boolean;group?:HTMLOptGroupElement}
+interface Choice {index:number;value:string;label:string;disabled:boolean;group?:HTMLOptGroupElement}
 interface Menu {select:HTMLSelectElement;label:string;items:Choice[];active:number;selected:number;font:string}
 
 function choices(select:HTMLSelectElement):Choice[]{
  return [...select.options].flatMap((option,index)=>{
   const group=option.parentElement instanceof HTMLOptGroupElement?option.parentElement:undefined;
-  return option.hidden||group?.hidden?[]:[{index,label:option.label,disabled:option.disabled||!!group?.disabled,group}];
+  return option.hidden||group?.hidden?[]:[{index,value:option.value,label:option.label,disabled:option.disabled||!!group?.disabled,group}];
  });
 }
 function selectable(select:HTMLSelectElement){return select.isConnected&&!select.matches(':disabled')&&!select.multiple&&select.size<=1&&select.getClientRects().length>0;}
@@ -27,7 +27,9 @@ export function ThemedSelectMenus(){
  const choose=useRef((position:number)=>{
   const state=current.current;if(!state)return;
   const item=state.items[position],option=item&&state.select.options[item.index];
-  if(!item||item.disabled||!option||option.disabled||!selectable(state.select))return;
+  if(!item||item.disabled||!option||option.disabled||option.parentElement instanceof HTMLOptGroupElement&&option.parentElement.disabled||!selectable(state.select))return;
+  // A catalog may update between pointerdown and click. Never commit a stale index.
+  if(option.value!==item.value||option.label!==item.label){close.current(true);return;}
   close.current(true);
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'selectedIndex')!.set!.call(state.select,item.index);
   state.select.dispatchEvent(new Event('input',{bubbles:true}));state.select.dispatchEvent(new Event('change',{bubbles:true}));
@@ -61,10 +63,10 @@ export function ThemedSelectMenus(){
   };
   const keyboard=(event:KeyboardEvent)=>{
    const state=current.current,select=selectFor(event.target);
-   if(!state){if(select&&selectable(select)&&!event.ctrlKey&&!event.metaKey&&['ArrowDown','ArrowUp','Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();open(select);}return;}
+   if(!state){if(select&&selectable(select)&&!event.ctrlKey&&!event.metaKey&&['ArrowDown','ArrowUp','Enter',' ','F4'].includes(event.key)){event.preventDefault();event.stopPropagation();open(select);}return;}
    if(event.target!==state.select&&!popup.current?.contains(event.target as Node))return;
    if(event.key==='Tab'){close.current();return;}
-   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close.current(true);return;}
+   if(event.key==='Escape'||event.key==='F4'||event.altKey&&['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();event.stopPropagation();close.current(true);return;}
    if(event.ctrlKey||event.metaKey||event.altKey)return;
    if(['ArrowDown','ArrowUp','Home','End','PageDown','PageUp','Enter',' '].includes(event.key)){
     event.preventDefault();event.stopPropagation();
@@ -96,14 +98,24 @@ export function ThemedSelectMenus(){
    element.style.top=`${Math.max(8,Math.min(below<bounds.height&&above>below?anchor.top-bounds.height-4:anchor.bottom+4,window.innerHeight-bounds.height-8))}px`;
   };
   const scroll=(event:Event)=>{if(!element.contains(event.target as Node))close.current();};
-  const mutation=new MutationObserver(()=>{if(!selectable(select))close.current();});mutation.observe(document.body,{childList:true,subtree:true});mutation.observe(select,{attributes:true,attributeFilter:['disabled'],subtree:true});
+  const mutation=new MutationObserver(()=>{if(!selectable(select))close.current();});mutation.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled','hidden','inert']});
+  const optionsChanged=new MutationObserver(()=>{
+   const state=current.current;if(!state||state.select!==select)return;
+   const items=choices(select),previous=state.items[state.active];
+   let active=items.findIndex(item=>!item.disabled&&item.value===previous?.value&&item.label===previous?.label);
+   if(active<0)active=items.findIndex(item=>!item.disabled&&item.index===select.selectedIndex);
+   if(active<0)active=items.findIndex(item=>!item.disabled);
+   if(active<0){close.current();return;}
+   const next={...state,items,active,selected:select.selectedIndex};current.current=next;setMenu(next);
+  });
+  optionsChanged.observe(select,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['disabled','hidden','label','value']});
   const resize=new ResizeObserver(position);resize.observe(select);resize.observe(element);window.addEventListener('resize',position);document.addEventListener('scroll',scroll,true);position();
-  return()=>{mutation.disconnect();resize.disconnect();window.removeEventListener('resize',position);document.removeEventListener('scroll',scroll,true);};
+  return()=>{mutation.disconnect();optionsChanged.disconnect();resize.disconnect();window.removeEventListener('resize',position);document.removeEventListener('scroll',scroll,true);};
  },[menu?.select]);
  useLayoutEffect(()=>{
   if(!menu)return;menu.select.setAttribute('aria-activedescendant',`${menuID}-option-${menu.items[menu.active].index}`);
   document.getElementById(`${menuID}-option-${menu.items[menu.active].index}`)?.scrollIntoView({block:'nearest'});
- },[menu?.active,menu?.select,menuID]);
+ },[menu?.active,menu?.select,menu?.items,menuID]);
  if(!menu)return null;
  const groups:Array<{group?:HTMLOptGroupElement;items:Array<{choice:Choice;position:number}>}>=[];
  menu.items.forEach((choice,position)=>{if(!groups.length||groups.at(-1)!.group!==choice.group)groups.push({group:choice.group,items:[]});groups.at(-1)!.items.push({choice,position});});

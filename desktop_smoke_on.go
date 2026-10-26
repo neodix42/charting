@@ -307,7 +307,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     }
     check(details.options.every(option=>[details.text,rootColor('--accent'),rootColor('--muted')].includes(option.color)),label+' every opened option inherits the current palette text',details);
     check(details.bounds.left>=0&&details.bounds.right<=innerWidth&&details.bounds.top>=0&&details.bounds.bottom<=innerHeight,label+' popup fits the native window',details.bounds);
-    await sleep(250);details.screenshot=await api.DesktopSmokeThemeScreenshot(theme());report.themes.push(details);
+    await sleep(250);details.screenshot=await api.DesktopSmokeThemeScreenshot(phase==='themes-restore'?'restore':theme());report.themes.push(details);
     key(menu,'Escape');await wait(()=>!opened(),label+' Escape dismisses popup');
    };
    report.themes=[];
@@ -333,7 +333,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    report.enrichmentMenu={theme:theme(),background:getComputedStyle(menu).backgroundColor,color:getComputedStyle(menu).color,options:options.length,groups:groups.map(group=>group.getAttribute('aria-label')||group.textContent.trim().slice(0,80)),bounds:bounds(menu)};
    check(options.length===42&&groups.length>=2,'opened Enrichment menu preserves all indicator options and category groups',report.enrichmentMenu);
    check(getComputedStyle(menu).backgroundColor===rootColor('--elevated')||getComputedStyle(menu).backgroundColor===rootColor('--panel'),'opened Enrichment menu uses Red Sands surface',report.enrichmentMenu);
-   await sleep(250);report.enrichmentMenu.screenshot=await api.DesktopSmokeThemeScreenshot(phase==='themes'?'enrichment':'restore');
+   if(phase==='themes'){await sleep(250);report.enrichmentMenu.screenshot=await api.DesktopSmokeThemeScreenshot('enrichment');}
    key(menu,'Escape');await wait(()=>!opened(),'Escape dismisses grouped Enrichment dropdown');
    await wait(async()=>window.__cryptodeskDiagnostics?.().chartInstances===0&&(await api.GetDiagnostics()).market.activeLeases===0,'Screener releases all chart renderers and leases');
    check(report.initialCounts.tabs===1&&report.initialCounts.charts.join(',')==='1','theme verification preserves first-launch one-tab one-chart workspace',report.initialCounts);
