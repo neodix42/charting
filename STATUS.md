@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-10-25
 
+## Main README and light-theme screenshots — 2026-10-25
+
+The main README now introduces current charting capabilities and the complete Screener workflow, with downloader/resume controls, indicator enrichment and refresh, visual Analysis operators, a reproducible two-row filter, named condition sets and match-chart navigation. Six light-theme UI captures are retained as product documentation in `docs/screenshots/`, outside disposable verification output. Their provenance explicitly separates recorded Binance candles, genuine Dukascopy inputs and production-calculated indicators/results from illustrative downloader progress. The actual analysis example returns 100 occurrences across two 1,028-bar daily files. Documentation captures use the explicit browser bridge and establish layout, not native platform execution.
+
+Capture: six screenshots, no browser page errors; all six PNGs are 1600 × 1100 and were visually reviewed. Documentation validation passes all 39 local links/anchors and `git diff --check`. No application code, runtime dependencies or release workflow changed; the application regression suite was not repeated for this documentation-only change. Native Windows GUI and hosted CI remain unrun; earlier application verification is recorded below.
+
 ## Saved Screener Analysis conditions — 2026-10-25
 
 Analysis now has a persistent **Saved conditions** sidebar on the right. **Safe Condition** asks for a name and saves all current AND rows, with every operand, comparison, timeframe, offset and window. Clicking a saved name copies the full snapshot into the editable rows on the left; the scan waits for **Apply conditions**. Editing a loaded draft retains the saved snapshot. A separate versioned `<profile>/screener-saved-conditions.json` uses synced atomic publication, validates bounds and rejects duplicate names without replacement; corrupt/future files are preserved and reported. Names are limited to 100 characters, collections to 100 snapshots and 8 MiB. The normal-close flush waits for an in-flight named save. No chart workspace schema, dependency or runtime catalog changes.
