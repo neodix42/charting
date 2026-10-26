@@ -140,3 +140,34 @@ func TestScreenerAnalysisFacadeFiltersCategoriesBeforePaging(t *testing.T) {
 		t.Fatal("facade accepted an invalid category")
 	}
 }
+
+func TestScreenerDeleteSavedConditionFacadePersists(t *testing.T) {
+	profile := t.TempDir()
+	manager := screener.New(profile)
+	t.Cleanup(manager.Close)
+	app := &App{screener: manager}
+	draft, err := app.GetScreenerAnalysisView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := app.SaveScreenerAnalysisCondition("Remove", draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = app.DeleteScreenerAnalysisCondition(saved.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = app.DeleteScreenerAnalysisCondition(saved.ID); err == nil {
+		t.Fatal("facade did not propagate the missing condition error")
+	}
+	manager.Close()
+	reopened := screener.New(profile)
+	t.Cleanup(reopened.Close)
+	app = &App{screener: reopened}
+	if list, err := app.GetScreenerSavedConditions(); err != nil || len(list) != 0 {
+		t.Fatalf("facade deletion did not persist: %+v %v", list, err)
+	}
+	if restored, err := app.GetScreenerAnalysisView(); err != nil || !reflect.DeepEqual(restored, draft) {
+		t.Fatalf("facade deletion changed the editable draft: %+v %v", restored, err)
+	}
+}

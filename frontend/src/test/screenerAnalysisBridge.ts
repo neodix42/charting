@@ -10,7 +10,7 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
  const savedKey='cryptodesk-explicit-test-saved-conditions';
  let savedConditions:SavedAnalysisCondition[]=JSON.parse(sessionStorage.getItem(savedKey)||'[]');
  let catalogOverride:Partial<AnalysisCatalog>={},request:AnalysisRequest|null=null,reads=0,chartDelay=0;
- let errors:Partial<Record<'catalog'|'view'|'save'|'start'|'status'|'chart'|'savedList'|'savedWrite',string>>={};
+ let errors:Partial<Record<'catalog'|'view'|'save'|'start'|'status'|'chart'|'savedList'|'savedWrite'|'savedDelete',string>>={};
  const saves:AnalysisRequest[]=[],chartRequests:Array<{resultID:string;occurrence:number;before:number;after:number}>=[];
  let info:AnalysisInfo={active:false,phase:'idle',total:0,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],offset:0,limit:50,totalResults:0};
  let charts:Record<string,AnalysisChart>={},saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined;
@@ -40,6 +40,11 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
    if(savedConditions.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw Error('A condition with this name already exists; choose another name.');
    const saved={id:crypto.randomUUID().replaceAll('-',''),name,request:structuredClone(value)};
    savedConditions.push(saved);sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));return structuredClone(saved);
+  },
+  async DeleteScreenerAnalysisCondition(id){
+   if(errors.savedDelete)throw Error(errors.savedDelete);
+   if(!savedConditions.some(item=>item.id===id))throw Error('Saved condition not found.');
+   savedConditions=savedConditions.filter(item=>item.id!==id);sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));
   },
   async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,active:true,phase:'indexing',total:files().filter(file=>value.categories==null||value.categories.includes(file.category)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
   async GetScreenerAnalysis(offset,limit){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit);},

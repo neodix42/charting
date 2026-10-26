@@ -2,10 +2,12 @@ package screener
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -114,9 +116,145 @@ func TestSavedConditionsCorruptFutureAndOversizedStateIsNeverOverwritten(t *test
 			if _, err := m.SaveAnalysisCondition("New", defaultAnalysisRequest()); err == nil {
 				t.Fatal("invalid saved state was overwritten")
 			}
+			if err := m.DeleteAnalysisCondition(strings.Repeat("a", 32)); err == nil {
+				t.Fatal("deletion accepted invalid saved state")
+			}
 			if after, _ := os.ReadFile(path); string(after) != data {
 				t.Fatal("saved evidence was changed")
 			}
 		})
+	}
+}
+
+func TestDeleteSavedConditionPersistsWithoutChangingDraftOrData(t *testing.T) {
+	profile := t.TempDir()
+	m := savedConditionManager(t, profile)
+	request := defaultAnalysisRequest()
+	request.Conditions[0].Operator = "equal"
+	request.Conditions[0].Left.Field = "weekday"
+	request.Conditions[0].Right = analysisNumber(1)
+	if _, err := m.SaveAnalysisView(request); err != nil {
+		t.Fatal(err)
+	}
+	var saved []SavedAnalysisCondition
+	for _, name := range []string{"First", "Delete me", "Last"} {
+		condition, err := m.SaveAnalysisCondition(name, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		saved = append(saved, condition)
+	}
+	dataDirectory := filepath.Join(profile, "screener")
+	if err := os.MkdirAll(dataDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dataPath := filepath.Join(dataDirectory, "btcusd-d1-2024-01-01-2024-01-02.csv")
+	const data = "timestamp,close,weekday\n1704067200000,42,1\n"
+	if err := os.WriteFile(dataPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.DeleteAnalysisCondition(saved[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	m.Close()
+	restarted := savedConditionManager(t, profile)
+	if list, err := restarted.SavedAnalysisConditions(); err != nil || !reflect.DeepEqual(list, []SavedAnalysisCondition{saved[0], saved[2]}) {
+		t.Fatalf("deletion did not preserve the remaining snapshots across restart: %+v %v", list, err)
+	}
+	if draft, err := restarted.AnalysisView(); err != nil || !reflect.DeepEqual(draft, request) {
+		t.Fatalf("deleting a saved snapshot changed the draft: %+v %v", draft, err)
+	}
+	if got, err := os.ReadFile(dataPath); err != nil || string(got) != data {
+		t.Fatalf("deleting a saved snapshot changed downloaded data: %q %v", got, err)
+	}
+	if info, err := restarted.Analysis(0, 10); err != nil || info.Active {
+		t.Fatalf("deleting a saved snapshot started analysis: %+v %v", info, err)
+	}
+	for _, condition := range []SavedAnalysisCondition{saved[0], saved[2]} {
+		if err := restarted.DeleteAnalysisCondition(condition.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	restarted.Close()
+	empty := savedConditionManager(t, profile)
+	if list, err := empty.SavedAnalysisConditions(); err != nil || list == nil || len(list) != 0 {
+		t.Fatalf("deletion of the last snapshot did not persist an empty list: %+v %v", list, err)
+	}
+	if _, err := empty.SaveAnalysisCondition("Delete me", request); err != nil {
+		t.Fatalf("deleted condition name could not be reused: %v", err)
+	}
+}
+
+func TestDeleteSavedConditionFailuresPreserveState(t *testing.T) {
+	m := savedConditionManager(t, t.TempDir())
+	saved, err := m.SaveAnalysisCondition("Keep", defaultAnalysisRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(m.profile, "screener-saved-conditions.json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"", "bad", strings.Repeat("z", 32), strings.Repeat("0", 32)} {
+		if err := m.DeleteAnalysisCondition(id); err == nil {
+			t.Fatalf("invalid or missing ID was accepted: %q", id)
+		}
+		if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
+			t.Fatalf("failed deletion changed saved snapshots: %v", err)
+		}
+	}
+	m.Close()
+	if err := m.DeleteAnalysisCondition(saved.ID); err == nil {
+		t.Fatal("deleted from closed manager")
+	}
+	if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
+		t.Fatalf("deletion after close changed saved snapshots: %v", err)
+	}
+}
+
+func TestSavedConditionsConcurrentSaveAndDeleteDoNotLoseChanges(t *testing.T) {
+	profile := t.TempDir()
+	m := savedConditionManager(t, profile)
+	const count = 10
+	var saved []SavedAnalysisCondition
+	for i := 0; i < count; i++ {
+		condition, err := m.SaveAnalysisCondition(fmt.Sprintf("Old %d", i), defaultAnalysisRequest())
+		if err != nil {
+			t.Fatal(err)
+		}
+		saved = append(saved, condition)
+	}
+	var wg sync.WaitGroup
+	errors := make(chan error, count*2)
+	for i, condition := range saved {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			errors <- m.DeleteAnalysisCondition(condition.ID)
+		}()
+		go func() {
+			defer wg.Done()
+			_, err := m.SaveAnalysisCondition(fmt.Sprintf("New %d", i), defaultAnalysisRequest())
+			errors <- err
+		}()
+	}
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	m.Close()
+	restarted := savedConditionManager(t, profile)
+	list, err := restarted.SavedAnalysisConditions()
+	if err != nil || len(list) != count {
+		t.Fatalf("concurrent mutations lost saved snapshots: %+v %v", list, err)
+	}
+	for _, condition := range list {
+		if !strings.HasPrefix(condition.Name, "New ") {
+			t.Fatalf("deleted snapshot returned after concurrent save: %+v", condition)
+		}
 	}
 }

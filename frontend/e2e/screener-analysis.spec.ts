@@ -16,6 +16,11 @@ async function complete(page:Page,results:AnalysisResult[]){
 }
 const control=(page:Page,name:string)=>page.getByLabel(name,{exact:true});
 const resources=(page:Page)=>page.evaluate(()=>(window as any).__testAnalysisChartResources());
+async function saveCondition(page:Page,name:string){
+ await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill(name);
+ const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});
+ await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
+}
 
 test('Analysis loads only when visible and exposes grouped enriched fields plus every comparison',async({page})=>{
  await page.goto('/');expect(await page.evaluate(()=>(window as any).__testAnalysisReads())).toBe(0);
@@ -276,6 +281,83 @@ test('a delayed saved list cannot erase a newly saved condition',async({page})=>
  await expect(page.getByRole('button',{name:'Load condition Keep this',exact:true})).toBeVisible();
  await page.evaluate(()=>(window as any).__releaseSavedList());await page.waitForTimeout(100);
  await expect(page.getByRole('button',{name:'Load condition Keep this',exact:true})).toBeVisible();
+});
+
+test('right-click Delete removes only the selected saved condition durably and preserves the draft',async({page})=>{
+ await open(page);await saveCondition(page,'First');
+ await control(page,'Condition 1 right constant').fill('42');await saveCondition(page,'Second');
+ await control(page,'Condition 1 right constant').fill('99');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(99);
+ const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
+ const first=page.getByRole('button',{name:'Load condition First',exact:true}),second=page.getByRole('button',{name:'Load condition Second',exact:true});
+ await first.click({button:'right'});
+ const menu=page.getByRole('menu',{name:'Saved condition First',exact:true});await expect(menu).toBeVisible();
+ await expect(control(page,'Condition 1 right constant')).toHaveValue('99');
+ expect(await page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(draft);
+ await menu.getByRole('menuitem',{name:'Delete',exact:true}).click();
+ await expect(first).toHaveCount(0);await expect(second).toBeVisible();
+ expect((await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).map((item:any)=>item.name)).toEqual(['Second']);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(draft);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(first).toHaveCount(0);await expect(second).toBeVisible();await expect(control(page,'Condition 1 right constant')).toHaveValue('99');
+ await second.click({button:'right'});await page.getByRole('menuitem',{name:'Delete',exact:true}).click();
+ await expect(second).toHaveCount(0);await expect(page.getByText('No saved conditions yet.',{exact:true})).toBeVisible();
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(page.getByText('No saved conditions yet.',{exact:true})).toBeVisible();await expect(control(page,'Condition 1 right constant')).toHaveValue('99');
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual([]);
+});
+
+test('saved-condition Delete menu supports keyboard and dismissal, and a failed delete preserves the condition',async({page})=>{
+ await open(page);await saveCondition(page,'Protected');await control(page,'Condition 1 right constant').fill('42');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(42);
+ const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
+ const saved=page.getByRole('button',{name:'Load condition Protected',exact:true}),menu=page.getByRole('menu',{name:'Saved condition Protected',exact:true});
+ await saved.focus();await page.keyboard.press('Shift+F10');await expect(menu).toBeVisible();
+ await expect(menu.getByRole('menuitem',{name:'Delete',exact:true})).toBeFocused();
+ await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(saved).toBeFocused();
+ await saved.click({button:'right'});await page.getByRole('heading',{name:'Visual condition rows',exact:true}).click();await expect(menu).toHaveCount(0);
+ await saved.click({button:'right'});await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(menu).toHaveCount(0);
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();await expect(menu).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__testAnalysisErrors({savedDelete:'Cannot delete named condition: disk full'}));
+ await saved.click({button:'right'});await menu.getByRole('menuitem',{name:'Delete',exact:true}).click();
+ await expect(page.getByRole('complementary',{name:'Saved conditions',exact:true}).getByRole('alert')).toContainText('disk full');
+ await expect(saved).toBeVisible();await expect(saved).toBeEnabled();await expect(control(page,'Condition 1 right constant')).toHaveValue('42');
+ expect((await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).map((item:any)=>item.name)).toEqual(['Protected']);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(draft);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+});
+
+test('a delayed saved list cannot resurrect a deleted condition',async({page})=>{
+ await open(page);await saveCondition(page,'Delete me');await saveCondition(page,'Keep me');
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditions;
+  api.GetScreenerSavedConditions=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
+ });
+ await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSavedList)).toBe('function');
+ const removed=page.getByRole('button',{name:'Load condition Delete me',exact:true}),kept=page.getByRole('button',{name:'Load condition Keep me',exact:true});
+ await removed.click({button:'right'});await page.getByRole('menuitem',{name:'Delete',exact:true}).click();
+ await expect(removed).toHaveCount(0);await expect(kept).toBeVisible();
+ await page.evaluate(()=>(window as any).__releaseSavedList());await page.waitForTimeout(100);
+ await expect(removed).toHaveCount(0);await expect(kept).toBeVisible();
+ expect((await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).map((item:any)=>item.name)).toEqual(['Keep me']);
+});
+
+test('normal close waits for an in-flight saved-condition delete',async({page})=>{
+ await open(page);await saveCondition(page,'Pending deletion');
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,original=api.DeleteScreenerAnalysisCondition;
+  api.DeleteScreenerAnalysisCondition=id=>new Promise(resolve=>{(window as any).__releaseNamedDelete=async()=>resolve(await original(id));});
+ });
+ const saved=page.getByRole('button',{name:'Load condition Pending deletion',exact:true});
+ await saved.click({button:'right'});await page.getByRole('menuitem',{name:'Delete',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseNamedDelete)).toBe('function');await expect(saved).toBeDisabled();
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'named-condition-delete'}));
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__releaseNamedDelete());
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'named-condition-delete',discard:false});
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual([]);
 });
 
 test('scan categories default to all, survive row edits and reload, and are included in saved conditions',async({page})=>{

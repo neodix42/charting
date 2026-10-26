@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-10-26
 
+## Delete saved Analysis conditions — 2026-10-26
+
+Added a theme-aware right-click menu with **Delete** on each Saved conditions entry. Shift+F10/context-menu key opens it for the focused entry; Escape/outside click, scrolling, resizing and panel switches dismiss it. Position is constrained to the viewport and the menu focuses its action. Deletion addresses the stable saved ID, validates the existing store and atomically writes the remaining entries under the manager lock. Only successful deletion removes the visible entry; failures stay visible, and the current draft, other named sets and CSV data are preserved. A pending deletion participates in the existing normal-close flush, and delayed list responses cannot restore deleted entries. README and APP_README document usage.
+
+Verification: Go race tests pass for saved-condition deletion/restart, last-entry removal, invalid/missing IDs, protected corrupt state, concurrent saves/deletes and the Wails facade. The full binding-tagged app race suite passes and JavaScript/TypeScript facade bindings were regenerated. Frontend typecheck/lint, **176 unit tests** and all **22 Analysis browser tests** pass, including durable selective deletion, keyboard/dismissal behavior, errors, stale lists and close during deletion. Frontend/binding/build evidence is under ignored `.tools/verification/screener-condition-delete/`. Native desktop interaction and live provider access were not rechecked for this local saved-condition action.
+
+Linux and Windows release builds, complete archive/runtime inventories and artifact checksums pass. The root Linux executable is rebuilt with the new action. Native Windows GUI and a new hosted Actions run remain unverified; `git diff --check` passes.
+
 ## Historical Screener numeric equality — 2026-10-26
 
 Added **Is equal** to Analysis visual condition rows and the comparison selectors inside **Occurred within** and **Remained true for**. It compares parsed numeric values exactly, with no rounding or tolerance, across the existing indicator, price, constant, timeframe and earlier-bar operands. Missing values and warm-up blanks cannot match. The custom hover/focus help explains the semantics and gives a Weekday=1 example. Drafts and named condition snapshots retain the new operator across restart. README and APP_README describe equality and point to distance comparisons for a tolerance.

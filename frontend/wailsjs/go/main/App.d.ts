@@ -26,6 +26,8 @@ export function ConfigureScreenerDirectory(arg1:string):Promise<screener.Info>;
 
 export function ConfirmClose(arg1:string,arg2:boolean):Promise<void>;
 
+export function DeleteScreenerAnalysisCondition(arg1:string):Promise<void>;
+
 export function DetachChart(arg1:string):Promise<void>;
 
 export function ExportWorkspace():Promise<string>;

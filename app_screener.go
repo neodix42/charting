@@ -90,6 +90,10 @@ func (a *App) SaveScreenerAnalysisCondition(name string, request screener.Analys
 	return a.screener.SaveAnalysisCondition(name, request)
 }
 
+func (a *App) DeleteScreenerAnalysisCondition(id string) error {
+	return a.screener.DeleteAnalysisCondition(id)
+}
+
 func (a *App) StartScreenerAnalysis(request screener.AnalysisRequest) (screener.AnalysisInfo, error) {
 	return a.screener.StartAnalysis(request)
 }

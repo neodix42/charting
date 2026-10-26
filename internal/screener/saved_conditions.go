@@ -127,3 +127,32 @@ func (m *Manager) SaveAnalysisCondition(name string, request AnalysisRequest) (S
 	}
 	return condition, nil
 }
+
+func (m *Manager) DeleteAnalysisCondition(id string) error {
+	if len(id) != 32 {
+		return errors.New("invalid saved condition ID")
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return errors.New("invalid saved condition ID")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return errors.New("screener is closed")
+	}
+	conditions, err := m.readSavedConditions()
+	if err != nil {
+		return err
+	}
+	for i, condition := range conditions {
+		if condition.ID != id {
+			continue
+		}
+		saved := savedAnalysisConditions{Version: 1, Conditions: append(conditions[:i], conditions[i+1:]...)}
+		if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+			return fmt.Errorf("delete named condition: %w", err)
+		}
+		return nil
+	}
+	return errors.New("saved condition was not found")
+}

@@ -1,4 +1,5 @@
-import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
+import {forwardRef,useEffect,useImperativeHandle,useLayoutEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import type {AnalysisRequest,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
 
@@ -9,6 +10,8 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
 }>(function ScreenerSavedConditions({api,visible,disabled,canSave,request,onLoad},ref){
  const [conditions,setConditions]=useState<SavedAnalysisCondition[]>([]),[ready,setReady]=useState(false),[listError,setListError]=useState(''),[retry,setRetry]=useState(0);
  const [open,setOpen]=useState(false),[name,setName]=useState(''),[saveError,setSaveError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [context,setContext]=useState<{condition:SavedAnalysisCondition;x:number;y:number;origin:HTMLButtonElement}|null>(null),[deleteError,setDeleteError]=useState('');
+ const menu=useRef<HTMLDivElement>(null),deleteButton=useRef<HTMLButtonElement>(null),restoreDeleteFocus=useRef<HTMLButtonElement|null>(null);
  const input=useRef<HTMLInputElement>(null),dialog=useRef<HTMLElement>(null),trigger=useRef<HTMLButtonElement>(null),mounted=useRef(false),flight=useRef<Promise<void>|null>(null);
  const listEpoch=useRef(0);
  useImperativeHandle(ref,()=>({flush:async()=>{await flight.current;}}),[]);
@@ -20,6 +23,33 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   return ()=>{current=false;};
  },[api,visible,retry]);
  useEffect(()=>{if(!visible)setOpen(false);},[visible]);
+ useEffect(()=>{if(!visible||disabled||busy||open)setContext(null);},[visible,disabled,busy,open]);
+ useLayoutEffect(()=>{
+  if(!context||!menu.current)return;
+  const bounds=menu.current.getBoundingClientRect();
+  menu.current.style.left=`${Math.max(8,Math.min(context.x,innerWidth-bounds.width-8))}px`;
+  menu.current.style.top=`${Math.max(8,Math.min(context.y,innerHeight-bounds.height-8))}px`;
+  deleteButton.current?.focus();
+ },[context]);
+ useEffect(()=>{
+  if(!context)return;
+  const close=()=>setContext(null);
+  const pointer=(event:PointerEvent)=>{if(!menu.current?.contains(event.target as Node))close();};
+  const key=(event:KeyboardEvent)=>{
+   if(event.key==='Escape'||event.key==='Tab'){
+    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();}
+    close();if(context.origin.isConnected)context.origin.focus();
+   }else if(['ArrowUp','ArrowDown','Home','End'].includes(event.key)){event.preventDefault();deleteButton.current?.focus();}
+  };
+  document.addEventListener('pointerdown',pointer,true);document.addEventListener('keydown',key,true);
+  window.addEventListener('resize',close);document.addEventListener('scroll',close,true);
+  return ()=>{document.removeEventListener('pointerdown',pointer,true);document.removeEventListener('keydown',key,true);window.removeEventListener('resize',close);document.removeEventListener('scroll',close,true);};
+ },[context]);
+ useEffect(()=>{
+  if(busy||!visible||!restoreDeleteFocus.current)return;
+  const origin=restoreDeleteFocus.current;restoreDeleteFocus.current=null;
+  (origin.isConnected&&!origin.disabled?origin:trigger.current)?.focus();
+ },[busy,visible]);
  useEffect(()=>{
   if(!open)return;
   input.current?.focus();
@@ -42,9 +72,26 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   const operation=(async()=>{
    try{
     const saved=await api.SaveScreenerAnalysisCondition(title,snapshot);
+    listEpoch.current++;
     if(mounted.current){setConditions(current=>[...current.filter(item=>item.id!==saved.id),saved]);setOpen(false);setNotice(`Saved “${saved.name}”.`);}
    }catch(error){if(mounted.current)setSaveError(errorText(error));throw error;}
    finally{flight.current=null;if(mounted.current)setBusy(false);}
+  })();
+  flight.current=operation;void operation.catch(()=>{});
+ };
+ const showMenu=(condition:SavedAnalysisCondition,origin:HTMLButtonElement,x:number,y:number)=>{
+  if(!visible||!ready||disabled||flight.current||open)return;
+  setContext({condition,origin,x,y});setDeleteError('');
+ };
+ const remove=()=>{
+  if(!context||flight.current||disabled||!ready)return;
+  const {condition,origin}=context;setContext(null);listEpoch.current++;setBusy(true);setDeleteError('');setNotice(`Deleting “${condition.name}”…`);
+  const operation=(async()=>{
+   try{
+    await api.DeleteScreenerAnalysisCondition(condition.id);listEpoch.current++;
+    if(mounted.current){setConditions(current=>current.filter(item=>item.id!==condition.id));setNotice(`Deleted “${condition.name}”.`);}
+   }catch(error){if(mounted.current){setDeleteError(errorText(error));setNotice('');}throw error;}
+   finally{flight.current=null;if(mounted.current){restoreDeleteFocus.current=origin;setBusy(false);}}
   })();
   flight.current=operation;void operation.catch(()=>{});
  };
@@ -52,13 +99,15 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   <aside className="analysis-saved" aria-label="Saved conditions">
    <header><h2>Saved conditions</h2><span>{conditions.length}</span></header>
    <button ref={trigger} type="button" className="analysis-save-condition" disabled={!ready||disabled||!canSave||busy} onClick={()=>{setName('');setSaveError('');setNotice('');setOpen(true);}}>Safe Condition</button>
-   <p>Select a condition to load all its rows. Apply conditions runs the scan.</p>
+   <p>Select a condition to load all its rows. Apply conditions runs the scan. Right-click a saved condition to delete it.</p>
    {notice&&<p className="analysis-saved-notice" role="status">{notice}</p>}
    {listError&&<div className="analysis-saved-error" role="alert">{listError}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry saved conditions</button></div>}
+   {deleteError&&<p className="analysis-saved-error" role="alert">{deleteError}</p>}
    {!ready&&!listError&&<p role="status">Loading saved conditions…</p>}
    {ready&&conditions.length===0&&<p className="analysis-saved-empty">No saved conditions yet.</p>}
-   <div className="analysis-saved-list">{conditions.map(condition=><button type="button" key={condition.id} disabled={!ready||disabled||busy} aria-label={`Load condition ${condition.name}`} onClick={()=>{setNotice('');onLoad(structuredClone(condition.request));}}><strong>{condition.name}</strong><small>{condition.request.conditions.length} {condition.request.conditions.length===1?'row':'rows'} · AND</small></button>)}</div>
+   <div className="analysis-saved-list">{conditions.map(condition=><button type="button" key={condition.id} disabled={!ready||disabled||busy} aria-label={`Load condition ${condition.name}`} aria-haspopup="menu" aria-expanded={context?.condition.id===condition.id} onContextMenu={event=>{event.preventDefault();event.stopPropagation();showMenu(condition,event.currentTarget,event.clientX,event.clientY);}} onKeyDown={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const bounds=event.currentTarget.getBoundingClientRect();showMenu(condition,event.currentTarget,bounds.left,bounds.bottom);}}} onClick={()=>{setContext(null);setNotice('');setDeleteError('');onLoad(structuredClone(condition.request));}}><strong>{condition.name}</strong><small>{condition.request.conditions.length} {condition.request.conditions.length===1?'row':'rows'} · AND</small></button>)}</div>
   </aside>
+  {visible&&context&&!disabled&&!busy&&!open&&createPortal(<div ref={menu} className="analysis-saved-menu" role="menu" aria-label={`Saved condition ${context.condition.name}`} style={{left:context.x,top:context.y}} onContextMenu={event=>event.preventDefault()}><button ref={deleteButton} type="button" role="menuitem" onClick={remove}>Delete</button></div>,document.body)}
   {visible&&open&&<div className="modal-backdrop analysis-save-backdrop"><section ref={dialog} className="modal analysis-save-dialog" role="dialog" aria-modal="true" aria-labelledby="analysis-save-title">
    <form aria-label="Save named condition" onSubmit={event=>{event.preventDefault();save();}}>
     <div className="modal-header"><h2 id="analysis-save-title">Save condition</h2><button type="button" disabled={busy} aria-label="Close save condition" onClick={()=>setOpen(false)}>×</button></div>

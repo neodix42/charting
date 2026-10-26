@@ -42,6 +42,10 @@ export function ConfirmClose(arg1, arg2) {
   return window['go']['main']['App']['ConfirmClose'](arg1, arg2);
 }
 
+export function DeleteScreenerAnalysisCondition(arg1) {
+  return window['go']['main']['App']['DeleteScreenerAnalysisCondition'](arg1);
+}
+
 export function DetachChart(arg1) {
   return window['go']['main']['App']['DetachChart'](arg1);
 }

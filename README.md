@@ -183,6 +183,8 @@ Press **Safe Condition** in the right-hand **Saved conditions** panel, then ente
 
 Click a saved name to load its rows into the editor. You can adjust the working copy, then press **Apply conditions** to scan; loading a set does not run it automatically. Named sets and the current draft survive restart. Save an edited version under a new name to retain the original snapshot. These settings are stored locally, separately from chart workspace exports.
 
+Right-click an entry in **Saved conditions** and choose **Delete** to permanently remove that saved set. The list updates after deletion succeeds, and the change persists across restarts. The current working rules remain available on the left. Keyboard users can focus an entry and press **Shift+F10** to open the same menu.
+
 #### Apply, inspect and navigate matches
 
 **Apply conditions** checks **every closed historical bar in downloaded files from the selected categories**. The results list groups occurrences by asset/file and timeframe, showing the asset's full catalog description, match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Completed files without matches are hidden; per-file failures remain visible.
