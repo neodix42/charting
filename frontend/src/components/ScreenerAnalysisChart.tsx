@@ -1,9 +1,11 @@
 import {useEffect,useRef,useState} from 'react';
-import {CandlestickSeries,ColorType,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {CandlestickSeries,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
 import type {AnalysisBar,AnalysisChart,AnalysisResult,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {analysisDate,analysisFieldGroup,analysisFieldLabel,analysisPriceOverlay} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
+import {getThemePalette} from '../workspace/themes';
+import {chartThemeOptions} from '../charts/theme';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -14,7 +16,7 @@ const price=(row:AnalysisBar)=>value(row,'close')??value(row,'price')??value(row
 const format=(number:number|undefined)=>number===undefined?'—':number.toLocaleString('en-US',{maximumSignificantDigits:10});
 
 function AnalysisPlot({data}:{data:AnalysisChart}){
- const fontSize=useAppearanceFontSize(),chartRef=useRef<IChartApi|null>(null);
+ const fontSize=useAppearanceFontSize(),[theme,setTheme]=useState(()=>document.documentElement.dataset.theme??'dark'),chartRef=useRef<IChartApi|null>(null),applyTheme=useRef<(theme:string)=>void>(()=>{});
  const host=useRef<HTMLDivElement>(null),[shown,setShown]=useState<string[]>(()=>data.fields.filter(field=>!rawFields.has(field.toLowerCase()))),[hover,setHover]=useState<AnalysisBar|null>(null),[chartError,setChartError]=useState('');
  const plotFields=data.fields.filter(field=>!rawFields.has(field.toLowerCase())),selected=shown.filter(field=>plotFields.includes(field));
  const groups=[...new Set(selected.filter(field=>!analysisPriceOverlay(field)).map(analysisFieldGroup))];
@@ -23,23 +25,34 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  const row=hover??data.bars.find(bar=>bar.index===data.matchIndex)??data.bars.find(bar=>bar.time===data.matchTime);
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
  useEffect(()=>{
+  const update=()=>setTheme(document.documentElement.dataset.theme??'dark');update();
+  const observer=new MutationObserver(update);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});analysisChartResources.observers++;
+  return ()=>{observer.disconnect();analysisChartResources.observers--;};
+ },[]);
+ useEffect(()=>{
   if(!host.current)return;
   setChartError('');
-  const styles=getComputedStyle(document.documentElement),background=styles.getPropertyValue('--panel').trim()||'#111820',text=styles.getPropertyValue('--text').trim()||'#dce5ed',border=styles.getPropertyValue('--border').trim()||'#293440';
+  const palette=getThemePalette(document.documentElement.dataset.theme??'dark'),themeOptions=chartThemeOptions(palette);
   const ordered=[...new Map(data.bars.map(bar=>[bar.time,bar])).values()].sort((a,b)=>a.time-b.time);
   const timed=(bar:AnalysisBar)=>({time:bar.time/1000 as UTCTimestamp});
   const candle=ordered.length>0&&ordered.every(bar=>['open','high','low','close'].every(field=>Number.isFinite(value(bar,field))));
   if(!candle&&!ordered.some(bar=>Number.isFinite(price(bar)))){setChartError('This file has no OHLC or price field to chart. Its numeric fields remain available below.');return;}
-  const chart=createChart(host.current,{width:Math.max(300,host.current.clientWidth),height,layout:{background:{type:ColorType.Solid,color:background},textColor:text,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:chartFontSize(10,fontSize),attributionLogo:true},grid:{vertLines:{color:border},horzLines:{color:border}},rightPriceScale:{borderColor:border},timeScale:{borderColor:border,timeVisible:true,secondsVisible:data.timeframe==='tick'||data.timeframe==='s1',rightOffset:3},crosshair:{vertLine:{color:'#e7ad51'},horzLine:{color:'#8191a2'}}});
+  const chart=createChart(host.current,{...themeOptions,width:Math.max(300,host.current.clientWidth),height,layout:{...themeOptions.layout,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:chartFontSize(10,fontSize),attributionLogo:true},timeScale:{...themeOptions.timeScale,timeVisible:true,secondsVisible:data.timeframe==='tick'||data.timeframe==='s1',rightOffset:3}});
   chartRef.current=chart;analysisChartResources.charts++;
   let markers:ReturnType<typeof createSeriesMarkers<Time>>|undefined;
   let observer:ResizeObserver|undefined,resize:()=>void=()=>{},crosshair:MouseEventHandler<Time>|undefined,windowResize=false;
   try{
-   const main=candle?chart.addSeries(CandlestickSeries,{upColor:'#34bea0',downColor:'#ed737c',wickUpColor:'#34bea0',wickDownColor:'#ed737c',borderVisible:false}):chart.addSeries(LineSeries,{color:'#68b8f7',lineWidth:2,title:data.timeframe==='tick'?'Tick price':'Price'});
+   const main=candle?chart.addSeries(CandlestickSeries,{upColor:palette.up,downColor:palette.danger,wickUpColor:palette.up,wickDownColor:palette.danger,borderVisible:false}):chart.addSeries(LineSeries,{color:palette.accent,lineWidth:2,title:data.timeframe==='tick'?'Tick price':'Price'});
    if(candle)main.setData(ordered.map(bar=>({...timed(bar),open:value(bar,'open')!,high:value(bar,'high')!,low:value(bar,'low')!,close:value(bar,'close')!})));
    else main.setData(ordered.map(bar=>Number.isFinite(price(bar))?{...timed(bar),value:price(bar)!}:timed(bar)));
-   markers=createSeriesMarkers(main,[{time:data.matchTime/1000 as UTCTimestamp,position:'belowBar',color:'#e7ad51',shape:'arrowUp',text:'Match'}]);
+   const matchMarker=(color:string)=>[{time:data.matchTime/1000 as UTCTimestamp,position:'belowBar' as const,color,shape:'arrowUp' as const,text:'Match'}];
+   markers=createSeriesMarkers(main,matchMarker(palette.accent));
    const panes=new Map<string,number>();
+   const histograms:{series:ReturnType<typeof chart.addSeries<'Histogram'>>;field:string}[]=[];
+   const histogramData=(field:string,theme:string)=>{
+    const colors=getThemePalette(theme);
+    return ordered.map(bar=>{const number=value(bar,field),positive=/histogram/i.test(field)?(number??0)>=0:(value(bar,'close')??0)>=(value(bar,'open')??0);return Number.isFinite(number)?{...timed(bar),value:number!,color:`${positive?colors.up:colors.danger}${/volume/i.test(field)?'88':'ff'}`}:timed(bar);});
+   };
    selected.forEach(field=>{
     const group=analysisFieldGroup(field);let pane=0;
     if(!analysisPriceOverlay(field)){
@@ -47,9 +60,20 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
      pane=panes.get(group)!;
     }
     const options={color:colors[plotFields.indexOf(field)%colors.length],title:analysisFieldLabel(field),priceLineVisible:false,lastValueVisible:true};
-    const series=/volume(?:\[|$)|histogram/i.test(field)?chart.addSeries(HistogramSeries,options,pane):chart.addSeries(LineSeries,{...options,lineWidth:1},pane);
-    series.setData(ordered.map(bar=>{const number=value(bar,field);return Number.isFinite(number)?{...timed(bar),value:number!}:timed(bar);}));
+    if(/volume(?:\[|$)|histogram/i.test(field)){
+     const series=chart.addSeries(HistogramSeries,options,pane);series.setData(histogramData(field,document.documentElement.dataset.theme??'dark'));histograms.push({series,field});
+    }else{
+     const series=chart.addSeries(LineSeries,{...options,lineWidth:1},pane);series.setData(ordered.map(bar=>{const number=value(bar,field);return Number.isFinite(number)?{...timed(bar),value:number!}:timed(bar);}));
+    }
    });
+   applyTheme.current=theme=>{
+    const colors=getThemePalette(theme),range=chart.timeScale().getVisibleLogicalRange();
+    chart.applyOptions(chartThemeOptions(colors));
+    main.applyOptions(candle?{upColor:colors.up,downColor:colors.danger,wickUpColor:colors.up,wickDownColor:colors.danger}:{color:colors.accent});
+    markers?.setMarkers(matchMarker(colors.accent));
+    for(const {series,field} of histograms)series.setData(histogramData(field,theme));
+    if(range)chart.timeScale().setVisibleLogicalRange(range);
+   };
    chart.panes()[0]?.setStretchFactor(2.5);
    chart.timeScale().fitContent();
    crosshair=event=>{if(typeof event.time==='number')setHover(ordered.find(bar=>bar.time===Math.round(Number(event.time)*1000))??null);else setHover(null);};
@@ -62,9 +86,10 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
    if(observer){observer.disconnect();analysisChartResources.observers--;}
    else if(windowResize){window.removeEventListener('resize',resize);analysisChartResources.listeners--;}
    if(crosshair){chart.unsubscribeCrosshairMove(crosshair);analysisChartResources.listeners--;}
-   markers?.detach();chart.remove();chartRef.current=null;analysisChartResources.charts--;
+   applyTheme.current=()=>{};markers?.detach();chart.remove();chartRef.current=null;analysisChartResources.charts--;
   };
  },[data,signature,height]);
+ useEffect(()=>{applyTheme.current(theme);},[theme,data,signature,height]);
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(10,fontSize)}});},[fontSize]);
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>

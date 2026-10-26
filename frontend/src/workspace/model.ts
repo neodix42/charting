@@ -1,4 +1,5 @@
 import {DEFAULT_FONT_SIZE,MIN_FONT_SIZE,MAX_FONT_SIZE} from './appearance';
+import {isThemeName} from './themes';
 import type {ChartConfig, ChartRightGap, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
 export const MAX_TABS=20, MAX_CHARTS=9, MAX_INDICATORS=12, MAX_DRAWINGS=100;
 export const DEFAULT_CHART_RIGHT_GAP:ChartRightGap={unit:'bars',value:10};
@@ -41,6 +42,7 @@ export function reduceWorkspace(w:Workspace,a:Action):Workspace {
   return change({...current,charts:current.charts.map(chart=>({...chart,indicators:[...(chart.indicators??[]),{...structuredClone(a.indicator),id:uuid()}]}))});
  }
  case 'settings':{
+  if(a.theme!==undefined&&!isThemeName(a.theme))throw Error('Unknown theme');
   if(a.fontSize!==undefined&&(!Number.isSafeInteger(a.fontSize)||a.fontSize<MIN_FONT_SIZE||a.fontSize>MAX_FONT_SIZE))throw Error(`Font size must be a whole number from ${MIN_FONT_SIZE} to ${MAX_FONT_SIZE}`);
   const gap=a.chartRightGap,previous=w.chartRightGap??DEFAULT_CHART_RIGHT_GAP;
   if(gap&&(!['bars','pixels'].includes(gap.unit)||!Number.isSafeInteger(gap.value)||gap.value<0||gap.value>(gap.unit==='bars'?500:5000)))throw Error('Chart right gap must be a whole number from 0 to 500 bars or 0 to 5,000 pixels');

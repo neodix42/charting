@@ -3,6 +3,7 @@ import type {Backend,ChartRightGap,Workspace} from '../types';
 import {errorText} from '../types';
 import {DEFAULT_CHART_RIGHT_GAP,type Action} from '../workspace/model';
 import {DEFAULT_FONT_SIZE,MIN_FONT_SIZE,MAX_FONT_SIZE} from '../workspace/appearance';
+import {THEME_OPTIONS} from '../workspace/themes';
 import {ChartGapSetting} from './ChartGapSetting';
 import {CandleStorageSetting} from './CandleStorageSetting';
 import {ScreenerDirectorySetting} from './ScreenerDirectorySetting';
@@ -24,7 +25,7 @@ export function WorkspaceSettings({workspace,api,onClose,onChange,onChartGap,onN
   <nav className="settings-tabs" role="tablist" aria-label="Settings pages">{pages.map((name,index)=><button key={name} ref={element=>{tabs.current[index]=element;}} id={`settings-tab-${name.toLowerCase()}`} role="tab" aria-selected={page===name} aria-controls={`settings-panel-${name.toLowerCase()}`} tabIndex={page===name?0:-1} onKeyDown={event=>selectPage(event,index)} onClick={()=>setPage(name)}>{name}</button>)}</nav>
   <div className="settings-page" role="tabpanel" id={`settings-panel-${page.toLowerCase()}`} aria-labelledby={`settings-tab-${page.toLowerCase()}`}>
    {page==='Appearance'&&<>
-    <label className="setting-row"><span><strong>Theme</strong><small>Your theme applies to every chart.</small></span><select aria-label="Theme" value={workspace.theme} onChange={event=>onChange({type:'settings',theme:event.target.value as Workspace['theme']})}><option value="dark">Dark</option><option value="light">Light</option></select></label>
+    <label className="setting-row"><span><strong>Theme</strong><small>Your theme applies to every chart and Screener screen.</small></span><select aria-label="Theme" value={workspace.theme} onChange={event=>onChange({type:'settings',theme:event.target.value as Workspace['theme']})}>{THEME_OPTIONS.map(theme=><option key={theme.id} value={theme.id}>{theme.label}</option>)}</select></label>
     <label className="setting-row"><span><strong>Font size</strong><small>Scales text throughout the app, including chart labels and status bars.</small></span><select aria-label="Font size" value={workspace.fontSize??DEFAULT_FONT_SIZE} onChange={event=>onChange({type:'settings',fontSize:Number(event.target.value)})}>{Array.from({length:MAX_FONT_SIZE-MIN_FONT_SIZE+1},(_,index)=>index+MIN_FONT_SIZE).map(size=><option key={size} value={size}>{size} px{size===DEFAULT_FONT_SIZE?' (default)':''}</option>)}</select></label>
     <div className="setting-row"><span><strong>Display timezone</strong><small>Candle boundaries always use UTC.</small></span><div className="timezone-controls"><input aria-label="Display timezone" value={zone} list="timezones" onChange={event=>setZone(event.target.value)}/><datalist id="timezones">{timezones.map(value=><option key={value} value={value}/>)}</datalist><button onClick={()=>{try{if(zone!=='system')new Intl.DateTimeFormat('en',{timeZone:zone}).format();const displayTimezone=zone==='system'?Intl.DateTimeFormat().resolvedOptions().timeZone:zone;onChange({type:'settings',displayTimezone});setZone(displayTimezone);}catch{onError('Enter a valid IANA timezone, UTC or system');}}}>Apply</button></div></div>
     <ChartGapSetting value={workspace.chartRightGap??DEFAULT_CHART_RIGHT_GAP} onApply={onChartGap}/>

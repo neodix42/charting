@@ -1,4 +1,5 @@
 import type {ScreenerAnalysisBackend} from './workspace/screenerAnalysis';
+import type {ThemeName} from './workspace/themes';
 
 export type Exchange = 'binance'|'bybit'|'coinbase';
 export type Market = 'spot'|'perpetual';
@@ -18,7 +19,7 @@ export interface ChartConfig extends FeedKey {id:string; chartType:'candlestick'
 export interface Grid {rows:number;columns:number;rowFractions:number[];columnFractions:number[]}
 export interface Tab {id:string;name:string;grid:Grid;charts:ChartConfig[]}
 export interface ChartRightGap {unit:'bars'|'pixels';value:number}
-export interface Workspace {schemaVersion:1;app:'cryptodesk';id:string;theme:'dark'|'light';fontSize?:number;displayTimezone:string;chartRightGap?:ChartRightGap;activeTabId:string;window:{width:number;height:number;maximized:boolean};tabs:Tab[]}
+export interface Workspace {schemaVersion:1;app:'cryptodesk';id:string;theme:ThemeName;fontSize?:number;displayTimezone:string;chartRightGap?:ChartRightGap;activeTabId:string;window:{width:number;height:number;maximized:boolean};tabs:Tab[]}
 export interface Candle {time:number;open:number|string;high:number|string;low:number|string;close:number|string;volume:number|string;closed:boolean;quality:string;sourceRevision:number}
 export interface Health {state:string;reason?:string;lastMessageAt?:number|string;lastTradeAt?:number|string}
 export interface Snapshot {leaseId:string;revision:number;bars:Candle[];health:Health}

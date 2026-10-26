@@ -106,7 +106,7 @@ test('matching assets show exact counts/errors and chart navigation traverses ev
  const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});await expect(dialog).toBeVisible();
  await expect(dialog.getByText('Occurrence 1 of 2',{exact:true})).toBeVisible();await expect(dialog.getByTestId('analysis-chart').locator('canvas').first()).toBeVisible();
  await expect(dialog.getByText('MACD · Histogram (12, 26, 9)',{exact:false})).toBeVisible();
- await expect.poll(()=>resources(page)).toEqual({charts:1,observers:1,listeners:2});
+ await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:2});
  await dialog.getByRole('button',{name:'Next match',exact:false}).click();await expect(dialog.getByText('Occurrence 2 of 2',{exact:true})).toBeVisible();
  await dialog.getByRole('button',{name:'Next match',exact:false}).click();await expect(dialog.getByText('Occurrence 1 of 3',{exact:true})).toBeVisible();await expect(dialog.locator('header')).toContainText('h4');
  await dialog.getByRole('button',{name:'Previous match',exact:false}).click();await expect(dialog.getByText('Occurrence 2 of 2',{exact:true})).toBeVisible();
@@ -145,7 +145,7 @@ test('closing an in-flight chart ignores its stale response and tick timestamps 
  await page.evaluate(()=>(window as any).__testAnalysisChartDelay(0));await page.getByRole('button',{name:`Inspect ${file(1,'ethusd','tick').name} matches`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});await expect(dialog.locator('header h2')).toContainText('ETHUSD');
  await expect(dialog.getByText(/Ticks sharing an identical timestamp/)).toBeVisible();await expect(dialog.getByText('EMA (200) · d1 [offset 1]',{exact:false})).toBeVisible();
- await page.waitForTimeout(1300);await expect(dialog.locator('header h2')).toContainText('ETHUSD');await expect.poll(()=>resources(page)).toEqual({charts:1,observers:1,listeners:2});
+ await page.waitForTimeout(1300);await expect(dialog.locator('header h2')).toContainText('ETHUSD');await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:2});
  await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
 });
 

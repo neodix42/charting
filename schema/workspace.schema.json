@@ -18,7 +18,10 @@
     "theme": {
       "enum": [
         "dark",
-        "light"
+        "light",
+        "matrix",
+        "cyberpunk",
+        "red-sands"
       ]
     },
     "fontSize": {

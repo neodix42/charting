@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-10-26
 
+## Theme-aware native lists and combo boxes — 2026-10-26
+
+The root now explicitly selects the dark or light native `color-scheme` with the saved theme. Native select options and group headings use the application's elevated background and text colors, with muted disabled entries. This covers Settings, chart selectors and Screener lists without replacing their keyboard-accessible native controls.
+
+Verification: production frontend build and all four existing Appearance browser checks pass. An isolated browser check switches dark → light → dark through Settings, verifies native control schemes and all 42 enrichment options/group headings, and captures open menus in both themes for visual review. Generated evidence stays in ignored `.tools/verification/themed-native-controls/`. The Linux application and standard release archive rebuild successfully and their checksums pass. Native desktop and Windows GUI palette checks were not rerun for this CSS-only change; the separate portable/Windows archives were not rebuilt.
+
 ## Parallel file processing and duplicate-history fixes — 2026-10-26
 
 Operator descriptions now use only the custom hover/focus tooltip; native select/option titles are removed. New and legacy-unspecified workspaces default to 15 px, while explicit saved font sizes remain unchanged. The original 13 px design baseline still scales CSS and chart canvas labels consistently. Matching assets no longer offers Show files without matches; completed files without matches stay hidden and errors remain visible.

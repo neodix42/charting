@@ -151,7 +151,7 @@ func Validate(w Workspace) error {
 	if w.App != "cryptodesk" {
 		return bad("app must be cryptodesk")
 	}
-	if !member(w.Theme, "dark", "light") {
+	if !member(w.Theme, "dark", "light", "matrix", "cyberpunk", "red-sands") {
 		return bad("invalid theme")
 	}
 	if w.FontSize != nil && (*w.FontSize < 10 || *w.FontSize > 24) {

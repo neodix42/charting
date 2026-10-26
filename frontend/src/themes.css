@@ -1,0 +1,50 @@
+/* App controls and chart canvases share the palette in workspace/themes.ts. */
+:root[data-theme=dark]{
+ color-scheme:dark;color:#dce5ed;background:#0c1117;
+ --bg:#0c1117;--panel:#111820;--elevated:#18212c;--text:#dce5ed;--muted:#8191a2;--border:#293440;--accent:#e7ad51;--hover:#232f3d;--danger:#ed737c;--up:#34bea0;--shadow:0 14px 65px #00000088;
+ --chart-background:#111820;--chart-grid:#1c2631;--chart-text:#8191a2;--chart-border:#293440;--chart-crosshair:#566578;
+}
+:root[data-theme=light]{
+ color-scheme:light;color:#263544;background:#eef2f5;
+ --bg:#eef2f5;--panel:#ffffff;--elevated:#f1f4f6;--text:#263544;--muted:#5f7081;--border:#d7dfe6;--accent:#94621f;--hover:#e5ebf0;--danger:#bd4554;--up:#157b65;--shadow:0 14px 65px #18324b26;
+ --chart-background:#ffffff;--chart-grid:#edf0f3;--chart-text:#5f7081;--chart-border:#d7dfe6;--chart-crosshair:#8795a3;
+}
+:root[data-theme=matrix]{
+ color-scheme:dark;color:#d9ffd9;background:#020503;
+ --bg:#020503;--panel:#071008;--elevated:#0e1a10;--text:#d9ffd9;--muted:#8fbb91;--border:#285431;--accent:#94f744;--hover:#18351b;--danger:#ff8294;--up:#9df75d;--shadow:0 14px 65px #000000bb;
+ --chart-background:#050c06;--chart-grid:#16351d;--chart-text:#8fbb91;--chart-border:#285431;--chart-crosshair:#a0d187;
+}
+:root[data-theme=cyberpunk]{
+ color-scheme:dark;color:#f6ecff;background:#130c24;
+ --bg:#130c24;--panel:#1c1234;--elevated:#281c44;--text:#f6ecff;--muted:#c5a8df;--border:#5d3b83;--accent:#24e2f3;--hover:#3a2559;--danger:#ff6ba7;--up:#4ce2bb;--shadow:0 14px 65px #080018bb;
+ --chart-background:#180f2b;--chart-grid:#3c2555;--chart-text:#c5a8df;--chart-border:#5d3b83;--chart-crosshair:#cb91f9;
+}
+:root[data-theme=red-sands]{
+ color-scheme:dark;color:#fff0db;background:#251411;
+ --bg:#251411;--panel:#321d17;--elevated:#40271d;--text:#fff0db;--muted:#d0ad94;--border:#74482f;--accent:#ffc180;--hover:#593523;--danger:#ff8d83;--up:#b9d28a;--shadow:0 14px 65px #170600bb;
+ --chart-background:#2a1813;--chart-grid:#513224;--chart-text:#d0ad94;--chart-border:#74482f;--chart-crosshair:#dbb492;
+}
+
+/* Highlighted controls and feedback must follow the selected accent as well. */
+:root{--on-accent:#13170f}
+button.primary,.primary{color:var(--on-accent)}
+:root[data-theme=light]{--on-accent:#ffffff}
+button.primary:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 85%,var(--text));border-color:var(--accent);color:var(--on-accent)}
+button:hover:not(:disabled){border-color:color-mix(in srgb,var(--border),var(--text) 35%)}
+.tab.active,.chart-header .selected,.drawing-tool.selected,.tab-chart-controls .timeframe-buttons button[aria-pressed=true],.screener-subtabs button[aria-selected=true]{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.drawing-tool.selected,.chart-header .timeframe-buttons button[aria-pressed=true],.tab-chart-controls .timeframe-buttons button[aria-pressed=true],.screener-subtabs button[aria-selected=true]{border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+.chart-cell.focused{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent)}
+.chart-placeholder{background:color-mix(in srgb,var(--panel) 45%,transparent);border-color:var(--border)}
+.splitter:hover{background:color-mix(in srgb,var(--accent) 27%,transparent)}
+.save-indicator.saved .status-dot{background:var(--up)}
+.status-dot.live{box-shadow:0 0 8px color-mix(in srgb,var(--up) 20%,transparent)}
+.drag-handle{color:var(--muted)}
+.product-list .product-market.perpetual{border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.analysis-and-badge{border-color:color-mix(in srgb,var(--accent) 27%,transparent);background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.analysis-results td>button{border-color:color-mix(in srgb,var(--accent) 19%,transparent);background:color-mix(in srgb,var(--accent) 3%,transparent)}
+.notice{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.inline-error,.notice.error{border-color:color-mix(in srgb,var(--danger) 50%,var(--border));background:color-mix(in srgb,var(--danger) 10%,var(--panel));color:var(--danger)}
+.danger-solid{background:color-mix(in srgb,var(--danger) 30%,var(--panel));border-color:var(--danger);color:var(--text)}
+.startup{background:radial-gradient(ellipse at 50% 30%,var(--elevated) 0,transparent 65%)}
+input{accent-color:var(--accent)}
+::selection{background:color-mix(in srgb,var(--accent) 30%,var(--panel));color:var(--text)}

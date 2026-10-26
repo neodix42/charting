@@ -43,6 +43,29 @@ func TestFirstLaunchAndNewTab(t *testing.T) {
 		t.Fatal("larger grids add placeholders only", err)
 	}
 }
+
+func TestThemeWorkspaceRoundTrip(t *testing.T) {
+	if NewWorkspace().Theme != "dark" {
+		t.Fatal("the existing default theme must remain dark")
+	}
+	for _, theme := range []string{"dark", "light", "matrix", "cyberpunk", "red-sands"} {
+		t.Run(theme, func(t *testing.T) {
+			workspace := NewWorkspace()
+			workspace.Theme = theme
+			encoded, err := json.Marshal(workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored, err := DecodeWorkspace(encoded)
+			if err != nil {
+				t.Fatalf("saved theme cannot be restored: %v", err)
+			}
+			if !reflect.DeepEqual(workspace, restored) {
+				t.Fatal("theme round-trip changed chart settings or appearance")
+			}
+		})
+	}
+}
 func TestEveryExampleExactRoundTrip(t *testing.T) {
 	files, err := filepath.Glob("../../examples/*.json")
 	if err != nil || len(files) != 3 {

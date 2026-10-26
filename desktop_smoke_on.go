@@ -34,6 +34,23 @@ func writeDesktopSmokeReport(report string) error {
 	return os.WriteFile(destination, []byte(report), 0600)
 }
 func (a *App) DesktopSmokeClose() { runtime.Quit(a.ctx) }
+func (a *App) DesktopSmokeThemeScreenshot(label string) (string, error) {
+	if label != "dark" && label != "light" && label != "matrix" && label != "cyberpunk" && label != "red-sands" && label != "enrichment" && label != "restore" {
+		return "", errors.New("invalid theme screenshot label")
+	}
+	report := os.Getenv("CRYPTODESK_SMOKE_REPORT")
+	if !filepath.IsAbs(report) {
+		return "", errors.New("theme screenshot requires an absolute smoke report path")
+	}
+	path := filepath.Join(filepath.Dir(report), "native-theme-"+label+".xwd")
+	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "xwd", "-name", fmt.Sprintf("CryptoDesk Themes Smoke %d", os.Getpid()), "-silent", "-out", path)
+	if output, err := command.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("capture native theme window: %w: %s", err, output)
+	}
+	return path, nil
+}
 func (a *App) DesktopSmokeCandleRows(key domain.FeedKey, from, to int64) ([]domain.Candle, error) {
 	return a.candles.Range(key, from, to, 1000)
 }
@@ -207,8 +224,11 @@ func (a *App) DesktopSmokeMetrics() map[string]any {
 }
 func desktopSmoke(ctx context.Context, a *App) {
 	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
-	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" && phase != "enrichment" && phase != "enrichment-restore" && phase != "analysis-refresh" && phase != "analysis-refresh-restore" {
+	if phase != "fresh" && phase != "restore" && phase != "capacity" && phase != "signal-edit" && phase != "signal-restore" && phase != "signal-early" && phase != "signal-failure" && phase != "markets" && phase != "markets-restore" && phase != "screener" && phase != "screener-resume" && phase != "screener-resume-restore" && phase != "enrichment" && phase != "enrichment-restore" && phase != "analysis-refresh" && phase != "analysis-refresh-restore" && phase != "themes" && phase != "themes-restore" {
 		return
+	}
+	if phase == "themes" || phase == "themes-restore" {
+		runtime.WindowSetTitle(ctx, fmt.Sprintf("CryptoDesk Themes Smoke %d", os.Getpid()))
 	}
 	encoded, _ := json.Marshal(phase)
 	runtime.WindowExecJS(ctx, "("+desktopSmokeJavaScript+")("+string(encoded)+")")
@@ -262,7 +282,62 @@ const desktopSmokeJavaScript = `async function(phase) {
   const initial=await api.LoadWorkspace();
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
-  if(phase==='analysis-refresh'||phase==='analysis-refresh-restore'){
+  if(phase==='themes'||phase==='themes-restore'){
+   const key=(element,value)=>element.dispatchEvent(new KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true}));
+   const rgb=value=>{const probe=document.createElement('span');probe.style.color=value;document.body.appendChild(probe);const result=getComputedStyle(probe).color;probe.remove();return result;};
+   const theme=()=>document.documentElement.dataset.theme;
+   const rootColor=name=>rgb(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+   const opened=()=>q('.themed-select-menu[role="listbox"]');
+   const optionLabel=option=>option?.querySelector('span')?.textContent.trim()||option?.textContent.trim();
+   const open=async selector=>{
+    const element=await wait(()=>q(selector),selector);element.focus();const rect=element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',button:0,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
+    return wait(opened,'app-rendered opened select menu');
+   };
+   const choose=async(selector,label)=>{const menu=await open(selector),option=Array.from(menu.querySelectorAll('[role="option"]')).find(item=>optionLabel(item)===label);check(!!option,'opened dropdown contains '+label);option.click();await wait(()=>!opened(),'menu closes after '+label+' selection');await sleep(100);};
+   const verifyMenu=async(label)=>{
+    const menu=await open('[aria-label="Theme"]'),style=getComputedStyle(menu),options=Array.from(menu.querySelectorAll('[role="option"]')),selected=options.find(option=>option.getAttribute('aria-selected')==='true');
+    const details={theme:theme(),menuBackground:style.backgroundColor,menuColor:style.color,panel:rootColor('--panel'),elevated:rootColor('--elevated'),text:rootColor('--text'),selected:optionLabel(selected),options:options.map(option=>({label:optionLabel(option),background:getComputedStyle(option).backgroundColor,color:getComputedStyle(option).color})),bounds:bounds(menu)};
+    check(style.backgroundColor===details.elevated||style.backgroundColor===details.panel,label+' opened popup uses the current app surface color',details);
+    check(style.color===details.text,label+' opened popup uses the current app text color',details);
+    check(options.length===5&&optionLabel(selected)===label,label+' opened popup exposes all themes and marks the saved selection',details);
+    if(theme()!=='light'){
+     const white=value=>/^rgba?\(255,\s*255,\s*255(?:,\s*1)?\)$/.test(value);
+     check(!white(style.backgroundColor)&&details.options.every(option=>!white(option.background)),label+' opened popup and every option have no white native surface',details);
+    }
+    check(details.options.every(option=>[details.text,rootColor('--accent'),rootColor('--muted')].includes(option.color)),label+' every opened option inherits the current palette text',details);
+    check(details.bounds.left>=0&&details.bounds.right<=innerWidth&&details.bounds.top>=0&&details.bounds.bottom<=innerHeight,label+' popup fits the native window',details.bounds);
+    await sleep(250);details.screenshot=await api.DesktopSmokeThemeScreenshot(theme());report.themes.push(details);
+    key(menu,'Escape');await wait(()=>!opened(),label+' Escape dismisses popup');
+   };
+   report.themes=[];
+   if(phase==='themes-restore')check(initial.workspace.theme==='red-sands'&&theme()==='red-sands','restart restores the selected Red Sands theme in workspace and UI',{saved:initial.workspace.theme,rendered:theme()});
+   await click('[aria-label="Open settings"]');
+   if(phase==='themes'){
+    for(const [id,label] of [['dark','Dark'],['light','Light'],['matrix','Matrix'],['cyberpunk','Cyberpunk'],['red-sands','Red Sands']]){
+     await choose('[aria-label="Theme"]',label);await wait(()=>theme()===id,'selected theme '+id);await verifyMenu(label);
+     check(window.__cryptodeskDiagnostics?.().chartInstances===1,id+' palette change retains exactly one live chart',window.__cryptodeskDiagnostics?.());
+    }
+    const selectElement=q('[aria-label="Theme"]');selectElement.focus();key(selectElement,'ArrowDown');const menu=await wait(opened,'keyboard opens app dropdown');
+    key(menu,'Home');key(menu,'ArrowDown');key(menu,'ArrowDown');key(menu,'Enter');
+    await wait(()=>theme()==='matrix'&&!opened(),'keyboard commits Matrix theme');check(q('[aria-label="Theme"]').value==='matrix','keyboard selection updates the actual native form control');
+    await choose('[aria-label="Theme"]','Red Sands');await wait(()=>theme()==='red-sands','restore final Red Sands selection');
+   }else{
+    await verifyMenu('Red Sands');
+   }
+   await click('[aria-label="Close settings"]');await flush();
+   check((await api.LoadWorkspace()).workspace.theme==='red-sands','Red Sands is acknowledged in the persisted workspace');
+   await click('[role="tab"][aria-controls="screener-panel"]');await click('#screener-enrichment-tab');
+   await wait(()=>q('[aria-label="Enrichment indicator"]').options.length===42,'full enrichment indicator selector');
+   const menu=await open('[aria-label="Enrichment indicator"]'),options=Array.from(menu.querySelectorAll('[role="option"]')),groups=Array.from(menu.querySelectorAll('[role="group"],.themed-select-group'));
+   report.enrichmentMenu={theme:theme(),background:getComputedStyle(menu).backgroundColor,color:getComputedStyle(menu).color,options:options.length,groups:groups.map(group=>group.getAttribute('aria-label')||group.textContent.trim().slice(0,80)),bounds:bounds(menu)};
+   check(options.length===42&&groups.length>=2,'opened Enrichment menu preserves all indicator options and category groups',report.enrichmentMenu);
+   check(getComputedStyle(menu).backgroundColor===rootColor('--elevated')||getComputedStyle(menu).backgroundColor===rootColor('--panel'),'opened Enrichment menu uses Red Sands surface',report.enrichmentMenu);
+   await sleep(250);report.enrichmentMenu.screenshot=await api.DesktopSmokeThemeScreenshot(phase==='themes'?'enrichment':'restore');
+   key(menu,'Escape');await wait(()=>!opened(),'Escape dismisses grouped Enrichment dropdown');
+   await wait(async()=>window.__cryptodeskDiagnostics?.().chartInstances===0&&(await api.GetDiagnostics()).market.activeLeases===0,'Screener releases all chart renderers and leases');
+   check(report.initialCounts.tabs===1&&report.initialCounts.charts.join(',')==='1','theme verification preserves first-launch one-tab one-chart workspace',report.initialCounts);
+  }else if(phase==='analysis-refresh'||phase==='analysis-refresh-restore'){
    await click('[role="tab"][aria-controls="screener-panel"]');
    if(phase==='analysis-refresh'){
     await click('#screener-downloader-tab');await wait(()=>qa('.screener-instrument').length===1499,'complete native instrument catalog');
