@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 type RefreshJob struct {
@@ -31,6 +32,7 @@ type RefreshJob struct {
 type RefreshInfo struct {
 	Directory        string       `json:"directory"`
 	Active           bool         `json:"active"`
+	AsOf             int64        `json:"asOf,omitempty"`
 	RuntimeAvailable bool         `json:"runtimeAvailable"`
 	RuntimeError     string       `json:"runtimeError,omitempty"`
 	Total            int          `json:"total"`
@@ -55,7 +57,7 @@ func (m *Manager) refreshRuntimeError() string {
 
 func (m *Manager) refreshInfoLocked(fileIDs []string) RefreshInfo {
 	message := m.refreshRuntimeError()
-	info := RefreshInfo{Directory: m.directory, Active: m.refreshActive, RuntimeAvailable: message == "", RuntimeError: message, Total: len(m.refreshJobs), Jobs: []RefreshJob{}}
+	info := RefreshInfo{Directory: m.directory, Active: m.refreshActive, AsOf: m.refreshAsOf, RuntimeAvailable: message == "", RuntimeError: message, Total: len(m.refreshJobs), Jobs: []RefreshJob{}}
 	wanted := map[string]bool{}
 	for _, id := range fileIDs {
 		wanted[id] = true
@@ -99,6 +101,7 @@ func (m *Manager) Refresh(fileIDs []string) (RefreshInfo, error) {
 func (m *Manager) StartRefresh() (RefreshInfo, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	asOf := time.Now().UnixMilli()
 	if m.closed {
 		return m.refreshInfoLocked(nil), errors.New("screener is closed")
 	}
@@ -133,10 +136,11 @@ func (m *Manager) StartRefresh() (RefreshInfo, error) {
 		jobs[i] = RefreshJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, name), Name: name, Status: "queued", Message: "Waiting for data refresh", Columns: []string{}}
 	}
 	m.refreshJobs, m.refreshActive = jobs, true
+	m.refreshAsOf = asOf
 	ctx, cancel := context.WithCancel(context.Background())
 	m.refreshCancel, m.refreshDone = cancel, make(chan struct{})
 	m.wg.Add(1)
-	go m.runRefresh(ctx, m.directory)
+	go m.runRefresh(ctx, m.directory, asOf)
 	return m.refreshInfoLocked(nil), nil
 }
 
@@ -155,7 +159,7 @@ func (m *Manager) CancelRefresh() RefreshInfo {
 	return m.refreshInfoLocked(nil)
 }
 
-func (m *Manager) runRefresh(ctx context.Context, directory string) {
+func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) {
 	defer m.wg.Done()
 	defer func() {
 		m.mu.Lock()
@@ -177,7 +181,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string) {
 		m.refreshJobs[index].Status, m.refreshJobs[index].Message = "running", "Checking saved data and indicator recipes"
 		job := m.refreshJobs[index]
 		m.mu.Unlock()
-		err := m.refreshFile(ctx, index, directory, job, legacy[job.Name])
+		err := m.refreshFile(ctx, index, directory, job, legacy[job.Name], asOf)
 		m.mu.Lock()
 		if m.refreshJobs[index].Status != "completed" {
 			if ctx.Err() != nil {
@@ -207,7 +211,7 @@ type refreshEvent struct {
 	Message        string              `json:"message"`
 }
 
-func (m *Manager) refreshFile(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest) error {
+func (m *Manager) refreshFile(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64) error {
 	match := downloadFilename.FindStringSubmatch(job.Name)
 	if match == nil {
 		return errors.New("cannot identify the Dukascopy instrument, timeframe and start date from this CSV filename; original kept")
@@ -247,7 +251,8 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 		CoverageVerified bool   `json:"coverageVerified"`
 		CoverageDigest   string `json:"coverageDigest"`
 		OwnerPipe        bool   `json:"ownerPipe"`
-	}{source, output, match[1], match[2], match[3], recipePath, metadata.Verified && metadataMatches(metadata, original), metadata.Checksum, true})
+		AsOf             int64  `json:"asOf"`
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: match[3], RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work

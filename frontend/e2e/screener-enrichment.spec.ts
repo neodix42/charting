@@ -3,7 +3,7 @@ import type {ScreenerDataFile,ScreenerEnrichmentInfo} from '../src/types';
 import type {AnalysisRequest} from '../src/workspace/screenerAnalysis';
 
 const fields=['timestamp','open','high','low','close','volume'];
-const file=(index:number):ScreenerDataFile=>({id:`file-${index}`,name:`symbol${String(index).padStart(3,'0')}-d1-2024-01-01-2024-02-01.csv`,symbol:`symbol${index}`,timeframe:'d1',from:'2024-01-01',to:'2024-02-01',fields:[...fields],bytes:2048});
+const file=(index:number):ScreenerDataFile=>({id:`file-${index}`,name:`symbol${String(index).padStart(3,'0')}-d1-2024-01-01-2024-02-01.csv`,symbol:`symbol${index}`,timeframe:'d1',from:'2024-01-01',to:'2024-02-01',firstTimestamp:1704067200000,lastTimestamp:1706659200000,fields:[...fields],bytes:2048});
 async function open(page:Page,count=2){
  await page.goto('/');
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles(value),Array.from({length:count},(_,i)=>file(i)));
@@ -23,7 +23,8 @@ test('Enrichment loads CSV periods and comma separated headers only when opened,
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles([value]),file(0));
  await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(panel(page).locator('tbody tr')).toHaveCount(1);
- await expect(panel(page).locator('tbody tr')).toContainText('2024-01-01 → 2024-02-01');
+ await expect(panel(page).locator('tbody tr')).toContainText('2024-01-01 00:00:00 UTC → 2024-01-31 00:00:00 UTC');
+ await expect(panel(page).locator('tbody tr')).toContainText('Available bar open times');
  await expect(panel(page).locator('tbody tr code')).toHaveText(fields.join(', '));
  await expect(panel(page).getByText('/explicit-test/screener',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(42);

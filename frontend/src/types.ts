@@ -33,7 +33,7 @@ export interface ScreenerCatalog {version:string;groups:Array<{name:string;instr
 export interface ScreenerDownloadRequest {symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
 export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategories:string[]}
 export interface ScreenerJob {id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
-export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[]}
+export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[];downloadedSymbols?:string[]}
 export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
 export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string}
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
@@ -43,7 +43,7 @@ export interface ScreenerEnrichmentRequest {indicator:string;parameters:Record<s
 export interface ScreenerEnrichmentJob {id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}
 export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;indicator:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerEnrichmentJob[]}
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}
-export interface ScreenerRefreshInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
+export interface ScreenerRefreshInfo {directory:string;active:boolean;asOf?:number;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
 export interface Backend extends ScreenerAnalysisBackend {
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;

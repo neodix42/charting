@@ -28,7 +28,7 @@ export function screenerEnrichmentBridge(directory:()=>string){
   async StartScreenerRefresh(){
    if(refreshStartError)throw Error(refreshStartError);
    refreshStarts++;
-   refresh={...refresh,active:true,total:files.length,completed:0,failed:0,cancelled:0,jobs:files.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,addedRows:0,updatedRows:0,message:'Refreshing in explicit test mode',columns:file.fields.filter(field=>!['timestamp','open','high','low','close','volume'].includes(field))}))};
+   refresh={...refresh,active:true,asOf:Date.now(),total:files.length,completed:0,failed:0,cancelled:0,jobs:files.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,addedRows:0,updatedRows:0,message:'Refreshing in explicit test mode',columns:file.fields.filter(field=>!['timestamp','open','high','low','close','volume'].includes(field))}))};
    return structuredClone({...refresh,jobs:[]});
   },
   async CancelScreenerRefresh(){

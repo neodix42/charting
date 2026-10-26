@@ -137,6 +137,10 @@ async function* groups(iterator,timestampIndex) {
 
 async function refresh(request,options={}) {
   const report=options.emit??emit;
+  // Every file in a Go batch shares the instant Refresh was clicked, including
+  // files queued behind the twenty active workers and slow CSV scans.
+  const now=options.now??request.asOf??Date.now();
+  if(!Number.isSafeInteger(now)||now<0||now>8640000000000000)throw Error('Refresh cutoff must be a valid Unix millisecond timestamp.');
   if(!path.isAbsolute(request.input)||!path.isAbsolute(request.output)||request.input===request.output)throw Error('Separate absolute input and output paths are required.');
   const original=await fsp.lstat(request.input);
   if(!original.isFile())throw Error('Refresh input must be a regular CSV file.');
@@ -153,7 +157,6 @@ async function refresh(request,options={}) {
   }
   if(!Array.isArray(savedRecipes)||savedRecipes.length>2000)throw Error('Applied indicator recipe list is invalid.');
   const recipes=await recipesFor(scanned.headers,savedRecipes);
-  const now=options.now??Date.now();
   if(scanned.last>now)throw Error('CSV contains future timestamps; original file kept.');
   const closed=closedBoundary(now,request.timeframe);
   const initial=Date.parse(`${request.from}T00:00:00.000Z`);

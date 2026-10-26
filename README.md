@@ -85,6 +85,10 @@ Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from 
 3. Choose one common timeframe and UTC date range. **From** is inclusive; **To** is exclusive. Available history depends on the instrument.
 4. Set **Parallel downloads** from **1 to 20** (default **20**) and press **Download**. Additional symbols wait in the queue; progress, completed paths and provider errors appear per symbol.
 
+**Select all downloaded assets** replaces the selection with symbols that already have CSV files in the current Screener folder, across all date ranges and timeframes. Search and collapsed categories do not limit it. Files from earlier sessions count; removed files and unfinished downloads do not.
+
+**Download** always creates a new CSV for the complete selected range. Extending **To** downloads that full range again and preserves existing files, including their indicator columns. To update existing CSVs, use **Enrichment → Refresh data and indicators**.
+
 The Downloads panel shows **10 jobs per page**, with totals for **completed** and **failed** downloads. Its status filter includes **Failed** and **Completed**; **All statuses** includes completed jobs alongside queued, running and other jobs. Filtering happens before pagination.
 
 The pinned [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node) integration supports **1,499 instruments across 39 categories** and ten timeframes: **tick, s1, m1, m5, m15, m30, h1, h4, d1 and mn1**. Choose `d1` for daily indicator research or an intraday interval for hour-based conditions.
@@ -97,7 +101,7 @@ Use **Settings → Screener → Screener download folder** to change the destina
 
 ![Light-theme Screener Enrichment showing MACD parameters, CSV date ranges, available columns and completed calculations](docs/screenshots/screener-enrichment.png)
 
-*The file list shows each dataset's timeframe, period and comma-separated fields. MACD adds its line, signal and histogram columns while retaining existing prices and indicators.*
+*The file list shows each dataset's timeframe, actual UTC timestamps from its first and last rows, and comma-separated fields. MACD adds its line, signal and histogram columns while retaining existing prices and indicators.*
 
 1. Open **Screener → Enrichment** to inspect downloaded files and their available fields.
 2. Choose an indicator, its parameters and, where applicable, a price source.
@@ -119,7 +123,9 @@ The two file actions have different purposes:
 | **Reload file list** | Discover and display files and headers without downloading or recalculating data. |
 | **Refresh data and indicators** | Download missing/new history, repair gaps, revise overlapping source values, append fully closed bars, and recalculate every applied indicator using its saved parameters. |
 
-The first refresh verifies history from each download's original start through the present; subsequent refreshes use verified coverage and recent overlap. Exact originals are backed up before enriched/refreshed CSVs are atomically replaced. Unknown derived columns or missing inputs produce per-file errors while preserving originals. Completed changes survive restart; interrupted **enrichment or refresh must be run again**. See the [full enrichment guide](APP_README.md#enrichment) for backup locations, source selection and recovery details.
+Refresh first downloads data through the instant you click, shared by every file in the batch, then merges it and recalculates existing indicator columns. New candles must be fully closed at that instant; ticks are included up to the cutoff. **UTC period** follows the actual most recent row in the CSV, including rows beyond the filename's original end date. Market closures and provider availability can leave the last row earlier than the cutoff.
+
+The first refresh verifies history from each download's original start through that cutoff; subsequent refreshes use verified coverage and recent overlap. Exact originals are backed up before enriched/refreshed CSVs are atomically replaced. Unknown derived columns or missing inputs produce per-file errors while preserving originals. Completed changes survive restart; interrupted **enrichment or refresh must be run again**. See the [full enrichment guide](APP_README.md#enrichment) for backup locations, source selection and recovery details.
 
 ### Analysis: build smart filters visually
 

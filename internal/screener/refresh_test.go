@@ -113,7 +113,7 @@ func TestRefreshRepairsHistoryReplaysLegacyIndicatorsBacksUpAndPersistsVerifiedC
 		t.Fatalf("successful checked-through watermark was not retained: %+v", metadata)
 	}
 	page, err := m.Files(0, 50)
-	if err != nil || page.Files[0].FirstTimestamp != 1704067200000 || page.Files[0].LastTimestamp <= 1704240000000 {
+	if err != nil || page.Files[0].FirstTimestamp == nil || *page.Files[0].FirstTimestamp != 1704067200000 || page.Files[0].LastTimestamp == nil || *page.Files[0].LastTimestamp <= 1704240000000 {
 		t.Fatalf("actual file period: %+v %v", page, err)
 	}
 	firstRequests, _ := os.ReadFile(trace)

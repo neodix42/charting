@@ -221,6 +221,12 @@ func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailur
 				if err != nil || len(metadata.Recipes) != 1 {
 					t.Fatalf("parallel recipe metadata missing: %s %+v %v", job.Name, metadata, err)
 				}
+				if operation == "refresh" {
+					info, err := m.Refresh(nil)
+					if err != nil || info.AsOf == 0 || metadata.CheckedThrough != info.AsOf {
+						t.Fatalf("active and queued files used different execution cutoffs: %s %+v %+v %v", job.Name, metadata, info, err)
+					}
+				}
 			}
 			assertNoEnrichmentScratch(t, m.directory)
 			assertNoRefreshScratch(t, m.directory)

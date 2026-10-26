@@ -48,10 +48,17 @@ func TestHubSequenceCheckedBeforeProductRoutingAndOverflow(t *testing.T) {
 		t.Fatal("bounded buffer overflow not surfaced")
 	}
 }
+
+type socketTestTransport func(*http.Request) (*http.Response, error)
+
+func (f socketTestTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 	var socketCount atomic.Int32
-	var subscribed atomic.Bool
 	var initialREST atomic.Bool
+	subscriptions := map[string]chan struct{}{"1m": make(chan struct{}), "5m": make(chan struct{})}
+	historyStarted, stopping := make(chan struct{}), make(chan struct{})
+	var historyOnce sync.Once
 	var mu sync.Mutex
 	var client *websocket.Conn
 	upgrader := websocket.Upgrader{}
@@ -67,6 +74,13 @@ func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 			mu.Lock()
 			client = conn
 			mu.Unlock()
+			// WebSocket and HTTP use independent connections. Deliberately let
+			// HTTP arrive first even though the client has already written SUBSCRIBE.
+			select {
+			case <-historyStarted:
+			case <-stopping:
+				return
+			}
 			for {
 				var msg struct {
 					Method string
@@ -76,9 +90,13 @@ func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 					return
 				}
 				if msg.Method == "SUBSCRIBE" {
-					subscribed.Store(true)
 					for _, topic := range msg.Params {
 						interval := strings.TrimPrefix(topic, "btcusdt@kline_")
+						select {
+						case <-subscriptions[interval]:
+						default:
+							close(subscriptions[interval])
+						}
 						bucket := start / TimeframeSeconds(interval) * TimeframeSeconds(interval)
 						_ = conn.WriteJSON(map[string]any{"e": "kline", "E": time.Now().UnixMilli(), "s": "BTCUSDT", "k": map[string]any{"t": bucket * 1000, "i": interval, "o": "100", "h": "102", "l": "99", "c": "101", "v": "6", "x": false}})
 					}
@@ -86,8 +104,14 @@ func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 			}
 		}
 		if r.URL.Path == "/api/v3/klines" {
-			if !subscribed.Load() {
-				t.Error("history requested before upstream subscribe")
+			historyOnce.Do(func() { close(historyStarted) })
+			select {
+			case <-subscriptions[r.URL.Query().Get("interval")]:
+			case <-time.After(3 * time.Second):
+				t.Error("upstream subscription was not delivered")
+				return
+			case <-r.Context().Done():
+				return
 			}
 			initialREST.Store(true)
 			bucket := start / TimeframeSeconds(r.URL.Query().Get("interval")) * TimeframeSeconds(r.URL.Query().Get("interval"))
@@ -97,6 +121,7 @@ func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
+	defer close(stopping)
 	defer func() {
 		mu.Lock()
 		if client != nil {
@@ -108,6 +133,18 @@ func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 	a := generic.(*publicAdapter)
 	a.base = server.URL
 	a.ws = "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	a.client.Transport = socketTestTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/api/v3/klines" {
+			topic := "btcusdt@kline_" + r.URL.Query().Get("interval")
+			a.hub.mu.Lock()
+			written := a.hub.active[topic]
+			a.hub.mu.Unlock()
+			if !written {
+				t.Errorf("history requested before writing subscription for %s", topic)
+			}
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	results := make(chan domain.Candle, 32)

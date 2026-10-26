@@ -48,6 +48,8 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
   void read();return ()=>{active=false;if(timer)clearTimeout(timer);};
  },[api,visible,retry]);
  const instruments=catalog?.groups.flatMap(group=>group.instruments)??[],working=info?.jobs.some(job=>job.status==='queued'||job.status==='running')??false;
+ const downloaded=new Set(info?.downloadedSymbols??[]),downloadedIDs=instruments.filter(instrument=>downloaded.has(instrument.id)).map(instrument=>instrument.id);
+ const selectedDownloaded=downloadedIDs.filter(id=>selected.has(id)).length,onlyDownloaded=downloadedIDs.length>0&&selectedDownloaded===downloadedIDs.length&&selected.size===downloadedIDs.length;
  const downloads=info?.jobs??[],filteredDownloads=downloads.filter(job=>downloadFilter==='all'||job.status===downloadFilter);
  const lastDownloadPage=Math.max(0,Math.ceil(filteredDownloads.length/downloadPageSize)-1),currentDownloadPage=Math.min(downloadPage,lastDownloadPage);
  const visibleDownloads=filteredDownloads.slice(currentDownloadPage*downloadPageSize,(currentDownloadPage+1)*downloadPageSize);
@@ -78,10 +80,11 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
     {working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerDownload())}>Cancel downloads</button>}
     {!info?.active&&info?.runtimeAvailable&&info.jobs.some(job=>job.status==='failed'||job.status==='queued')&&<button type="button" disabled={busy} onClick={()=>void run(()=>api.ResumeScreenerDownload())}>Resume downloads</button>}
     <small className="screener-download-directory">CSV destination: <span>{info?.directory||'Loading…'}</span><span>Change the folder in Settings.</span></small>
+    <small className="screener-download-note">Download creates a new CSV for the full selected date range. To extend existing files, use Enrichment → Refresh data and indicators.</small>
     {invalidDates&&<small className="screener-date-error">Choose a start date before the end date.</small>}
    </form>
    <div className="screener-columns">
-    <section className="screener-catalog" aria-label="Dukascopy instruments"><div className="screener-catalog-toolbar"><Selection label="Select all symbols" checked={instruments.length>0&&selected.size===instruments.length} partial={selected.size>0&&selected.size<instruments.length} disabled={!viewReady||!catalog||working||busy} onChange={checked=>changeSelection(instruments.map(instrument=>instrument.id),checked)}/><span className="muted" aria-label="Selected symbol count">{selected.size} / {instruments.length} selected</span><input type="search" aria-label="Search Dukascopy instruments" placeholder="Search symbols or names…" value={query} onChange={event=>setQuery(event.target.value)}/></div>
+    <section className="screener-catalog" aria-label="Dukascopy instruments"><div className="screener-catalog-toolbar"><Selection label="Select all symbols" checked={instruments.length>0&&selected.size===instruments.length} partial={selected.size>0&&selected.size<instruments.length} disabled={!viewReady||!catalog||working||busy} onChange={checked=>changeSelection(instruments.map(instrument=>instrument.id),checked)}/><Selection label="Select all downloaded assets" checked={onlyDownloaded} partial={!onlyDownloaded&&selectedDownloaded>0} disabled={!viewReady||!catalog||!info||!downloadedIDs.length||working||busy} onChange={checked=>checked?changeView({symbols:downloadedIDs}):changeSelection(downloadedIDs,false)}/><span className="muted" aria-label="Selected symbol count">{selected.size} / {instruments.length} selected</span><input type="search" aria-label="Search Dukascopy instruments" placeholder="Search symbols or names…" value={query} onChange={event=>setQuery(event.target.value)}/></div>
      {!catalog&&!catalogError&&<p className="screener-loading" role="status">Loading supported instruments…</p>}
      {catalog?.groups.map(group=>{
       const matches=group.instruments.filter(instrument=>!search||`${group.name} ${instrument.id} ${instrument.name}`.toLowerCase().includes(search));

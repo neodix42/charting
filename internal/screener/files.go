@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -24,8 +25,8 @@ type DataFile struct {
 	Timeframe      string   `json:"timeframe,omitempty"`
 	From           string   `json:"from,omitempty"`
 	To             string   `json:"to,omitempty"`
-	FirstTimestamp int64    `json:"firstTimestamp,omitempty"`
-	LastTimestamp  int64    `json:"lastTimestamp,omitempty"`
+	FirstTimestamp *int64   `json:"firstTimestamp,omitempty"`
+	LastTimestamp  *int64   `json:"lastTimestamp,omitempty"`
 	Fields         []string `json:"fields"`
 	Bytes          int64    `json:"bytes"`
 	Error          string   `json:"error,omitempty"`
@@ -72,6 +73,27 @@ func csvNames(directory string) ([]string, error) {
 	return names, nil
 }
 
+// Published files, rather than the last download queue, define which assets are
+// already present. Multiple ranges/timeframes count once; scratch stays hidden.
+func downloadedSymbols(directory string) ([]string, error) {
+	names, err := csvNames(directory)
+	if err != nil {
+		return []string{}, err
+	}
+	seen := map[string]bool{}
+	for _, name := range names {
+		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+			seen[match[1]] = true
+		}
+	}
+	symbols := make([]string, 0, len(seen))
+	for symbol := range seen {
+		symbols = append(symbols, symbol)
+	}
+	sort.Strings(symbols)
+	return symbols, nil
+}
+
 func describeFile(directory, name string) DataFile {
 	file := DataFile{ID: dataFileID(directory, name), Name: name, Fields: []string{}}
 	if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
@@ -92,10 +114,21 @@ func describeFile(directory, name string) DataFile {
 		return file
 	}
 	defer input.Close()
-	// Reading only a bounded header keeps listing large tick histories cheap.
+	// Publication can replace the pathname between Lstat and Open. Use the
+	// opened file's size so the header and tail describe the same CSV snapshot.
+	info, err = input.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		file.Error = "CSV is no longer a readable regular file"
+		return file
+	}
+	file.Bytes = info.Size()
+	// Bounded head/tail reads keep listing large tick histories cheap, while
+	// reporting actual CSV timestamps even before the first refresh.
 	buffered := bufio.NewReader(io.LimitReader(input, 1024*1024))
+	var prefixBytes int64
 	if prefix, _ := buffered.Peek(3); bytes.Equal(prefix, []byte{0xef, 0xbb, 0xbf}) {
 		_, _ = buffered.Discard(3)
+		prefixBytes = 3
 	}
 	reader := csv.NewReader(buffered)
 	header, err := reader.Read()
@@ -113,8 +146,11 @@ func describeFile(directory, name string) DataFile {
 		seen[normalized], header[i] = true, field
 	}
 	file.Fields = header
-	if metadata, err := readFileMetadata(directory, name); err == nil && metadataMatches(metadata, info) {
-		file.FirstTimestamp, file.LastTimestamp = metadata.FirstTimestamp, metadata.LastTimestamp
+	if file.Error == "" {
+		file.FirstTimestamp, file.LastTimestamp, err = csvPeriod(input, reader, header, info.Size(), reader.InputOffset()+prefixBytes)
+		if err != nil {
+			file.Error = cleanMessage(err.Error())
+		}
 	}
 	return file
 }

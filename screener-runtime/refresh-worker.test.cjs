@@ -66,6 +66,30 @@ test('all 42 indicator and time field headers can migrate their complete applied
   assert.deepEqual(await recipesFor([...header,...scientific.columns]),[{indicator:'alma',parameters:{period:3,offset:1e-7,sigma:6},source:'close'}]);
 });
 
+test('the batch execution cutoff controls the download endpoint, newest closed bar and appended indicator values',async t=>{
+  const original=`${header.join(',')},sma_2\n${row(start,10).join(',')},\n`;
+  const asOf=start+3*day+12345;
+  const request={...await fixture(t,original),asOf};
+  let endpoint;
+  const result=await refresh(request,{emit:()=>{},download:async input=>{
+    endpoint=input.to;
+    await fs.writeFile(input.output,csv([row(start,10),row(start+day,20),row(start+2*day,30),row(start+3*day,40)]));
+  }});
+  assert.equal(endpoint,new Date(asOf).toISOString());
+  assert.equal(result.checkedThrough,asOf);
+  assert.equal(result.lastTimestamp,start+2*day);
+  assert.equal(result.addedRows,2);
+  assert.deepEqual((await read(request.output)).map(value=>value.sma_2),['','15','25']);
+  assert.equal(await fs.readFile(request.input,'utf8'),original);
+});
+
+test('invalid execution cutoffs fail before scanning or downloading data',async t=>{
+  const request=await fixture(t,csv([row(start,10)]));
+  for(const asOf of [-1,NaN,Infinity,1.25,'2024-01-01',8640000000000001]){
+    await assert.rejects(refresh({...request,asOf},{emit:()=>{},download:()=>assert.fail('invalid cutoff reached transport')}),/Refresh cutoff/);
+  }
+});
+
 test('verified coverage fetches bounded overlap only, preserves earlier data and does not add an open candle',async t=>{
   const request={...await fixture(t,csv([row(start,10),row(start+day,20),row(start+2*day,30),row(start+3*day,40)])),coverageVerified:true};
   request.coverageDigest=createHash('sha256').update(await fs.readFile(request.input)).digest('hex');

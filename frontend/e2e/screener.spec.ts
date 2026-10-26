@@ -1,11 +1,57 @@
 import {test,expect,type Page} from '@playwright/test';
 import capacity from '../../examples/capacity-20-tabs-180-charts.json' with {type:'json'};
-import type {ScreenerInfo,Workspace} from '../src/types';
+import type {ScreenerDataFile,ScreenerInfo,Workspace} from '../src/types';
 
 const chartTabs=(page:Page)=>page.locator('[role="tab"][data-tab-id]');
 const mainTab=(page:Page)=>page.getByRole('tab',{name:'Screener',exact:true});
 const saved=(page:Page):Promise<Workspace>=>page.evaluate(()=>(window as any).__testWorkspace());
 async function downloader(page:Page){await mainTab(page).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(page.getByRole('checkbox',{name:'Select all symbols',exact:true})).toBeEnabled();}
+
+test('downloaded asset selection replaces unrelated symbols, ignores search and persists across restart',async({page})=>{
+ await page.goto('/');
+ const files:ScreenerDataFile[]=[
+  {id:'btc-daily',name:'btcusd-d1-2024-01-01-2024-02-01.csv',symbol:'btcusd',timeframe:'d1',fields:['timestamp','close'],bytes:200},
+  {id:'btc-minute',name:'btcusd-m1-2024-01-01-2024-02-01.csv',symbol:'btcusd',timeframe:'m1',fields:['timestamp','close'],bytes:300},
+  {id:'eth-daily',name:'ethusd-d1-2024-01-01-2024-02-01.csv',symbol:'ethusd',timeframe:'d1',fields:['timestamp','close'],bytes:200},
+  {id:'unknown',name:'custom.csv',symbol:'unknown',fields:['timestamp','close'],bytes:100},
+ ];
+ await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
+ await downloader(page);
+ const downloaded=page.getByRole('checkbox',{name:'Select all downloaded assets',exact:true});
+ await expect(downloaded).toBeEnabled();
+ await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();
+ await page.getByRole('searchbox',{name:'Search Dukascopy instruments',exact:true}).fill('Gold');
+ await downloaded.check();
+ await expect(page.getByLabel('Selected symbol count',{exact:true})).toHaveText('2 / 4 selected');
+ await expect(page.getByRole('checkbox',{name:'XAUUSD — Gold vs US Dollar',exact:true})).not.toBeChecked();
+ await page.getByRole('combobox',{name:'Download timeframe',exact:true}).selectOption('m1');
+ await page.reload();await downloader(page);
+ await expect(downloaded).toBeChecked();
+ await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m1');
+ await expect(page.getByRole('checkbox',{name:'BTCUSD — Bitcoin vs US Dollar',exact:true})).toBeChecked();
+ await expect(page.getByRole('checkbox',{name:'ETHUSD — Ethereum vs US Dollar',exact:true})).toBeChecked();
+ await downloaded.uncheck();await expect(page.getByLabel('Selected symbol count',{exact:true})).toHaveText('0 / 4 selected');
+ await downloaded.check();
+ await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();
+ expect((await page.evaluate(()=>(window as any).__testScreenerRequest())).symbols).toEqual(['btcusd','ethusd']);
+ await expect(downloaded).toBeDisabled();
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
+ await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files.filter(file=>file.symbol==='btcusd')),files);
+ await expect.poll(()=>downloaded.evaluate(input=>(input as HTMLInputElement).indeterminate)).toBe(true);
+ await downloaded.check();await expect(page.getByLabel('Selected symbol count',{exact:true})).toHaveText('1 / 4 selected');
+ await page.evaluate(()=>(window as any).__testSetScreener({directory:'/new/empty/folder',downloadedSymbols:[]}));
+ await expect(downloaded).toBeDisabled();
+});
+
+test('completed queue history alone does not count as an existing downloaded asset',async({page})=>{
+ await page.goto('/');await downloader(page);
+ const downloaded=page.getByRole('checkbox',{name:'Select all downloaded assets',exact:true});
+ await expect(downloaded).toBeDisabled();
+ await page.evaluate(()=>(window as any).__testSetScreener({jobs:[{id:'old',symbol:'btcusd',timeframe:'d1',from:'2024-01-01',to:'2024-02-01',status:'completed',progress:100,message:'Old queue; CSV was removed',outputPath:'/removed.csv'}]}));
+ await expect(page.getByLabel('Download summary',{exact:true})).toContainText('1 completed');
+ await expect(downloaded).toBeDisabled();
+ await expect(page.getByRole('form',{name:'Download historical data',exact:true})).toContainText('Download creates a new CSV for the full selected date range.');
+});
 
 test('reopening restores selected symbols, timeframe, dates, parallelism and every category expansion',async({page})=>{
  await page.goto('/');await downloader(page);

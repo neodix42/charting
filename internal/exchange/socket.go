@@ -196,7 +196,8 @@ func (h *socketHub) run() {
 		}
 		delay = time.Second
 		h.hasSequence = false
-		h.publish("", wireEvent{state: "subscribed", reason: "Public stream subscribed"})
+		// syncSubscriptions notifies only topics whose subscription was written.
+		// A subscriber added after its snapshot must wait for the next sync.
 		err = h.connected(conn, active)
 		conn.Close()
 		h.mu.Lock()

@@ -388,6 +388,13 @@ const desktopSmokeJavaScript = `async function(phase) {
     await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-02');
     await click('[aria-label="Download historical data"] button[type="submit"]');
     await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed');},'two genuine original daily CSVs',90000);
+    const downloaded=await api.GetScreener(),initialFiles=await api.GetScreenerFiles(0,50);
+    check(downloaded.downloadedSymbols.join(',')==='btcusd,ethusd'&&initialFiles.files.every(file=>file.firstTimestamp===1704067200000&&file.lastTimestamp===1704067200000),'new downloads report published assets and actual CSV times before any refresh',initialFiles);
+    await input('[aria-label="Search Dukascopy instruments"]','eurusd');
+    await wait(()=>q('.screener-instrument input:not(:disabled)'),'completed download selection controls');await click('.screener-instrument input');
+    await click('[aria-label="Select all downloaded assets"]');
+    await wait(async()=>{const value=await api.GetScreenerView();return value.symbols.length===2&&value.symbols.includes('btcusd')&&value.symbols.includes('ethusd');},'native downloaded-only selection replaces unrelated symbols despite search');
+    check(qa('.screener-instrument input:checked').length===0,'downloaded-only selection excludes the searched undownloaded asset');
     await click('#screener-enrichment-tab');await wait(()=>q('[aria-label="Enrich downloaded data"] button[type="submit"]:not(:disabled)'),'native enrichment ready');
     await input('[aria-label="Period"]','2');await click('[aria-label="Enrich downloaded data"] button[type="submit"]');
     const page=await api.GetScreenerFiles(0,50),ids=page.files.map(file=>file.id);
@@ -402,7 +409,9 @@ const desktopSmokeJavaScript = `async function(phase) {
      csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
      const rows=csv[symbol].trim().split('\n'),values=rows.slice(1).map(line=>line.split(','));counts[symbol]=values.length;
      check(rows[0]==='timestamp,open,high,low,close,volume,sma_2'&&values.length>2&&values[0][6]===''&&values.every((row,i)=>i===0||Math.abs(Number(row[6])-(Number(values[i-1][4])+Number(row[4]))/2)<1e-8),symbol+' refresh appends real missing/new bars and calculates the existing SMA column for each new row',{rows:values.length,last:values.at(-1)});
-     check(values.every((row,i)=>Number(row[0])+86400000<=Date.now()&&(i===0||Number(row[0])>Number(values[i-1][0]))),symbol+' refreshed candles are closed, unique and chronological');
+     check(values.every((row,i)=>Number(row[0])+86400000<=refreshed.asOf&&(i===0||Number(row[0])>Number(values[i-1][0]))),symbol+' refreshed candles are closed at the shared execution cutoff, unique and chronological');
+     const file=(await api.GetScreenerFiles(0,50)).files.find(file=>file.symbol===symbol);
+     check(file.firstTimestamp===Number(values[0][0])&&file.lastTimestamp===Number(values.at(-1)[0])&&file.lastTimestamp>Date.parse(file.to+'T00:00:00Z'),symbol+' UTC period follows the actual appended CSV through its newest bar',file);
     }
     check(refreshed.jobs.every(job=>job.addedRows>0&&job.columns.includes('sma_2')&&job.backupPath),'all refreshed files report appends, applied indicators and retained originals',refreshed.jobs);
     await click('#screener-analysis-tab');await wait(()=>q('[aria-label="Analysis conditions"] button[type="submit"]:not(:disabled)'),'native visual conditions ready');
@@ -441,6 +450,8 @@ const desktopSmokeJavaScript = `async function(phase) {
     const view=await api.GetScreenerAnalysisView(),files=await api.GetScreenerFiles(0,50);
     check(view.conditions.length===2&&view.conditions[0].left.field==='close'&&view.conditions[1].left.field==='sma_2','restart restores both visual AND rows and operands',view);
     check(files.files.length===2&&files.files.every(file=>file.fields.includes('sma_2')&&file.firstTimestamp&&file.lastTimestamp),'restart discovers refreshed periods and saved indicator columns',files);
+    const downloadView=await api.GetScreenerView(),downloaded=await api.GetScreener();
+    check(downloadView.symbols.length===2&&downloadView.symbols.every(symbol=>downloaded.downloadedSymbols.includes(symbol)),'restart remembers downloaded-only symbol selection and discovers published CSVs',downloaded.downloadedSymbols);
     await click('[aria-label="Analysis conditions"] button[type="submit"]');
     const result=await wait(async()=>{const value=await api.GetScreenerAnalysis(0,50);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2?value:false;},'restarted rule scan');
     check(result.results.every(file=>file.matches>1),'restored conditions scan all saved historical occurrences',result);

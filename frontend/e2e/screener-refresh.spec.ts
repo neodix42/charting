@@ -20,6 +20,7 @@ test('Refresh updates all existing files and applied indicators, independently o
  expect(info.jobs).toHaveLength(57);expect(info.jobs[0].columns).toEqual(fields.slice(6));
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toBeNull();
  expect(await page.evaluate(()=>(window as any).__testRefreshStarts())).toBe(1);
+ await expect(panel(page).locator('.enrichment-refresh-help')).toContainText('This refresh checks through');
  await page.evaluate(info=>(window as any).__testSetRefresh({...info,currentFile:info.jobs[56].name,currentProgress:36,jobs:info.jobs.map((job,i)=>({...job,status:i===56?'running':'queued',progress:i===56?36:0,message:'Downloading new rows and recalculating saved indicators'}))}),info);
  await expect(panel(page).locator('tbody tr').last().getByRole('progressbar')).toHaveAttribute('value','36');
  await expect(page.getByRole('button',{name:'Enrich 57 files',exact:true})).toBeDisabled();

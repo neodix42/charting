@@ -42,14 +42,15 @@ type Job struct {
 	OutputPath string  `json:"outputPath,omitempty"`
 }
 type Info struct {
-	Directory        string `json:"directory"`
-	RuntimeAvailable bool   `json:"runtimeAvailable"`
-	RuntimeError     string `json:"runtimeError,omitempty"`
-	Error            string `json:"error,omitempty"`
-	Jobs             []Job  `json:"jobs"`
-	Concurrency      int    `json:"concurrency"`
-	MaxConcurrency   int    `json:"maxConcurrency"`
-	Active           bool   `json:"active"`
+	Directory         string   `json:"directory"`
+	RuntimeAvailable  bool     `json:"runtimeAvailable"`
+	RuntimeError      string   `json:"runtimeError,omitempty"`
+	Error             string   `json:"error,omitempty"`
+	Jobs              []Job    `json:"jobs"`
+	DownloadedSymbols []string `json:"downloadedSymbols"`
+	Concurrency       int      `json:"concurrency"`
+	MaxConcurrency    int      `json:"maxConcurrency"`
+	Active            bool     `json:"active"`
 }
 
 // Manager runs one selected batch at a time through a bounded symbol worker
@@ -79,6 +80,7 @@ type Manager struct {
 	enrichmentDone          chan struct{}
 	refreshJobs             []RefreshJob
 	refreshActive           bool
+	refreshAsOf             int64
 	refreshCancel           context.CancelFunc
 	refreshDone             chan struct{}
 	analysis                *analysisState
@@ -126,7 +128,12 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 func (m *Manager) infoLocked() Info {
 	jobs := make([]Job, len(m.jobs))
 	copy(jobs, m.jobs)
-	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError}, " ")), Jobs: jobs, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active}
+	symbols, err := downloadedSymbols(m.directory)
+	fileError := ""
+	if err != nil {
+		fileError = err.Error()
+	}
+	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active}
 }
 func (m *Manager) Info() Info { m.mu.Lock(); defer m.mu.Unlock(); return m.infoLocked() }
 

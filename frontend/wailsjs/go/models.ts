@@ -1235,6 +1235,7 @@ export namespace screener {
 	    runtimeError?: string;
 	    error?: string;
 	    jobs: Job[];
+	    downloadedSymbols: string[];
 	    concurrency: number;
 	    maxConcurrency: number;
 	    active: boolean;
@@ -1250,6 +1251,7 @@ export namespace screener {
 	        this.runtimeError = source["runtimeError"];
 	        this.error = source["error"];
 	        this.jobs = this.convertValues(source["jobs"], Job);
+	        this.downloadedSymbols = source["downloadedSymbols"];
 	        this.concurrency = source["concurrency"];
 	        this.maxConcurrency = source["maxConcurrency"];
 	        this.active = source["active"];
@@ -1310,6 +1312,7 @@ export namespace screener {
 	export class RefreshInfo {
 	    directory: string;
 	    active: boolean;
+	    asOf?: number;
 	    runtimeAvailable: boolean;
 	    runtimeError?: string;
 	    total: number;
@@ -1329,6 +1332,7 @@ export namespace screener {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
 	        this.active = source["active"];
+	        this.asOf = source["asOf"];
 	        this.runtimeAvailable = source["runtimeAvailable"];
 	        this.runtimeError = source["runtimeError"];
 	        this.total = source["total"];
