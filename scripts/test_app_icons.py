@@ -148,11 +148,11 @@ class AppIconTests(unittest.TestCase):
             subprocess.run([str(installer)], env=env, check=True, capture_output=True)
             self.assertEqual(workspace.read_bytes(), b"existing user workspace")
 
-    def test_portable_installer_keeps_launcher_runtime_licenses_and_sources_together(self):
+    def test_legacy_portable_installer_keeps_launcher_runtime_licenses_and_sources_together(self):
         with tempfile.TemporaryDirectory(prefix="cryptodesk-runtime-install-") as temporary:
             root = Path(temporary)
             package = self.make_package(root)
-            shutil.copy2(icons.ROOT / "build/linux/portable-launcher.sh", package / "cryptodesk")
+            (package / "cryptodesk").write_text('#!/bin/sh\ncd -- "$(dirname -- "$0")"\nexec ./runtime/usr/bin/cryptodesk "$@"\n')
             binary = package / "runtime/usr/bin/cryptodesk"
             binary.parent.mkdir(parents=True)
             binary.write_text('#!/bin/sh\nprintf "bundled-runtime\\n"\n')

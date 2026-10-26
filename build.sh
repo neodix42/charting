@@ -59,6 +59,6 @@ install -m 644 -- "$APP_ROOT/release/$RELEASE_NAME.tar.gz" "$APP_ROOT/$RELEASE_N
 
 printf '\n%s\n' \
   "Ready to run: $APP_ROOT/cryptodesk" \
-  "Portable archive: $APP_ROOT/$RELEASE_NAME.tar.gz" \
+  "Linux archive: $APP_ROOT/$RELEASE_NAME.tar.gz" \
   "Checksums: $APP_ROOT/cryptodesk-SHA256SUMS" \
-  'Runtime requirements: compatible Linux with GTK3 and WebKitGTK 4.1 (APP_README.md).'
+  'Runtime requirements: GTK3, WebKitGTK 4.1 and libsoup3; see the Ubuntu apt command in README.md.'

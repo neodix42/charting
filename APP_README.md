@@ -12,9 +12,22 @@ The original specification bundle is retained at the repository root. [STATUS.md
 
 Run the root `./cryptodesk` produced by `./build.sh`, or extract `cryptodesk-X.Y.Z-linux-amd64.tar.gz` and run `./cryptodesk` inside its directory. This small archive requires compatible GTK3, WebKitGTK 4.1, libsoup3 and Linux desktop runtime libraries. Tested local build environment: Ubuntu 26.04.1 x86_64, Wayland, GTK 3.24.52, WebKitGTK 2.52.6.
 
-For a machine without GTK/WebKit, choose **`cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz`**, extract the whole directory and run its **`./cryptodesk` launcher**. It includes GTK/WebKit, their helper processes and runtime dependencies, licenses and matching source archives. Keep its `runtime` directory beside the launcher. No installation or FUSE is needed. The host still supplies compatible glibc, graphics drivers, desktop session and fonts; CI builds use Ubuntu 24.04, while local packages require the glibc version of their build host or newer. Workspace storage remains in the normal user profile unless `--data-dir` is supplied. [Portable Linux details](docs/LINUX_PORTABLE.md).
+On Ubuntu Desktop **24.04 or 26.04 x64**, install the system runtime dependencies once:
 
-Optional user-local installation for **either Linux archive**:
+```bash
+sudo apt update
+sudo apt install -y \
+  libgtk-3-0t64 libwebkit2gtk-4.1-0 libsoup-3.0-0 \
+  glib-networking gsettings-desktop-schemas dconf-gsettings-backend \
+  ca-certificates fonts-dejavu-core \
+  libnss3 libnspr4 libasound2t64 libxss1
+```
+
+GTK3 provides the desktop window, WebKitGTK the embedded interface/JavaScript engine, and libsoup3 plus GLib networking the webview's HTTP/TLS support. NSS/NSPR, ALSA and X11 support libraries serve the private Screener Chromium. APT installs transitive dependencies automatically; the [Ubuntu package catalog](https://packages.ubuntu.com/noble/amd64/libwebkit2gtk-4.1-0) lists the WebKitGTK runtime dependencies. Keep the supplied `screener-runtime` folder beside the application: Node, dukascopy-node, trading-signals and Chromium are already included.
+
+Use a graphical desktop session with working graphics drivers. GitHub releases build on Ubuntu 24.04; locally built archives require a glibc version compatible with their build host. Workspace storage remains in the normal user profile unless `--data-dir` is supplied. The separate Linux archive with bundled GTK/WebKit has been retired.
+
+Optional user-local installation for the **Linux archive**:
 
 ```bash
 ./install-user.sh --dry-run
@@ -23,19 +36,19 @@ Optional user-local installation for **either Linux archive**:
 
 This writes the app under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local/share/cryptodesk-app`), registers its application launcher and installs the same diamond logo shown in the app's top-left corner. The launcher uses an absolute PNG icon path, with SVG and eight PNG sizes also registered in the user icon theme. The native window embeds a smaller copy that GTK accepts on X11; the matching `cryptodesk` desktop identity provides Wayland taskbar association. Windows builds carry the same logo in their executable resources.
 
-If your configured desktop folder exists, installation also creates an executable `cryptodesk.desktop` shortcut there, preserving any differing existing shortcut. It sets that file's trusted metadata when supported; your desktop may still require **Allow Launching**. Per-user icon/application metadata is refreshed when the desktop tools are available. No system settings or workspace data are changed. The bundled-runtime installer copies the complete runtime, including licenses and sources; the original extraction folder can then be removed.
+If your configured desktop folder exists, installation also creates an executable `cryptodesk.desktop` shortcut there, preserving any differing existing shortcut. It sets that file's trusted metadata when supported; your desktop may still require **Allow Launching**. Per-user icon/application metadata is refreshed when the desktop tools are available. No system settings or workspace data are changed. The installer copies the complete private Screener runtime; the original extraction folder can then be removed.
 
 Run the installer again after rebuilding or downloading an updated archive, then close and reopen CryptoDesk. If an existing pinned taskbar entry retains an old icon, unpin it and pin the newly installed **CryptoDesk** application entry. Installation does not start the app. Source-checkout equivalent: `scripts/install-user.sh --dry-run` after building.
 
 ## Downloads and release versions
 
-The main [README](https://github.com/neodix42/charting#download) links to the [latest release](https://github.com/neodix42/charting/releases/latest). Pushing commits to `main` runs the release workflow: check and build both Linux variants and Windows, assign `v0.1.0` initially and increment subsequent patch tags, then publish all three versioned packages together. Unversioned duplicate archives are no longer published. `SHA256SUMS` verifies the archives and `release.json` records their version, source commit and hashes. Historical completed releases are preserved. The workflow assumes `main` is the default branch. Superseded queued commits or older workflow contents are skipped in favor of the newer push; a workflow change during a build stops publication before remote writes.
+The main [README](https://github.com/neodix42/charting#download) links to the [latest release](https://github.com/neodix42/charting/releases/latest). Pushing commits to `main` runs the release workflow: check and build the standard Linux archive and Windows ZIP, assign `v0.1.0` initially and increment subsequent patch tags, then publish both versioned packages together. `SHA256SUMS` verifies the archives and `release.json` records their version, source commit and hashes. Historical completed releases, including older bundled Linux downloads, remain preserved and checksum-verified. The workflow assumes `main` is the default branch. Superseded queued commits or older workflow contents are skipped in favor of the newer push; a workflow change during a build stops publication before remote writes.
 
 The header displays the installed build's `vX.Y.Z` release tag beside the CryptoDesk name. It is embedded at build time and works offline; it does not change when a newer release is published. Packaging verifies that the UI version matches the selected release, and diagnostics reports the same compiled version.
 
 Local builds use the baseline in `VERSION` (currently `0.1.0`). Set `CRYPTODESK_VERSION=X.Y.Z` to override it for either build script; the header, output filename, package manifest and Windows product version follow this value. Release CI passes its selected version without making source-version bump commits. Hosted execution and Windows GUI checks are recorded separately in [STATUS.md](STATUS.md).
 
-Ubuntu release CI checks unprivileged Bubblewrap namespace setup before building. Only a restricted GitHub-hosted Ubuntu 24.04 runner can load the pinned upstream Bubblewrap AppArmor profile when the initial probe fails; existing policy and global namespace settings are preserved. Portable startup failures print their exit code/log tail and retain `namespace.json`, `portable.json` and application logs in the **diagnostics-portable-linux-amd64** workflow artifact. Diagnostics are kept separate from published application archives. Local build scripts do not load AppArmor policy.
+Ubuntu release CI verifies the packaged Screener enrichment/Refresh runtime offline and retains its report in the **diagnostics-linux-amd64** workflow artifact, separate from the two published application archives. The retired GTK/WebKit bundle's namespace provisioning, runtime redistribution and source collection no longer run.
 
 ## Build and develop
 
@@ -48,8 +61,7 @@ Linux native builds also require GTK3 and WebKitGTK 4.1 development packages; th
 On an Ubuntu machine which already has the corresponding runtime libraries, `scripts/bootstrap-native-sdk.sh` is an optional unprivileged alternative: it downloads exact currently resolved Ubuntu development-package archives and extracts them under ignored `.tools/native`; it does not install packages or change the OS. `scripts/native-env.sh` scopes those headers/linker paths to the invoking process. This SDK path was used in the test environment. Repositories/network access are needed for bootstrap; package versions are recorded in `.tools/native/package-versions.txt`.
 
 ```bash
-./build.sh                   # ready-to-run app + portable archive + checksums in repo root
-./portable-build.sh          # larger Linux archive with GTK/WebKit runtime, licenses and sources
+./build.sh                   # ready-to-run app + standard Linux archive + checksums in repo root
 ./win-build.sh               # cross-build Windows x64 ZIP with English WebView2 locale packs
 scripts/build-linux.sh       # pinned local CLI, production frontend + desktop + archive
 scripts/dev.sh               # desktop development
@@ -60,8 +72,6 @@ cd frontend && npm run test:e2e
 `./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-X.Y.Z-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
 
 Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
-
-`./portable-build.sh` first builds the normal Linux executable, then creates `cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz` and `cryptodesk-Portable-SHA256SUMS` at the root. Use `--skip-build` only immediately after a matching `./build.sh`. This Ubuntu-only bundler copies installed runtime files and downloads their exact source versions through authenticated Ubuntu source indexes into a project-local cache. It does not modify APT configuration or install packages. Build on the oldest Ubuntu release you intend to support; the package records its build OS/glibc, host-library requirements and complete runtime file hashes.
 
 For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-X.Y.Z-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The ZIP includes Microsoft Fixed Version WebView2 with English (`en-US` and `en-GB`) locale packs; other locale PAKs are omitted. The complete source runtime is verified against its pinned version, SHA-256 and inventory before reducing only the staged package. Shared resources and all licenses are retained. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Fresh machines download the pinned Windows-only Go WebView2 module before preparing the English-language overlay; a prefilled Go module cache is not required, and normal Go checksum/source verification remains enabled. Initial runtime download is about 300 MB; the complete verified runtime remains cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
 

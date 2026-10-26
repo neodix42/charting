@@ -16,6 +16,8 @@ python3 "$APP_ROOT/scripts/app_version.py" --verify-frontend > /dev/null
 RELEASE_NAME="cryptodesk-$CRYPTODESK_VERSION-linux-amd64"
 ARTIFACT_DIR="$APP_ROOT/release/$RELEASE_NAME"
 mkdir -p "$ARTIFACT_DIR/docs"
+# Do not retain the retired bundle guide when rebuilding an existing version.
+rm -f -- "$ARTIFACT_DIR/docs/LINUX_PORTABLE.md"
 cp "$APP_ROOT/build/bin/cryptodesk" "$ARTIFACT_DIR/cryptodesk"
 cp "$APP_ROOT/build/linux/cryptodesk.desktop" "$APP_ROOT/build/linux/cryptodesk.svg" "$APP_ROOT/build/linux/cryptodesk.png" "$APP_ROOT/scripts/install-user.sh" "$APP_ROOT/APP_README.md" "$ARTIFACT_DIR/"
 cp -R "$APP_ROOT/build/linux/icons" "$ARTIFACT_DIR/"

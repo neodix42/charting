@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan, verify and publish main-branch portable releases.
+"""Plan, verify and publish main-branch desktop releases.
 
 Only the publish subcommand writes to GitHub. The workflow serializes the entire
 plan/build/publish cycle; an existing tag is never moved and published assets are
@@ -24,7 +24,7 @@ import zipfile
 from app_version import app_version, parse_version
 from screener_bundle import MANIFEST as SCREENER_MANIFEST, validate_inventory as validate_screener
 
-TARGETS = {"linux-amd64": ".tar.gz", "linux-amd64-portable": ".tar.gz", "windows-amd64": ".zip"}
+TARGETS = {"linux-amd64": ".tar.gz", "windows-amd64": ".zip"}
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 INTEGRITY_PATTERN = re.compile(r"<!-- cryptodesk-assets: (.+?) -->")
@@ -78,8 +78,12 @@ def validate_published(release, tag, commit):
     if release["tag_name"] != tag or marker(tag, commit) not in (release.get("body") or ""):
         raise ValueError("Existing release was not created for this version and exact commit; refusing to replace it")
     assets = {asset["name"]: asset for asset in release.get("assets", [])}
+    current_names = archive_names(tag[1:])
+    # Completed releases from the retired three-archive format stay immutable
+    # and checksum-verified. This does not make the old target publishable.
+    bundled_names = [*current_names, f"cryptodesk-{tag[1:]}-linux-amd64-portable.tar.gz"]
     supported = [set(names) | {"SHA256SUMS", "release.json"}
-                 for names in (archive_names(tag[1:]), legacy_archive_names(tag[1:]))]
+                 for names in (current_names, bundled_names, legacy_archive_names(tag[1:]))]
     if set(assets) not in supported or len(assets) != len(release.get("assets", [])) or any(asset.get("state") != "uploaded" or asset.get("size", 0) <= 0 for asset in assets.values()):
         raise ValueError("Published release has incomplete or unexpected assets; refusing to modify a published release")
     expected = set(assets)
@@ -251,13 +255,15 @@ def stage(root, target, version, directory):
     versioned = f"cryptodesk-{version}-{target}{TARGETS[target]}"
     source = root / versioned
     if not source.is_file() or source.is_symlink():
-        raise ValueError(f"Missing portable archive: {source}")
+        raise ValueError(f"Missing release archive: {source}")
     shutil.copyfile(source, directory / versioned)
 
 
 def archive_manifest(path, target, version):
+    if target not in TARGETS:
+        raise ValueError("Unknown release target")
     prefix = f"cryptodesk-{version}-{target}/"
-    if target.startswith("linux-amd64"):
+    if target == "linux-amd64":
         with tarfile.open(path, "r:gz") as archive:
             names = archive.getnames()
             if any(not (name == prefix[:-1] or name.startswith(prefix)) or ".." in Path(name).parts for name in names):
@@ -281,38 +287,7 @@ def archive_manifest(path, target, version):
                 if len(header) != 20 or header[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", header, 18)[0] != 62:
                     raise ValueError(f"Expected an x64 Linux ELF binary: {name}")
 
-            if target == "linux-amd64-portable":
-                with archive.extractfile(regular("cryptodesk", executable=True)) as stream:
-                    launcher = stream.readline(256)
-                if not launcher.startswith(b"#!") or b"bash" not in launcher:
-                    raise ValueError("Bundled Linux portable launcher must be an executable Bash script")
-                executable("runtime/usr/bin/cryptodesk")
-                for helper in ("WebKitNetworkProcess", "WebKitWebProcess"):
-                    executable(f"runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/{helper}")
-                for library in ("libwebkit2gtk-4.1.so.0", "libgtk-3.so.0"):
-                    regular(f"runtime/usr/lib/x86_64-linux-gnu/{library}")
-                with archive.extractfile(regular("runtime-manifest.json")) as stream:
-                    inventory = json.load(stream)
-                runtime_files = {entry.name.removeprefix(prefix): entry for entry in archive.getmembers()
-                                 if entry.name.startswith(prefix + "runtime/") and entry.isfile()}
-                if not isinstance(inventory, dict) or set(inventory) != set(runtime_files):
-                    raise ValueError("Bundled Linux runtime inventory does not match the archived files")
-                # Tar offsets keep gzip reads forward through the potentially
-                # large corresponding-source archives rather than restarting
-                # decompression for each filename.
-                for name, entry in sorted(runtime_files.items(), key=lambda item: item[1].offset_data):
-                    record = inventory[name]
-                    if not isinstance(record, dict) or record.get("bytes") != entry.size:
-                        raise ValueError(f"Bundled Linux runtime inventory size mismatch: {name}")
-                    with archive.extractfile(entry) as stream:
-                        digest = hashlib.file_digest(stream, "sha256").hexdigest()
-                    if digest != record.get("sha256"):
-                        raise ValueError(f"Bundled Linux runtime inventory checksum mismatch: {name}")
-                for directory in ("runtime/sources/", "runtime/licenses/"):
-                    if not any(entry.name.startswith(prefix + directory) and entry.isfile() and entry.size > 0 for entry in archive.getmembers()):
-                        raise ValueError(f"Bundled Linux runtime is missing {directory}")
-            else:
-                executable("cryptodesk")
+            executable("cryptodesk")
             screener_files = {entry.name.removeprefix(prefix + "screener-runtime/"): entry for entry in sorted(archive.getmembers(), key=lambda entry: entry.offset_data)
                               if entry.name.startswith(prefix + "screener-runtime/") and entry.isfile()}
             with archive.extractfile(regular("screener-runtime/" + SCREENER_MANIFEST)) as stream:
@@ -358,14 +333,14 @@ def bundle(directory, version, commit):
     names = archive_names(version)
     actual = {path.name for path in directory.iterdir() if path.name not in {"SHA256SUMS", "release.json"}}
     if actual != set(names):
-        raise ValueError("Release inputs must contain exactly three versioned archives: Linux, Linux portable and Windows")
+        raise ValueError("Release inputs must contain exactly two versioned archives: Linux and Windows")
     for target, suffix in TARGETS.items():
         original = directory / f"cryptodesk-{version}-{target}{suffix}"
         if original.is_symlink() or not original.is_file():
             raise ValueError(f"Release archive must be a regular file: {target}")
         manifest = archive_manifest(original, target, version)
         expected_target = "linux/amd64" if target.startswith("linux-") else "windows/amd64"
-        variant_matches = manifest.get("packageVariant") == "portable" if target == "linux-amd64-portable" else manifest.get("packageVariant") in (None, "standard")
+        variant_matches = manifest.get("packageVariant") in (None, "standard")
         if manifest.get("app") != "CryptoDesk" or manifest.get("version") != version or manifest.get("gitRevision") != commit or manifest.get("target") != expected_target or not variant_matches:
             raise ValueError(f"Archive manifest does not match the requested release: {target}")
         if manifest.get("workingTreeModified") is not False:
@@ -411,9 +386,9 @@ def publish(api, directory, version, commit):
     paths = sorted(path for path in directory.iterdir() if path.is_file())
     integrity = asset_integrity(paths)
     if release is None:
-        body = (f"Portable CryptoDesk builds from commit `{commit}`.\n\n"
-                "- Linux x64: extract the standard tar.gz and run `./cryptodesk`; GTK3 and WebKitGTK 4.1 runtime libraries are required.\n"
-                "- Linux x64 portable: extract the `-linux-amd64-portable.tar.gz` for the bundled desktop runtime and run `./cryptodesk`.\n"
+        body = (f"CryptoDesk desktop builds from commit `{commit}`.\n\n"
+                "- Ubuntu x64: extract the tar.gz and run `./cryptodesk`; GTK3, WebKitGTK 4.1 and libsoup3 runtime libraries are required. "
+                "Install the Ubuntu dependencies using the apt command in [Linux runtime requirements](https://github.com/neodix42/charting#linux-runtime-requirements).\n"
                 "- Windows x64: extract the complete ZIP and run `cryptodesk.exe`. The English WebView2 runtime is included.\n"
                 "- Verify downloads with `SHA256SUMS`; `release.json` records the source commit and archive hashes.\n\n"
                 f"{marker(tag, commit)}\n{integrity_marker(integrity)}")

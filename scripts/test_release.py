@@ -36,8 +36,10 @@ def screener_entries(target):
             for name, content in entries.items()]
 
 
-def published(tag="v0.1.0", commit=COMMIT, draft=False, legacy=False):
+def published(tag="v0.1.0", commit=COMMIT, draft=False, legacy=False, bundled=False):
     names = [*(release.legacy_archive_names(tag[1:]) if legacy else release.archive_names(tag[1:])), "release.json", "SHA256SUMS"]
+    if bundled:
+        names.append(f"cryptodesk-{tag[1:]}-linux-amd64-portable.tar.gz")
     integrity = {name: {"bytes": 20, "sha256": "1" * 64} for name in names}
     return {"id": 7, "tag_name": tag, "target_commitish": commit, "draft": draft,
             "body": release.marker(tag, commit) + "\n" + release.integrity_marker(integrity),
@@ -46,7 +48,7 @@ def published(tag="v0.1.0", commit=COMMIT, draft=False, legacy=False):
                        for index, name in enumerate(names, 10)]}
 
 
-def portable_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
+def release_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
     """Small structurally real archives, without WebView2 or external toolchains."""
     for target, suffix in release.TARGETS.items():
         prefix = f"cryptodesk-{version}-{target}/"
@@ -58,19 +60,6 @@ def portable_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
             binary[:6] = b"\x7fELF\x02\x01"
             struct.pack_into("<H", binary, 18, 62)
             entries = [("cryptodesk", bytes(binary), 0o755)]
-            if target == "linux-amd64-portable":
-                manifest["packageVariant"] = "portable"
-                entries = [("cryptodesk", b"#!/usr/bin/env bash\nexec runtime/usr/bin/cryptodesk\n", 0o755),
-                           ("runtime/usr/bin/cryptodesk", bytes(binary), 0o755),
-                           ("runtime/usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0", bytes(binary), 0o644),
-                           ("runtime/usr/lib/x86_64-linux-gnu/libgtk-3.so.0", bytes(binary), 0o644),
-                           ("runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess", bytes(binary), 0o755),
-                           ("runtime/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess", bytes(binary), 0o755),
-                           ("runtime/sources/packages.json", b'{"fixture":true}', 0o644),
-                           ("runtime/licenses/copyright", b"Runtime licenses fixture", 0o644)]
-                inventory = {name: {"bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()}
-                             for name, content, _ in entries if name.startswith("runtime/")}
-                entries.append(("runtime-manifest.json", json.dumps(inventory).encode(), 0o644))
             entries.append(("version.json", json.dumps(manifest).encode(), 0o644))
             entries.extend(screener_entries("linux-amd64"))
             with tarfile.open(versioned, "w:gz") as archive:
@@ -204,6 +193,16 @@ class VersionSelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checksums differ"):
             release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])
 
+    def test_completed_three_archive_release_is_preserved_and_its_retired_asset_still_verified(self):
+        value = published(bundled=True)
+        before = copy.deepcopy(value)
+        result = release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])
+        self.assertTrue(result["published"])
+        self.assertEqual(value, before)
+        value["assets"][-1]["digest"] = "sha256:" + "9" * 64
+        with self.assertRaisesRegex(ValueError, "checksums differ"):
+            release.choose_plan("0.1.0", COMMIT, {"v0.1.0": COMMIT}, [value])
+
     def test_published_assets_without_commit_marker_are_not_overwritten(self):
         value = published()
         value["body"] = "Someone else's release"
@@ -288,7 +287,7 @@ class BundleTests(unittest.TestCase):
         for mutation in ("missing-worker", "missing-chromium", "corrupt-node", "wrong-target", "missing-license"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                portable_inputs(root)
+                release_inputs(root)
                 archive = root / "cryptodesk-0.1.0-linux-amd64.tar.gz"
                 def mutate(entry, content):
                     name = entry.name.removeprefix("cryptodesk-0.1.0-linux-amd64/screener-runtime/")
@@ -310,32 +309,34 @@ class BundleTests(unittest.TestCase):
     def test_bundle_verifies_source_and_architecture_and_creates_download_checksums(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root, "1.2.3")
+            release_inputs(root, "1.2.3")
             result = release.bundle(root, "1.2.3", COMMIT)
             self.assertEqual(result["commit"], COMMIT)
             self.assertEqual(result["tag"], "v1.2.3")
             for line in (root / "SHA256SUMS").read_text().splitlines():
                 digest, name = line.split("  ", 1)
                 self.assertEqual(release.sha256(root / name), digest)
-            self.assertEqual(len((root / "SHA256SUMS").read_text().splitlines()), 4)
-            self.assertEqual(set(result["assets"]), {"cryptodesk-1.2.3-linux-amd64.tar.gz", "cryptodesk-1.2.3-linux-amd64-portable.tar.gz", "cryptodesk-1.2.3-windows-amd64.zip"})
+            self.assertEqual(len((root / "SHA256SUMS").read_text().splitlines()), 3)
+            self.assertEqual(set(result["assets"]), {"cryptodesk-1.2.3-linux-amd64.tar.gz", "cryptodesk-1.2.3-windows-amd64.zip"})
             self.assertEqual(release.bundle(root, "1.2.3", COMMIT), result)
 
     def test_wrong_source_commit_version_and_modified_checkout_are_rejected(self):
         for expected_commit, modified in [(OTHER, False), (COMMIT, True)]:
             with self.subTest(commit=expected_commit, modified=modified), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                portable_inputs(root, modified=modified)
+                release_inputs(root, modified=modified)
                 with self.assertRaises(ValueError):
                     release.bundle(root, "0.1.0", expected_commit)
 
     def test_missing_archive_unversioned_alias_and_extra_files_are_rejected(self):
-        for mutation in ("missing-portable", "alias", "extra"):
+        for mutation in ("missing-linux", "alias", "extra", "retired-portable"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                portable_inputs(root)
-                if mutation == "missing-portable":
-                    (root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz").unlink()
+                release_inputs(root)
+                if mutation == "missing-linux":
+                    (root / "cryptodesk-0.1.0-linux-amd64.tar.gz").unlink()
+                elif mutation == "retired-portable":
+                    (root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz").write_bytes(b"Retired build")
                 elif mutation == "alias":
                     (root / "cryptodesk-windows-amd64.zip").write_bytes((root / "cryptodesk-0.1.0-windows-amd64.zip").read_bytes())
                 else:
@@ -347,7 +348,7 @@ class BundleTests(unittest.TestCase):
         for variant in ("traversal", "arm64"):
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                portable_inputs(root)
+                release_inputs(root)
                 archive = root / "cryptodesk-0.1.0-linux-amd64.tar.gz"
                 with tarfile.open(archive, "r:gz") as source:
                     entries = [(entry, source.extractfile(entry).read()) for entry in source.getmembers()]
@@ -364,10 +365,10 @@ class BundleTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     release.bundle(root, "0.1.0", COMMIT)
 
-    def test_stage_copies_exactly_three_versioned_archives_without_aliases(self):
+    def test_stage_copies_exactly_two_versioned_archives_without_aliases(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root, "2.1.9")
+            release_inputs(root, "2.1.9")
             output = root / "staged"
             for target in release.TARGETS:
                 release.stage(root, target, "2.1.9", output)
@@ -375,48 +376,21 @@ class BundleTests(unittest.TestCase):
             for path in output.iterdir():
                 self.assertEqual(path.read_bytes(), (root / path.name).read_bytes())
 
-    def test_portable_variant_requires_launcher_elf_runtime_helpers_sources_and_licenses(self):
-        mutations = ["missing-library", "missing-helper", "arm64-helper", "missing-sources", "missing-licenses", "invalid-launcher", "nonexecutable-launcher", "missing-variant", "wrong-target", "corrupt-library", "empty-inventory"]
-        for mutation in mutations:
-            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                portable_inputs(root)
-                archive = root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz"
-                def mutate(entry, content):
-                    name = entry.name.removeprefix("cryptodesk-0.1.0-linux-amd64-portable/")
-                    if (mutation == "missing-library" and name.endswith("libwebkit2gtk-4.1.so.0")
-                        or mutation == "missing-helper" and name.endswith("WebKitNetworkProcess")
-                        or mutation == "missing-sources" and name.startswith("runtime/sources/")
-                        or mutation == "missing-licenses" and name.startswith("runtime/licenses/")):
-                        return None
-                    if mutation == "arm64-helper" and name.endswith("WebKitWebProcess"):
-                        content = bytearray(content)
-                        struct.pack_into("<H", content, 18, 183)
-                        content = bytes(content)
-                    if mutation == "invalid-launcher" and name == "cryptodesk":
-                        content = b"Not an executable shell launcher\n"
-                    if mutation == "nonexecutable-launcher" and name == "cryptodesk":
-                        entry.mode = 0o644
-                    if mutation == "corrupt-library" and name.endswith("libgtk-3.so.0"):
-                        content += b"unexpected bytes"
-                    if mutation == "empty-inventory" and name == "runtime-manifest.json":
-                        content = b"{}"
-                    if name == "version.json" and mutation in ("missing-variant", "wrong-target"):
-                        manifest = json.loads(content)
-                        if mutation == "missing-variant":
-                            manifest.pop("packageVariant")
-                        else:
-                            manifest["target"] = "linux/arm64"
-                        content = json.dumps(manifest).encode()
-                    return entry, content
-                rewrite_tar(archive, mutate)
-                with self.assertRaises(ValueError):
-                    release.bundle(root, "0.1.0", COMMIT)
+    def test_retired_linux_portable_target_cannot_be_staged_or_validated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            retired = root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz"
+            retired.write_bytes(b"Old local build output")
+            with self.assertRaisesRegex(ValueError, "Unknown release target"):
+                release.stage(root, "linux-amd64-portable", "0.1.0", root / "staged")
+            self.assertFalse((root / "staged").exists())
+            with self.assertRaisesRegex(ValueError, "Unknown release target"):
+                release.archive_manifest(retired, "linux-amd64-portable", "0.1.0")
 
     def test_standard_linux_archive_cannot_claim_the_portable_variant(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             def mutate(entry, content):
                 if entry.name.endswith("version.json"):
                     manifest = json.loads(content)
@@ -429,34 +403,47 @@ class BundleTests(unittest.TestCase):
 
 
 class PublicationTests(unittest.TestCase):
-    def test_fresh_release_uploads_three_versioned_archives_then_publishes_once(self):
+    def test_stale_retired_portable_archive_prevents_new_publication_before_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
+            (root / "cryptodesk-0.1.0-linux-amd64-portable.tar.gz").write_bytes(b"Retired build")
+            api = FakeGitHub()
+            with self.assertRaisesRegex(ValueError, "exactly two"):
+                release.publish(api, root, "0.1.0", COMMIT)
+            self.assertEqual(api.writes, [])
+
+    def test_fresh_release_uploads_two_versioned_archives_then_publishes_once(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            release_inputs(root)
             api = FakeGitHub()
             release.publish(api, root, "0.1.0", COMMIT)
             self.assertEqual(api.tags, {"v0.1.0": COMMIT})
             self.assertFalse(api.releases[0]["draft"])
-            self.assertEqual(len(api.releases[0]["assets"]), 5)
+            self.assertEqual(len(api.releases[0]["assets"]), 4)
+            self.assertNotIn("-linux-amd64-portable.tar.gz", api.releases[0]["body"])
+            self.assertIn("#linux-runtime-requirements", api.releases[0]["body"])
             self.assertEqual(api.writes[-1][:2], ("PATCH", "releases/7"))
             writes = copy.deepcopy(api.writes)
             release.publish(api, root, "0.1.0", COMMIT)
             self.assertEqual(api.writes, writes, "Reruns must not replace published assets")
 
     def test_legacy_completed_release_is_not_mutated_or_forced_to_add_new_archives(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            original = published(legacy=True)
-            api = FakeGitHub([original], tags={"v0.1.0": COMMIT})
-            release.publish(api, Path(temporary), "0.1.0", COMMIT)
-            self.assertEqual(api.releases, [original])
-            self.assertEqual(api.writes, [])
-            self.assertEqual(list(Path(temporary).iterdir()), [])
+        for format_options in ({"legacy": True}, {"bundled": True}):
+            with self.subTest(format_options=format_options), tempfile.TemporaryDirectory() as temporary:
+                original = published(**format_options)
+                api = FakeGitHub([original], tags={"v0.1.0": COMMIT})
+                release.publish(api, Path(temporary), "0.1.0", COMMIT)
+                self.assertEqual(api.releases, [original])
+                self.assertEqual(api.writes, [])
+                self.assertEqual(list(Path(temporary).iterdir()), [])
 
     def test_tag_collision_and_unowned_draft_are_rejected_without_writes(self):
         for api in (FakeGitHub(tags={"v0.1.0": OTHER}), FakeGitHub([published(commit=OTHER, draft=True)])):
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                portable_inputs(root)
+                release_inputs(root)
                 with self.assertRaises(ValueError):
                     release.publish(api, root, "0.1.0", COMMIT)
                 self.assertEqual(api.writes, [])
@@ -464,7 +451,7 @@ class PublicationTests(unittest.TestCase):
     def test_bad_upload_digest_keeps_release_unpublished(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             api = FakeGitHub()
             api.corrupt_upload = True
             with self.assertRaisesRegex(ValueError, "checksum"):
@@ -475,7 +462,7 @@ class PublicationTests(unittest.TestCase):
     def test_failed_upload_rerun_reuses_reserved_tag_and_draft(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             api = FakeGitHub()
             api.fail_upload = True
             with self.assertRaises(OSError):
@@ -489,7 +476,7 @@ class PublicationTests(unittest.TestCase):
     def test_rebuilt_partial_draft_refreshes_integrity_before_publication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             api = FakeGitHub()
             api.corrupt_upload = True
             with self.assertRaises(ValueError):
@@ -511,7 +498,7 @@ class PublicationTests(unittest.TestCase):
     def test_existing_matching_draft_assets_are_not_uploaded_again(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             api = FakeGitHub()
             api.corrupt_upload = True
             with self.assertRaises(ValueError):
@@ -522,13 +509,13 @@ class PublicationTests(unittest.TestCase):
             before = len(api.writes)
             api.corrupt_upload = False
             release.publish(api, root, "0.1.0", COMMIT)
-            self.assertEqual(sum(upload is not None for _, _, _, upload in api.writes[before:]), 4)
+            self.assertEqual(sum(upload is not None for _, _, _, upload in api.writes[before:]), 3)
             self.assertFalse(any(method == "DELETE" for method, *_ in api.writes))
 
     def test_newer_published_release_prevents_older_build_from_becoming_latest(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             api = FakeGitHub([published("v0.1.1", OTHER)])
             with self.assertRaisesRegex(ValueError, "newer release"):
                 release.publish(api, root, "0.1.0", COMMIT)
@@ -537,7 +524,7 @@ class PublicationTests(unittest.TestCase):
     def test_main_workflow_change_mid_build_is_rejected_before_remote_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            portable_inputs(root)
+            release_inputs(root)
             api = FakeGitHub()
             api.main_commit = OTHER
             api.workflows = {COMMIT: {"release.yml": "old"}, OTHER: {"release.yml": "new"}}

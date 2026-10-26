@@ -22,16 +22,30 @@
 | Platform | Package in the [latest release](https://github.com/neodix42/charting/releases/latest) | Run |
 |---|---|---|
 | Ubuntu x64, system GTK/WebKit | `cryptodesk-X.Y.Z-linux-amd64.tar.gz` | Extract, then run `./cryptodesk` |
-| Ubuntu x64, bundled GTK/WebKit | `cryptodesk-X.Y.Z-linux-amd64-portable.tar.gz` | Extract the whole archive, then run its `./cryptodesk` launcher |
 | Windows x64 | `cryptodesk-X.Y.Z-windows-amd64.zip` | Extract the whole ZIP, then run `cryptodesk.exe` |
 
 [All releases](https://github.com/neodix42/charting/releases) · [Latest SHA-256 checksums](https://github.com/neodix42/charting/releases/latest/download/SHA256SUMS)
 
 **Extract the complete archive.** Ubuntu and Windows packages include the private Node runtime, Dukascopy downloader, indicator library and browser support used by Screener. Keep `screener-runtime` alongside the application; no global Node/npm or runtime `npx` installation is needed.
 
-The small Linux archive requires GTK3, WebKitGTK 4.1 and libsoup3 runtime libraries. The larger **portable** archive bundles those libraries, helper processes, licenses and corresponding sources; it needs no GTK/WebKit installation or FUSE. It still uses the host's glibc, desktop session, fonts and graphics drivers. CI builds on Ubuntu 24.04 x64; older systems require separate verification. Both Linux archives include an optional `install-user.sh` for application-menu and desktop shortcuts. See [Linux portable details](docs/LINUX_PORTABLE.md).
-
 The Windows ZIP includes a pinned WebView2 runtime. Keep `WebView2` and `portable.marker` beside the executable in a writable local folder; application data stays in its portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md) and [installation instructions](APP_README.md#run-the-built-release).
+
+### Linux runtime requirements
+
+The small Linux archive requires **GTK3, WebKitGTK 4.1 and libsoup3 runtime libraries** installed on the system. GTK3 provides the native desktop window; WebKitGTK renders the interface and runs its JavaScript; libsoup3 and GLib networking provide the webview's HTTP/TLS support. The bundled Screener Chromium also uses NSS/NSPR, ALSA and X11 support libraries. Ubuntu's [WebKitGTK package](https://packages.ubuntu.com/noble/amd64/libwebkit2gtk-4.1-0) installs its dependent libraries automatically.
+
+On **Ubuntu Desktop 24.04 or 26.04 x64**, install the runtime dependencies once:
+
+```bash
+sudo apt update
+sudo apt install -y \
+  libgtk-3-0t64 libwebkit2gtk-4.1-0 libsoup-3.0-0 \
+  glib-networking gsettings-desktop-schemas dconf-gsettings-backend \
+  ca-certificates fonts-dejavu-core \
+  libnss3 libnspr4 libasound2t64 libxss1
+```
+
+These are runtime packages; Go, a compiler and the `-dev` packages are needed only when building from source. Run CryptoDesk from a graphical desktop session with working graphics drivers. GitHub releases build on Ubuntu 24.04 x64; older systems require separate verification, and local builds inherit their build host's glibc requirement. The Linux archive includes optional `install-user.sh` for application-menu and desktop shortcuts. Linux releases use the system GTK/WebKit libraries; the separate bundled GTK/WebKit archive is retired.
 
 ## Charting features
 
@@ -189,8 +203,7 @@ See the [complete Screener guide](APP_README.md#screener) for file formats, chec
 CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQLite**. Requires Go, Python 3.12+, and a C compiler/pkg-config for Linux. Linux builds need the GTK3 and WebKitGTK 4.1 development packages; Windows packaging on Ubuntu needs `7z`. Scripts use pinned project-local Wails and bootstrap a verified local Node/npm bundle if a usable toolchain is absent. They do not install OS packages or change your shell configuration.
 
 ```bash
-./build.sh                 # Linux executable, portable archive and checksums in the root
-./portable-build.sh        # Larger Linux archive with bundled GTK/WebKit runtime and sources
+./build.sh                 # Linux executable, standard archive and checksums in the root
 ./win-build.sh             # Windows x64 portable ZIP, including English WebView2
 ```
 
@@ -198,7 +211,7 @@ CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQL
 
 ## Automatic releases
 
-The [release workflow](.github/workflows/release.yml) runs on pushes to `main`. It runs checks, builds both Linux variants and the Windows ZIP, and publishes only after all three packages pass verification. It increments the highest release tag's patch version, starting at `v0.1.0` when no release exists. Builds do not create source-version bump commits.
+The [release workflow](.github/workflows/release.yml) runs on pushes to `main`. It runs checks, builds the standard Linux archive and Windows ZIP, and publishes only after both packages pass verification. It increments the highest release tag's patch version, starting at `v0.1.0` when no release exists. Builds do not create source-version bump commits.
 
 Release jobs are serialized; reruns recognize published commits, and stale workflow revisions are prevented from publishing. Packages, checksums and `release.json` use versioned filenames. Actual local verification and remaining platform checks are documented in [STATUS.md](STATUS.md).
 
@@ -218,4 +231,4 @@ The original specification bundle remains at the repository root: [START_HERE.md
 
 ## License and attribution
 
-CryptoDesk is licensed under [Apache 2.0](LICENSE). Charts use [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/). Screener integrates [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node) and [trading-signals](https://github.com/bennycode/trading-signals). Dependency notices and redistributed licenses are included in [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) and the portable packages. Windows packages also include Microsoft's WebView2 redistribution terms.
+CryptoDesk is licensed under [Apache 2.0](LICENSE). Charts use [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/). Screener integrates [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node) and [trading-signals](https://github.com/bennycode/trading-signals). Dependency notices and redistributed licenses are included in [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) and the release packages. Windows packages also include Microsoft's WebView2 redistribution terms.

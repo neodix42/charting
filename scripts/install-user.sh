@@ -34,6 +34,8 @@ for icon_size in 16 24 32 48 64 128 256 512; do
     echo "Missing release icon: ${icon_size}x${icon_size}; rebuild this Linux package" >&2; exit 1
   fi
 done
+# Compatibility with previously published bundled Linux archives; current
+# builds use the system GUI runtime. Preserve their existing install/rollback.
 PORTABLE_RUNTIME=0
 if [[ -d "$SOURCE_DIR/runtime" ]]; then
   if [[ ! -x "$SOURCE_DIR/runtime/usr/bin/cryptodesk" ]]; then echo 'The bundled Linux runtime is incomplete' >&2; exit 1; fi
