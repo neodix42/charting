@@ -90,6 +90,10 @@ export function GetScreenerAnalysisChart(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetScreenerAnalysisChart'](arg1, arg2, arg3, arg4);
 }
 
+export function GetScreenerAnalysisFiltered(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetScreenerAnalysisFiltered'](arg1, arg2, arg3);
+}
+
 export function GetScreenerAnalysisView() {
   return window['go']['main']['App']['GetScreenerAnalysisView']();
 }

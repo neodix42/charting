@@ -5,6 +5,7 @@ package screener
 import (
 	_ "embed"
 	"encoding/json"
+	"strings"
 )
 
 type Instrument struct {
@@ -27,6 +28,35 @@ type Catalog struct {
 //
 //go:embed catalog.json
 var catalogJSON []byte
+
+const otherAssetCategory = "Other"
+
+type assetMetadata struct {
+	description string
+	category    string
+}
+
+// Keep the lookup private and immutable: CSV listings can contain thousands of
+// files, so resolving each asset must not repeatedly decode the whole catalog.
+var catalogAssets = func() map[string]assetMetadata {
+	assets := map[string]assetMetadata{}
+	for _, group := range loadCatalog().Groups {
+		for _, instrument := range group.Instruments {
+			assets[strings.ToLower(instrument.ID)] = assetMetadata{description: instrument.Name, category: group.Name}
+		}
+	}
+	return assets
+}()
+
+func describeAsset(symbol, fallback string) assetMetadata {
+	if metadata, ok := catalogAssets[strings.ToLower(symbol)]; ok {
+		return metadata
+	}
+	if symbol != "" {
+		fallback = strings.ToUpper(symbol)
+	}
+	return assetMetadata{description: fallback, category: otherAssetCategory}
+}
 
 func loadCatalog() Catalog {
 	var c Catalog

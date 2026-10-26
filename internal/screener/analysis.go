@@ -38,18 +38,28 @@ type AnalysisCondition struct {
 }
 type AnalysisRequest struct {
 	Conditions []AnalysisCondition `json:"conditions"`
+	// A nil selection preserves older saved conditions: apply to every asset.
+	// An explicit empty selection means none and must never silently mean all.
+	Categories []string `json:"categories"`
 }
 type AnalysisCatalog struct {
 	Directory  string     `json:"directory"`
 	Fields     []string   `json:"fields"`
 	Timeframes []string   `json:"timeframes"`
 	Files      []DataFile `json:"files"`
+	Categories []string   `json:"categories"`
+}
+type AnalysisFilter struct {
+	Categories   []string `json:"categories"`
+	IncludeEmpty bool     `json:"includeEmpty"`
 }
 type AnalysisResult struct {
 	ID           string `json:"id"`
 	FileID       string `json:"fileId"`
 	Name         string `json:"name"`
 	Symbol       string `json:"symbol"`
+	Description  string `json:"description"`
+	Category     string `json:"category"`
 	Timeframe    string `json:"timeframe"`
 	Status       string `json:"status"`
 	Error        string `json:"error,omitempty"`
@@ -147,6 +157,9 @@ func baseAnalysisOperator(op string) bool {
 	return false
 }
 func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
+	if err := validateAnalysisCategories(request.Categories); err != nil {
+		return err
+	}
 	if len(request.Conditions) > 32 || (!draft && len(request.Conditions) == 0) {
 		return errors.New("analysis requires between 1 and 32 condition rows")
 	}
@@ -199,7 +212,40 @@ func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
 }
 func copyAnalysisRequest(request AnalysisRequest) AnalysisRequest {
 	request.Conditions = append([]AnalysisCondition{}, request.Conditions...)
+	if request.Categories != nil {
+		request.Categories = append([]string{}, request.Categories...)
+	}
 	return request
+}
+
+func validateAnalysisCategories(categories []string) error {
+	known := map[string]bool{otherAssetCategory: true}
+	for _, group := range loadCatalog().Groups {
+		known[group.Name] = true
+	}
+	seen := map[string]bool{}
+	for _, category := range categories {
+		if !known[category] {
+			return fmt.Errorf("unsupported asset category %q", category)
+		}
+		if seen[category] {
+			return fmt.Errorf("duplicate asset category %q", category)
+		}
+		seen[category] = true
+	}
+	return nil
+}
+
+func includesAnalysisCategory(categories []string, category string) bool {
+	if categories == nil {
+		return true
+	}
+	for _, selected := range categories {
+		if selected == category {
+			return true
+		}
+	}
+	return false
 }
 func (m *Manager) AnalysisView() (AnalysisRequest, error) {
 	var saved struct {
@@ -245,15 +291,20 @@ func (m *Manager) AnalysisCatalog() (AnalysisCatalog, error) {
 	m.mu.Lock()
 	directory := m.directory
 	m.mu.Unlock()
-	catalog := AnalysisCatalog{Directory: directory, Fields: []string{}, Timeframes: []string{}, Files: []DataFile{}}
+	catalog := AnalysisCatalog{Directory: directory, Fields: []string{}, Timeframes: []string{}, Files: []DataFile{}, Categories: []string{}}
+	for _, group := range loadCatalog().Groups {
+		catalog.Categories = append(catalog.Categories, group.Name)
+	}
 	names, err := csvNames(directory)
 	if err != nil {
 		return catalog, err
 	}
 	fields, tfs := map[string]bool{}, map[string]bool{}
+	hasOther := false
 	for _, name := range names {
 		file := describeFile(directory, name)
 		catalog.Files = append(catalog.Files, file)
+		hasOther = hasOther || file.Category == otherAssetCategory
 		for _, field := range file.Fields {
 			normalized := strings.ToLower(strings.TrimSpace(field))
 			if normalized != "timestamp" {
@@ -263,6 +314,9 @@ func (m *Manager) AnalysisCatalog() (AnalysisCatalog, error) {
 		if file.Timeframe != "" {
 			tfs[file.Timeframe] = true
 		}
+	}
+	if hasOther {
+		catalog.Categories = append(catalog.Categories, otherAssetCategory)
 	}
 	// "price" resolves to close, then bidPrice, then askPrice, in that order.
 	if fields["close"] || fields["bidprice"] || fields["askprice"] {
@@ -290,14 +344,18 @@ func (m *Manager) cleanupAnalysisLocked() {
 	m.analysis = nil
 }
 func (m *Manager) analysisInfoLocked(offset, limit int) AnalysisInfo {
+	return m.analysisFilteredInfoLocked(offset, limit, AnalysisFilter{IncludeEmpty: true})
+}
+func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisFilter) AnalysisInfo {
 	info := AnalysisInfo{Phase: "idle", Results: []AnalysisResult{}, Offset: offset, Limit: limit}
 	a := m.analysis
 	if a == nil {
 		return info
 	}
 	info.Active, info.Phase, info.CurrentFile, info.Progress, info.Rows, info.Error = a.active, a.phase, a.current, a.progress, a.rows, a.errorText
-	info.Total, info.TotalResults = len(a.results), len(a.results)
+	info.Total = len(a.results)
 	assetMatches, assetFiles := map[string]int64{}, map[string]int{}
+	filtered := []AnalysisResult{}
 	for _, r := range a.results {
 		if r.Status == "completed" || r.Status == "failed" || r.Status == "cancelled" {
 			info.Completed++
@@ -311,15 +369,30 @@ func (m *Manager) analysisInfoLocked(offset, limit int) AnalysisInfo {
 			assetFiles[r.Symbol]++
 			assetMatches[r.Symbol] += r.Matches
 		}
+		if includesAnalysisCategory(filter.Categories, r.Category) && (filter.IncludeEmpty || r.Matches > 0 || r.Status == "failed" || r.Status == "cancelled") {
+			filtered = append(filtered, r)
+		}
 	}
-	start := min(offset, len(a.results))
-	info.Results = append(info.Results, a.results[start:start+min(limit, len(a.results)-start)]...)
+	info.TotalResults = len(filtered)
+	start := min(offset, len(filtered))
+	info.Results = append(info.Results, filtered[start:start+min(limit, len(filtered)-start)]...)
 	for i := range info.Results {
 		symbol := info.Results[i].Symbol
 		info.Results[i].AssetMatches = assetMatches[symbol]
 		info.Results[i].AssetFiles = assetFiles[symbol]
 	}
 	return info
+}
+func (m *Manager) AnalysisFiltered(offset, limit int, filter AnalysisFilter) (AnalysisInfo, error) {
+	if offset < 0 || limit < 1 || limit > 200 {
+		return AnalysisInfo{}, errors.New("analysis page requires a nonnegative offset and limit between 1 and 200")
+	}
+	if err := validateAnalysisCategories(filter.Categories); err != nil {
+		return AnalysisInfo{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.analysisFilteredInfoLocked(offset, limit, filter), nil
 }
 func (m *Manager) Analysis(offset, limit int) (AnalysisInfo, error) {
 	if offset < 0 || limit < 1 || limit > 200 {
@@ -351,6 +424,19 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	if len(names) == 0 {
 		return AnalysisInfo{}, errors.New("there are no downloaded CSV files to analyze")
 	}
+	if request.Categories != nil && len(request.Categories) == 0 {
+		return AnalysisInfo{}, errors.New("select at least one asset category")
+	}
+	files := []DataFile{}
+	for _, name := range names {
+		file := describeFile(m.directory, name)
+		if includesAnalysisCategory(request.Categories, file.Category) {
+			files = append(files, file)
+		}
+	}
+	if len(files) == 0 {
+		return AnalysisInfo{}, errors.New("there are no downloaded CSV files in the selected asset categories")
+	}
 	if err = os.MkdirAll(m.profile, 0700); err != nil {
 		return AnalysisInfo{}, err
 	}
@@ -361,10 +447,9 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	m.cleanupAnalysisLocked()
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &analysisState{active: true, phase: "indexing", directory: m.directory, work: work, cancel: cancel, done: make(chan struct{}), request: copyAnalysisRequest(request), series: map[string]*analysisSeries{}, matchFiles: map[string]string{}, results: []AnalysisResult{}, cache: newAnalysisRowCache(), asOf: time.Now().UTC().UnixMilli()}
-	for _, name := range names {
-		file := describeFile(m.directory, name)
+	for _, file := range files {
 		id := file.ID
-		a.results = append(a.results, AnalysisResult{ID: id, FileID: id, Name: name, Symbol: file.Symbol, Timeframe: file.Timeframe, Status: "queued"})
+		a.results = append(a.results, AnalysisResult{ID: id, FileID: id, Name: file.Name, Symbol: file.Symbol, Description: file.Description, Category: file.Category, Timeframe: file.Timeframe, Status: "queued"})
 	}
 	m.analysis = a
 	m.wg.Add(1)

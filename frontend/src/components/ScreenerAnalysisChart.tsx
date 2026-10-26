@@ -1,8 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
-import {CandlestickSeries,ColorType,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {CandlestickSeries,ColorType,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
 import type {AnalysisBar,AnalysisChart,AnalysisResult,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {analysisDate,analysisFieldGroup,analysisFieldLabel,analysisPriceOverlay} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
+import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -13,6 +14,7 @@ const price=(row:AnalysisBar)=>value(row,'close')??value(row,'price')??value(row
 const format=(number:number|undefined)=>number===undefined?'—':number.toLocaleString('en-US',{maximumSignificantDigits:10});
 
 function AnalysisPlot({data}:{data:AnalysisChart}){
+ const fontSize=useAppearanceFontSize(),chartRef=useRef<IChartApi|null>(null);
  const host=useRef<HTMLDivElement>(null),[shown,setShown]=useState<string[]>(()=>data.fields.filter(field=>!rawFields.has(field.toLowerCase()))),[hover,setHover]=useState<AnalysisBar|null>(null),[chartError,setChartError]=useState('');
  const plotFields=data.fields.filter(field=>!rawFields.has(field.toLowerCase())),selected=shown.filter(field=>plotFields.includes(field));
  const groups=[...new Set(selected.filter(field=>!analysisPriceOverlay(field)).map(analysisFieldGroup))];
@@ -28,8 +30,8 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
   const timed=(bar:AnalysisBar)=>({time:bar.time/1000 as UTCTimestamp});
   const candle=ordered.length>0&&ordered.every(bar=>['open','high','low','close'].every(field=>Number.isFinite(value(bar,field))));
   if(!candle&&!ordered.some(bar=>Number.isFinite(price(bar)))){setChartError('This file has no OHLC or price field to chart. Its numeric fields remain available below.');return;}
-  const chart=createChart(host.current,{width:Math.max(300,host.current.clientWidth),height,layout:{background:{type:ColorType.Solid,color:background},textColor:text,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:10,attributionLogo:true},grid:{vertLines:{color:border},horzLines:{color:border}},rightPriceScale:{borderColor:border},timeScale:{borderColor:border,timeVisible:true,secondsVisible:data.timeframe==='tick'||data.timeframe==='s1',rightOffset:3},crosshair:{vertLine:{color:'#e7ad51'},horzLine:{color:'#8191a2'}}});
-  analysisChartResources.charts++;
+  const chart=createChart(host.current,{width:Math.max(300,host.current.clientWidth),height,layout:{background:{type:ColorType.Solid,color:background},textColor:text,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:chartFontSize(10,fontSize),attributionLogo:true},grid:{vertLines:{color:border},horzLines:{color:border}},rightPriceScale:{borderColor:border},timeScale:{borderColor:border,timeVisible:true,secondsVisible:data.timeframe==='tick'||data.timeframe==='s1',rightOffset:3},crosshair:{vertLine:{color:'#e7ad51'},horzLine:{color:'#8191a2'}}});
+  chartRef.current=chart;analysisChartResources.charts++;
   let markers:ReturnType<typeof createSeriesMarkers<Time>>|undefined;
   let observer:ResizeObserver|undefined,resize:()=>void=()=>{},crosshair:MouseEventHandler<Time>|undefined,windowResize=false;
   try{
@@ -60,13 +62,14 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
    if(observer){observer.disconnect();analysisChartResources.observers--;}
    else if(windowResize){window.removeEventListener('resize',resize);analysisChartResources.listeners--;}
    if(crosshair){chart.unsubscribeCrosshairMove(crosshair);analysisChartResources.listeners--;}
-   markers?.detach();chart.remove();analysisChartResources.charts--;
+   markers?.detach();chart.remove();chartRef.current=null;analysisChartResources.charts--;
   };
  },[data,signature,height]);
+ useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(10,fontSize)}});},[fontSize]);
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
-  <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
+  <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-chart-font-size={chartFontSize(10,fontSize)} data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
   {duplicates&&<p className="analysis-chart-note">Each observation is evaluated. Ticks sharing an identical timestamp display their last price on the chart.</p>}
   {!!plotFields.length&&<details className="analysis-chart-fields" open><summary>Enriched indicators and volume · {selected.length} displayed</summary><div>{plotFields.map((field,index)=><label key={field}><input type="checkbox" checked={shown.includes(field)} onChange={event=>setShown(current=>event.target.checked?[...current,field]:current.filter(value=>value!==field))}/><span style={{color:colors[index%colors.length]}}>{analysisFieldGroup(field)} · {analysisFieldLabel(field)}</span><b>{format(row?value(row,field):undefined)}</b></label>)}</div></details>}
  </>;

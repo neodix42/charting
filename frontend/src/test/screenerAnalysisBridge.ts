@@ -1,9 +1,10 @@
-import type {AnalysisCatalog,AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {AnalysisCatalog,AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult,AnalysisResultFilter,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {ScreenerCatalog} from '../types';
 import {initialAnalysisView} from '../workspace/screenerAnalysis';
 import {analysisChartResources} from '../components/ScreenerAnalysisChart';
 
 /** Installed only by VITE_EXPLICIT_TEST_BRIDGE. No production data fallback. */
-export function screenerAnalysisBridge(directory:()=>string):ScreenerAnalysisBackend{
+export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()=>ScreenerCatalog):ScreenerAnalysisBackend{
  const viewKey='cryptodesk-explicit-test-analysis-view';
  let view:AnalysisRequest=JSON.parse(sessionStorage.getItem(viewKey)||'null')??initialAnalysisView();
  const savedKey='cryptodesk-explicit-test-saved-conditions';
@@ -13,12 +14,14 @@ export function screenerAnalysisBridge(directory:()=>string):ScreenerAnalysisBac
  const saves:AnalysisRequest[]=[],chartRequests:Array<{resultID:string;occurrence:number;before:number;after:number}>=[];
  let info:AnalysisInfo={active:false,phase:'idle',total:0,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],offset:0,limit:50,totalResults:0};
  let charts:Record<string,AnalysisChart>={},saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined;
- const files=()=>((window as unknown as {__testEnrichmentFiles?:()=>AnalysisFile[]}).__testEnrichmentFiles?.()??[]);
- const catalog=():AnalysisCatalog=>({directory:directory(),files:files(),fields:[...new Set(['price','close',...files().flatMap(file=>file.fields.map(field=>field.toLowerCase()))])].filter(field=>field!=='timestamp'),timeframes:[...new Set(files().map(file=>file.timeframe).filter(Boolean))],...structuredClone(catalogOverride)});
- const page=(offset:number,limit:number):AnalysisInfo=>{
+ const metadata=(symbol:string)=>{for(const group of instrumentCatalog().groups){const item=group.instruments.find(item=>item.id===symbol.toLowerCase());if(item)return{description:item.name,category:group.name};}return{description:'Description unavailable',category:'Other'};};
+ const files=()=>((window as unknown as {__testEnrichmentFiles?:()=>AnalysisFile[]}).__testEnrichmentFiles?.()??[]).map(file=>({...metadata(file.symbol),...file}));
+ const catalog=():AnalysisCatalog=>({directory:directory(),files:files(),fields:[...new Set(['price','close',...files().flatMap(file=>file.fields.map(field=>field.toLowerCase()))])].filter(field=>field!=='timestamp'),timeframes:[...new Set(files().map(file=>file.timeframe).filter(Boolean))],categories:[...new Set([...instrumentCatalog().groups.map(group=>group.name),...files().map(file=>file.category)])],...structuredClone(catalogOverride)});
+ const page=(offset:number,limit:number,filter?:AnalysisResultFilter):AnalysisInfo=>{
   const groups=new Map<string,{matches:number;files:number}>();
   info.results.forEach(result=>{const key=result.symbol||result.name,current=groups.get(key)??{matches:0,files:0};current.matches+=result.matches;if(result.matches)current.files++;groups.set(key,current);});
-  return structuredClone({...info,offset,limit,totalResults:info.results.length,results:info.results.slice(offset,offset+limit).map(result=>({...result,assetMatches:groups.get(result.symbol||result.name)?.matches??0,assetFiles:groups.get(result.symbol||result.name)?.files??0}))});
+  const results=info.results.map(result=>({...metadata(result.symbol),...result})).filter(result=>!filter||((filter.categories==null||filter.categories.includes(result.category))&&(filter.includeEmpty||result.matches>0||!!result.error||result.status==='failed'||result.status==='cancelled')));
+  return structuredClone({...info,offset,limit,totalResults:results.length,results:results.slice(offset,offset+limit).map(result=>({...result,assetMatches:groups.get(result.symbol||result.name)?.matches??0,assetFiles:groups.get(result.symbol||result.name)?.files??0}))});
  };
  const chart=(result:AnalysisResult,occurrence:number):AnalysisChart=>{
   const fixture=charts[`${result.id}:${occurrence}`];if(fixture)return structuredClone(fixture);
@@ -38,8 +41,9 @@ export function screenerAnalysisBridge(directory:()=>string):ScreenerAnalysisBac
    const saved={id:crypto.randomUUID().replaceAll('-',''),name,request:structuredClone(value)};
    savedConditions.push(saved);sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));return structuredClone(saved);
   },
-  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,active:true,phase:'indexing',total:files().length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,50);},
+  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,active:true,phase:'indexing',total:files().filter(file=>value.categories==null||value.categories.includes(file.category)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
   async GetScreenerAnalysis(offset,limit){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit);},
+  async GetScreenerAnalysisFiltered(offset,limit,filter){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit,filter);},
   async CancelScreenerAnalysis(){info={...info,active:false,phase:'cancelled',currentFile:''};return page(0,50);},
   async GetScreenerAnalysisChart(resultID,occurrence,before,after){
    chartRequests.push({resultID,occurrence,before,after});if(errors.chart)throw Error(errors.chart);

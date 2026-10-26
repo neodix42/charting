@@ -4,6 +4,10 @@ import {errorText} from '../types';
 import {initialScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
 import {ScreenerEnrichment} from './ScreenerEnrichment';
 import {ScreenerAnalysis,type ScreenerAnalysisHandle} from './ScreenerAnalysis';
+import './ScreenerDownloads.css';
+
+const downloadPageSize=10;
+type DownloadFilter='all'|'queued'|'running'|'completed'|'failed'|'cancelled';
 
 function Selection({label,checked,partial,disabled,onChange}:{label:string;checked:boolean;partial:boolean;disabled?:boolean;onChange(value:boolean):void}){
  const input=useRef<HTMLInputElement>(null);
@@ -19,6 +23,7 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const analysis=useRef<ScreenerAnalysisHandle>(null);
  const selected=new Set(view.symbols),collapsed=new Set(view.collapsedCategories),{timeframe,concurrency,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
+ const [downloadFilter,setDownloadFilter]=useState<DownloadFilter>('all'),[downloadPage,setDownloadPage]=useState(0);
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false);
  if(!writer.current)writer.current=new ScreenerViewWriter(value=>api.SaveScreenerView(value),error=>{if(alive.current)setViewError(errorText(error));});
  useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await analysis.current?.flush();}}),[]);
@@ -43,6 +48,10 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
   void read();return ()=>{active=false;if(timer)clearTimeout(timer);};
  },[api,visible,retry]);
  const instruments=catalog?.groups.flatMap(group=>group.instruments)??[],working=info?.jobs.some(job=>job.status==='queued'||job.status==='running')??false;
+ const downloads=info?.jobs??[],filteredDownloads=downloads.filter(job=>downloadFilter==='all'||job.status===downloadFilter);
+ const lastDownloadPage=Math.max(0,Math.ceil(filteredDownloads.length/downloadPageSize)-1),currentDownloadPage=Math.min(downloadPage,lastDownloadPage);
+ const visibleDownloads=filteredDownloads.slice(currentDownloadPage*downloadPageSize,(currentDownloadPage+1)*downloadPageSize);
+ useEffect(()=>{setDownloadPage(page=>Math.min(page,lastDownloadPage));},[lastDownloadPage]);
  const changeSelection=(ids:string[],checked:boolean)=>{const next=new Set(draft.current.symbols);ids.forEach(id=>checked?next.add(id):next.delete(id));changeView({symbols:[...next]});};
  const run=async(operation:()=>Promise<ScreenerInfo>)=>{
   if(actionBusy.current)return;
@@ -83,9 +92,12 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
      {catalog&&!catalog.groups.some(group=>group.instruments.some(instrument=>!search||`${group.name} ${instrument.id} ${instrument.name}`.toLowerCase().includes(search)))&&<p className="screener-loading">No instruments match your search.</p>}
      {catalog&&<p className="screener-catalog-version muted">dukascopy-node {catalog.version} · {instruments.length} supported instruments</p>}
     </section>
-    <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted">{info?.jobs.filter(job=>job.status==='completed').length??0} / {info?.jobs.length??0} complete · <span aria-label="Applied parallel download limit">Up to {info?.concurrency??20} parallel</span></span></div>
+    <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted" aria-label="Download summary">{downloads.filter(job=>job.status==='completed').length} completed · {downloads.filter(job=>job.status==='failed').length} failed · {downloads.length} total · <span aria-label="Applied parallel download limit">Up to {info?.concurrency??20} parallel</span></span></div>
+     <div className="screener-jobs-filter"><label>Show downloads<select aria-label="Download status filter" value={downloadFilter} onChange={event=>{setDownloadFilter(event.target.value as DownloadFilter);setDownloadPage(0);}}><option value="all">All statuses</option><option value="queued">Queued</option><option value="running">Running</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></label><span>{filteredDownloads.length} {filteredDownloads.length===1?'download':'downloads'}</span></div>
      {!info?.jobs.length&&<p className="screener-loading">Select symbols and a common timeframe, then download their CSV files.</p>}
-     <div aria-live="polite" aria-relevant="additions text">{info?.jobs.map(job=><article className={`screener-job ${job.status}`} key={job.id} data-symbol={job.symbol} aria-label={`${job.symbol.toUpperCase()} download`}><div className="screener-job-title"><strong>{job.symbol.toUpperCase()}</strong><span>{job.timeframe}</span><span className="screener-job-status">{job.status}</span></div><progress aria-label={`${job.symbol.toUpperCase()} download progress`} max={100} value={Math.min(100,Math.max(0,job.progress||0))}/><div className="screener-job-details"><span>{job.from} → {job.to}</span><span>{Math.round(job.progress||0)}%</span></div>{job.message&&<p>{job.message}</p>}{job.outputPath&&<small className="screener-output">{job.outputPath}</small>}</article>)}</div>
+     {!!downloads.length&&!filteredDownloads.length&&<p className="screener-loading">No {downloadFilter} downloads.</p>}
+     <div aria-live="polite" aria-relevant="additions text">{visibleDownloads.map(job=><article className={`screener-job ${job.status}`} key={job.id} data-symbol={job.symbol} aria-label={`${job.symbol.toUpperCase()} download`}><div className="screener-job-title"><strong>{job.symbol.toUpperCase()}</strong><span>{job.timeframe}</span><span className="screener-job-status">{job.status}</span></div><progress aria-label={`${job.symbol.toUpperCase()} download progress`} max={100} value={Math.min(100,Math.max(0,job.progress||0))}/><div className="screener-job-details"><span>{job.from} → {job.to}</span><span>{Math.round(job.progress||0)}%</span></div>{job.message&&<p>{job.message}</p>}{job.outputPath&&<small className="screener-output">{job.outputPath}</small>}</article>)}</div>
+     {!!downloads.length&&<nav className="screener-download-pagination" aria-label="Download pages"><button type="button" disabled={currentDownloadPage===0} onClick={()=>setDownloadPage(currentDownloadPage-1)}>Previous downloads</button><span>{filteredDownloads.length?`${currentDownloadPage*downloadPageSize+1}–${Math.min((currentDownloadPage+1)*downloadPageSize,filteredDownloads.length)} of ${filteredDownloads.length}`:'0'} downloads</span><button type="button" disabled={currentDownloadPage>=lastDownloadPage} onClick={()=>setDownloadPage(currentDownloadPage+1)}>Next downloads</button></nav>}
     </section>
    </div>
   </div>

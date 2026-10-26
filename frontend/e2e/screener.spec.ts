@@ -63,6 +63,54 @@ test('grouped symbols, global selection, shared timeframe and UTC dates produce 
  await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(btc).toContainText('cancelled');await expect(eth).toContainText('cancelled');
 });
 
+test('download status filters precede ten-row pagination and pages clamp as live jobs change',async({page})=>{
+ await page.goto('/');await downloader(page);
+ await page.evaluate(()=>{
+  (window as any).__testSetScreener({active:true,jobs:Array.from({length:27},(_,index)=>({id:`job-${index}`,symbol:`symbol${index}`,timeframe:'d1',from:'2024-01-01',to:'2024-02-01',status:index<12?'completed':index<24?'failed':index===24?'running':index===25?'queued':'cancelled',progress:index<12?100:index===24?35:0,message:index>=12&&index<24?'Explicit download failure':'Explicit download progress'}))});
+ });
+ const jobs=page.locator('.screener-job'),filter=page.getByRole('combobox',{name:'Download status filter',exact:true}),pages=page.getByRole('navigation',{name:'Download pages',exact:true});
+ await expect(jobs).toHaveCount(10);await expect(filter).toHaveValue('all');
+ await expect(page.getByLabel('Download summary',{exact:true})).toContainText('12 completed · 12 failed · 27 total');
+ await expect(pages).toContainText('1–10 of 27 downloads');
+ await page.getByRole('button',{name:'Next downloads',exact:true}).click();await expect(pages).toContainText('11–20 of 27 downloads');
+ await page.getByRole('button',{name:'Next downloads',exact:true}).click();await expect(jobs).toHaveCount(7);await expect(pages).toContainText('21–27 of 27 downloads');
+ await expect(page.getByRole('button',{name:'Next downloads',exact:true})).toBeDisabled();
+ await filter.selectOption('failed');await expect(jobs).toHaveCount(10);await expect(pages).toContainText('1–10 of 12 downloads');await expect(jobs.first()).toHaveAttribute('data-symbol','symbol12');
+ await page.getByRole('button',{name:'Next downloads',exact:true}).click();await expect(jobs).toHaveCount(2);await expect(pages).toContainText('11–12 of 12 downloads');
+ await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map((job,index)=>index===22?{...job,status:'completed',progress:100}:index===23?{...job,status:'running',progress:12}:job)});});
+ await expect(jobs).toHaveCount(10);await expect(pages).toContainText('1–10 of 10 downloads');
+ await expect(page.getByLabel('Download summary',{exact:true})).toContainText('13 completed · 10 failed · 27 total');
+ await filter.selectOption('completed');await expect(jobs).toHaveCount(10);await expect(jobs.locator('.screener-job-status')).toHaveText(Array(10).fill('completed'));
+ await page.getByRole('button',{name:'Next downloads',exact:true}).click();await expect(jobs).toHaveCount(3);await expect(pages).toContainText('11–13 of 13 downloads');await expect(jobs.last()).toHaveAttribute('data-symbol','symbol22');
+ await filter.selectOption('running');await expect(jobs).toHaveCount(2);
+ await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map(job=>job.symbol==='symbol24'?{...job,progress:85}:job)});});
+ await expect(page.getByRole('progressbar',{name:'SYMBOL24 download progress',exact:true})).toHaveAttribute('value','85');
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(jobs).toHaveCount(0);await expect(page.getByText('No running downloads.',{exact:true})).toBeVisible();
+ await filter.selectOption('cancelled');await expect(jobs).toHaveCount(4);
+ await filter.selectOption('completed');await expect(jobs).toHaveCount(10);await expect(page.getByLabel('Download summary',{exact:true})).toContainText('13 completed · 10 failed · 27 total');
+});
+
+test('all Analysis operators describe closed-bar semantics on hover and keyboard focus',async({page})=>{
+ await page.goto('/');await mainTab(page).click();
+ const operator=page.getByRole('combobox',{name:'Condition 1 operator',exact:true}),tooltip=page.getByRole('tooltip');
+ const descriptions:[string,string][]=[['above','Close is above SMA(200).'],['below','Kijun is below Tenkan.'],['crossesAbove','preceding and current closed bars'],['crossesBelow','preceding and current closed bars'],['between','including both boundaries'],['withinDistance','0.2 × ATR(14)'],['occurredWithin','last 3 closed bars'],['remainedFor','5 closed bars'],['highest','current bar is excluded'],['lowest','current bar is excluded']];
+ await expect(operator.locator('option')).toHaveCount(10);
+ for(const [value,example] of descriptions){
+  await operator.selectOption(value);await page.mouse.move(0,0);await operator.hover();
+  await expect(tooltip).toBeVisible();await expect(tooltip).toContainText(example);
+  await expect(operator).toHaveAttribute('title',new RegExp(example.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  await expect(operator.locator(`option[value="${value}"]`)).toHaveAttribute('title',await operator.getAttribute('title')||'');
+  await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
+ }
+ await page.mouse.move(0,0);await page.getByRole('button',{name:'Help for Condition 1 operator',exact:true}).focus();await expect(tooltip).toContainText('previous 20-bar Low');
+ await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
+ await operator.selectOption('occurredWithin');const comparison=page.getByRole('combobox',{name:'Condition 1 comparison',exact:true});
+ await comparison.selectOption('crossesAbove');await page.mouse.move(0,0);await comparison.hover();await expect(tooltip).toContainText('preceding and current closed bars');await expect(comparison.locator('option')).toHaveCount(6);
+ await expect(comparison.locator('option[value="between"]')).toHaveAttribute('title',/including both boundaries/);
+ await page.mouse.move(0,0);await page.getByRole('button',{name:'Help for Condition 1 comparison',exact:true}).focus();await expect(tooltip).toBeVisible();await expect(tooltip).toContainText('Tenkan crosses above Kijun');
+ await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
+});
+
 test('parallel download limits default to twenty, stay within bounds and survive panel switches',async({page})=>{
  await page.goto('/');await downloader(page);const parallel=page.getByRole('combobox',{name:'Parallel downloads',exact:true});await expect(parallel).toHaveValue('20');await expect(parallel.locator('option')).toHaveCount(20);expect(await parallel.locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(Array.from({length:20},(_,index)=>String(index+1)));
  await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();await parallel.selectOption('1');await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(parallel).toHaveValue('1');await chartTabs(page).first().click();await mainTab(page).click();await expect(parallel).toHaveValue('1');
@@ -80,12 +128,12 @@ test('concurrent symbols keep independent progress, stable queue order and cance
 });
 
 test('Screener directory is applied separately from the workspace and restored after reload',async({page})=>{
- await page.goto('/');await page.getByRole('button',{name:'Open settings',exact:true}).click();const form=page.getByRole('form',{name:'Screener data storage',exact:true});
+ await page.goto('/');await page.getByRole('button',{name:'Open settings',exact:true}).click();await page.getByRole('dialog',{name:'Workspace settings',exact:true}).getByRole('tab',{name:'Screener',exact:true}).click();const form=page.getByRole('form',{name:'Screener data storage',exact:true});
  await expect(form.getByLabel('Screener download folder',{exact:true})).toHaveValue('/explicit-test/screener');
  await page.evaluate(()=>{window.go!.main!.App!.ChooseScreenerDirectory=async()=>'/chosen folder/historical data';});await form.getByRole('button',{name:'Choose Screener download folder',exact:true}).click();await expect(form.getByLabel('Screener download folder',{exact:true})).toHaveValue('/chosen folder/historical data');expect(await page.evaluate(()=>(window as any).__testScreener().directory)).toBe('/explicit-test/screener');
  await form.getByRole('button',{name:'Apply Screener download folder',exact:true}).click();await expect(form.getByRole('status',{name:'Applied Screener folder',exact:true})).toHaveText('Current folder: /chosen folder/historical data');expect(JSON.stringify(await saved(page))).not.toContain('/chosen folder/historical data');
  await page.getByRole('button',{name:'Close settings',exact:true}).click();await downloader(page);await expect(page.locator('.screener-download-directory')).toContainText('/chosen folder/historical data');
- await page.reload();await page.getByRole('button',{name:'Open settings',exact:true}).click();await expect(form.getByLabel('Screener download folder',{exact:true})).toHaveValue('/chosen folder/historical data');
+ await page.reload();await page.getByRole('button',{name:'Open settings',exact:true}).click();await page.getByRole('dialog',{name:'Workspace settings',exact:true}).getByRole('tab',{name:'Screener',exact:true}).click();await expect(form.getByLabel('Screener download folder',{exact:true})).toHaveValue('/chosen folder/historical data');
  await page.evaluate(()=>{window.go!.main!.App!.ConfigureScreenerDirectory=async()=>{throw Error('Explicit folder permission failure');};});await form.getByLabel('Screener download folder',{exact:true}).fill('/unwritable');await form.getByRole('button',{name:'Apply Screener download folder',exact:true}).click();await expect(form.getByRole('alert')).toContainText('Explicit folder permission failure');await expect(form.getByRole('status',{name:'Applied Screener folder',exact:true})).toContainText('/chosen folder/historical data');expect(await page.evaluate(()=>(window as any).__testScreener().directory)).toBe('/chosen folder/historical data');
 });
 

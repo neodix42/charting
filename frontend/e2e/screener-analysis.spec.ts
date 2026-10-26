@@ -25,7 +25,7 @@ test('Analysis loads only when visible and exposes grouped enriched fields plus 
  await expect(control(page,'Condition 1 left field').locator('optgroup[label="MACD"] option')).toContainText(['MACD (12, 26)','Histogram (12, 26, 9)']);
  await expect(control(page,'Condition 1 operator').locator('option')).toHaveCount(10);
  await expect(control(page,'Condition 1 left timeframe').locator('option')).toHaveText(['Same as file','d1','h4']);
- await expect(page.getByText('All rows must match (AND). Every closed bar in every downloaded CSV file is checked.',{exact:true})).toBeVisible();
+ await expect(page.getByText('All rows must match (AND). Every closed bar in the selected downloaded CSV files is checked.',{exact:true})).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);
 });
 
@@ -101,7 +101,7 @@ test('draft edits coalesce durably and restore after reload without being applie
 test('matching assets show exact counts/errors and chart navigation traverses every occurrence with cleanup',async({page})=>{
  await open(page,[file(0),file(1,'btcusd','h4'),file(2,'ethusd')]);
  await complete(page,[result(0),result(1,'btcusd',3,'h4'),{...result(2,'ethusd',0),status:'failed',error:'Missing field ema_200 in this file'}]);
- await expect(page.getByText('5 total matches · 2 matching files',{exact:true})).toBeVisible();await expect(page.getByRole('alert')).toContainText('Missing field ema_200');
+ await expect(page.locator('.analysis-asset').getByText('Bitcoin vs US Dollar',{exact:true})).toBeVisible();await expect(page.getByRole('alert')).toContainText('Missing field ema_200');
  await page.getByRole('button',{name:`Inspect ${file(0).name} matches`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});await expect(dialog).toBeVisible();
  await expect(dialog.getByText('Occurrence 1 of 2',{exact:true})).toBeVisible();await expect(dialog.getByTestId('analysis-chart').locator('canvas').first()).toBeVisible();
@@ -246,4 +246,63 @@ test('a delayed saved list cannot erase a newly saved condition',async({page})=>
  await expect(page.getByRole('button',{name:'Load condition Keep this',exact:true})).toBeVisible();
  await page.evaluate(()=>(window as any).__releaseSavedList());await page.waitForTimeout(100);
  await expect(page.getByRole('button',{name:'Load condition Keep this',exact:true})).toBeVisible();
+});
+
+test('scan categories default to all, survive row edits and reload, and are included in saved conditions',async({page})=>{
+ await open(page,[file(0),file(1,'eurusd'),file(2,'xauusd')]);
+ const scope=page.getByRole('group',{name:'Asset categories to scan',exact:true});
+ await expect(scope.getByRole('checkbox')).toHaveCount(3);
+ for(const category of ['Forex','Cryptocurrencies','Commodities'])await expect(scope.getByRole('checkbox',{name:`Scan ${category}`,exact:true})).toBeChecked();
+ await scope.getByRole('button',{name:'Deselect all scan categories',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeDisabled();
+ await expect(page.getByText('Select at least one asset category before scanning.',{exact:true})).toBeVisible();
+ await scope.getByRole('checkbox',{name:'Scan Forex',exact:true}).check();
+ await control(page,'Condition 1 right constant').fill('12');
+ await page.getByRole('button',{name:'Add condition',exact:false}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().categories)).toEqual(['Forex']);
+ await page.getByRole('button',{name:'Safe Condition',exact:true}).click();
+ await control(page,'Condition name').fill('Forex only');
+ await page.getByRole('dialog',{name:'Save condition',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]?.request.categories)).toEqual(['Forex']);
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();
+ await expect(scope.getByRole('checkbox',{name:'Scan Forex',exact:true})).toBeChecked();
+ await expect(scope.getByRole('checkbox',{name:'Scan Cryptocurrencies',exact:true})).not.toBeChecked();
+ await scope.getByRole('button',{name:'Select all scan categories',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().categories)).toBeNull();
+ await page.getByRole('button',{name:'Load condition Forex only',exact:true}).click();
+ await expect(scope.getByRole('checkbox',{name:'Scan Cryptocurrencies',exact:true})).not.toBeChecked();
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisRequest().categories)).toEqual(['Forex']);
+ await expect(page.locator('.analysis-scan-status')).toContainText('0 / 1 files');
+});
+
+test('Matching assets filters before ten-record pagination and match navigation keeps the category scope',async({page})=>{
+ await open(page);const results=Array.from({length:25},(_,index)=>result(index,index%2?'xauusd':'btcusd',index?1:0));
+ await complete(page,results);
+ const section=page.getByRole('region',{name:'Analysis results',exact:true}),nav=page.getByRole('navigation',{name:'Analysis file pages',exact:true});
+ await expect(section.locator('.analysis-file-match')).toHaveCount(10);await expect(nav).toContainText('Files 1–10 of 24');
+ await nav.getByRole('button',{name:'Next files',exact:true}).click();await expect(nav).toContainText('Files 11–20 of 24');
+ await control(page,'Result asset category').selectOption('Commodities');
+ await expect(nav).toContainText('Files 1–10 of 12');await expect(section.locator('.analysis-file-match')).toHaveCount(10);
+ await expect(section.locator('.analysis-asset')).toHaveCount(1);await expect(section.locator('.analysis-asset')).toContainText('Gold vs US Dollar');
+ await nav.getByRole('button',{name:'Next files',exact:true}).click();await expect(nav).toContainText('Files 11–12 of 12');
+ await expect(section.locator('.analysis-file-match')).toHaveCount(2);
+ await page.getByRole('button',{name:`Inspect ${file(21,'xauusd').name} matches`,exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});
+ await expect(dialog.getByTestId('analysis-chart')).toBeVisible();await dialog.getByRole('button',{name:'Previous match',exact:false}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisChartRequests().at(-1))).toMatchObject({resultID:'result-19',occurrence:0});
+ await page.keyboard.press('Escape');
+ await control(page,'Result asset category').selectOption('Cryptocurrencies');await expect(nav).toContainText('Files 1–10 of 12');
+ await page.getByRole('checkbox',{name:'Show files without matches',exact:true}).check();await expect(nav).toContainText('Files 1–10 of 13');
+ await control(page,'Result asset category').selectOption('Forex');await expect(nav).toHaveCount(0);
+ await expect(section.getByText('No matching files in this asset category.',{exact:true})).toBeVisible();
+});
+
+test('asset headings use full catalog descriptions instead of aggregate-match boilerplate',async({page})=>{
+ const description='ARK Artificial Intelligence & Robotics UCITS ETF';
+ await open(page,[{...file(0,'arkiususd'),description,category:'ETFs'}]);
+ await complete(page,[{...result(0,'arkiususd',224),description,category:'ETFs'}]);
+ const heading=page.locator('.analysis-asset');await expect(heading).toContainText('ARKIUSUSD');await expect(heading).toContainText(description);
+ await expect(heading).not.toContainText('total matches');await expect(page.getByRole('button',{name:/Inspect arkiususd/})).toContainText('224');
+ await expect(control(page,'Result asset category').locator('option[value="ETFs"]')).toHaveCount(1);
 });

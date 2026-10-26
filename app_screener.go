@@ -98,6 +98,10 @@ func (a *App) GetScreenerAnalysis(offset, limit int) (screener.AnalysisInfo, err
 	return a.screener.Analysis(offset, limit)
 }
 
+func (a *App) GetScreenerAnalysisFiltered(offset, limit int, filter screener.AnalysisFilter) (screener.AnalysisInfo, error) {
+	return a.screener.AnalysisFiltered(offset, limit, filter)
+}
+
 func (a *App) CancelScreenerAnalysis() screener.AnalysisInfo { return a.screener.CancelAnalysis() }
 
 func (a *App) GetScreenerAnalysisChart(resultID string, occurrence, before, after int) (screener.AnalysisChart, error) {

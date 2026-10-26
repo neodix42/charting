@@ -1,11 +1,12 @@
 export type AnalysisOperator='above'|'below'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
 export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:number;timeframe?:string;offset?:number;aggregate?:'value'|'highest'|'lowest'|'';window?:number}
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
-export interface AnalysisRequest {conditions:AnalysisCondition[]}
+export interface AnalysisRequest {conditions:AnalysisCondition[];categories?:string[]|null}
+export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest}
-export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string}
-export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[]}
-export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number}
+export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
+export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
+export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string}
 export interface AnalysisInfo {active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string}
 export interface AnalysisBar {index:number;time:number;values:Record<string,number>}
 export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[]}
@@ -17,6 +18,7 @@ export interface ScreenerAnalysisBackend {
  SaveScreenerAnalysisCondition(name:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
  StartScreenerAnalysis(request:AnalysisRequest):Promise<AnalysisInfo>;
  GetScreenerAnalysis(offset:number,limit:number):Promise<AnalysisInfo>;
+ GetScreenerAnalysisFiltered(offset:number,limit:number,filter:AnalysisResultFilter):Promise<AnalysisInfo>;
  CancelScreenerAnalysis():Promise<AnalysisInfo>;
  GetScreenerAnalysisChart(resultID:string,occurrence:number,before:number,after:number):Promise<AnalysisChart>;
 }
@@ -48,6 +50,7 @@ export function analysisFieldGroups(fields:string[]){
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return priceFields.has(base.toLowerCase())||/^(?:sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
 export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
 export function analysisInputError(view:AnalysisRequest){
+ if(view.categories&&view.categories.length===0)return'Select at least one asset category before scanning.';
  if(!view.conditions.length)return'Add at least one condition before scanning.';
  if(view.conditions.length>32)return'Use at most 32 conditions.';
  for(const condition of view.conditions){

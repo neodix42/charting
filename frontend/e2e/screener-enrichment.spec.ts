@@ -119,21 +119,39 @@ test('UTC Weekday and Hour use timestamps without price parameters and become An
 
 test('file pagination keeps the entire batch in scope and shows progress beyond the first page',async({page})=>{
  await open(page,57);
- await expect(panel(page).locator('tbody tr')).toHaveCount(50);
- await expect(panel(page)).toContainText('1–50 of 57 files');
+ await expect(panel(page).locator('tbody tr')).toHaveCount(20);
+ await expect(panel(page)).toContainText('1–20 of 57 files');
  await page.getByRole('button',{name:'Enrich 57 files',exact:true}).click();
  const info=await page.evaluate(()=>(window as any).__testEnrichment()) as ScreenerEnrichmentInfo;
  expect(info.jobs).toHaveLength(57);
  await progress(page,{currentFile:info.jobs[56].name,currentProgress:75,jobs:info.jobs.map((job,i)=>({...job,status:i===56?'running':'queued',progress:i===56?75:0,message:'Explicit progress'}))});
  await page.getByRole('button',{name:'Next files',exact:true}).click();
- await expect(panel(page).locator('tbody tr')).toHaveCount(7);
- await expect(panel(page)).toContainText('51–57 of 57 files');
+ await expect(panel(page).locator('tbody tr')).toHaveCount(20);
+ await expect(panel(page)).toContainText('21–40 of 57 files');
+ await page.getByRole('button',{name:'Next files',exact:true}).click();
+ await expect(panel(page).locator('tbody tr')).toHaveCount(17);
+ await expect(panel(page)).toContainText('41–57 of 57 files');
  await expect(panel(page).locator('tbody tr').last().getByRole('progressbar')).toHaveAttribute('value','75');
  await expect(page.getByRole('button',{name:'Next files',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'Previous files',exact:true}).click();
- await expect(panel(page).locator('tbody tr')).toHaveCount(50);
+ await expect(panel(page).locator('tbody tr')).toHaveCount(20);
+ await expect(panel(page)).toContainText('21–40 of 57 files');
+ await page.getByRole('button',{name:'Previous files',exact:true}).click();
+ await expect(panel(page)).toContainText('1–20 of 57 files');
  await page.getByRole('button',{name:'Cancel enrichment',exact:true}).click();
  await expect(panel(page)).toContainText('57 cancelled');
+});
+
+test('reloading a smaller file list clamps pagination to an available twenty-row page',async({page})=>{
+ await open(page,43);
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page)).toContainText('21–40 of 43 files');
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page)).toContainText('41–43 of 43 files');
+ await page.evaluate(value=>(window as any).__testSetEnrichmentFiles(value),Array.from({length:21},(_,index)=>file(index)));
+ await page.getByRole('button',{name:'Reload file list',exact:true}).click();
+ await expect(panel(page)).toContainText('21–21 of 21 files');await expect(panel(page).locator('tbody tr')).toHaveCount(1);
+ await expect(page.getByRole('button',{name:'Next files',exact:true})).toBeDisabled();
+ await page.evaluate(()=>(window as any).__testSetEnrichmentFiles([]));await page.getByRole('button',{name:'Reload file list',exact:true}).click();
+ await expect(panel(page)).toContainText('No downloaded CSV files.');await expect(panel(page).locator('tbody tr')).toHaveCount(0);
 });
 
 test('failed files stay visible beside completed files and cancellation preserves completed results',async({page})=>{

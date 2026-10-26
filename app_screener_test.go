@@ -3,9 +3,11 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"cryptodesk/internal/screener"
 	"cryptodesk/internal/storage"
@@ -79,5 +81,62 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	configured, err = app.ConfigureScreenerDirectory("  ")
 	if err != nil || configured.Directory != filepath.Join(profile, "screener") {
 		t.Fatalf("empty path did not reset to profile default: %+v, %v", configured, err)
+	}
+}
+
+func TestScreenerAnalysisFacadeFiltersCategoriesBeforePaging(t *testing.T) {
+	manager := screener.New(t.TempDir())
+	t.Cleanup(manager.Close)
+	app := &App{screener: manager}
+	catalog := app.GetScreenerCatalog()
+	category := ""
+	for _, group := range catalog.Groups {
+		for _, instrument := range group.Instruments {
+			if instrument.ID == "arkiususd" {
+				category = group.Name
+			}
+		}
+	}
+	if category == "" {
+		t.Fatal("test instrument missing from catalog")
+	}
+	if err := os.MkdirAll(manager.Info().Directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, symbol := range []string{"arkiususd", "btcusd"} {
+		path := filepath.Join(manager.Info().Directory, symbol+"-m1-2024-01-01-2024-01-02.csv")
+		if err := os.WriteFile(path, []byte("timestamp,close\n1704067200000,2\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request, err := app.GetScreenerAnalysisView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.StartScreenerAnalysis(request); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		page, err := app.GetScreenerAnalysisFiltered(0, 10, screener.AnalysisFilter{Categories: []string{category}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !page.Active {
+			if page.Total != 2 || page.TotalResults != 1 || len(page.Results) != 1 || page.Results[0].Description != "ARK Artificial Intelligence & Robotics UCITS ETF" || page.Results[0].Category != category {
+				t.Fatalf("filtered facade metadata: %+v", page)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("analysis did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if all, err := app.GetScreenerAnalysis(0, 10); err != nil || all.TotalResults != 2 {
+		t.Fatalf("original facade no longer lists all results: %+v %v", all, err)
+	}
+	if _, err := app.GetScreenerAnalysisFiltered(0, 10, screener.AnalysisFilter{Categories: []string{"invalid"}}); err == nil {
+		t.Fatal("facade accepted an invalid category")
 	}
 }

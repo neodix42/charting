@@ -1,6 +1,23 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useId,useState} from 'react';
 import type {AnalysisCatalog,AnalysisCondition,AnalysisOperand,AnalysisOperator} from '../workspace/screenerAnalysis';
 import {analysisFieldGroups,analysisFieldLabel,analysisOperators,fieldOperand,numberOperand} from '../workspace/screenerAnalysis';
+import {analysisOperatorDescription,analysisOperatorHelp} from '../workspace/screenerOperatorHelp';
+import './ScreenerAnalysisCondition.css';
+
+function OperatorSelect({label,name,value,options=analysisOperators,onChange}:{label:string;name:string;value:string;options?:typeof analysisOperators;onChange(value:AnalysisOperator):void}){
+ const [showHelp,setShowHelp]=useState(false),helpID=useId();
+ useEffect(()=>{
+  if(!showHelp)return;
+  const dismiss=(event:KeyboardEvent)=>{if(event.key==='Escape')setShowHelp(false);};
+  window.addEventListener('keydown',dismiss);return()=>window.removeEventListener('keydown',dismiss);
+ },[showHelp]);
+ const selected=options.find(item=>item.id===value)??options[0],help=analysisOperatorHelp[selected.id],description=analysisOperatorDescription(selected.id);
+ return <label className="analysis-operator-control" onMouseEnter={()=>setShowHelp(true)} onMouseLeave={()=>setShowHelp(false)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setShowHelp(false);}} onKeyDown={event=>{if(event.key==='Escape'){setShowHelp(false);event.stopPropagation();}}}>
+  <span className="analysis-operator-label">{label}<button type="button" className="analysis-operator-help" aria-label={`Help for ${name}`} aria-describedby={helpID} onFocus={()=>setShowHelp(true)} onClick={()=>setShowHelp(value=>!value)}>?</button></span>
+  <select aria-label={name} aria-describedby={helpID} title={description} value={value} onChange={event=>{setShowHelp(false);onChange(event.target.value as AnalysisOperator);}}>{options.map(item=><option key={item.id} value={item.id} title={analysisOperatorDescription(item.id)}>{item.label}</option>)}</select>
+  <span id={helpID} role="tooltip" className="analysis-operator-tooltip" hidden={!showHelp}><strong>{selected.label}</strong><span>{help.description}</span><span>Example: {help.example}</span></span>
+ </label>;
+}
 
 function NumberInput({value,onChange,...props}:{value:number;onChange(value:number):void;min?:number;max?:number;step?:number|string;'aria-label':string}){
  const [draft,setDraft]=useState(String(value));
@@ -36,11 +53,10 @@ export function ScreenerAnalysisCondition({condition,index,catalog,onChange,onRe
   <legend><span className="analysis-condition-number">{index+1}</span>{index===0?'When':'AND'}<button type="button" className="analysis-remove" aria-label={`Remove condition ${index+1}`} disabled={!canRemove} title={canRemove?'Remove this condition':'Keep at least one condition'} onClick={onRemove}>−</button></legend>
   <div className="analysis-condition-body">
    <AnalysisOperandEditor label={`Condition ${index+1} left`} value={condition.left} catalog={catalog} onChange={left=>patch({left})}/>
-   <div className="analysis-comparison"><label>Condition<select aria-label={`Condition ${index+1} operator`} value={condition.operator} onChange={event=>{
-    const operator=event.target.value as AnalysisOperator;
+   <div className="analysis-comparison"><OperatorSelect label="Condition" name={`Condition ${index+1} operator`} value={condition.operator} onChange={operator=>{
     patch({operator,bars:condition.bars??3,multiplier:condition.multiplier??0.2,comparison:condition.comparison||'above',upper,distance});
-   }}>{analysisOperators.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-   {temporal&&<label>Comparison<select aria-label={`Condition ${index+1} comparison`} value={operator} onChange={event=>patch({comparison:event.target.value})}>{analysisOperators.filter(item=>!['occurredWithin','remainedFor','highest','lowest'].includes(item.id)).map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
+   }}/>
+   {temporal&&<OperatorSelect label="Comparison" name={`Condition ${index+1} comparison`} value={operator} onChange={comparison=>patch({comparison})} options={analysisOperators.filter(item=>!['occurredWithin','remainedFor','highest','lowest'].includes(item.id))}/>}
    {['highest','lowest','occurredWithin','remainedFor'].includes(condition.operator)&&<label>Closed bars<NumberInput aria-label={`Condition ${index+1} bar window`} min={1} max={10000} step={1} value={condition.bars??3} onChange={bars=>patch({bars})}/></label>}
    </div>
    <AnalysisOperandEditor label={`Condition ${index+1} right`} value={condition.right} catalog={catalog} onChange={right=>patch({right})}/>

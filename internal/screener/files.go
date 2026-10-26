@@ -19,6 +19,8 @@ type DataFile struct {
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
 	Symbol         string   `json:"symbol,omitempty"`
+	Description    string   `json:"description"`
+	Category       string   `json:"category"`
 	Timeframe      string   `json:"timeframe,omitempty"`
 	From           string   `json:"from,omitempty"`
 	To             string   `json:"to,omitempty"`
@@ -75,6 +77,8 @@ func describeFile(directory, name string) DataFile {
 	if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
 		file.Symbol, file.Timeframe, file.From, file.To = match[1], match[2], match[3], match[4]
 	}
+	asset := describeAsset(file.Symbol, name)
+	file.Description, file.Category = asset.description, asset.category
 	full := filepath.Join(directory, name)
 	info, err := os.Lstat(full)
 	if err != nil || !info.Mode().IsRegular() {

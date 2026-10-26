@@ -404,6 +404,7 @@ export namespace domain {
 	    app: string;
 	    id: string;
 	    theme: string;
+	    fontSize?: number;
 	    displayTimezone: string;
 	    chartRightGap?: ChartRightGap;
 	    activeTabId: string;
@@ -420,6 +421,7 @@ export namespace domain {
 	        this.app = source["app"];
 	        this.id = source["id"];
 	        this.theme = source["theme"];
+	        this.fontSize = source["fontSize"];
 	        this.displayTimezone = source["displayTimezone"];
 	        this.chartRightGap = this.convertValues(source["chartRightGap"], ChartRightGap);
 	        this.activeTabId = source["activeTabId"];
@@ -547,6 +549,8 @@ export namespace screener {
 	    id: string;
 	    name: string;
 	    symbol?: string;
+	    description: string;
+	    category: string;
 	    timeframe?: string;
 	    from?: string;
 	    to?: string;
@@ -565,6 +569,8 @@ export namespace screener {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.symbol = source["symbol"];
+	        this.description = source["description"];
+	        this.category = source["category"];
 	        this.timeframe = source["timeframe"];
 	        this.from = source["from"];
 	        this.to = source["to"];
@@ -580,6 +586,7 @@ export namespace screener {
 	    fields: string[];
 	    timeframes: string[];
 	    files: DataFile[];
+	    categories: string[];
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisCatalog(source);
@@ -591,6 +598,7 @@ export namespace screener {
 	        this.fields = source["fields"];
 	        this.timeframes = source["timeframes"];
 	        this.files = this.convertValues(source["files"], DataFile);
+	        this.categories = source["categories"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -731,11 +739,27 @@ export namespace screener {
 		    return a;
 		}
 	}
+	export class AnalysisFilter {
+	    categories: string[];
+	    includeEmpty: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisFilter(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.categories = source["categories"];
+	        this.includeEmpty = source["includeEmpty"];
+	    }
+	}
 	export class AnalysisResult {
 	    id: string;
 	    fileId: string;
 	    name: string;
 	    symbol: string;
+	    description: string;
+	    category: string;
 	    timeframe: string;
 	    status: string;
 	    error?: string;
@@ -756,6 +780,8 @@ export namespace screener {
 	        this.fileId = source["fileId"];
 	        this.name = source["name"];
 	        this.symbol = source["symbol"];
+	        this.description = source["description"];
+	        this.category = source["category"];
 	        this.timeframe = source["timeframe"];
 	        this.status = source["status"];
 	        this.error = source["error"];
@@ -828,6 +854,7 @@ export namespace screener {
 
 	export class AnalysisRequest {
 	    conditions: AnalysisCondition[];
+	    categories: string[];
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisRequest(source);
@@ -836,6 +863,7 @@ export namespace screener {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
+	        this.categories = source["categories"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

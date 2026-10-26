@@ -40,11 +40,13 @@ First launch opens **one tab with one chart**. New tabs also start with one char
 - **Independent charts:** choose exchange, spot/perpetual instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets.
 - **Indicators and drawings:** SMA, EMA, Ichimoku Cloud and MACD, with editable parameters, colors and multiple instances. Adjust moving-average widths and resize MACD panes. Add arrows, horizontal levels and trend lines; select, move or remove drawings.
 - **Flexible layouts:** drag tabs/charts, resize grid tracks, maximize a chart, rename tabs and duplicate layouts. Shared period and indicator controls apply to the current tab's charts.
-- **Display controls:** light/dark themes, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space.
+- **Display controls:** light/dark themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Font size** scales interface text and chart labels from **10–24 px** (default **13**).
 - **Automatic saving:** SQLite persistence, JSON workspace export/import and recovery snapshots. Optional local candle storage reuses genuine downloaded chart history across restarts.
 - **Efficient live feeds:** only the active chart tab renders and subscribes. Opening Screener saves chart views and releases live chart subscriptions; returning restores the selected tab. Connection and provisional-data states remain visible.
 
 Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. CryptoDesk reads public market data and does not place trades or connect to exchange accounts.
+
+Settings are grouped into **Appearance**, **Storage**, **Screener**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics.
 
 ## Screener
 
@@ -69,11 +71,13 @@ Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from 
 3. Choose one common timeframe and UTC date range. **From** is inclusive; **To** is exclusive. Available history depends on the instrument.
 4. Set **Parallel downloads** from **1 to 20** (default **20**) and press **Download**. Additional symbols wait in the queue; progress, completed paths and provider errors appear per symbol.
 
+The Downloads panel shows **10 jobs per page**, with totals for **completed** and **failed** downloads. Its status filter includes **Failed** and **Completed**; **All statuses** includes completed jobs alongside queued, running and other jobs. Filtering happens before pagination.
+
 The pinned [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node) integration supports **1,499 instruments across 39 categories** and ten timeframes: **tick, s1, m1, m5, m15, m30, h1, h4, d1 and mn1**. Choose `d1` for daily indicator research or an intraday interval for hour-based conditions.
 
 Downloads continue when you switch screens. **Closing the app pauses unfinished downloads; the next launch resumes them automatically from committed batches.** Symbol selection, timeframe, dates, parallelism and category open/closed states are remembered. Completed files are retained. **Cancel downloads** discards unfinished work and stops automatic continuation; **Resume downloads** can retry failed or paused jobs.
 
-Use **Settings → Screener download folder** to change the destination. The default on Linux is `~/.local/share/cryptodesk/screener`; Windows portable builds use `data/screener`. Changing the setting does not move previous files. Network/provider failures are reported visibly. If the bundled downloader is unavailable, the screen reports the runtime error and offers **Retry downloader**; restore the complete release archive before retrying.
+Use **Settings → Screener → Screener download folder** to change the destination. The default on Linux is `~/.local/share/cryptodesk/screener`; Windows portable builds use `data/screener`. Changing the setting does not move previous files. Network/provider failures are reported visibly. If the bundled downloader is unavailable, the screen reports the runtime error and offers **Retry downloader**; restore the complete release archive before retrying.
 
 ### Enrichment: turn histories into indicator datasets
 
@@ -85,6 +89,8 @@ Use **Settings → Screener download folder** to change the destination. The def
 2. Choose an indicator, its parameters and, where applicable, a price source.
 3. Press **Enrich** to calculate it for **all CSV files in the folder**, including files on other list pages. Overall and per-file progress show completion or errors.
 4. Repeat for the indicators you want to compare in Analysis.
+
+The file list uses **20 rows per page**. Enrich and Refresh still process all applicable files, across every page.
 
 The bundled [trading-signals](https://github.com/bennycode/trading-signals) integration provides **40 technical indicators** across moving averages, momentum, trend, volatility and volume. Examples include SMA/EMA, RSI, MACD, Ichimoku/Tenkan/Kijun, ATR, Bollinger bands, Donchian channels, stochastic oscillators, ADX, OBV and VWAP.
 
@@ -104,6 +110,8 @@ The first refresh verifies history from each download's original start through t
 ### Analysis: build smart filters visually
 
 **Visual condition rows** let you express a research rule without writing code. Choose a left value, an operator and a right value. Add rows with **+ Add condition**, remove them with **−**, and combine them with **AND**: every row must hold at the evaluated bar.
+
+Hover an operator control or its **?** help button for its description and an example. The help button also works with keyboard focus, including for comparisons inside temporal rules.
 
 ![Light-theme Analysis visual filter builder with two AND conditions and saved condition sets on the right](docs/screenshots/screener-analysis.png)
 
@@ -136,6 +144,8 @@ Timeframe alignment uses only bars that had **fully closed** at the point being 
 3. Add a second row: **Histogram (12, 26, 9) → Occurred within → Constant 0**. Set **Comparison** to **Crosses above** and **Closed bars** to `3`.
 4. Leave both timeframes at **Same as file** and **Bars ago** at `0`, then press **Apply conditions**.
 
+Below **Apply conditions**, **Asset categories to scan** lists the same categories as Downloader. All categories start enabled. Use individual checkboxes, **Select all** or **Deselect all** to choose the scan scope. Only downloaded files in the selected categories are evaluated; the selection is retained in the draft and saved condition sets.
+
 You can also enrich Weekday/Hour and add rows such as **Weekday is between 1 and 5** or **Hour is between 8 and 16** for UTC calendar filters.
 
 #### Save and reuse a condition set
@@ -146,7 +156,9 @@ Click a saved name to load its rows into the editor. You can adjust the working 
 
 #### Apply, inspect and navigate matches
 
-**Apply conditions** checks **every closed historical bar in every downloaded file**. The results list groups occurrences by asset/file and timeframe, showing the match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Enable **Show files without matches** to include zero-match datasets.
+**Apply conditions** checks **every closed historical bar in downloaded files from the selected categories**. The results list groups occurrences by asset/file and timeframe, showing the asset's full catalog description, match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Enable **Show files without matches** to include zero-match datasets.
+
+Matching assets uses **10 file records per page**. The **Asset category** filter narrows displayed results before pagination; it does not change or rerun the scan. For example, an ARKIUSUSD group displays **ARK Artificial Intelligence & Robotics UCITS ETF** beside its symbol.
 
 ![Light-theme Analysis results listing BTCUSD and ETHUSD with occurrence counts and first and last match times](docs/screenshots/screener-results.png)
 

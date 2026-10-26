@@ -1,0 +1,6 @@
+.screener-jobs-heading{gap:10px;flex-wrap:wrap}
+.screener-jobs-filter{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 15px;border-bottom:1px solid var(--border);font-size:.76923rem;color:var(--muted)}
+.screener-jobs-filter label{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.screener-jobs-filter select{font-size:.84615rem;min-width:130px}
+.screener-download-pagination{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;padding:12px 15px;border-top:1px solid var(--border);font-size:.76923rem;color:var(--muted)}
+.screener-download-pagination button{font-size:.76923rem}

@@ -30,6 +30,7 @@ type Workspace struct {
 	App             string         `json:"app"`
 	ID              string         `json:"id"`
 	Theme           string         `json:"theme"`
+	FontSize        *int           `json:"fontSize,omitempty"`
 	DisplayTimezone string         `json:"displayTimezone"`
 	ChartRightGap   *ChartRightGap `json:"chartRightGap,omitempty"`
 	ActiveTabID     string         `json:"activeTabId"`
@@ -111,7 +112,8 @@ func NewTab(name string) Tab {
 // NewWorkspace is used only when no workspace has ever been saved, or on explicit reset.
 func NewWorkspace() Workspace {
 	tab := NewTab("Tab 1")
-	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "dark", DisplayTimezone: "UTC", ChartRightGap: &ChartRightGap{Unit: "bars", Value: 10}, ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
+	fontSize := 13
+	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "dark", FontSize: &fontSize, DisplayTimezone: "UTC", ChartRightGap: &ChartRightGap{Unit: "bars", Value: 10}, ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
 }
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -151,6 +153,9 @@ func Validate(w Workspace) error {
 	}
 	if !member(w.Theme, "dark", "light") {
 		return bad("invalid theme")
+	}
+	if w.FontSize != nil && (*w.FontSize < 10 || *w.FontSize > 24) {
+		return bad("font size must be a whole number from 10 to 24")
 	}
 	if !text(w.DisplayTimezone, 80) {
 		return bad("invalid display timezone")

@@ -13,7 +13,8 @@ const panel=(page:Page)=>page.locator('#screener-enrichment');
 test('Refresh updates all existing files and applied indicators, independently of the new indicator controls',async({page})=>{
  await open(page,57);
  await page.getByLabel('Period',{exact:true}).fill('3');
- await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(7);
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(20);
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(17);
  await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
  const info=await page.evaluate(()=>(window as any).__testRefresh()) as ScreenerRefreshInfo;
  expect(info.jobs).toHaveLength(57);expect(info.jobs[0].columns).toEqual(fields.slice(6));

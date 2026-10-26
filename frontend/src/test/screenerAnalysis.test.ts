@@ -58,4 +58,11 @@ describe('Analysis field selection and validation',()=>{
   expect(analysisInputError({conditions:[]})).toContain('at least one');
   expect(analysisInputError({conditions:Array.from({length:33},(_,i)=>newAnalysisCondition(String(i)))})).toContain('32');
  });
+ it('keeps legacy all-category requests valid while rejecting an explicitly empty scan scope',()=>{
+  const request=initialAnalysisView();
+  expect(analysisInputError(request)).toBe('');
+  expect(analysisInputError({...request,categories:null})).toBe('');
+  expect(analysisInputError({...request,categories:['Forex']})).toBe('');
+  expect(analysisInputError({...request,categories:[]})).toContain('Select at least one asset category');
+ });
 });

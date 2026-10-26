@@ -3,7 +3,7 @@ import type {Backend,ScreenerEnrichmentInfo,ScreenerFilePage,ScreenerIndicators,
 import {errorText} from '../types';
 import './ScreenerRefresh.css';
 
-const pageSize=50;
+const pageSize=20;
 const requirements={price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume',timestamp:'timestamp (UTC); no price fields required'};
 function size(bytes:number){return bytes<1024?`${bytes} B`:bytes<1024*1024?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1024/1024).toFixed(1)} MiB`;}
 function utcTime(value:number){return new Date(value).toISOString().replace('T',' ').replace('.000Z',' UTC');}

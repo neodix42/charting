@@ -596,11 +596,13 @@ const desktopSmokeJavaScript = `async function(phase) {
    q('[role="tab"][data-tab-id]').click();await wait(()=>q('[data-testid="chart-cell"]'),'chart restored after Screener');
    check((await api.LoadWorkspace()).workspace.activeTabId===initial.workspace.activeTabId,'Screener preserves the actual saved chart-tab selection');
    await click('[aria-label="Open settings"]');
+   await click('#settings-tab-screener');
    await wait(()=>q('[aria-label="Screener download folder"]:not(:disabled)'),'native Screener settings');
    await input('[aria-label="Screener download folder"]',screenerDefault.directory+'-selected');
    await click('[aria-label="Apply Screener download folder"]');
    await wait(async()=>(await api.GetScreener()).directory===screenerDefault.directory+'-selected','native Screener folder preference committed');
    report.screener={directory:(await api.GetScreener()).directory,catalogVersion:screenerCatalog.version,instruments:screenerCount};
+   await click('#settings-tab-storage');
    await wait(()=>q('.candle-storage-toggle input:not(:disabled)'),'native candle storage settings');
    const storageDefault=await api.GetCandleStorage();
    check(!q('.candle-storage-toggle input').checked&&!storageDefault.enabled&&storageDefault.directory.endsWith('/candles'),'native candle storage defaults off in the isolated profile',storageDefault);

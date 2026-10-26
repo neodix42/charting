@@ -21,6 +21,12 @@
         "light"
       ]
     },
+    "fontSize": {
+      "description": "Global base text size in CSS pixels. Omission in older workspaces means 13 pixels.",
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 24
+    },
     "displayTimezone": {
       "type": "string",
       "minLength": 1,
