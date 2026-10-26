@@ -1,10 +1,11 @@
 import {test,expect,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
 import type {ScreenerDataFile,ScreenerRefreshInfo} from '../src/types';
 
 const fields=['timestamp','open','high','low','close','volume','sma_200','macd_histogram_12_26_9'];
 const file=(index:number):ScreenerDataFile=>({id:`refresh-${index}`,name:`asset${index}-d1-2024-01-01-2024-02-01.csv`,symbol:`asset${index}`,timeframe:'d1',from:'2024-01-01',to:'2024-02-01',fields:[...fields],bytes:2000});
 async function open(page:Page,count=2){
- await page.goto('/');await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),Array.from({length:count},(_,i)=>file(i)));
+ await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),Array.from({length:count},(_,i)=>file(i)));
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
 }

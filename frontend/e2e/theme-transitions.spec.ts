@@ -1,4 +1,5 @@
 import {test,expect,type Locator,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
 import {THEME_OPTIONS,getThemePalette,type ThemeName} from '../src/workspace/themes';
 
 const rgb=(hex:string)=>`rgb(${[1,3,5].map(offset=>parseInt(hex.slice(offset,offset+2),16)).join(', ')})`;
@@ -25,7 +26,7 @@ async function progressPixels(progress:Locator){
 
 for(const screen of ['Downloader','Enrichment','Analysis'] as const){
  test(`${screen} buttons and painted progress bars follow all 25 theme transitions`,async({page})=>{
-  await page.goto('/');
+  await openTestApp(page);
   await page.evaluate(()=>{
    (window as any).__testSetEnrichmentFiles([{id:'theme-file',name:'btcusd-d1-theme.csv',symbol:'btcusd',timeframe:'d1',fields:['timestamp','open','high','low','close','volume'],bytes:4096}]);
    (window as any).__testSetScreener({jobs:[{id:'theme-download',symbol:'btcusd',timeframe:'d1',from:'2024-01-01',to:'2024-01-02',status:'failed',progress:50,message:'Explicit appearance fixture: interrupted download'}]});

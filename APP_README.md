@@ -48,7 +48,7 @@ The header displays the installed build's `vX.Y.Z` release tag beside the Crypto
 
 Local builds use the baseline in `VERSION` (currently `0.1.0`). Set `CRYPTODESK_VERSION=X.Y.Z` to override it for either build script; the header, output filename, package manifest and Windows product version follow this value. Release CI passes its selected version without making source-version bump commits. Hosted execution and Windows GUI checks are recorded separately in [STATUS.md](STATUS.md).
 
-Ubuntu release CI verifies the packaged Screener enrichment/Refresh runtime offline and retains its report in the **diagnostics-linux-amd64** workflow artifact, separate from the two published application archives. The retired GTK/WebKit bundle's namespace provisioning, runtime redistribution and source collection no longer run.
+Ubuntu release CI verifies the packaged Screener enrichment/Refresh runtime offline and retains its report in the **diagnostics-linux-amd64** workflow artifact, separate from the two published application archives. Browser test reports and failure screenshots/traces are retained in **diagnostics-browser-linux-amd64**, including when browser checks stop the build. The retired GTK/WebKit bundle's namespace provisioning, runtime redistribution and source collection no longer run.
 
 ## Build and develop
 

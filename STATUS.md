@@ -1,5 +1,15 @@
 # Implementation status — updated 2026-10-26
 
+## Release browser-bootstrap race — 2026-10-26
+
+Investigated [Actions run 40326451440](https://github.com/neodix42/charting/actions/runs/40326451440), commit `e2a1f2d4e7cb363ba5e419df16b3d110f24be56d`. Windows packaging and Linux domain/storage/frontend/packaging validation passed. The Linux browser step failed one Enrichment test with `window.__testSetEnrichmentFiles is not a function`; the other 163 browser tests passed. Navigation's load event can finish while `main.tsx` is awaiting its dynamic test-bridge import, so direct fixture access immediately after `page.goto` raced startup.
+
+The explicit browser harness now marks readiness after installing all backend methods and controls. Shared test navigation waits for that marker with bounded Node-side polling, including when a test uses the browser's fake clock. Suites that seed fixtures or replace bridge methods directly use this helper. A deterministic regression holds the bridge module request, proves page load occurs while fixture controls remain unavailable, then releases it and verifies Enrichment setup after both navigation and reload. Production bootstrap retains its explicit opt-in guard. The release workflow now preserves browser JSON results and failure screenshots/traces in `diagnostics-browser-linux-amd64`, outside the release archive selection.
+
+Focused verification: all **13 readiness, Enrichment and production-isolation browser tests** pass with `VITE_EXPLICIT_TEST_BRIDGE=0` inherited as in CI. Frontend typecheck/lint and **176 unit tests** pass. Evidence and the original failure excerpt are under ignored `.tools/verification/actions-40326451440/`. A hosted run of the changed commit remains unverified; no native desktop or live-provider check was needed for this test-harness/workflow change.
+
+The complete CI-equivalent browser run passes **165 tests** in 7.4 minutes (`browser-full.log`). The final additional theme-transition caller was then switched to the same readiness helper, and its **three tests covering all 25 theme transitions per screen** pass (`theme-transitions.log`). Production frontend builds, release YAML parsing and `git diff --check` pass. Runtime binaries were not rebuilt because application behavior and packaged runtime code are unchanged.
+
 ## Delete saved Analysis conditions — 2026-10-26
 
 Added a theme-aware right-click menu with **Delete** on each Saved conditions entry. Shift+F10/context-menu key opens it for the focused entry; Escape/outside click, scrolling, resizing and panel switches dismiss it. Position is constrained to the viewport and the menu focuses its action. Deletion addresses the stable saved ID, validates the existing store and atomically writes the remaining entries under the manager lock. Only successful deletion removes the visible entry; failures stay visible, and the current draft, other named sets and CSV data are preserved. A pending deletion participates in the existing normal-close flush, and delayed list responses cannot restore deleted entries. README and APP_README document usage.

@@ -1,4 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
 import type {ChartConfig,FeedKey,Instrument,MarketEvent} from '../src/types';
 
 const picker=(page:Page)=>page.getByLabel('Instruments',{exact:true});
@@ -12,7 +13,7 @@ async function select(page:Page,symbol:string,market:'Spot'|'Perpetual'){
 }
 
 for(const viewport of [{width:1600,height:1000},{width:1100,height:720}])test(`one symbol list labels and selects identical spot/perpetual names at ${viewport.width}px`,async({page})=>{
- await page.setViewportSize(viewport);await page.goto('/');await expect(page.getByLabel('OHLCV')).toContainText('61,000.00');
+ await page.setViewportSize(viewport);await openTestApp(page);await expect(page.getByLabel('OHLCV')).toContainText('61,000.00');
  await expect(page.getByText('SPOT TERMINAL',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Application version',{exact:true})).toBeVisible();
  await openPicker(page);await expect(picker(page).getByRole('combobox')).toHaveCount(0);
  await expect(picker(page).getByRole('button',{name:'BTCUSDT Spot',exact:true})).toHaveAttribute('aria-pressed','true');
@@ -32,7 +33,7 @@ for(const viewport of [{width:1600,height:1000},{width:1100,height:720}])test(`o
 });
 
 test('silver perpetual selection persists across restart and tabs and uses perpetual history',async({page})=>{
- await page.goto('/');await expect(page.getByLabel('OHLCV')).toContainText('61,000.00');
+ await openTestApp(page);await expect(page.getByLabel('OHLCV')).toContainText('61,000.00');
  await page.evaluate(async()=>{const modulePath='/src/charts/priceScale.ts';const {chartPriceScaleDiagnostics}=await import(modulePath);chartPriceScaleDiagnostics.values().next().value.setVisibleRange({from:59000,to:63000});});
  await page.getByTestId('chart-canvas').dispatchEvent('pointerup');await page.locator('.save-indicator').click();await expect(page.locator('.save-indicator.saved')).toBeVisible();expect((await savedChart(page)).priceScale).toMatchObject({autoScale:false,manualRange:{min:59000,max:63000}});
  await select(page,'XAGUSDT','Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');expect((await savedChart(page)).priceScale).toMatchObject({autoScale:true,manualRange:null});
@@ -48,7 +49,7 @@ test('silver perpetual selection persists across restart and tabs and uses perpe
 });
 
 test('the complete catalog remains selectable beyond seventy rows and supports Unicode symbols',async({page})=>{
- await page.goto('/');await page.evaluate(()=>{
+ await openTestApp(page);await page.evaluate(()=>{
   const item:Instrument={nativeId:'BTCUSDT',market:'spot',baseAsset:'BTC',quoteAsset:'USDT',priceIncrement:'0.01',sizeIncrement:'0.1',availability:'Trading',supportedIntervals:['1h']};
   window.go!.main!.App!.ListInstruments=async()=>[...Array.from({length:90},(_,index)=>({...item,nativeId:`ASSET${index.toString().padStart(3,'0')}USDT`})),{...item,nativeId:'币安人生USDT',market:'perpetual',baseAsset:'币安人生'}];
  });
@@ -61,7 +62,7 @@ test('the complete catalog remains selectable beyond seventy rows and supports U
 });
 
 test('partial discovery shows its warning while working markets stay selectable and retries without reconnecting the chart',async({page})=>{
- await page.goto('/');await page.evaluate(()=>{
+ await openTestApp(page);await page.evaluate(()=>{
   const api=window.go!.main!.App!,original=api.ListInstruments;let bybitCalls=0;
   api.ListInstruments=async exchange=>{const restrict=exchange==='bybit'&&++bybitCalls===1;const items=await original(exchange);return restrict?[{...items[0],providerMetadata:{catalogWarning:'Explicit linear catalog restriction; spot remains available'}}]:items;};
  });
@@ -74,7 +75,7 @@ test('partial discovery shows its warning while working markets stay selectable 
 });
 
 test('a delayed perpetual history result cannot replace candles after switching the same symbol to spot',async({page})=>{
- await page.goto('/');await select(page,'BTCUSDT','Perpetual');
+ await openTestApp(page);await select(page,'BTCUSDT','Perpetual');
  await page.evaluate(()=>{window.go!.main!.App!.GetHistory=async(requestId,feedKey)=>new Promise(resolve=>{(window as any).__releasePerpetualHistory=()=>{const time=Math.floor(Date.now()/3600000)*3600;resolve({requestId,feedKey,moreHistory:false,bars:[{time,open:99999,high:100000,low:99998,close:99999,volume:1,closed:false,quality:'live',sourceRevision:100}]});};});});
  await page.getByRole('button',{name:'Return to live',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releasePerpetualHistory)).toBe('function');
  await select(page,'BTCUSDT','Spot');await page.evaluate(()=>(window as any).__releasePerpetualHistory());

@@ -24,4 +24,6 @@ export async function installTestBridge(){
  },__testChartGaps:()=>[...chartGapDiagnostics.values()].map(entry=>entry.read()).filter(Boolean),__testChartZoom:(id:string,barSpacing:number)=>chartGapDiagnostics.get(id)?.zoom(barSpacing),__testChartPan:(id:string,position:number)=>chartGapDiagnostics.get(id)?.pan(position),__testAdvanceBars:()=>{
   for(const [leaseId,lease] of leases){const last=bars(lease.feedKey).at(-1)!;const bar={...last,time:last.time+intervalSeconds[lease.feedKey.timeframe],sourceRevision:2};emit('market:update',{leaseId,chartId:lease.chartId,generation:lease.generation,feedKey:lease.feedKey,kind:'bars',revision:++lease.revision,bars:[bar],health:{state:'provisional'}} satisfies MarketEvent);}
  }});
+ // Publish readiness only after every backend method and fixture control is installed.
+ Object.assign(window,{__testBridgeReady:true});
 }

@@ -1,4 +1,5 @@
 import {test,expect,type Locator,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
 import {firstWorkspace} from '../src/workspace/model';
 import {THEME_OPTIONS,getThemePalette} from '../src/workspace/themes';
 import type {AnalysisFile,AnalysisResult} from '../src/workspace/screenerAnalysis';
@@ -22,7 +23,7 @@ test('all five themes repaint actual chart canvases without replacing feeds, vie
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  const workspace=firstWorkspace(),chart=workspace.tabs[0].charts[0];chart.indicators=[{id:crypto.randomUUID(),type:'sma',parameters:{period:20},color:'#457bd4'}];
  await page.addInitScript(value=>{if(!sessionStorage.getItem('cryptodesk-explicit-test-workspace'))sessionStorage.setItem('cryptodesk-explicit-test-workspace',JSON.stringify(value));},workspace);
- await page.goto('/');await expect(page.getByLabel('OHLCV')).toContainText('61,000');
+ await openTestApp(page);await expect(page.getByLabel('OHLCV')).toContainText('61,000');
  // Supply alternating real series inputs so both bullish and bearish candle paint is verified.
  await page.evaluate(()=>{
   const step=3600,end=Math.floor(Date.now()/1000/step)*step;
@@ -63,7 +64,7 @@ test('an open Analysis chart follows theme changes in place and releases both ob
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  const file:AnalysisFile={id:'theme-file',name:'btcusd-d1-theme.csv',symbol:'btcusd',timeframe:'d1',fields:['timestamp','open','high','low','close','volume','sma_20','macd_histogram_12_26_9'],bytes:4096};
  const result:AnalysisResult={id:'theme-result',fileId:file.id,name:file.name,symbol:file.symbol,timeframe:file.timeframe,status:'completed',rows:200,matches:1,firstTime:Date.UTC(2024,0,5),lastTime:Date.UTC(2024,0,5)};
- await page.goto('/');await page.evaluate(file=>(window as any).__testSetEnrichmentFiles([file]),file);
+ await openTestApp(page);await page.evaluate(file=>(window as any).__testSetEnrichmentFiles([file]),file);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
  await page.evaluate(result=>(window as any).__testSetAnalysisInfo({active:false,phase:'completed',total:1,completed:1,failed:0,currentFile:'',progress:100,rows:200,totalMatches:1,matchedFiles:1,results:[result]}),result);

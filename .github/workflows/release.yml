@@ -83,6 +83,15 @@ jobs:
           cd frontend
           npx --no-install playwright install --with-deps chromium
           npm run test:e2e
+      - name: Preserve browser test diagnostics on success or failure
+        if: always() && matrix.target == 'linux-amd64'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-browser-linux-amd64
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true
       - name: Build Ubuntu x64 standard archive
         if: matrix.target == 'linux-amd64'
         run: ./build.sh

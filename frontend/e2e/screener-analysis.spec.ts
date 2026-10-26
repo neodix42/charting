@@ -1,11 +1,12 @@
 import {test,expect,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
 import type {AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult} from '../src/workspace/screenerAnalysis';
 
 const fields=['timestamp','open','high','low','close','volume','ema_200','atr_14','macd_12_26','macd_histogram_12_26_9'];
 const file=(index:number,symbol='btcusd',timeframe='d1'):AnalysisFile=>({id:`file-${index}`,name:`${symbol}-${timeframe}-${index}.csv`,symbol,timeframe,fields:[...fields],bytes:4096});
 const result=(index:number,symbol='btcusd',matches=2,timeframe='d1'):AnalysisResult=>({id:`result-${index}`,fileId:`file-${index}`,name:file(index,symbol,timeframe).name,symbol,timeframe,status:'completed',rows:200,matches,firstTime:Date.UTC(2024,0,5),lastTime:Date.UTC(2024,0,5+matches-1)});
 async function open(page:Page,files:AnalysisFile[]=[file(0),file(1,'ethusd','h4')]){
- await page.goto('/');await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
+ await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Visual condition rows',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
@@ -23,7 +24,7 @@ async function saveCondition(page:Page,name:string){
 }
 
 test('Analysis loads only when visible and exposes grouped enriched fields plus every comparison',async({page})=>{
- await page.goto('/');expect(await page.evaluate(()=>(window as any).__testAnalysisReads())).toBe(0);
+ await openTestApp(page);expect(await page.evaluate(()=>(window as any).__testAnalysisReads())).toBe(0);
  await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[file(0),file(1,'ethusd','h4')]);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Visual condition rows'})).toBeVisible();
@@ -104,7 +105,7 @@ test('temporal/window operators retain both operand sides, allow between bounds 
 
 test('advanced operators initialize unused Go zero-value operands and comparisons',async({page})=>{
  for(const operator of ['between','withinDistance','occurredWithin','remainedFor']){
-  await page.goto('/');
+  await openTestApp(page);
   await page.evaluate(files=>{
    (window as any).__testSetEnrichmentFiles(files);
    (window as any).__testSetAnalysisView({conditions:[{id:'condition-1',operator:'above',comparison:'',left:{kind:'field',field:'close',timeframe:'same',offset:0,aggregate:'value',window:1},right:{kind:'number',value:0},upper:{kind:'',field:'',value:0},distance:{kind:'',field:'',value:0},multiplier:1,bars:3}]});
@@ -238,7 +239,7 @@ test('saved-condition names and failures preserve previous entries and the curre
 });
 
 test('saved-condition list errors can retry while ordinary Analysis remains available at 1100px',async({page})=>{
- await page.setViewportSize({width:1100,height:900});await page.goto('/');
+ await page.setViewportSize({width:1100,height:900});await openTestApp(page);
  await page.evaluate(files=>{(window as any).__testSetEnrichmentFiles(files);(window as any).__testAnalysisErrors({savedList:'Saved conditions use an unsupported version; original state preserved'});},[file(0)]);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  const sidebar=page.getByRole('complementary',{name:'Saved conditions',exact:true});

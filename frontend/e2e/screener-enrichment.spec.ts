@@ -1,11 +1,12 @@
 import {test,expect,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
 import type {ScreenerDataFile,ScreenerEnrichmentInfo} from '../src/types';
 import type {AnalysisRequest} from '../src/workspace/screenerAnalysis';
 
 const fields=['timestamp','open','high','low','close','volume'];
 const file=(index:number):ScreenerDataFile=>({id:`file-${index}`,name:`symbol${String(index).padStart(3,'0')}-d1-2024-01-01-2024-02-01.csv`,symbol:`symbol${index}`,timeframe:'d1',from:'2024-01-01',to:'2024-02-01',firstTimestamp:1704067200000,lastTimestamp:1706659200000,fields:[...fields],bytes:2048});
 async function open(page:Page,count=2){
- await page.goto('/');
+ await openTestApp(page);
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles(value),Array.from({length:count},(_,i)=>file(i)));
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
@@ -15,7 +16,7 @@ const panel=(page:Page)=>page.locator('#screener-enrichment');
 async function progress(page:Page,value:Partial<ScreenerEnrichmentInfo>){await page.evaluate(value=>(window as any).__testSetEnrichment(value),value);}
 
 test('Enrichment loads CSV periods and comma separated headers only when opened, with all reviewed indicators',async({page})=>{
- await page.goto('/');
+ await openTestApp(page);
  expect(await page.evaluate(()=>(window as any).__testEnrichmentReads())).toBe(0);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await expect(page.locator('#screener-analysis').getByRole('heading',{name:'Visual condition rows',exact:true})).toBeVisible();
@@ -80,7 +81,7 @@ test('indicator changes reset parameter controls, validate periods and expose ti
 });
 
 test('UTC Weekday and Hour use timestamps without price parameters and become Analysis fields',async({page})=>{
- await page.goto('/');
+ await openTestApp(page);
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles([value]),{...file(0),fields:['timestamp']});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['Weekday','Hour']);
@@ -188,7 +189,7 @@ test('missing runtime, folder errors and start failures are reported without cha
 });
 
 test('empty folders show a clear download prompt and never enable enrichment',async({page})=>{
- await page.goto('/');await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ await openTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(panel(page)).toContainText('No downloaded CSV files.');
  await expect(page.getByRole('button',{name:'Enrich 0 files',exact:true})).toBeDisabled();
  await expect(panel(page).locator('tbody tr')).toHaveCount(0);
