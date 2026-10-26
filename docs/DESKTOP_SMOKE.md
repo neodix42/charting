@@ -20,7 +20,7 @@ Remaining manual checks (record outcomes, never infer a pass from automation):
 - Panning to an old date, manual price scale restoration and Return to live in WebKit.
 - Real network loss/recovery, OS suspend/resume and quiet instruments.
 - Mixed providers on each interval in the native UI, alongside already separate live adapter tests.
-- Additional Ubuntu releases and X11. Current recorded build/smoke runs use Ubuntu 26.04.1 and Wayland.
+- Additional Ubuntu releases and the complete X11 manual matrix. Earlier full desktop runs used Ubuntu 26.04.1 and Wayland; the theme smoke below additionally exercises X11/XWayland.
 
 ## Terminal signal verification
 
@@ -31,3 +31,9 @@ The deterministic harness tests use temporary SQLite data and synthetic process 
 ## Screener refresh and visual analysis
 
 Run `scripts/smoke-screener-analysis-refresh.sh` with an available Linux display and the private Screener runtime. It uses an isolated profile, genuine BTCUSD/ETHUSD daily downloads, SMA enrichment, Refresh data and indicators through the present, two visual AND rules, named-condition save/load, every-match counts, popup navigation and normal-close/restart verification. The named snapshot is restored independently of a deliberately changed draft, and loading waits for Apply. Evidence defaults to `docs/verification/screener-analysis-refresh/desktop`. It never opens the user's profile. Windows GUI and hosted CI require their own execution; cross-building and archive validation do not establish native Windows behavior.
+
+## Themes and opened dropdowns
+
+Run `scripts/smoke-themes.sh` in a graphical Linux session with X11/XWayland, `xwd`, `xwininfo`, `ffmpeg` and the XTest library available. The script selects X11 only for its isolated test processes and creates a temporary profile; it does not change the desktop theme or use the ordinary application profile. All automation hooks are confined to the `desktop_smoke` build.
+
+The test uses trusted native mouse events to open and select application dropdowns in Dark, Light, Matrix, Cyberpunk and Red Sands. It checks popup bounds, colors, selected options, keyboard navigation, all 42 grouped enrichment choices, chart/lease cleanup and Red Sands persistence after restarting the app. Seven screenshots of the actual Wails/WebKit window, JSON reports and logs are retained in ignored `.tools/verification/themes/desktop/`. Browser tests additionally inspect painted progress-bar pixels for all 25 theme transitions on each Screener screen and both bullish/bearish chart candles. Native Windows GUI verification remains separate.

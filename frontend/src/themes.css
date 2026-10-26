@@ -6,7 +6,7 @@
 }
 :root[data-theme=light]{
  color-scheme:light;color:#263544;background:#eef2f5;
- --bg:#eef2f5;--panel:#ffffff;--elevated:#f1f4f6;--text:#263544;--muted:#5f7081;--border:#d7dfe6;--accent:#94621f;--hover:#e5ebf0;--danger:#bd4554;--up:#157b65;--shadow:0 14px 65px #18324b26;
+ --bg:#eef2f5;--panel:#ffffff;--elevated:#f1f4f6;--text:#263544;--muted:#5f7081;--border:#d7dfe6;--accent:#2563b8;--hover:#e5ebf0;--danger:#bd4554;--up:#157b65;--shadow:0 14px 65px #18324b26;
  --chart-background:#ffffff;--chart-grid:#edf0f3;--chart-text:#5f7081;--chart-border:#d7dfe6;--chart-crosshair:#8795a3;
 }
 :root[data-theme=matrix]{
@@ -25,26 +25,21 @@
  --chart-background:#2a1813;--chart-grid:#513224;--chart-text:#d0ad94;--chart-border:#74482f;--chart-crosshair:#dbb492;
 }
 
-/* Highlighted controls and feedback must follow the selected accent as well. */
+/* Native progress widgets can retain an OS accent after color-scheme changes.
+   Paint both track and value explicitly in WebKit/Chromium and Firefox. */
+progress{appearance:none;-webkit-appearance:none;border:0;border-radius:4px;overflow:hidden;background:var(--hover);color:var(--accent);accent-color:var(--accent)}
+progress::-webkit-progress-bar{background:var(--hover);border-radius:inherit}
+progress::-webkit-progress-value{background:var(--accent);border-radius:inherit}
+progress::-moz-progress-bar{background:var(--accent);border-radius:inherit}
+
+/* Keep the closed select face inside the webview palette too: GTK can paint
+   a gray native gradient over its CSS background even with color-scheme set. */
+select:not([multiple]):not([size]){appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:right 12px center,right 7px center;background-size:5px 5px;background-repeat:no-repeat}
+
+/* Highlighted controls and feedback follow the selected accent as well. */
 :root{--on-accent:#13170f}
-button.primary,.primary{color:var(--on-accent)}
 :root[data-theme=light]{--on-accent:#ffffff}
-button.primary:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 85%,var(--text));border-color:var(--accent);color:var(--on-accent)}
-button:hover:not(:disabled){border-color:color-mix(in srgb,var(--border),var(--text) 35%)}
-.tab.active,.chart-header .selected,.drawing-tool.selected,.tab-chart-controls .timeframe-buttons button[aria-pressed=true],.screener-subtabs button[aria-selected=true]{background:color-mix(in srgb,var(--accent) 8%,transparent)}
-.drawing-tool.selected,.chart-header .timeframe-buttons button[aria-pressed=true],.tab-chart-controls .timeframe-buttons button[aria-pressed=true],.screener-subtabs button[aria-selected=true]{border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
-.chart-cell.focused{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent)}
-.chart-placeholder{background:color-mix(in srgb,var(--panel) 45%,transparent);border-color:var(--border)}
-.splitter:hover{background:color-mix(in srgb,var(--accent) 27%,transparent)}
-.save-indicator.saved .status-dot{background:var(--up)}
-.status-dot.live{box-shadow:0 0 8px color-mix(in srgb,var(--up) 20%,transparent)}
-.drag-handle{color:var(--muted)}
-.product-list .product-market.perpetual{border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 .analysis-and-badge{border-color:color-mix(in srgb,var(--accent) 27%,transparent);background:color-mix(in srgb,var(--accent) 4%,transparent)}
 .analysis-results td>button{border-color:color-mix(in srgb,var(--accent) 19%,transparent);background:color-mix(in srgb,var(--accent) 3%,transparent)}
-.notice{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
-.inline-error,.notice.error{border-color:color-mix(in srgb,var(--danger) 50%,var(--border));background:color-mix(in srgb,var(--danger) 10%,var(--panel));color:var(--danger)}
-.danger-solid{background:color-mix(in srgb,var(--danger) 30%,var(--panel));border-color:var(--danger);color:var(--text)}
-.startup{background:radial-gradient(ellipse at 50% 30%,var(--elevated) 0,transparent 65%)}
 input{accent-color:var(--accent)}
 ::selection{background:color-mix(in srgb,var(--accent) 30%,var(--panel));color:var(--text)}

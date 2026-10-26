@@ -34,6 +34,46 @@ func writeDesktopSmokeReport(report string) error {
 	return os.WriteFile(destination, []byte(report), 0600)
 }
 func (a *App) DesktopSmokeClose() { runtime.Quit(a.ctx) }
+
+// Use trusted X11 mouse input so this check would also expose a native GTK popup
+// accidentally opened by the original select's default pointer behavior.
+func (a *App) DesktopSmokeThemePointer(x, y int) error {
+	phase := os.Getenv("CRYPTODESK_SMOKE_PHASE")
+	if (phase != "themes" && phase != "themes-restore") || x < 0 || y < 0 || x > 4096 || y > 4096 {
+		return errors.New("invalid theme smoke pointer")
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "python3", "-c", desktopThemePointer, fmt.Sprintf("CryptoDesk Themes Smoke %d", os.Getpid()), strconv.Itoa(x), strconv.Itoa(y))
+	if output, err := command.CombinedOutput(); err != nil {
+		return fmt.Errorf("native theme pointer: %w: %s", err, output)
+	}
+	return nil
+}
+
+const desktopThemePointer = `import ctypes,ctypes.util,os,re,subprocess,sys
+title,x,y=sys.argv[1],int(sys.argv[2]),int(sys.argv[3])
+info=subprocess.check_output(['xwininfo','-name',title],env={**os.environ,'LC_ALL':'C'},text=True)
+number=lambda label:int(re.search(label+r':\s*(-?\d+)',info).group(1))
+assert 0<=x<number('Width') and 0<=y<number('Height'),'pointer outside isolated window'
+window=int(re.search(r'Window id: (0x[0-9a-fA-F]+)',info).group(1),16)
+x11=ctypes.CDLL(ctypes.util.find_library('X11'));xtst=ctypes.CDLL(ctypes.util.find_library('Xtst'))
+x11.XOpenDisplay.argtypes=[ctypes.c_char_p];x11.XOpenDisplay.restype=ctypes.c_void_p
+x11.XRaiseWindow.argtypes=[ctypes.c_void_p,ctypes.c_ulong]
+x11.XSync.argtypes=[ctypes.c_void_p,ctypes.c_int]
+x11.XFlush.argtypes=[ctypes.c_void_p];x11.XCloseDisplay.argtypes=[ctypes.c_void_p]
+xtst.XTestFakeMotionEvent.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_ulong]
+xtst.XTestFakeButtonEvent.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_int,ctypes.c_ulong]
+display=x11.XOpenDisplay(None);assert display,'cannot open X11 display'
+try:
+ x11.XRaiseWindow(display,window)
+ assert xtst.XTestFakeMotionEvent(display,-1,number('Absolute upper-left X')+x,number('Absolute upper-left Y')+y,0),'native mouse motion failed'
+ assert xtst.XTestFakeButtonEvent(display,1,1,0),'native mouse press failed'
+ assert xtst.XTestFakeButtonEvent(display,1,0,0),'native mouse release failed'
+ x11.XSync(display,0)
+finally:x11.XCloseDisplay(display)
+`
+
 func (a *App) DesktopSmokeThemeScreenshot(label string) (string, error) {
 	if label != "dark" && label != "light" && label != "matrix" && label != "cyberpunk" && label != "red-sands" && label != "enrichment" && label != "restore" {
 		return "", errors.New("invalid theme screenshot label")
@@ -283,6 +323,8 @@ const desktopSmokeJavaScript = `async function(phase) {
   report.initialCounts={tabs:initial.workspace.tabs.length,charts:initial.workspace.tabs.map(tab=>tab.charts.length)};
   report.initialMetrics=await api.DesktopSmokeMetrics();
   if(phase==='themes'||phase==='themes-restore'){
+   let trustedPointers=0;report.pointerEvents=[];const trusted=event=>{if(event.isTrusted)trustedPointers++;report.pointerEvents.push({trusted:event.isTrusted,x:event.clientX,y:event.clientY,target:event.target.outerHTML?.slice(0,200)});};document.addEventListener('pointerdown',trusted,true);
+   const pointer=async element=>{const rect=element.getBoundingClientRect();await api.DesktopSmokeThemePointer(Math.round(rect.left+rect.width/2),Math.round(rect.top+rect.height/2));};
    const key=(element,value)=>element.dispatchEvent(new KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true}));
    const rgb=value=>{const probe=document.createElement('span');probe.style.color=value;document.body.appendChild(probe);const result=getComputedStyle(probe).color;probe.remove();return result;};
    const theme=()=>document.documentElement.dataset.theme;
@@ -290,11 +332,10 @@ const desktopSmokeJavaScript = `async function(phase) {
    const opened=()=>q('.themed-select-menu[role="listbox"]');
    const optionLabel=option=>option?.querySelector('span')?.textContent.trim()||option?.textContent.trim();
    const open=async selector=>{
-    const element=await wait(()=>q(selector),selector);element.focus();const rect=element.getBoundingClientRect();
-    element.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',button:0,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2}));
+    const element=await wait(()=>q(selector),selector);element.focus();await pointer(element);
     return wait(opened,'app-rendered opened select menu');
    };
-   const choose=async(selector,label)=>{const menu=await open(selector),option=Array.from(menu.querySelectorAll('[role="option"]')).find(item=>optionLabel(item)===label);check(!!option,'opened dropdown contains '+label);option.click();await wait(()=>!opened(),'menu closes after '+label+' selection');await sleep(100);};
+   const choose=async(selector,label)=>{const menu=await open(selector),option=Array.from(menu.querySelectorAll('[role="option"]')).find(item=>optionLabel(item)===label);check(!!option,'opened dropdown contains '+label);await pointer(option);await wait(()=>!opened(),'menu closes after '+label+' selection');await sleep(100);};
    const verifyMenu=async(label)=>{
     const menu=await open('[aria-label="Theme"]'),style=getComputedStyle(menu),options=Array.from(menu.querySelectorAll('[role="option"]')),selected=options.find(option=>option.getAttribute('aria-selected')==='true');
     const details={theme:theme(),menuBackground:style.backgroundColor,menuColor:style.color,panel:rootColor('--panel'),elevated:rootColor('--elevated'),text:rootColor('--text'),selected:optionLabel(selected),options:options.map(option=>({label:optionLabel(option),background:getComputedStyle(option).backgroundColor,color:getComputedStyle(option).color})),bounds:bounds(menu)};
@@ -337,6 +378,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    key(menu,'Escape');await wait(()=>!opened(),'Escape dismisses grouped Enrichment dropdown');
    await wait(async()=>window.__cryptodeskDiagnostics?.().chartInstances===0&&(await api.GetDiagnostics()).market.activeLeases===0,'Screener releases all chart renderers and leases');
    check(report.initialCounts.tabs===1&&report.initialCounts.charts.join(',')==='1','theme verification preserves first-launch one-tab one-chart workspace',report.initialCounts);
+   report.trustedPointers=trustedPointers;check(trustedPointers>=2,'opened menus were exercised with trusted native mouse input',trustedPointers);document.removeEventListener('pointerdown',trusted,true);
   }else if(phase==='analysis-refresh'||phase==='analysis-refresh-restore'){
    await click('[role="tab"][aria-controls="screener-panel"]');
    if(phase==='analysis-refresh'){

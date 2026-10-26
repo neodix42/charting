@@ -109,8 +109,10 @@ export function ThemedSelectMenus(){
    const next={...state,items,active,selected:select.selectedIndex};current.current=next;setMenu(next);
   });
   optionsChanged.observe(select,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['disabled','hidden','label','value']});
-  const resize=new ResizeObserver(position);resize.observe(select);resize.observe(element);window.addEventListener('resize',position);document.addEventListener('scroll',scroll,true);position();
-  return()=>{mutation.disconnect();optionsChanged.disconnect();resize.disconnect();window.removeEventListener('resize',position);document.removeEventListener('scroll',scroll,true);};
+  let frame:number|undefined;
+  const schedulePosition=()=>{if(frame===undefined)frame=requestAnimationFrame(()=>{frame=undefined;position();});};
+  const resize=new ResizeObserver(schedulePosition);resize.observe(select);resize.observe(element);window.addEventListener('resize',schedulePosition);document.addEventListener('scroll',scroll,true);position();
+  return()=>{mutation.disconnect();optionsChanged.disconnect();resize.disconnect();if(frame!==undefined)cancelAnimationFrame(frame);window.removeEventListener('resize',schedulePosition);document.removeEventListener('scroll',scroll,true);};
  },[menu?.select]);
  useLayoutEffect(()=>{
   if(!menu)return;menu.select.setAttribute('aria-activedescendant',`${menuID}-option-${menu.items[menu.active].index}`);

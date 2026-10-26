@@ -7,7 +7,7 @@ if [[ -z "${DISPLAY:-}" ]]; then
   echo 'Theme desktop smoke blocked: DISPLAY is absent (native X11 capture required).' >&2
   exit 2
 fi
-for command in xwd ffmpeg; do
+for command in xwd xwininfo ffmpeg python3; do
   if ! command -v "$command" >/dev/null; then
     echo "Theme desktop smoke blocked: $command is required for native window screenshots." >&2
     exit 2
