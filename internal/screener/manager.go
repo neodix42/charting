@@ -56,7 +56,8 @@ type Info struct {
 
 // Manager runs one selected batch at a time through a bounded symbol worker
 // pool while preserving its jobs in selection order. Each child has a process
-// group/tree, bounded logs and a private temporary directory, including WAF data.
+// group/tree, bounded logs and a private temporary directory. The supported WAF
+// session cache is shared by the batch and retained in the local profile.
 // Preferences belong to the local profile, never imported workspaces.
 type Manager struct {
 	mu                      sync.Mutex
@@ -366,6 +367,19 @@ func (m *Manager) Close() {
 func (m *Manager) run(ctx context.Context, directory string, done chan struct{}, workers int) {
 	defer m.wg.Done()
 	defer func() { m.mu.Lock(); m.active, m.cancel = false, nil; close(done); m.mu.Unlock() }()
+	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	if err != nil {
+		m.mu.Lock()
+		for i := range m.jobs {
+			if m.jobs[i].Status == "queued" {
+				m.jobs[i].Status, m.jobs[i].Message = "failed", "Prepare Dukascopy session: "+cleanMessage(err.Error())
+			}
+		}
+		m.saveDownloadsLocked()
+		m.mu.Unlock()
+		return
+	}
+	defer cleanup()
 	// The batch's aggregate upstream request budget stays at twenty, including
 	// the library's per-symbol fetching parallelism. A single symbol retains its
 	// existing four-file bound; twenty symbols fetch one source file each.
@@ -424,6 +438,7 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 }
 
 type workerEvent struct {
+	providerEvent
 	Type           string              `json:"type"`
 	Progress       float64             `json:"progress"`
 	Message        string              `json:"message"`
@@ -464,17 +479,18 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	// JSON tags in this internal protocol are lowercase; no shell ever interprets
 	// symbols, dates, executable paths or destination directories.
 	input, _ := json.Marshal(struct {
-		Symbol          string `json:"symbol"`
-		Timeframe       string `json:"timeframe"`
-		From            string `json:"from"`
-		To              string `json:"to"`
-		Output          string `json:"output"`
-		SourceBatchSize int    `json:"sourceBatchSize"`
-		Resume          bool   `json:"resume"`
-		OwnerPipe       bool   `json:"ownerPipe"`
-		PlanFile        string `json:"planFile,omitempty"`
-		AsOf            int64  `json:"asOf"`
-	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), plan.AsOf})
+		Symbol          string           `json:"symbol"`
+		Timeframe       string           `json:"timeframe"`
+		From            string           `json:"from"`
+		To              string           `json:"to"`
+		Output          string           `json:"output"`
+		SourceBatchSize int              `json:"sourceBatchSize"`
+		Resume          bool             `json:"resume"`
+		OwnerPipe       bool             `json:"ownerPipe"`
+		PlanFile        string           `json:"planFile,omitempty"`
+		AsOf            int64            `json:"asOf"`
+		ProviderSession *providerSession `json:"providerSession,omitempty"`
+	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), plan.AsOf, sessionFromContext(ctx)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
 	owner, err := cmd.StdinPipe()
@@ -503,6 +519,14 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	var done bool
 	var result workerEvent
 	var finalMessage, workerError string
+	replies := newProviderReplies(ctx, owner, func(message string) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.jobs[index].Status == "running" {
+			m.jobs[index].Message = message
+		}
+	})
+	defer replies.close()
 	for scanner.Scan() {
 		var event workerEvent
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
@@ -511,6 +535,11 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 			break
 		}
 		switch event.Type {
+		case "provider-request":
+			if err := replies.handle(event.providerEvent); err != nil {
+				workerError = err.Error()
+				_ = cmd.Cancel()
+			}
 		case "progress":
 			if math.IsNaN(event.Progress) || math.IsInf(event.Progress, 0) || event.Progress < 0 || event.Progress > 100 {
 				continue

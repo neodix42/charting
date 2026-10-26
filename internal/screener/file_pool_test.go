@@ -69,8 +69,13 @@ if(config.Operation==='enrichment'){
 }else{
   const api=require(config.Module);
   api.BufferFetcher.prototype.fetchBuffer=async function(url){
-    await gate();
-    if(%t&&source===config.Fail)throw Error('Independent test upstream failure');
+    // Let the first shared-session probe finish, then hold subsequent source
+    // fetches to prove all twenty production workers progress concurrently.
+    let initial=false;
+    try{await fsp.writeFile(path.join(config.Gates,'session-ready'),'',{flag:'wx'});initial=true;}
+    catch(error){if(error.code!=='EEXIST')throw error;}
+    if(!initial)await gate();
+    if(!initial&&%t&&source===config.Fail)throw Error('Independent test upstream failure');
     const parsed=new URL(url),last=Number(parsed.pathname.split('/').at(-1));
     const year=Number.isFinite(last)?last:new Date(Number(parsed.searchParams.get('from'))).getUTCFullYear();
     return Buffer.from(JSON.stringify({timestamp:Date.UTC(year,0,1),shift:86400000,multiplier:1,open:10,high:11,low:9,close:10,

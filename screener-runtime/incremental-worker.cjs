@@ -146,7 +146,7 @@ async function extendDownload(request,options={}){
     emit({type:'progress',progress:2+index/Math.max(1,snapshot.ranges.length)*68,message:`Downloading missing range ${index+1}/${snapshot.ranges.length}: ${new Date(range.from).toISOString()} → ${new Date(range.to).toISOString()}`});
     let rows=0;
     try{
-      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(range.from).toISOString(),to:new Date(range.to).toISOString(),output,resume:true,sourceBatchSize:request.sourceBatchSize??1,asOf:plan.asOf},
+      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(range.from).toISOString(),to:new Date(range.to).toISOString(),output,resume:true,sourceBatchSize:request.sourceBatchSize??1,asOf:plan.asOf,providerSession:request.providerSession},
         {...options,emit:event=>{if(event.type==='done')rows=event.rows;if(event.type==='progress')emit({...event,progress:2+(index+event.progress/100)/snapshot.ranges.length*68});}});
     }catch(error){if(!/Dukascopy returned no rows|No available history in the requested UTC date range/.test(error.message))throw error;}
     if(rows>0)downloaded.push(output);

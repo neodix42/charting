@@ -254,6 +254,54 @@ const localApi={...api,BufferFetcher:class extends api.BufferFetcher{
             "networkRequired": False}
 
 
+def provider_smoke(runtime, node, directory):
+    """Exercise the packaged shared-session gate with the pinned HTTP decoder."""
+    script = r"""
+const fs=require('node:fs/promises'),path=require('node:path');
+const input=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
+const api=require(path.join(input.runtime,'node_modules','dukascopy-node'));
+const {createProviderFetcher}=require(path.join(input.runtime,'provider-session.cjs'));
+const {installProviderTransport}=require(path.join(input.runtime,'provider-transport.cjs'));
+const {EventEmitter}=require('node:events');
+(async()=>{
+  const directory=path.join(input.directory,'provider-batch'),tokenCache=path.join(input.directory,'provider-session.json');
+  await fs.mkdir(directory);
+  const session=JSON.stringify({version:2,origin:'https://jetta.dukascopy.com',token:'offline-fixture',userAgent:'CryptoDesk offline fixture'});
+  await fs.writeFile(tokenCache,session,{mode:0o600});
+  let requests=0,denied=false;
+  global.fetch=async(url,options)=>{
+    requests++;
+    if(options.headers.cookie!=='aws-waf-token=offline-fixture')throw Error('Packaged workers did not share the supported session');
+    if(denied)return new Response('Forbidden',{status:403});
+    return new Response(JSON.stringify({timestamp:1704067200000,shift:86400000,multiplier:1,open:10,high:11,low:9,close:10,
+      times:[0],opens:[0],highs:[0],lows:[0],closes:[0],volumes:[1]}),{headers:{'content-type':'application/json'}});
+  };
+  const lines=new EventEmitter();let permits=0;
+  const transport=installProviderTransport(lines,{ownerPipe:true,providerSession:{rateLimit:true}},event=>{
+    if(event.operation==='permit')permits++;
+    queueMicrotask(()=>lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId})));
+  });
+  const config={retryCount:0,failAfterRetryCount:true,wafMode:'auto',wafTokenCache:true};
+  const url='https://jetta.dukascopy.com/v1/candles/day/EUR-USD/BID/2024';
+  const make=state=>Array.from({length:20},()=>createProviderFetcher(api,config,state));
+  const values=await Promise.all(make({directory,tokenCache}).map(worker=>worker.fetch([url])));
+  if(requests!==20||values.some(value=>value.length!==1))throw Error('Packaged shared-session downloads failed');
+  denied=true;requests=0;
+  const deniedDirectory=path.join(input.directory,'denied-batch');await fs.mkdir(deniedDirectory);
+  const failures=await Promise.allSettled(make({directory:deniedDirectory,tokenCache}).map(worker=>worker.fetch([url])));
+  if(requests!==1||failures.some(result=>result.status!=='rejected'||!result.reason.message.includes('Dukascopy refused access (HTTP 403)')))throw Error('Packaged access-denial gate failed');
+  if(await fs.readFile(tokenCache,'utf8')!==session)throw Error('Batch guard discarded the supported session cache');
+  await transport.drain();transport.close();
+  if(permits!==21)throw Error('Packaged transport did not ask the parent for each request');
+  process.stdout.write(JSON.stringify({passed:true,workers:20,sharedSession:true,ownerPacingPermits:permits,deniedBatchRequests:requests,networkRequired:false})+'\n');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    result = subprocess.run([str(node), "-e", script],
+                            input=json.dumps({"runtime": str(runtime), "directory": str(directory)}) + "\n",
+                            text=True, capture_output=True, cwd=directory, timeout=20, check=True)
+    return json.loads(result.stdout)
+
+
 def smoke(runtime):
     runtime = runtime.resolve()
     node = runtime / ("node.exe" if os.name == "nt" else "node")
@@ -283,10 +331,11 @@ def smoke(runtime):
         if source.read_bytes() != original.encode():
             raise ValueError("Packaged Refresh changed the original raw CSV")
         incremental = incremental_smoke(runtime, node, directory, output)
+        provider = provider_smoke(runtime, node, directory)
         return {"passed": True, "runtime": str(runtime), "columns": ["sma_3"], "rows": 4,
                 "warmupBlank": True, "exactValues": True, "originalFieldsPreserved": True,
                 "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar,
-                "incremental": incremental}
+                "incremental": incremental, "providerSession": provider}
 
 
 def main():

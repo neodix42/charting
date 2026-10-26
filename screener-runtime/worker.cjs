@@ -51,7 +51,9 @@ async function download(request, options = {}) {
     pauseBetweenBatchesMs: 1000,
     requestIntervalMs: 250,
     rateLimitRetryCount: 2,
-    retryCount: 1,
+    // A forbidden request is terminal, not a reason to repeat the same request.
+    // The library retains its separate, bounded HTTP 429 backoff policy.
+    retryCount: 0,
     retryOnEmpty: false,
     failAfterRetryCount: true,
     pauseBetweenRetriesMs: 1000,
@@ -101,11 +103,11 @@ async function download(request, options = {}) {
   if (!urls.length) throw new Error('No available history in the requested UTC date range.');
   if (checkpoint && (checkpoint.totalSources !== urls.length || checkpoint.nextIndex > urls.length)) throw new Error('Saved checkpoint source plan changed.');
   const completed = new Set(urls.slice(0, checkpoint?.nextIndex ?? 0));
-  const fetcher = new api.BufferFetcher({ ...input, onItemFetch(url) {
+  const fetcher = require('./provider-session.cjs').createProviderFetcher(api, { ...input, onItemFetch(url) {
     completed.add(url);
     emit({ type: 'progress', progress: Math.min(95, completed.size / urls.length * 95),
       message: `Fetched ${completed.size} of ${urls.length} source files` });
-  } });
+  } }, request.providerSession);
   let handle;
   let rows = checkpoint?.rows ?? 0;
   let previous = checkpoint?.lastTimestamp ?? -Infinity;
@@ -187,7 +189,11 @@ async function main(downloadFn = download) {
     if(input.length>16384)throw new Error('Worker request exceeds the input limit.');
     const request=JSON.parse(input);ownerRequired=request.ownerPipe===true;
     if(ownerRequired&&ended)throw new Error('Downloader owner disconnected.');
-    await downloadFn(request);
+    const transport = require('./provider-transport.cjs').installProviderTransport(lines, request);
+    try {
+      try { await downloadFn(request); await transport.drain?.(); }
+      catch (error) { throw await transport.failure(error); }
+    } finally { transport.close(); }
   }
   finally { finished=true;lines.close();process.stdin.destroy(); }
 }

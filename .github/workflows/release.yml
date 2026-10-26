@@ -86,7 +86,7 @@ jobs:
       - name: Build Ubuntu x64 standard archive
         if: matrix.target == 'linux-amd64'
         run: ./build.sh
-      - name: Verify packaged indicators, Refresh and incremental downloads offline
+      - name: Verify packaged indicators, downloads and provider pacing offline
         if: matrix.target == 'linux-amd64'
         run: python3 scripts/smoke-enrichment-runtime.py "release/cryptodesk-$CRYPTODESK_VERSION-linux-amd64/screener-runtime" --report "$RUNNER_TEMP/release-checks/enrichment-runtime.json"
       - name: Preserve packaged runtime diagnostics on success or failure

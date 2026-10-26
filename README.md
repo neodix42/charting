@@ -12,7 +12,7 @@
 
 - **A workspace that remembers your layout.** Up to 20 chart tabs and 9 charts per tab, with independent instruments, periods, indicators and drawings.
 - **Public market data without an account.** Binance and Bybit spot/perpetual markets, plus Coinbase spot. No API keys required.
-- **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download up to 20 symbols simultaneously.
+- **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and process up to 20 symbols with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
 - **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, and inspect each match on a chart.
 - **Local files and persistence.** SQLite workspace saving, export/import, resumable downloads, remembered Screener choices and named condition sets.
@@ -84,6 +84,10 @@ Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from 
 2. Select the instruments you want—for example, **BTCUSD** and **ETHUSD**.
 3. Choose one common timeframe and UTC date range. **From** is inclusive; **To** is exclusive. Available history depends on the instrument.
 4. Set **Parallel downloads** from **1 to 20** (default **20**) and press **Download**. Additional symbols wait in the queue; progress, completed paths and provider errors appear per symbol.
+
+Downloader and **Refresh data and indicators** share one request queue: data requests start at least **two seconds apart across all workers**, including browser verification. This is CryptoDesk's conservative default, not a published Dukascopy quota. Increasing parallelism keeps more files in progress without multiplying the request rate. HTTP **429** pauses every worker using `Retry-After` or exponential backoff. Wait reasons appear in each job's status, and cooldowns survive app restart.
+
+An HTTP **403** is an access refusal, and does not establish that a rate limit was exceeded. CryptoDesk stops requests and records a **15-minute access-denial cooldown**, extended if the provider asks for longer. The error shows when to retry manually; restarting or clicking Resume during the cooldown sends no new request. Existing CSVs and committed checkpoints are retained. If access is still refused after the cooldown, use [Dukascopy support](https://www.dukascopy.bank/contact/); reducing the rate cannot guarantee that a WAF refusal will clear. The upstream library also treats [rate limits separately from browser verification](https://github.com/Leo4815162342/dukascopy-node/blob/master/src/buffer-fetcher/rate-limit.ts).
 
 **Select all downloaded assets** replaces the selection with symbols that already have CSV files in the current Screener folder, across all date ranges and timeframes. Search and collapsed categories do not limit it. Files from earlier sessions count; removed files and unfinished downloads do not.
 

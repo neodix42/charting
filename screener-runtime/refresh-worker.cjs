@@ -176,7 +176,7 @@ async function refresh(request,options={}) {
     try{
       // Go runs up to twenty file workers. Each worker fetches one source at a
       // time so their combined upstream concurrency never exceeds twenty.
-      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1},
+      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1,providerSession:request.providerSession},
         {api:options.api,pauseMs:options.pauseMs,emit:event=>{if(event.type==='progress')report({...event,progress:2+event.progress*0.58});}});
       hasDownloaded=true;
     }catch(error){

@@ -168,6 +168,16 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) 
 		m.refreshActive, m.refreshCancel = false, nil
 		close(m.refreshDone)
 	}()
+	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	if err != nil {
+		m.mu.Lock()
+		for i := range m.refreshJobs {
+			m.refreshJobs[i].Status, m.refreshJobs[i].Message = "failed", "Prepare Dukascopy session: "+cleanMessage(err.Error())
+		}
+		m.mu.Unlock()
+		return
+	}
+	defer cleanup()
 	legacy := legacyRecipes(ctx, directory)
 	m.mu.Lock()
 	count := len(m.refreshJobs)
@@ -198,6 +208,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) 
 }
 
 type refreshEvent struct {
+	providerEvent
 	Type           string              `json:"type"`
 	Progress       float64             `json:"progress"`
 	Rows           int64               `json:"rows"`
@@ -244,17 +255,18 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 		return err
 	}
 	input, _ := json.Marshal(struct {
-		Input            string `json:"input"`
-		Output           string `json:"output"`
-		Symbol           string `json:"symbol"`
-		Timeframe        string `json:"timeframe"`
-		From             string `json:"from"`
-		RecipeFile       string `json:"recipeFile"`
-		CoverageVerified bool   `json:"coverageVerified"`
-		CoverageDigest   string `json:"coverageDigest"`
-		OwnerPipe        bool   `json:"ownerPipe"`
-		AsOf             int64  `json:"asOf"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf})
+		Input            string           `json:"input"`
+		Output           string           `json:"output"`
+		Symbol           string           `json:"symbol"`
+		Timeframe        string           `json:"timeframe"`
+		From             string           `json:"from"`
+		RecipeFile       string           `json:"recipeFile"`
+		CoverageVerified bool             `json:"coverageVerified"`
+		CoverageDigest   string           `json:"coverageDigest"`
+		OwnerPipe        bool             `json:"ownerPipe"`
+		AsOf             int64            `json:"asOf"`
+		ProviderSession  *providerSession `json:"providerSession,omitempty"`
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, ProviderSession: sessionFromContext(ctx)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work
@@ -280,6 +292,14 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 	var result refreshEvent
 	var done bool
 	var workerError string
+	replies := newProviderReplies(ctx, owner, func(message string) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.refreshJobs[index].Status == "running" {
+			m.refreshJobs[index].Message = message
+		}
+	})
+	defer replies.close()
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	for scanner.Scan() {
@@ -290,6 +310,11 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 			break
 		}
 		switch event.Type {
+		case "provider-request":
+			if err := replies.handle(event.providerEvent); err != nil {
+				workerError = err.Error()
+				_ = cmd.Cancel()
+			}
 		case "progress":
 			m.mu.Lock()
 			if !math.IsNaN(event.Progress) && !math.IsInf(event.Progress, 0) {
