@@ -208,3 +208,16 @@ test('fast consecutive batches refresh headers when their completed file counts 
   await expect(page.getByRole('button',{name:'Enrich 1 file',exact:true})).toBeEnabled();
  }
 });
+
+test('parallel enrichment reports aggregate progress for files beyond the visible page',async({page})=>{
+ await open(page,25);await page.getByRole('button',{name:'Enrich 25 files',exact:true}).click();
+ await page.evaluate(()=>{
+  const info=(window as any).__testEnrichment() as ScreenerEnrichmentInfo;
+  (window as any).__testSetEnrichment({...info,progress:40,currentFile:info.jobs[19].name,currentProgress:50,jobs:info.jobs.map((job,index)=>({...job,status:index<20?'running':'queued',progress:index<20?50:0}))});
+ });
+ await expect(page.getByRole('progressbar',{name:'Overall enrichment progress',exact:true})).toHaveAttribute('value','40');
+ await expect(panel(page).locator('tbody tr progress')).toHaveCount(20);
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(5);
+ await expect(page.getByRole('progressbar',{name:'Overall enrichment progress',exact:true})).toHaveAttribute('value','40');
+ await expect(page.getByRole('spinbutton',{name:/parallel|threads|workers/i})).toHaveCount(0);
+});

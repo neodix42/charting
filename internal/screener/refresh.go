@@ -37,6 +37,7 @@ type RefreshInfo struct {
 	Completed        int          `json:"completed"`
 	Failed           int          `json:"failed"`
 	Cancelled        int          `json:"cancelled"`
+	Progress         float64      `json:"progress"`
 	CurrentFile      string       `json:"currentFile"`
 	CurrentProgress  float64      `json:"currentProgress"`
 	Jobs             []RefreshJob `json:"jobs"`
@@ -60,20 +61,28 @@ func (m *Manager) refreshInfoLocked(fileIDs []string) RefreshInfo {
 		wanted[id] = true
 	}
 	for _, job := range m.refreshJobs {
+		progress := job.Progress
 		switch job.Status {
 		case "completed":
 			info.Completed++
+			progress = 100
 		case "failed":
 			info.Failed++
+			progress = 100
 		case "cancelled":
 			info.Cancelled++
+			progress = 100
 		case "running":
 			info.CurrentFile, info.CurrentProgress = job.Name, job.Progress
 		}
+		info.Progress += progress
 		if wanted[job.FileID] {
 			job.Columns = append([]string{}, job.Columns...)
 			info.Jobs = append(info.Jobs, job)
 		}
+	}
+	if info.Total > 0 {
+		info.Progress /= float64(info.Total)
 	}
 	return info
 }
@@ -155,12 +164,15 @@ func (m *Manager) runRefresh(ctx context.Context, directory string) {
 		close(m.refreshDone)
 	}()
 	legacy := legacyRecipes(ctx, directory)
-	for index := range m.refreshJobs {
+	m.mu.Lock()
+	count := len(m.refreshJobs)
+	m.mu.Unlock()
+	runFilePool(count, func(index int) {
 		m.mu.Lock()
 		if ctx.Err() != nil {
 			m.refreshJobs[index].Status, m.refreshJobs[index].Message = "cancelled", "Refresh cancelled; original file kept"
 			m.mu.Unlock()
-			continue
+			return
 		}
 		m.refreshJobs[index].Status, m.refreshJobs[index].Message = "running", "Checking saved data and indicator recipes"
 		job := m.refreshJobs[index]
@@ -177,7 +189,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string) {
 			}
 		}
 		m.mu.Unlock()
-	}
+	})
 }
 
 type refreshEvent struct {

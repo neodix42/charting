@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 				gates := os.Getenv("CRYPTODESK_SCREENER_TEST_GATES")
 				data, _ := json.Marshal(request)
 				_ = os.WriteFile(filepath.Join(gates, "started"), data, 0600)
+				_ = os.WriteFile(filepath.Join(gates, filepath.Base(request.Input)+".started"), data, 0600)
 				for {
 					if _, err := os.Stat(filepath.Join(gates, "release")); err == nil {
 						break

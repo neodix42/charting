@@ -293,7 +293,9 @@ test('Matching assets filters before ten-record pagination and match navigation 
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisChartRequests().at(-1))).toMatchObject({resultID:'result-19',occurrence:0});
  await page.keyboard.press('Escape');
  await control(page,'Result asset category').selectOption('Cryptocurrencies');await expect(nav).toContainText('Files 1–10 of 12');
- await page.getByRole('checkbox',{name:'Show files without matches',exact:true}).check();await expect(nav).toContainText('Files 1–10 of 13');
+ await expect(page.getByRole('checkbox',{name:'Show files without matches',exact:true})).toHaveCount(0);
+ await expect(section.getByRole('button',{name:`Inspect ${file(0).name} matches`,exact:true})).toHaveCount(0);
+ await expect(nav).toContainText('Files 1–10 of 12');
  await control(page,'Result asset category').selectOption('Forex');await expect(nav).toHaveCount(0);
  await expect(section.getByText('No matching files in this asset category.',{exact:true})).toBeVisible();
 });

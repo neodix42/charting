@@ -40,7 +40,7 @@ First launch opens **one tab with one chart**. New tabs also start with one char
 - **Independent charts:** choose exchange, spot/perpetual instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets.
 - **Indicators and drawings:** SMA, EMA, Ichimoku Cloud and MACD, with editable parameters, colors and multiple instances. Adjust moving-average widths and resize MACD panes. Add arrows, horizontal levels and trend lines; select, move or remove drawings.
 - **Flexible layouts:** drag tabs/charts, resize grid tracks, maximize a chart, rename tabs and duplicate layouts. Shared period and indicator controls apply to the current tab's charts.
-- **Display controls:** light/dark themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Font size** scales interface text and chart labels from **10–24 px** (default **13**).
+- **Display controls:** light/dark themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Font size** scales interface text and chart labels from **10–24 px** (default **15**).
 - **Automatic saving:** SQLite persistence, JSON workspace export/import and recovery snapshots. Optional local candle storage reuses genuine downloaded chart history across restarts.
 - **Efficient live feeds:** only the active chart tab renders and subscribes. Opening Screener saves chart views and releases live chart subscriptions; returning restores the selected tab. Connection and provisional-data states remain visible.
 
@@ -90,7 +90,7 @@ Use **Settings → Screener → Screener download folder** to change the destina
 3. Press **Enrich** to calculate it for **all CSV files in the folder**, including files on other list pages. Overall and per-file progress show completion or errors.
 4. Repeat for the indicators you want to compare in Analysis.
 
-The file list uses **20 rows per page**. Enrich and Refresh still process all applicable files, across every page.
+The file list uses **20 rows per page**. Enrich and Refresh process all applicable files across every page, using a fixed pool of up to **20 parallel file workers**. Overall progress includes every active file; each file also shows its own progress. Each action runs as a batch, with refresh downloading and recalculating indicators in the same file worker.
 
 The bundled [trading-signals](https://github.com/bennycode/trading-signals) integration provides **40 technical indicators** across moving averages, momentum, trend, volatility and volume. Examples include SMA/EMA, RSI, MACD, Ichimoku/Tenkan/Kijun, ATR, Bollinger bands, Donchian channels, stochastic oscillators, ADX, OBV and VWAP.
 
@@ -156,7 +156,9 @@ Click a saved name to load its rows into the editor. You can adjust the working 
 
 #### Apply, inspect and navigate matches
 
-**Apply conditions** checks **every closed historical bar in downloaded files from the selected categories**. The results list groups occurrences by asset/file and timeframe, showing the asset's full catalog description, match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Enable **Show files without matches** to include zero-match datasets.
+**Apply conditions** checks **every closed historical bar in downloaded files from the selected categories**. The results list groups occurrences by asset/file and timeframe, showing the asset's full catalog description, match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Completed files without matches are hidden; per-file failures remain visible.
+
+Repeated downloads containing identical bars and indicator fields for the same asset/timeframe produce **one result and one set of occurrences**. Original CSV files are retained. Different histories, indicators or timeframes remain separate.
 
 Matching assets uses **10 file records per page**. The **Asset category** filter narrows displayed results before pagination; it does not change or rerun the scan. For example, an ARKIUSUSD group displays **ARK Artificial Intelligence & Robotics UCITS ETF** beside its symbol.
 

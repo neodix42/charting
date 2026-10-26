@@ -98,15 +98,15 @@ test('all Analysis operators describe closed-bar semantics on hover and keyboard
  for(const [value,example] of descriptions){
   await operator.selectOption(value);await page.mouse.move(0,0);await operator.hover();
   await expect(tooltip).toBeVisible();await expect(tooltip).toContainText(example);
-  await expect(operator).toHaveAttribute('title',new RegExp(example.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  await expect(operator.locator(`option[value="${value}"]`)).toHaveAttribute('title',await operator.getAttribute('title')||'');
+  await expect(operator).not.toHaveAttribute('title');
+  await expect(operator.locator('option[title]')).toHaveCount(0);
   await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
  }
  await page.mouse.move(0,0);await page.getByRole('button',{name:'Help for Condition 1 operator',exact:true}).focus();await expect(tooltip).toContainText('previous 20-bar Low');
  await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
  await operator.selectOption('occurredWithin');const comparison=page.getByRole('combobox',{name:'Condition 1 comparison',exact:true});
  await comparison.selectOption('crossesAbove');await page.mouse.move(0,0);await comparison.hover();await expect(tooltip).toContainText('preceding and current closed bars');await expect(comparison.locator('option')).toHaveCount(6);
- await expect(comparison.locator('option[value="between"]')).toHaveAttribute('title',/including both boundaries/);
+ await expect(comparison).not.toHaveAttribute('title');await expect(comparison.locator('option[title]')).toHaveCount(0);
  await page.mouse.move(0,0);await page.getByRole('button',{name:'Help for Condition 1 comparison',exact:true}).focus();await expect(tooltip).toBeVisible();await expect(tooltip).toContainText('Tenkan crosses above Kijun');
  await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
 });

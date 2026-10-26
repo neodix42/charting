@@ -165,7 +165,9 @@ func gatedEnrichment(t *testing.T) (*Manager, string, string) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(filepath.Join(gates, "started")); err == nil {
+		_, first := os.Stat(filepath.Join(gates, "a.csv.started"))
+		_, second := os.Stat(filepath.Join(gates, "b.csv.started"))
+		if first == nil && second == nil {
 			return m, path, gates
 		}
 		time.Sleep(5 * time.Millisecond)

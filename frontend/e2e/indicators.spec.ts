@@ -33,7 +33,12 @@ test('all four indicators configure, render, edit, remove and persist independen
 test('indicator controls stay in the header row in a three by three grid',async({page})=>{
  await page.goto('/');await page.getByLabel('Grid layout').selectOption('3x3');for(let i=0;i<8;i++)await page.getByRole('button',{name:'Add chart',exact:true}).click();
  const chart=page.getByTestId('chart-cell').last();await chart.getByRole('button',{name:'Timeframe 1w',exact:true}).click();await chart.getByLabel('Indicators',{exact:true}).selectOption('macd');const dialog=page.getByRole('dialog',{name:'MACD parameters'});await dialog.getByRole('button',{name:'OK',exact:true}).click();await expect(chart.locator('.indicator-chip')).toHaveCount(1);
- const geometry=await chart.locator('.chart-header').evaluate(header=>{const group=header.querySelector('[role="group"]')!,select=header.querySelector('[aria-label="Indicators"]')!;return{header:header.getBoundingClientRect().height,group:group.getBoundingClientRect().top,select:select.getBoundingClientRect().top,scroll:header.scrollWidth>header.clientWidth};});expect(geometry.header).toBeLessThanOrEqual(40);expect(Math.abs(geometry.group-geometry.select)).toBeLessThan(2);expect(geometry.scroll).toBe(true);await expect.poll(()=>page.evaluate(()=>window.__cryptodeskDiagnostics?.())).toMatchObject({chartInstances:9,consumers:9,savedTabs:1,savedCharts:9});
+ const geometry=await chart.locator('.chart-header').evaluate(header=>{
+  const rect=header.getBoundingClientRect(),controls=[...header.querySelectorAll('button,select')].map(control=>control.getBoundingClientRect()).filter(control=>control.height>0),centers=controls.map(control=>control.top+control.height/2);
+  return{height:rect.height,maxControlHeight:Math.max(...controls.map(control=>control.height)),fontSize:parseFloat(getComputedStyle(document.documentElement).fontSize),centerSpread:Math.max(...centers)-Math.min(...centers),contained:controls.every(control=>control.top>=rect.top-1&&control.bottom<=rect.bottom+1),scroll:header.scrollWidth>header.clientWidth};
+ });
+ expect(geometry.centerSpread).toBeLessThan(2);expect(geometry.contained).toBe(true);expect(geometry.height).toBeLessThanOrEqual(geometry.maxControlHeight+2*geometry.fontSize);expect(geometry.scroll).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>window.__cryptodeskDiagnostics?.())).toMatchObject({chartInstances:9,consumers:9,savedTabs:1,savedCharts:9});
 });
 
 test('long indicator periods load earlier history in bounded pages without a new feed lease',async({page})=>{

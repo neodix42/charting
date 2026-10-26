@@ -3,9 +3,9 @@ import {DEFAULT_FONT_SIZE,chartFontSize} from '../workspace/appearance';
 import {firstWorkspace,reduceWorkspace} from '../workspace/model';
 
 describe('persistent global appearance size',()=>{
- it('retains the existing default and scales canvas text proportionally',()=>{
-  expect(firstWorkspace().fontSize).toBe(13);expect(DEFAULT_FONT_SIZE).toBe(13);
-  expect(chartFontSize(11)).toBe(11);expect(chartFontSize(10,26)).toBe(20);expect(chartFontSize(11,20)).toBe(17);
+ it('defaults new workspaces to 15px while keeping the original chart scaling baseline',()=>{
+  expect(firstWorkspace().fontSize).toBe(15);expect(DEFAULT_FONT_SIZE).toBe(15);
+  expect(chartFontSize(11)).toBe(13);expect(chartFontSize(10)).toBe(12);expect(chartFontSize(11,13)).toBe(11);expect(chartFontSize(10,26)).toBe(20);expect(chartFontSize(11,20)).toBe(17);
  });
  it('changes only appearance while preserving chart identities, history and hidden tabs',()=>{
   let workspace=firstWorkspace();workspace=reduceWorkspace(workspace,{type:'addTab'});workspace.tabs[0].charts[0].view={mode:'historical',fromSec:100,toSec:1000,barSpacing:7,rightOffset:0};

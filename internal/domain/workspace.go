@@ -112,7 +112,7 @@ func NewTab(name string) Tab {
 // NewWorkspace is used only when no workspace has ever been saved, or on explicit reset.
 func NewWorkspace() Workspace {
 	tab := NewTab("Tab 1")
-	fontSize := 13
+	fontSize := 15
 	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "dark", FontSize: &fontSize, DisplayTimezone: "UTC", ChartRightGap: &ChartRightGap{Unit: "bars", Value: 10}, ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
 }
 

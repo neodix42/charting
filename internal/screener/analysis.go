@@ -116,8 +116,11 @@ type analysisState struct {
 	results                                    []AnalysisResult
 	series                                     map[string]*analysisSeries
 	matchFiles                                 map[string]string
-	cache                                      *analysisRowCache
-	asOf                                       int64
+	// Duplicate files still count as indexed inputs and remain available as
+	// companion sources, but publish only one canonical set of occurrences.
+	duplicateOf map[string]string
+	cache       *analysisRowCache
+	asOf        int64
 }
 
 func defaultAnalysisRequest() AnalysisRequest {
@@ -363,6 +366,9 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 		if r.Status == "failed" {
 			info.Failed++
 		}
+		if a.duplicateOf[r.ID] != "" {
+			continue
+		}
 		info.TotalMatches += r.Matches
 		if r.Matches > 0 {
 			info.MatchedFiles++
@@ -530,6 +536,7 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 		m.mu.Unlock()
 	}
 	m.mu.Lock()
+	a.markDuplicateResults()
 	a.phase = "scanning"
 	m.mu.Unlock()
 	for i := range a.results {
@@ -538,7 +545,7 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 		}
 		m.mu.Lock()
 		r := a.results[i]
-		if r.Status == "failed" {
+		if r.Status == "failed" || a.duplicateOf[r.ID] != "" {
 			m.mu.Unlock()
 			continue
 		}
@@ -563,6 +570,39 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 		m.mu.Unlock()
 	}
 }
+
+// Called after indexing while holding the manager lock. Requested dates in a
+// filename can precede an asset's actual available history, so two downloads
+// may contain identical bars and indicators. Keep their files untouched and
+// deterministically publish the lexically first name once. All indexed series
+// remain available: an identical companion can have a later verified horizon.
+func (a *analysisState) markDuplicateResults() {
+	type identity struct {
+		symbol, timeframe string
+		contentHash       [32]byte
+	}
+	indices := make([]int, 0, len(a.results))
+	for i, r := range a.results {
+		if a.series[r.ID] != nil {
+			indices = append(indices, i)
+		}
+	}
+	sort.Slice(indices, func(i, j int) bool { return a.results[indices[i]].Name < a.results[indices[j]].Name })
+	a.duplicateOf = map[string]string{}
+	canonical := map[identity]string{}
+	for _, i := range indices {
+		r := &a.results[i]
+		s := a.series[r.ID]
+		key := identity{r.Symbol, r.Timeframe, s.contentHash}
+		if id := canonical[key]; id != "" {
+			a.duplicateOf[r.ID] = id
+			r.Status = "completed"
+		} else {
+			canonical[key] = r.ID
+		}
+	}
+}
+
 func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index int) error {
 	r := a.results[index]
 	s := a.series[r.ID]

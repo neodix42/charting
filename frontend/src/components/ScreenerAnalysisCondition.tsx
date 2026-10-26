@@ -1,7 +1,7 @@
 import {useEffect,useId,useState} from 'react';
 import type {AnalysisCatalog,AnalysisCondition,AnalysisOperand,AnalysisOperator} from '../workspace/screenerAnalysis';
 import {analysisFieldGroups,analysisFieldLabel,analysisOperators,fieldOperand,numberOperand} from '../workspace/screenerAnalysis';
-import {analysisOperatorDescription,analysisOperatorHelp} from '../workspace/screenerOperatorHelp';
+import {analysisOperatorHelp} from '../workspace/screenerOperatorHelp';
 import './ScreenerAnalysisCondition.css';
 
 function OperatorSelect({label,name,value,options=analysisOperators,onChange}:{label:string;name:string;value:string;options?:typeof analysisOperators;onChange(value:AnalysisOperator):void}){
@@ -11,10 +11,10 @@ function OperatorSelect({label,name,value,options=analysisOperators,onChange}:{l
   const dismiss=(event:KeyboardEvent)=>{if(event.key==='Escape')setShowHelp(false);};
   window.addEventListener('keydown',dismiss);return()=>window.removeEventListener('keydown',dismiss);
  },[showHelp]);
- const selected=options.find(item=>item.id===value)??options[0],help=analysisOperatorHelp[selected.id],description=analysisOperatorDescription(selected.id);
+ const selected=options.find(item=>item.id===value)??options[0],help=analysisOperatorHelp[selected.id];
  return <label className="analysis-operator-control" onMouseEnter={()=>setShowHelp(true)} onMouseLeave={()=>setShowHelp(false)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setShowHelp(false);}} onKeyDown={event=>{if(event.key==='Escape'){setShowHelp(false);event.stopPropagation();}}}>
   <span className="analysis-operator-label">{label}<button type="button" className="analysis-operator-help" aria-label={`Help for ${name}`} aria-describedby={helpID} onFocus={()=>setShowHelp(true)} onClick={()=>setShowHelp(value=>!value)}>?</button></span>
-  <select aria-label={name} aria-describedby={helpID} title={description} value={value} onChange={event=>{setShowHelp(false);onChange(event.target.value as AnalysisOperator);}}>{options.map(item=><option key={item.id} value={item.id} title={analysisOperatorDescription(item.id)}>{item.label}</option>)}</select>
+  <select aria-label={name} aria-describedby={helpID} value={value} onChange={event=>{setShowHelp(false);onChange(event.target.value as AnalysisOperator);}}>{options.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select>
   <span id={helpID} role="tooltip" className="analysis-operator-tooltip" hidden={!showHelp}><strong>{selected.label}</strong><span>{help.description}</span><span>Example: {help.example}</span></span>
  </label>;
 }

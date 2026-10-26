@@ -36,6 +36,7 @@ type EnrichmentInfo struct {
 	Completed        int             `json:"completed"`
 	Failed           int             `json:"failed"`
 	Cancelled        int             `json:"cancelled"`
+	Progress         float64         `json:"progress"`
 	CurrentFile      string          `json:"currentFile"`
 	CurrentProgress  float64         `json:"currentProgress"`
 	Jobs             []EnrichmentJob `json:"jobs"`
@@ -70,20 +71,28 @@ func (m *Manager) enrichmentInfoLocked(fileIDs []string) EnrichmentInfo {
 		wanted[id] = true
 	}
 	for _, job := range m.enrichmentJobs {
+		progress := job.Progress
 		switch job.Status {
 		case "completed":
 			info.Completed++
+			progress = 100
 		case "failed":
 			info.Failed++
+			progress = 100
 		case "cancelled":
 			info.Cancelled++
+			progress = 100
 		case "running":
 			info.CurrentFile, info.CurrentProgress = job.Name, job.Progress
 		}
+		info.Progress += progress
 		if wanted[job.FileID] {
 			job.Columns = append([]string{}, job.Columns...)
 			info.Jobs = append(info.Jobs, job)
 		}
+	}
+	if info.Total > 0 {
+		info.Progress /= float64(info.Total)
 	}
 	return info
 }
@@ -166,12 +175,15 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 		m.enrichmentActive, m.enrichmentCancel = false, nil
 		close(m.enrichmentDone)
 	}()
-	for index := range m.enrichmentJobs {
+	m.mu.Lock()
+	count := len(m.enrichmentJobs)
+	m.mu.Unlock()
+	runFilePool(count, func(index int) {
 		m.mu.Lock()
 		if ctx.Err() != nil {
 			m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "cancelled", "Enrichment cancelled; original file kept"
 			m.mu.Unlock()
-			continue
+			return
 		}
 		m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "running", "Calculating indicator"
 		job := m.enrichmentJobs[index]
@@ -181,12 +193,14 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 		if m.enrichmentJobs[index].Status != "completed" {
 			if ctx.Err() != nil {
 				m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "cancelled", "Enrichment cancelled; original file kept"
-			} else {
+			} else if err != nil {
 				m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "failed", cleanMessage(err.Error())
+			} else {
+				m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "failed", "Enrichment did not publish its CSV"
 			}
 		}
 		m.mu.Unlock()
-	}
+	})
 }
 
 func (m *Manager) enrichFile(ctx context.Context, index int, directory string, job EnrichmentJob, request EnrichmentRequest) error {

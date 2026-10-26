@@ -12,7 +12,7 @@ export interface ScreenerAnalysisHandle {flush():Promise<void>}
 export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAnalysisBackend;visible:boolean}>(function ScreenerAnalysis({api,visible},ref){
  const [catalog,setCatalog]=useState<AnalysisCatalog|null>(null),[view,setView]=useState<AnalysisRequest>(initialAnalysisView),[ready,setReady]=useState(false),[info,setInfo]=useState<AnalysisInfo|null>(null);
  const [loadError,setLoadError]=useState(''),[catalogError,setCatalogError]=useState(''),[saveError,setSaveError]=useState(''),[scanError,setScanError]=useState(''),[actionError,setActionError]=useState('');
- const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[showEmpty,setShowEmpty]=useState(false),[resultCategory,setResultCategory]=useState(''),[selection,setSelection]=useState<AnalysisSelection|null>(null);
+ const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[resultCategory,setResultCategory]=useState(''),[selection,setSelection]=useState<AnalysisSelection|null>(null);
  const draft=useRef(view),mounted=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false),selectionRef=useRef(selection),chartEpoch=useRef(0),writer=useRef<AnalysisViewWriter|null>(null);
  const panelVisible=useRef(visible);panelVisible.current=visible;
  const savedConditions=useRef<ScreenerSavedConditionsHandle>(null);
@@ -38,12 +38,12 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   const poll=async()=>{
    const revision=epoch.current;
    try{
-    if(!actionBusy.current){const value=await api.GetScreenerAnalysisFiltered(page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:showEmpty});if(current&&revision===epoch.current){setInfo(value);setScanError('');if(page>0&&page*pageSize>=value.totalResults)setPage(Math.max(0,Math.ceil(value.totalResults/pageSize)-1));}}
+    if(!actionBusy.current){const value=await api.GetScreenerAnalysisFiltered(page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false});if(current&&revision===epoch.current){setInfo(value);setScanError('');if(page>0&&page*pageSize>=value.totalResults)setPage(Math.max(0,Math.ceil(value.totalResults/pageSize)-1));}}
    }catch(error){if(current&&revision===epoch.current)setScanError(errorText(error));}
    finally{if(current)timer=setTimeout(()=>void poll(),750);}
   };
   void poll();return ()=>{current=false;if(timer)clearTimeout(timer);};
- },[api,visible,page,reload,resultCategory,showEmpty]);
+ },[api,visible,page,reload,resultCategory]);
  const change=(next:AnalysisRequest)=>{draft.current=next;setView(next);setSaveError('');writer.current!.edit(next);};
  const closeChart=()=>{chartEpoch.current++;selectionRef.current=null;setSelection(null);};
  useEffect(()=>{if(!visible)closeChart();},[visible]);
@@ -52,7 +52,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   const session=lifetime.current;actionBusy.current=true;epoch.current++;setBusy(true);setActionError('');
   try{
    if(apply){await writer.current!.flush();closeChart();}
-   await operation();const value=await api.GetScreenerAnalysisFiltered(apply?0:page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:showEmpty});if(mounted.current&&session===lifetime.current){setInfo(value);setScanError('');if(apply)setPage(0);setReload(previous=>previous+1);}
+   await operation();const value=await api.GetScreenerAnalysisFiltered(apply?0:page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false});if(mounted.current&&session===lifetime.current){setInfo(value);setScanError('');if(apply)setPage(0);setReload(previous=>previous+1);}
   }catch(error){if(mounted.current&&session===lifetime.current)setActionError(errorText(error));}
   finally{actionBusy.current=false;if(mounted.current&&session===lifetime.current)setBusy(false);}
  };
@@ -62,7 +62,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   if(occurrence>=0&&occurrence<selected.result.matches){if(revision===chartEpoch.current)setSelection({...selected,occurrence});return;}
   let index=selected.offset+direction;
   while(index>=0){
-   const offset=Math.floor(index/pageSize)*pageSize,chunk=await api.GetScreenerAnalysisFiltered(offset,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:showEmpty});
+   const offset=Math.floor(index/pageSize)*pageSize,chunk=await api.GetScreenerAnalysisFiltered(offset,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false});
    if(revision!==chartEpoch.current||!mounted.current||!panelVisible.current)return;
    if(index>=chunk.totalResults)break;
    for(;index>=offset&&index<offset+chunk.results.length;index+=direction){
@@ -77,7 +77,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const categories=catalog?.categories??[],selectedCategories=new Set(view.categories??categories);
  const selectedFiles=catalog?.files.filter(file=>selectedCategories.has(file.category||'Other')).length??0;
  const changeCategories=(next:string[]|null)=>change({...draft.current,categories:next});
- const changeResultFilter=(category:string,empty:boolean)=>{epoch.current++;closeChart();setResultCategory(category);setShowEmpty(empty);setPage(0);setInfo(previous=>previous?{...previous,results:[],totalResults:0}:null);};
+ const changeResultFilter=(category:string)=>{epoch.current++;closeChart();setResultCategory(category);setPage(0);setInfo(previous=>previous?{...previous,results:[],totalResults:0}:null);};
  const results=info?.results??[],groups=new Map<string,Array<{result:typeof results[number];offset:number}>>();
  results.forEach((result,index)=>{const asset=result.symbol||result.name;groups.set(asset,[...(groups.get(asset)??[]),{result,offset:(info?.offset??page*pageSize)+index}]);});
  const working=info?.active??false,invalid=analysisInputError(view),error=loadError||catalogError||saveError||actionError||scanError||info?.error;
@@ -96,7 +96,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
    <div className="analysis-help"><p>Both sides can use a price, an enriched indicator, a constant or an earlier candle. “Price” / “Close” uses close, then bid or ask when the file contains ticks.</p><p>Timeframes use only companion bars that have fully closed. Temporal windows count the evaluated file’s closed bars. Highest / lowest compares the left value with the preceding N right-side values, excluding the aligned current bar.</p><p>Missing fields, missing companion files and invalid data are reported per file. Blank indicator warm-up values cannot create a match.</p>{catalog&&<small>{catalog.directory}</small>}</div>
   </section>
   <section className="analysis-results" aria-label="Analysis results">
-   <header><div><h2>Matching assets</h2><p>{info?.totalMatches?`${info.totalMatches.toLocaleString('en-US')} occurrences in ${info.matchedFiles.toLocaleString('en-US')} files`:'Apply conditions to find historical matches.'}</p></div><div className="analysis-result-filters"><label>Asset category<select aria-label="Result asset category" disabled={busy} value={resultCategory} onChange={event=>changeResultFilter(event.target.value,showEmpty)}><option value="">All categories</option>{categories.map(category=><option key={category} value={category}>{category}</option>)}</select></label><label><input type="checkbox" disabled={busy} checked={showEmpty} onChange={event=>changeResultFilter(resultCategory,event.target.checked)}/> Show files without matches</label></div></header>
+   <header><div><h2>Matching assets</h2><p>{info?.totalMatches?`${info.totalMatches.toLocaleString('en-US')} occurrences in ${info.matchedFiles.toLocaleString('en-US')} files`:'Apply conditions to find historical matches.'}</p></div><div className="analysis-result-filters"><label>Asset category<select aria-label="Result asset category" disabled={busy} value={resultCategory} onChange={event=>changeResultFilter(event.target.value)}><option value="">All categories</option>{categories.map(category=><option key={category} value={category}>{category}</option>)}</select></label></div></header>
    {info&&(working||info.total>0)&&<div className="analysis-scan-status" role="status"><div><strong>{working?(info.phase==='indexing'?'Indexing downloaded files':'Scanning closed bars'):info.phase==='cancelled'?'Analysis cancelled':'Analysis complete'}</strong><span>{info.completed} / {info.total} files · {info.rows.toLocaleString('en-US')} rows · {info.failed} failed</span></div><progress aria-label="Analysis scan progress" max={100} value={Math.max(0,Math.min(100,info.progress))}/>{info.currentFile&&<p>{info.currentFile}</p>}</div>}
    {!catalog?.files.length&&catalog&&<p className="analysis-empty">No downloaded files. Download historical data, then enrich it with any indicators you want to compare.</p>}
    {!groups.size&&!!info?.total&&<p className="analysis-empty">{working?'Waiting for matching files…':resultCategory?'No matching files in this asset category.':info.totalMatches?'No files match the current result filters.':'No closed bars matched all conditions.'}</p>}

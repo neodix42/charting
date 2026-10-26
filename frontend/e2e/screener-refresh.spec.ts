@@ -83,3 +83,15 @@ test('reloading the file list performs no download or indicator calculation',asy
  expect(await page.evaluate(()=>(window as any).__testRefreshStarts())).toBe(0);
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toBeNull();
 });
+
+test('parallel refresh uses whole-batch progress independently of one current file and the visible page',async({page})=>{
+ await open(page,25);await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await page.evaluate(()=>{
+  const info=(window as any).__testRefresh() as ScreenerRefreshInfo;
+  (window as any).__testSetRefresh({...info,progress:40,currentFile:info.jobs[19].name,currentProgress:50,jobs:info.jobs.map((job,index)=>({...job,status:index<20?'running':'queued',progress:index<20?50:0}))});
+ });
+ await expect(page.getByRole('progressbar',{name:'Overall data refresh progress',exact:true})).toHaveAttribute('value','40');
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(5);
+ await expect(page.getByRole('progressbar',{name:'Overall data refresh progress',exact:true})).toHaveAttribute('value','40');
+ await expect(page.getByRole('button',{name:'Cancel refresh',exact:true})).toBeEnabled();
+});

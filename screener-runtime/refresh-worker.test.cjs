@@ -75,6 +75,7 @@ test('verified coverage fetches bounded overlap only, preserves earlier data and
     await fs.writeFile(input.output,csv([row(start+day,20),row(start+2*day,30),row(start+3*day,40),row(start+4*day,50)]));
   }});
   assert.equal(seen.from,new Date(start+day).toISOString());
+  assert.equal(seen.sourceBatchSize,1,'twenty file workers must share a twenty-request upstream budget');
   assert.equal(result.rows,4);assert.equal(result.addedRows,0);
   assert.equal((await read(request.output))[0].close,'10');
 });

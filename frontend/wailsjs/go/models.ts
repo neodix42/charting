@@ -1006,6 +1006,7 @@ export namespace screener {
 	    completed: number;
 	    failed: number;
 	    cancelled: number;
+	    progress: number;
 	    currentFile: string;
 	    currentProgress: number;
 	    jobs: EnrichmentJob[];
@@ -1025,6 +1026,7 @@ export namespace screener {
 	        this.completed = source["completed"];
 	        this.failed = source["failed"];
 	        this.cancelled = source["cancelled"];
+	        this.progress = source["progress"];
 	        this.currentFile = source["currentFile"];
 	        this.currentProgress = source["currentProgress"];
 	        this.jobs = this.convertValues(source["jobs"], EnrichmentJob);
@@ -1314,6 +1316,7 @@ export namespace screener {
 	    completed: number;
 	    failed: number;
 	    cancelled: number;
+	    progress: number;
 	    currentFile: string;
 	    currentProgress: number;
 	    jobs: RefreshJob[];
@@ -1332,6 +1335,7 @@ export namespace screener {
 	        this.completed = source["completed"];
 	        this.failed = source["failed"];
 	        this.cancelled = source["cancelled"];
+	        this.progress = source["progress"];
 	        this.currentFile = source["currentFile"];
 	        this.currentProgress = source["currentProgress"];
 	        this.jobs = this.convertValues(source["jobs"], RefreshJob);

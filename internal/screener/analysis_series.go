@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,10 @@ type analysisSeries struct {
 	recordSize                      int64
 	cache                           *analysisRowCache
 	cursor                          int64
+	// Identity of all parsed fields and values, independent of CSV formatting,
+	// field order and filename request dates. Used only for duplicate results;
+	// each source keeps its own verified companion coverage and stale checks.
+	contentHash [sha256.Size]byte
 }
 type analysisRow struct {
 	timestamp int64
@@ -189,6 +194,23 @@ func indexAnalysisCSV(ctx context.Context, directory, name, output string, progr
 	if !exists {
 		return nil, errors.New("analysis CSV requires a timestamp field")
 	}
+	fieldNames := make([]string, 0, len(positions))
+	for field := range positions {
+		fieldNames = append(fieldNames, field)
+	}
+	sort.Strings(fieldNames)
+	canonicalPositions := make([]int, len(fieldNames))
+	content := sha256.New()
+	var length [8]byte
+	binary.LittleEndian.PutUint64(length[:], uint64(len(fieldNames)))
+	_, _ = content.Write(length[:])
+	for i, field := range fieldNames {
+		canonicalPositions[i] = positions[field]
+		binary.LittleEndian.PutUint64(length[:], uint64(len(field)))
+		_, _ = content.Write(length[:])
+		_, _ = io.WriteString(content, field)
+	}
+	canonicalRow := make([]byte, len(fieldNames)*8)
 	out, err := os.OpenFile(output, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return nil, err
@@ -271,6 +293,17 @@ func indexAnalysisCSV(ctx context.Context, directory, name, output string, progr
 		if _, e = buffered.Write(record); e != nil {
 			return nil, e
 		}
+		for i, position := range canonicalPositions {
+			bits := binary.LittleEndian.Uint64(record[8+position*8:])
+			value := math.Float64frombits(bits)
+			if value == 0 {
+				bits = 0 // Positive and negative zero compare identically.
+			} else if math.IsNaN(value) {
+				bits = 0x7ff8000000000000 // Every blank has the same identity.
+			}
+			binary.LittleEndian.PutUint64(canonicalRow[i*8:], bits)
+		}
+		_, _ = content.Write(canonicalRow)
 		if s.count == 0 {
 			s.first = timestamp
 		}
@@ -289,6 +322,7 @@ func indexAnalysisCSV(ctx context.Context, directory, name, output string, progr
 	if err = analysisUnchanged(s); err != nil {
 		return nil, err
 	}
+	copy(s.contentHash[:], content.Sum(nil))
 	// The latest closed companion remains the latest until another companion
 	// candle could have closed. Refresh deliberately excludes the open candle,
 	// so ending availability at the last close would discard today's D1 signal.

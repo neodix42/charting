@@ -22,7 +22,7 @@
       ]
     },
     "fontSize": {
-      "description": "Global base text size in CSS pixels. Omission in older workspaces means 13 pixels.",
+      "description": "Global base text size in CSS pixels. Omission in older workspaces means the 15 pixel default; explicit saved sizes are preserved.",
       "type": "integer",
       "minimum": 10,
       "maximum": 24

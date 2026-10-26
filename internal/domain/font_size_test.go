@@ -8,10 +8,10 @@ import (
 
 func TestFontSizeDefaultsLegacyAndPortableRoundTrip(t *testing.T) {
 	w := NewWorkspace()
-	if w.FontSize == nil || *w.FontSize != 13 {
-		t.Fatal("first launch must use the existing 13px base text size", w.FontSize)
+	if w.FontSize == nil || *w.FontSize != 15 {
+		t.Fatal("first launch must use the 15px default text size", w.FontSize)
 	}
-	for _, size := range []int{10, 13, 18, 24} {
+	for _, size := range []int{10, 13, 15, 18, 24} {
 		w.FontSize = &size
 		if got := cloneWorkspace(t, w); !reflect.DeepEqual(got, w) {
 			t.Fatal("font size changed in a portable round trip", got.FontSize)
