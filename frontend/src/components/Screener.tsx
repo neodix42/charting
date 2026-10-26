@@ -80,7 +80,7 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
     {working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerDownload())}>Cancel downloads</button>}
     {!info?.active&&info?.runtimeAvailable&&info.jobs.some(job=>job.status==='failed'||job.status==='queued')&&<button type="button" disabled={busy} onClick={()=>void run(()=>api.ResumeScreenerDownload())}>Resume downloads</button>}
     <small className="screener-download-directory">CSV destination: <span>{info?.directory||'Loading…'}</span><span>Change the folder in Settings.</span></small>
-    <small className="screener-download-note">Download creates a new CSV for the full selected date range. To extend existing files, use Enrichment → Refresh data and indicators.</small>
+    <small className="screener-download-note">Existing histories are reused by symbol and timeframe. Download fetches only missing earlier or later ranges, preserves saved data, and recalculates applied indicators. Already covered ranges need no download.</small>
     {invalidDates&&<small className="screener-date-error">Choose a start date before the end date.</small>}
    </form>
    <div className="screener-columns">

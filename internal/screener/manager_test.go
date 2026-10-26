@@ -241,12 +241,14 @@ func TestDownloadOrderingFailuresAndOutputPreservation(t *testing.T) {
 	if manager.Info().Jobs[0].Status != "completed" {
 		t.Fatal("mutable snapshot leaked")
 	}
-	if _, err = manager.Start(validRequest()); err != nil {
+	otherTimeframe := validRequest()
+	otherTimeframe.Timeframe = "m1"
+	if _, err = manager.Start(otherTimeframe); err != nil {
 		t.Fatal(err)
 	}
 	second := waitFinished(t, manager).Jobs[0]
-	if second.Status != "completed" || second.OutputPath == firstPath || !strings.HasSuffix(second.OutputPath, "-2.csv") {
-		t.Fatalf("overwrite instead of new output: %+v", second)
+	if second.Status != "completed" || second.OutputPath == firstPath || !strings.Contains(second.OutputPath, "-m1-") {
+		t.Fatalf("another timeframe did not retain a separate history: %+v", second)
 	}
 	preserved, err := os.ReadFile(firstPath)
 	if err != nil || !reflect.DeepEqual(original, preserved) {
@@ -256,39 +258,6 @@ func TestDownloadOrderingFailuresAndOutputPreservation(t *testing.T) {
 	// Cancelling a completed batch must preserve its committed status and output.
 	if got := manager.Cancel().Jobs[0]; got.Status != "completed" || got.OutputPath != second.OutputPath {
 		t.Fatal("cancel changed completed output")
-	}
-}
-
-func TestNewDownloadWithLaterEndRequestsFullRangeAndPreservesEnrichedOriginal(t *testing.T) {
-	manager := testManager(t)
-	request := validRequest()
-	if _, err := manager.Start(request); err != nil {
-		t.Fatal(err)
-	}
-	first := waitFinished(t, manager).Jobs[0]
-	original := "timestamp,open,high,low,close,volume,sma_2\n1704067200000,1,2,1,2,3,\n"
-	if err := os.WriteFile(first.OutputPath, []byte(original), 0600); err != nil {
-		t.Fatal(err)
-	}
-	gates := t.TempDir()
-	t.Setenv("CRYPTODESK_SCREENER_TEST_MODE", "gated")
-	t.Setenv("CRYPTODESK_SCREENER_TEST_GATES", gates)
-	request.To = "2024-01-04"
-	if _, err := manager.Start(request); err != nil {
-		t.Fatal(err)
-	}
-	worker := waitGate(t, gates, "btcusd")
-	if worker.From != request.From || worker.To != request.To || filepath.Dir(worker.Output) == filepath.Dir(first.OutputPath) {
-		t.Fatalf("new range did not request the complete period in private scratch: %+v", worker)
-	}
-	releaseGate(t, gates, "btcusd")
-	second := waitFinished(t, manager).Jobs[0]
-	if second.Status != "completed" || second.OutputPath == first.OutputPath || !strings.HasSuffix(second.OutputPath, "2024-01-01-2024-01-04.csv") {
-		t.Fatalf("new date range did not publish a separate file: %+v", second)
-	}
-	data, err := os.ReadFile(first.OutputPath)
-	if err != nil || string(data) != original {
-		t.Fatalf("existing enriched data changed: %s %v", data, err)
 	}
 }
 

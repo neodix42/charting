@@ -159,8 +159,10 @@ async function refresh(request,options={}) {
   const recipes=await recipesFor(scanned.headers,savedRecipes);
   if(scanned.last>now)throw Error('CSV contains future timestamps; original file kept.');
   const closed=closedBoundary(now,request.timeframe);
-  const initial=Date.parse(`${request.from}T00:00:00.000Z`);
-  if(!Number.isFinite(initial)||initial>scanned.first)throw Error('The downloaded filename start does not cover its CSV timestamps.');
+  const namedStart=Date.parse(`${request.from}T00:00:00.000Z`);
+  if(!Number.isFinite(namedStart))throw Error('The downloaded filename start is invalid.');
+  // Incremental downloads can prepend history while retaining the filename.
+  const initial=Math.min(namedStart,scanned.first);
   // First refresh verifies every source interval. After a durable fingerprint
   // confirms unchanged coverage, only the last two bars/hour plus new history
   // need fetching. A user edit invalidates that fingerprint in the Go owner.
@@ -249,7 +251,7 @@ async function refresh(request,options={}) {
     if(buffer)await writeAll(handle,buffer);
     await handle.sync();
     const columns=headers.filter(name=>!base.includes(key(name)));
-    const result={type:'done',rows,addedRows,updatedRows,columns,recipes,firstTimestamp,lastTimestamp,checksum:outputChecksum.digest('hex'),checkedThrough:now,message:`Refreshed ${rows.toLocaleString('en-US')} rows: ${addedRows.toLocaleString('en-US')} added, ${updatedRows.toLocaleString('en-US')} updated; ${recipes.length} indicator recipes recalculated`};
+    const result={type:'done',rows,addedRows,updatedRows,columns,recipes,firstTimestamp,lastTimestamp,checksum:outputChecksum.digest('hex'),checkedThrough:now,coverage:initial<closed?[{from:initial,to:closed}]:[],message:`Refreshed ${rows.toLocaleString('en-US')} rows: ${addedRows.toLocaleString('en-US')} added, ${updatedRows.toLocaleString('en-US')} updated; ${recipes.length} indicator recipes recalculated`};
     report(result);return result;
   }finally{
     await handle?.close();await left.return();await right.return();
@@ -259,4 +261,4 @@ async function refresh(request,options={}) {
 if(require.main===module)main(refresh).catch(error=>{
   emit({type:'error',message:String(error?.message||error).slice(0,4000)});process.exitCode=1;
 });
-module.exports={refresh,recipesFor,scan,overlapStart,closedBoundary};
+module.exports={refresh,recipesFor,scan,overlapStart,closedBoundary,records,groups};

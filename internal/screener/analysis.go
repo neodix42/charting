@@ -420,8 +420,8 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	if m.analysisActiveLocked() {
 		return m.analysisInfoLocked(0, 100), errors.New("an analysis is already running")
 	}
-	if m.enrichmentActive || m.refreshActive {
-		return m.analysisInfoLocked(0, 100), errors.New("finish or cancel data refresh and enrichment before applying analysis")
+	if m.enrichmentActive || m.refreshActive || m.active || m.pendingLocked() {
+		return m.analysisInfoLocked(0, 100), errors.New("finish or cancel downloads, data refresh and enrichment before applying analysis")
 	}
 	names, err := csvNames(m.directory)
 	if err != nil {

@@ -20,6 +20,9 @@ func inspectRuntime(directory string, allowSystemNode bool) (workerRuntime, erro
 	if st, err := os.Stat(worker); err != nil || !st.Mode().IsRegular() {
 		return workerRuntime{}, fmt.Errorf("downloader worker is missing from %s", directory)
 	}
+	if st, err := os.Stat(filepath.Join(directory, "incremental-worker.cjs")); err != nil || !st.Mode().IsRegular() {
+		return workerRuntime{}, fmt.Errorf("incremental downloader worker is missing from %s; rebuild or restore the complete Screener runtime", directory)
+	}
 	data, err := os.ReadFile(filepath.Join(directory, "node_modules", "dukascopy-node", "package.json"))
 	if err != nil {
 		return workerRuntime{}, fmt.Errorf("pinned dukascopy-node is missing; run npm ci --prefix screener-runtime for development")

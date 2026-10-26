@@ -24,6 +24,12 @@ type fileMetadata struct {
 	LastTimestamp  int64               `json:"lastTimestamp,omitempty"`
 	Checksum       string              `json:"checksum,omitempty"`
 	CheckedThrough int64               `json:"checkedThrough,omitempty"`
+	Coverage       []dataRange         `json:"coverage,omitempty"`
+}
+
+type dataRange struct {
+	From int64 `json:"from"`
+	To   int64 `json:"to"`
 }
 
 func metadataDirectory(directory string) string {
@@ -52,6 +58,14 @@ func readFileMetadata(directory, name string) (fileMetadata, error) {
 	}
 	if err = json.Unmarshal(data, &metadata); err != nil || metadata.Version != 1 || metadata.Filename != name || len(metadata.Recipes) > 2000 {
 		return metadata, errors.New("Screener file metadata is invalid or uses an unsupported version; original files kept")
+	}
+	if len(metadata.Coverage) > 10000 {
+		return metadata, errors.New("too many saved data coverage ranges")
+	}
+	for _, span := range metadata.Coverage {
+		if span.From < -8640000000000000 || span.To <= span.From || span.To > 8640000000000000 {
+			return metadata, errors.New("invalid saved data coverage range; original files kept")
+		}
 	}
 	manager := &Manager{}
 	for i, recipe := range metadata.Recipes {

@@ -40,6 +40,7 @@ type Job struct {
 	Progress   float64 `json:"progress"`
 	Message    string  `json:"message"`
 	OutputPath string  `json:"outputPath,omitempty"`
+	AsOf       int64   `json:"asOf,omitempty"`
 }
 type Info struct {
 	Directory         string   `json:"directory"`
@@ -263,6 +264,9 @@ func (m *Manager) Start(request Request) (Info, error) {
 	if m.refreshActive {
 		return m.infoLocked(), errors.New("finish or cancel the data refresh before starting downloads")
 	}
+	if m.enrichmentActive || m.analysisActiveLocked() {
+		return m.infoLocked(), errors.New("finish or cancel enrichment and Analysis before updating downloaded files")
+	}
 	if m.invalidDownloads || m.pendingLocked() {
 		return m.infoLocked(), errors.New("resume or cancel the saved download queue before starting another batch: " + m.stateError)
 	}
@@ -273,12 +277,13 @@ func (m *Manager) Start(request Request) (Info, error) {
 		return m.infoLocked(), err
 	}
 	jobs := make([]Job, len(request.Symbols))
+	asOf := time.Now().UnixMilli()
 	for i, symbol := range request.Symbols {
 		var id [16]byte
 		if _, err := rand.Read(id[:]); err != nil {
 			return m.infoLocked(), err
 		}
-		jobs[i] = Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: request.Timeframe, From: request.From, To: request.To, Status: "queued", Message: "Waiting for download"}
+		jobs[i] = Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: request.Timeframe, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"}
 	}
 	oldJobs, oldDirectory, oldConcurrency, oldPublication := m.jobs, m.batchDirectory, m.concurrency, m.publication
 	m.jobs, m.batchDirectory, m.publication = jobs, m.directory, map[string]string{}
@@ -403,7 +408,9 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 				terminal := m.jobs[i].Status == "completed" || m.jobs[i].Status == "cancelled"
 				if m.jobs[i].Status == "failed" {
 					if _, checkpointErr := os.Stat(filepath.Join(m.jobDirectory(job), "checkpoint.json")); errors.Is(checkpointErr, os.ErrNotExist) {
-						terminal = true
+						// Existing histories keep one checkpoint per missing range.
+						_, rangesErr := os.Stat(filepath.Join(m.jobDirectory(job), "ranges.json"))
+						terminal = errors.Is(rangesErr, os.ErrNotExist)
 					}
 				}
 				m.mu.Unlock()
@@ -417,16 +424,27 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 }
 
 type workerEvent struct {
-	Type     string  `json:"type"`
-	Progress float64 `json:"progress"`
-	Message  string  `json:"message"`
-	Rows     int64   `json:"rows"`
+	Type           string              `json:"type"`
+	Progress       float64             `json:"progress"`
+	Message        string              `json:"message"`
+	Rows           int64               `json:"rows"`
+	FirstTimestamp int64               `json:"firstTimestamp"`
+	LastTimestamp  int64               `json:"lastTimestamp"`
+	Checksum       string              `json:"checksum"`
+	CheckedThrough int64               `json:"checkedThrough"`
+	Coverage       []dataRange         `json:"coverage"`
+	Recipes        []EnrichmentRequest `json:"recipes"`
+	NoChange       bool                `json:"noChange"`
 }
 
 func (m *Manager) download(ctx context.Context, index int, job Job, directory string, sourceBatchSize int) (string, string, error) {
 	// Each worker has private WAF/session files. Removing this exclusively-owned
 	// directory also cleans atomic token-cache scratch files after cancellation.
 	jobDirectory, err := m.prepareJob(job)
+	if err != nil {
+		return "", "", err
+	}
+	plan, originals, err := prepareDownloadPlan(job, directory, jobDirectory)
 	if err != nil {
 		return "", "", err
 	}
@@ -454,7 +472,9 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		SourceBatchSize int    `json:"sourceBatchSize"`
 		Resume          bool   `json:"resume"`
 		OwnerPipe       bool   `json:"ownerPipe"`
-	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true})
+		PlanFile        string `json:"planFile,omitempty"`
+		AsOf            int64  `json:"asOf"`
+	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), plan.AsOf})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
 	owner, err := cmd.StdinPipe()
@@ -479,8 +499,9 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		return "", "", err
 	}
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 1024), 16384)
+	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	var done bool
+	var result workerEvent
 	var finalMessage, workerError string
 	for scanner.Scan() {
 		var event workerEvent
@@ -502,6 +523,7 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 			m.mu.Unlock()
 		case "done":
 			done, finalMessage = event.Rows > 0, cleanMessage(event.Message)
+			result = event
 		case "error":
 			workerError = cleanMessage(event.Message)
 			_ = cmd.Cancel()
@@ -531,6 +553,9 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	if !done {
 		return "", "", errors.New("downloader exited without confirming any downloaded rows")
 	}
+	if len(plan.Inputs) > 0 {
+		return m.publishExtendedDownload(ctx, index, job, directory, jobDirectory, partial, plan, originals, result)
+	}
 	if st, err := os.Stat(partial); err != nil || st.Size() == 0 {
 		return "", "", errors.New("downloader produced an empty file")
 	}
@@ -554,6 +579,11 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		// Link publishes atomically on the same filesystem without replacing an
 		// existing name. Repeated downloads receive a fresh numbered filename.
 		if err = os.Link(partial, output); err == nil {
+			if result.Checksum != "" {
+				if metadataErr := writeDownloadedMetadata(directory, name+".csv", partial, result); metadataErr != nil {
+					finalMessage += "; coverage metadata was not saved: " + cleanMessage(metadataErr.Error())
+				}
+			}
 			m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, finalMessage, output
 			m.saveDownloadsLocked()
 			return output, finalMessage, nil

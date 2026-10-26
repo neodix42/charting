@@ -50,7 +50,7 @@ test('completed queue history alone does not count as an existing downloaded ass
  await page.evaluate(()=>(window as any).__testSetScreener({jobs:[{id:'old',symbol:'btcusd',timeframe:'d1',from:'2024-01-01',to:'2024-02-01',status:'completed',progress:100,message:'Old queue; CSV was removed',outputPath:'/removed.csv'}]}));
  await expect(page.getByLabel('Download summary',{exact:true})).toContainText('1 completed');
  await expect(downloaded).toBeDisabled();
- await expect(page.getByRole('form',{name:'Download historical data',exact:true})).toContainText('Download creates a new CSV for the full selected date range.');
+ await expect(page.getByRole('form',{name:'Download historical data',exact:true})).toContainText('Download fetches only missing earlier or later ranges');
 });
 
 test('reopening restores selected symbols, timeframe, dates, parallelism and every category expansion',async({page})=>{

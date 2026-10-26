@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise packaged enrichment and Refresh with private Node and local data only."""
+"""Exercise packaged enrichment, Refresh and incremental downloads offline."""
 import argparse
 import csv
 import io
@@ -195,6 +195,65 @@ const localApi = {...api, BufferFetcher: class extends api.BufferFetcher {
             "networkRequired": False}
 
 
+def incremental_smoke(runtime, node, directory, enriched):
+    """Exercise the packaged incremental worker with its real decoder, offline."""
+    before = enriched.read_bytes()
+    work = directory / "incremental-work"
+    work.mkdir()
+    output, plan_file = work / "data.part", work / "plan.json"
+    output.write_bytes(b"")
+    stat = enriched.stat()
+    cutoff = 1704067560000  # 2024-01-01 00:06 UTC
+    plan_file.write_text(json.dumps({"version": 1, "asOf": cutoff, "inputs": [{
+        "input": str(enriched), "name": enriched.name, "from": "2024-01-01",
+        "bytes": stat.st_size, "modified": stat.st_mtime_ns // 1000000, "metadata": {}}]}))
+    request = {"runtime": str(runtime), "request": {"planFile": str(plan_file), "output": str(output),
+               "symbol": "eurusd", "timeframe": "m1", "from": "2023-12-31", "to": "2024-01-02",
+               "sourceBatchSize": 1}}
+    script = r"""
+const fs=require('node:fs'),path=require('node:path');
+const input=JSON.parse(fs.readFileSync(0,'utf8'));
+const {extendDownload}=require(path.join(input.runtime,'incremental-worker.cjs'));
+const api=require(path.join(input.runtime,'node_modules','dukascopy-node'));
+let fetches=0;
+const localApi={...api,BufferFetcher:class extends api.BufferFetcher{
+ constructor(options){super({...options,fetcherFn:async url=>{
+  fetches++;
+  const pathname=new URL(url).pathname;
+  if(!pathname.includes('/v1/candles/minute/'))throw Error('Unexpected incremental source interval');
+  const prefix=pathname.endsWith('/2023/12/31');
+  if(!prefix&&!pathname.endsWith('/2024/1/1'))throw Error('Unexpected incremental source day');
+  const price=prefix?0:5,deltas=prefix?[0]:[0,1];
+  return Buffer.from(JSON.stringify({timestamp:prefix?1704067140000:1704067440000,
+   shift:60000,multiplier:1,open:price,high:price+1,low:price-1,close:price,
+   times:deltas,opens:deltas,highs:deltas,lows:deltas,closes:deltas,volumes:prefix?[2]:[7,8]}));
+ }});}
+}};
+(async()=>{
+ const events=[];
+ await extendDownload(input.request,{api:localApi,pauseMs:0,emit:event=>events.push(event)});
+ const ranges=JSON.parse(fs.readFileSync(path.join(path.dirname(input.request.output),'ranges.json'),'utf8')).ranges;
+ process.stdout.write(JSON.stringify({result:events.at(-1),fetches,ranges})+'\n');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    run = subprocess.run([str(node), "-e", script], input=json.dumps(request) + "\n", text=True,
+                         capture_output=True, cwd=directory, timeout=20, check=True)
+    actual = json.loads(run.stdout)
+    result = actual["result"]
+    rows = list(csv.reader(io.StringIO(output.read_text())))
+    expected_ranges = [{"from": 1703980800000, "to": 1704067200000},
+                       {"from": 1704067440000, "to": cutoff}]
+    if (actual["fetches"] != 2 or actual["ranges"] != expected_ranges or result.get("type") != "done"
+            or result.get("rows") != 7 or len(rows) != 8 or result.get("firstTimestamp") != 1704067140000
+            or result.get("lastTimestamp") != 1704067500000 or enriched.read_bytes() != before
+            or [row[-1] for row in rows[1:]] != ["", "", "1", "2", "3", "4", "5"]
+            or [float(row[4]) for row in rows[1:]] != list(range(7))):
+        raise ValueError(f"Packaged incremental download did not prepend/append and replay SMA: {run.stdout[:4000]}")
+    return {"passed": True, "rows": 7, "missingRanges": actual["ranges"], "localTransportFetches": 2,
+            "existingSourcePreserved": True, "prependedWarmupRecalculated": True, "columns": ["sma_3"],
+            "networkRequired": False}
+
+
 def smoke(runtime):
     runtime = runtime.resolve()
     node = runtime / ("node.exe" if os.name == "nt" else "node")
@@ -223,9 +282,11 @@ def smoke(runtime):
         calendar = calendar_smoke(runtime, node, directory)
         if source.read_bytes() != original.encode():
             raise ValueError("Packaged Refresh changed the original raw CSV")
+        incremental = incremental_smoke(runtime, node, directory, output)
         return {"passed": True, "runtime": str(runtime), "columns": ["sma_3"], "rows": 4,
                 "warmupBlank": True, "exactValues": True, "originalFieldsPreserved": True,
-                "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar}
+                "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar,
+                "incremental": incremental}
 
 
 def main():

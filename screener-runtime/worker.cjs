@@ -30,6 +30,7 @@ async function writeAll(handle, text, position) {
 // small, ordered batches so years of ticks never accumulate in memory. Each
 // source file contains whole UTC aggregation buckets (hour/day/month/year).
 async function download(request, options = {}) {
+  if (request.planFile) return require('./incremental-worker.cjs').extendDownload(request, options);
   const api = options.api || require('dukascopy-node');
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));
   const sourceBatchSize = request.sourceBatchSize ?? 4;
@@ -66,6 +67,10 @@ async function download(request, options = {}) {
     instrument: input.instrument, timeframe: input.timeframe,
     startDate: input.dates.from, endDate: input.dates.to, utcOffset: 0,
   });
+  if (request.asOf !== undefined) {
+    if (!Number.isSafeInteger(request.asOf) || request.asOf < 0) throw new Error('Invalid download execution cutoff.');
+    endDate = new Date(Math.min(+endDate, request.asOf));
+  }
   const checkpointPath = path.join(path.dirname(request.output), 'checkpoint.json');
   let checkpoint;
   if (request.resume) {
@@ -151,7 +156,12 @@ async function download(request, options = {}) {
     }
     if (!rows) throw new Error('Dukascopy returned no rows for this symbol and date range.');
     await handle.sync();
-    emit({ type: 'done', rows, message: `Downloaded ${rows.toLocaleString('en-US')} rows` });
+    const {scan,closedBoundary}=require('./refresh-worker.cjs');
+    const actual=await scan(request.output, request.timeframe);
+    const coveredTo=closedBoundary(+endDate,request.timeframe);
+    const coverage=+input.dates.from<coveredTo?[{from:+input.dates.from,to:coveredTo}]:[];
+    emit({ type: 'done', rows, firstTimestamp:actual.first,lastTimestamp:actual.last,checksum:actual.checksum,
+      coverage,checkedThrough:coveredTo,message: `Downloaded ${rows.toLocaleString('en-US')} rows` });
     return rows;
   } finally {
     await handle?.close();
@@ -188,4 +198,4 @@ if (require.main === module) main().catch(error => {
   process.exitCode = 1;
 });
 
-module.exports = { download, main };
+module.exports = { download, main, writeCheckpoint };

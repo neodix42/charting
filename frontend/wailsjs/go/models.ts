@@ -1211,6 +1211,7 @@ export namespace screener {
 	    progress: number;
 	    message: string;
 	    outputPath?: string;
+	    asOf?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
@@ -1227,6 +1228,7 @@ export namespace screener {
 	        this.progress = source["progress"];
 	        this.message = source["message"];
 	        this.outputPath = source["outputPath"];
+	        this.asOf = source["asOf"];
 	    }
 	}
 	export class Info {

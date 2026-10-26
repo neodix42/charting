@@ -122,6 +122,9 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if m.refreshActive {
 		return m.enrichmentInfoLocked(nil), errors.New("finish or cancel the data refresh before enriching files")
 	}
+	if m.active || m.pendingLocked() {
+		return m.enrichmentInfoLocked(nil), errors.New("finish or cancel downloads before enriching existing files")
+	}
 	if m.analysisActiveLocked() {
 		return m.enrichmentInfoLocked(nil), errors.New("finish or cancel Analysis before changing its data files")
 	}
@@ -349,7 +352,11 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	if err != nil {
 		return err
 	}
-	metadataState.Verified = metadataState.Verified && metadataMatches(metadataState, original) && metadataState.Checksum != "" && metadataState.Checksum == result.InputChecksum
+	coverageUnchanged := metadataMatches(metadataState, original) && metadataState.Checksum != "" && metadataState.Checksum == result.InputChecksum
+	metadataState.Verified = metadataState.Verified && coverageUnchanged
+	if !coverageUnchanged {
+		metadataState.Coverage = nil
+	}
 	if !metadataState.Verified {
 		metadataState.CheckedThrough = 0
 	}

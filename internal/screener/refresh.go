@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -208,11 +209,12 @@ type refreshEvent struct {
 	LastTimestamp  int64               `json:"lastTimestamp"`
 	Checksum       string              `json:"checksum"`
 	CheckedThrough int64               `json:"checkedThrough"`
+	Coverage       []dataRange         `json:"coverage"`
 	Message        string              `json:"message"`
 }
 
 func (m *Manager) refreshFile(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64) error {
-	match := downloadFilename.FindStringSubmatch(job.Name)
+	match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name))
 	if match == nil {
 		return errors.New("cannot identify the Dukascopy instrument, timeframe and start date from this CSV filename; original kept")
 	}
@@ -252,7 +254,7 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 		CoverageDigest   string `json:"coverageDigest"`
 		OwnerPipe        bool   `json:"ownerPipe"`
 		AsOf             int64  `json:"asOf"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: match[3], RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf})
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work
@@ -362,7 +364,7 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 		_ = parent.Sync()
 		_ = parent.Close()
 	}
-	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough}
+	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough, Coverage: result.Coverage}
 	if err = writeFileMetadata(directory, job.Name, metadata); err != nil {
 		return fmt.Errorf("save refreshed indicator recipes (original kept): %w", err)
 	}
@@ -381,4 +383,14 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 	current.AddedRows, current.UpdatedRows, current.Message = result.AddedRows, result.UpdatedRows, cleanMessage(result.Message)
 	current.Columns, current.BackupPath = append([]string{}, result.Columns...), backup
 	return nil
+}
+
+func refreshFrom(named string, coverage []dataRange) string {
+	for _, span := range coverage {
+		date := time.UnixMilli(span.From).UTC()
+		if date.Year() >= 1900 && date.Format("2006-01-02") < named {
+			named = date.Format("2006-01-02")
+		}
+	}
+	return named
 }

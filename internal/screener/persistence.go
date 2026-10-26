@@ -238,7 +238,7 @@ func (m *Manager) loadDownloads() error {
 	ids := map[string]bool{}
 	for _, job := range saved.Jobs {
 		id, e := hex.DecodeString(job.ID)
-		if e != nil || len(id) != 16 || ids[job.ID] || len(job.Message) > 4000 || math.IsNaN(job.Progress) || math.IsInf(job.Progress, 0) || job.Progress < 0 || job.Progress > 100 {
+		if e != nil || len(id) != 16 || ids[job.ID] || len(job.Message) > 4000 || math.IsNaN(job.Progress) || math.IsInf(job.Progress, 0) || job.Progress < 0 || job.Progress > 100 || job.AsOf < 0 || job.AsOf > time.Now().Add(time.Minute).UnixMilli() {
 			return errors.New("invalid saved download job")
 		}
 		ids[job.ID] = true
@@ -254,7 +254,7 @@ func (m *Manager) loadDownloads() error {
 		default:
 			return errors.New("invalid saved job status")
 		}
-		if job.OutputPath != "" && (filepath.Dir(job.OutputPath) != directory || !strings.HasPrefix(filepath.Base(job.OutputPath), job.Symbol+"-")) {
+		if job.OutputPath != "" && (filepath.Dir(job.OutputPath) != directory || !strings.HasPrefix(strings.ToLower(filepath.Base(job.OutputPath)), job.Symbol+"-")) {
 			return errors.New("invalid saved output path")
 		}
 	}
@@ -262,7 +262,7 @@ func (m *Manager) loadDownloads() error {
 		return err
 	}
 	for id, name := range saved.Publication {
-		if !ids[id] || filepath.Base(name) != name || name == "." || name == ".." || !strings.HasSuffix(name, ".csv") {
+		if !ids[id] || filepath.Base(name) != name || name == "." || name == ".." || !strings.EqualFold(filepath.Ext(name), ".csv") {
 			return errors.New("invalid saved publication name")
 		}
 	}
@@ -324,6 +324,9 @@ func (m *Manager) Resume() (Info, error) {
 	}
 	if m.refreshActive {
 		return m.infoLocked(), errors.New("finish or cancel the data refresh before resuming downloads")
+	}
+	if m.enrichmentActive || m.analysisActiveLocked() {
+		return m.infoLocked(), errors.New("finish or cancel enrichment and Analysis before resuming downloads")
 	}
 	if m.invalidDownloads {
 		return m.infoLocked(), errors.New(m.stateError)

@@ -87,7 +87,9 @@ Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from 
 
 **Select all downloaded assets** replaces the selection with symbols that already have CSV files in the current Screener folder, across all date ranges and timeframes. Search and collapsed categories do not limit it. Files from earlier sessions count; removed files and unfinished downloads do not.
 
-**Download** always creates a new CSV for the complete selected range. Extending **To** downloads that full range again and preserves existing files, including their indicator columns. To update existing CSVs, use **Enrichment → Refresh data and indicators**.
+**Download** reuses existing files for the same symbol and timeframe and fetches **only missing ranges**. An earlier **From** prepends history; a later **To** appends it. Already covered ranges need no download, and narrowing the selection never removes saved bars. Applied indicators are recalculated over the combined history so earlier data supplies the correct warm-up context. New assets/timeframes get a new CSV; existing histories retain their original filename and exact backups.
+
+**To** remains exclusive. Selecting tomorrow UTC downloads the latest available data through the time the batch starts, including a current partial candle. Partial candles may be fetched again until closed. Downloaded ranges and their checkpoints survive restart, including separate earlier/later ranges. When several older files exist, their local data is reused in one primary history; the other originals remain intact. Dukascopy source files can span larger time buckets, but only missing requested rows are merged.
 
 The Downloads panel shows **10 jobs per page**, with totals for **completed** and **failed** downloads. Its status filter includes **Failed** and **Completed**; **All statuses** includes completed jobs alongside queued, running and other jobs. Filtering happens before pagination.
 
@@ -125,7 +127,7 @@ The two file actions have different purposes:
 
 Refresh first downloads data through the instant you click, shared by every file in the batch, then merges it and recalculates existing indicator columns. New candles must be fully closed at that instant; ticks are included up to the cutoff. **UTC period** follows the actual most recent row in the CSV, including rows beyond the filename's original end date. Market closures and provider availability can leave the last row earlier than the cutoff.
 
-The first refresh verifies history from each download's original start through that cutoff; subsequent refreshes use verified coverage and recent overlap. Exact originals are backed up before enriched/refreshed CSVs are atomically replaced. Unknown derived columns or missing inputs produce per-file errors while preserving originals. Completed changes survive restart; interrupted **enrichment or refresh must be run again**. See the [full enrichment guide](APP_README.md#enrichment) for backup locations, source selection and recovery details.
+Refresh verifies histories without a trusted coverage fingerprint from their earliest saved/requested start through that cutoff; verified files use recent overlap and new data. Exact originals are backed up before enriched/refreshed CSVs are atomically replaced. Unknown derived columns or missing inputs produce per-file errors while preserving originals. Completed changes survive restart; interrupted **enrichment or refresh must be run again**. See the [full enrichment guide](APP_README.md#enrichment) for backup locations, source selection and recovery details.
 
 ### Analysis: build smart filters visually
 

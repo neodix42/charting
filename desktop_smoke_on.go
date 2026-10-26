@@ -404,6 +404,18 @@ const desktopSmokeJavaScript = `async function(phase) {
     const refreshButton=Array.from(q('#screener-enrichment').querySelectorAll('button')).find(button=>button.textContent==='Refresh data and indicators');refreshButton.click();
     const refreshed=await wait(async()=>{const value=await api.GetScreenerRefresh(ids);if(value.failed)throw Error(JSON.stringify(value));return !value.active&&value.completed===2?value:false;},'real missing/new public data and saved indicator refresh',180000);
     await wait(()=>qa('#screener-enrichment tbody tr').every(row=>row.textContent.includes('Available bar open times')&&row.querySelector('progress')?.value===100),'native refreshed periods and per-file completion');
+    const previousFiles=await api.GetScreenerFiles(0,50);
+    await click('#screener-downloader-tab');
+    await input('[aria-label="Download from date"]','2023-12-31');await input('[aria-label="Download to date"]','2024-01-03');
+    await wait(()=>q('[aria-label="Download historical data"] button[type="submit"]:not(:disabled)'),'incremental Download action ready');await click('[aria-label="Download historical data"] button[type="submit"]');
+    const extended=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return !value.active&&value.jobs.length===2&&value.jobs.every(job=>job.status==='completed'&&job.from==='2023-12-31'&&job.to==='2024-01-03')?value:false;},'native Download prepends only missing earlier data',90000);
+    check(extended.jobs.every(job=>previousFiles.files.some(file=>job.outputPath.endsWith(file.name))&&job.message.includes('1 missing ranges')),'Download extends original files instead of creating date-range duplicates',extended.jobs);
+    const extendedFiles=await api.GetScreenerFiles(0,50);
+    check(extendedFiles.total===2&&extendedFiles.files.every(file=>file.firstTimestamp===1703980800000&&file.lastTimestamp>1704240000000&&file.fields.includes('sma_2')),'earlier From prepends history, preserves newer bars outside To, and retains applied indicators',extendedFiles);
+    await wait(()=>q('[aria-label="Download historical data"] button[type="submit"]:not(:disabled)'),'covered Download action ready');await click('[aria-label="Download historical data"] button[type="submit"]');
+    const covered=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return !value.active&&value.jobs.every(job=>job.status==='completed'&&job.message.includes('already available'))?value:false;},'covered native Download completes without a new request');
+    check(covered.jobs.length===2,'already covered Download reuses both histories',covered.jobs);
+    await click('#screener-enrichment-tab');
     const csv={},counts={};
     for(const symbol of ['btcusd','ethusd']){
      csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
@@ -438,7 +450,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     await click('[aria-label="Matching occurrences"] button:first-child');await wait(()=>q('.analysis-chart-modal nav strong')?.textContent.includes('Occurrence 1 of'),'previous occurrence label');
     await click('[aria-label="Close analysis chart"]');await wait(()=>!q('.analysis-chart-modal')&&!q('.tv-lightweight-charts'),'native chart popup unmounts');
     check((await api.GetDiagnostics()).market.activeLeases===0,'historical rule scanning and chart popup create no live chart subscriptions');
-    report.analysisRefresh={originals,csv,counts,refreshed,analysis,view:await api.GetScreenerAnalysisView(),named};
+    report.analysisRefresh={originals,csv,counts,refreshed,extended,covered,analysis,view:await api.GetScreenerAnalysisView(),named};
     await click('[aria-label="Remove condition 2"]');await wait(async()=>(await api.GetScreenerAnalysisView()).conditions.length===1,'changed draft saved independently of the named snapshot');
    }else{
     await wait(()=>qa('.analysis-condition').length===1&&q('[aria-label="Load condition Native two-row condition"]'),'native restored saved-condition list and independent draft');
