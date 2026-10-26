@@ -156,12 +156,15 @@ Timeframe alignment uses only bars that had **fully closed** at the point being 
 | Operator | Example rule |
 |---|---|
 | **Is above / Is below** | Close is above SMA(200), or Kijun is below Tenkan. |
+| **Is equal** | Weekday is equal to `1` (Monday), or Close is equal to Open. |
 | **Crosses above / Crosses below** | Tenkan crosses above Kijun, comparing the preceding and current closed bars. |
 | **Is between** | RSI is between `40` and `60`, including both boundaries. |
 | **Is within a distance** | Close is within `0.2 × ATR(14)` of SMA(200). |
 | **Occurred within** | A MACD histogram cross above `0` occurred within the last `3` closed bars. |
 | **Remained true for** | Close remained above SMA(200) for `5` closed bars. |
 | **Highest in window / Lowest in window** | Close exceeds the previous `20`-bar High, or falls below the previous `20`-bar Low. The current bar is excluded from the reference window. |
+
+**Is equal** compares numeric values exactly, with no rounding or tolerance. It supports indicators, prices, constants and earlier bars, including inside **Occurred within** and **Remained true for**. Use **Is within a distance** for approximate equality. Missing values and indicator warm-up blanks never match.
 
 **Try the filter shown above:**
 

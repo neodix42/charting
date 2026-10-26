@@ -139,8 +139,8 @@ test('download status filters precede ten-row pagination and pages clamp as live
 test('all Analysis operators describe closed-bar semantics on hover and keyboard focus',async({page})=>{
  await page.goto('/');await mainTab(page).click();
  const operator=page.getByRole('combobox',{name:'Condition 1 operator',exact:true}),tooltip=page.getByRole('tooltip');
- const descriptions:[string,string][]=[['above','Close is above SMA(200).'],['below','Kijun is below Tenkan.'],['crossesAbove','preceding and current closed bars'],['crossesBelow','preceding and current closed bars'],['between','including both boundaries'],['withinDistance','0.2 × ATR(14)'],['occurredWithin','last 3 closed bars'],['remainedFor','5 closed bars'],['highest','current bar is excluded'],['lowest','current bar is excluded']];
- await expect(operator.locator('option')).toHaveCount(10);
+ const descriptions:[string,string][]=[['above','Close is above SMA(200).'],['below','Kijun is below Tenkan.'],['equal','Weekday is equal to 1 (Monday).'],['crossesAbove','preceding and current closed bars'],['crossesBelow','preceding and current closed bars'],['between','including both boundaries'],['withinDistance','0.2 × ATR(14)'],['occurredWithin','last 3 closed bars'],['remainedFor','5 closed bars'],['highest','current bar is excluded'],['lowest','current bar is excluded']];
+ await expect(operator.locator('option')).toHaveCount(11);
  for(const [value,example] of descriptions){
   await operator.selectOption(value);await page.mouse.move(0,0);await operator.hover();
   await expect(tooltip).toBeVisible();await expect(tooltip).toContainText(example);
@@ -151,7 +151,7 @@ test('all Analysis operators describe closed-bar semantics on hover and keyboard
  await page.mouse.move(0,0);await page.getByRole('button',{name:'Help for Condition 1 operator',exact:true}).focus();await expect(tooltip).toContainText('previous 20-bar Low');
  await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
  await operator.selectOption('occurredWithin');const comparison=page.getByRole('combobox',{name:'Condition 1 comparison',exact:true});
- await comparison.selectOption('crossesAbove');await page.mouse.move(0,0);await comparison.hover();await expect(tooltip).toContainText('preceding and current closed bars');await expect(comparison.locator('option')).toHaveCount(6);
+ await comparison.selectOption('crossesAbove');await page.mouse.move(0,0);await comparison.hover();await expect(tooltip).toContainText('preceding and current closed bars');await expect(comparison.locator('option')).toHaveCount(7);
  await expect(comparison).not.toHaveAttribute('title');await expect(comparison.locator('option[title]')).toHaveCount(0);
  await page.mouse.move(0,0);await page.getByRole('button',{name:'Help for Condition 1 comparison',exact:true}).focus();await expect(tooltip).toBeVisible();await expect(tooltip).toContainText('Tenkan crosses above Kijun');
  await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();

@@ -233,6 +233,8 @@ func (c *compiledAnalysisCondition) evaluate(index, at int64) (bool, error) {
 			matched = left > right
 		case "below":
 			matched = left < right
+		case "equal":
+			matched = left == right
 		case "crossesAbove":
 			matched = c.previousValid && c.previousLeft <= c.previousRight && left > right
 		case "crossesBelow":

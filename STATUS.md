@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-10-26
 
+## Historical Screener numeric equality — 2026-10-26
+
+Added **Is equal** to Analysis visual condition rows and the comparison selectors inside **Occurred within** and **Remained true for**. It compares parsed numeric values exactly, with no rounding or tolerance, across the existing indicator, price, constant, timeframe and earlier-bar operands. Missing values and warm-up blanks cannot match. The custom hover/focus help explains the semantics and gives a Weekday=1 example. Drafts and named condition snapshots retain the new operator across restart. README and APP_README describe equality and point to distance comparisons for a tolerance.
+
+Verification in ignored `.tools/verification/screener-equal/`: scoped Go Analysis/saved-condition race tests pass, including production CSV scans for field/constant/earlier-bar equality, temporal windows, blanks, nearby unequal decimal values and combined Weekday/Hour rules. Frontend typecheck/lint, **176 unit tests**, production frontend assets and all **32 Screener browser tests** pass. Browser coverage includes selecting direct/temporal equality, naming/loading a condition set, reloading its draft and submitting it through Apply. These are offline tests; native desktop interaction and live-provider access were not rechecked for this operator.
+
+Both Linux and Windows release builds pass; the root Linux executable is rebuilt. Complete release archive/runtime inventories and root artifact checksums pass (`release-packages.json`, `linux-build.log`, `windows-build.log`). Native Windows GUI and a new hosted Actions run remain unverified. `git diff --check` passes after the builders restore generated binding files.
+
 ## Shared provider request pacing and durable cooldowns — 2026-10-26
 
 Corrected a remaining rate-control gap: the former 250 ms interval was per worker, so parallel symbol/file workers multiplied the total request rate. Downloader, incremental Download and Refresh now share one Go-owned queue with a conservative **two-second interval between request grants**, independently of their twenty-file worker limit. The existing private owner pipes carry bounded asynchronous permit/response messages; no local HTTP server, proxy, endpoint changes or identity changes were added. Both Node data fetches and the library's supported Playwright data navigation use the same queue through public APIs. Queue waits are visible in job status and do not consume the pinned thirty-second network timeout. Cancel/close drains pending permits and owned workers.

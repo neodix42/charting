@@ -30,6 +30,11 @@ func TestSavedConditionsRoundTripSnapshotsAllRowsWithoutChangingDraftOrApplying(
 	second.ID, second.Operator = "condition-2", "withinDistance"
 	second.Right = AnalysisOperand{Kind: "field", Field: "sma_200", Timeframe: "h4", Aggregate: "highest", Window: 20, Offset: 1}
 	request.Conditions = append(request.Conditions, second)
+	calendar := analysisCondition("equal", analysisField("weekday"), analysisNumber(1))
+	calendar.ID = "calendar-equal"
+	repeated := analysisCondition("remainedFor", analysisField("hour"), analysisNumber(0))
+	repeated.ID, repeated.Comparison = "repeated-equal", "equal"
+	request.Conditions = append(request.Conditions, calendar, repeated)
 	want := copyAnalysisRequest(request)
 	saved, err := m.SaveAnalysisCondition("  Trading hours 📈  ", request)
 	if err != nil || saved.Name != "Trading hours 📈" || len(saved.ID) != 32 || !reflect.DeepEqual(saved.Request, want) {

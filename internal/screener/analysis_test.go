@@ -84,6 +84,8 @@ func TestAnalysisEveryOperatorAndPreviousBarsUseProductionCSV(t *testing.T) {
 	windowField.Window = 2
 	previous := analysisField("close")
 	previous.Offset = 1
+	earlierEqual := analysisField("close")
+	earlierEqual.Offset = 5
 	tests := []struct {
 		name      string
 		condition AnalysisCondition
@@ -91,6 +93,9 @@ func TestAnalysisEveryOperatorAndPreviousBarsUseProductionCSV(t *testing.T) {
 	}{
 		{"above", analysisCondition("above", analysisField("close"), analysisField("sma_3")), []int64{2, 3, 5}},
 		{"below", analysisCondition("below", analysisField("close"), analysisNumber(3)), []int64{0, 1, 6}},
+		{"equal to number", analysisCondition("equal", analysisField("close"), analysisNumber(3)), []int64{4}},
+		{"equal to indicator", analysisCondition("equal", analysisField("close"), analysisField("sma_3")), []int64{4}},
+		{"equal to earlier bar", analysisCondition("equal", analysisField("close"), earlierEqual), []int64{6}},
 		{"cross above", analysisCondition("crossesAbove", analysisField("close"), analysisNumber(3)), []int64{2, 5}},
 		{"cross below equality", analysisCondition("crossesBelow", analysisField("close"), analysisNumber(3)), []int64{6}},
 		{"earlier bar", analysisCondition("above", analysisField("close"), previous), []int64{1, 2, 3, 5}},
@@ -117,6 +122,18 @@ func TestAnalysisEveryOperatorAndPreviousBarsUseProductionCSV(t *testing.T) {
 			c.Bars = 2
 			return c
 		}(), []int64{3}},
+		{"equal occurred within 2", func() AnalysisCondition {
+			c := analysisCondition("occurredWithin", analysisField("close"), analysisNumber(3))
+			c.Comparison = "equal"
+			c.Bars = 2
+			return c
+		}(), []int64{4, 5}},
+		{"equal remained for 2", func() AnalysisCondition {
+			c := analysisCondition("remainedFor", analysisField("close"), analysisField("open"))
+			c.Comparison = "equal"
+			c.Bars = 2
+			return c
+		}(), []int64{1, 2, 3, 4, 5, 6}},
 		{"highest previous2", func() AnalysisCondition {
 			c := analysisCondition("highest", analysisField("close"), analysisField("close"))
 			c.Bars = 2
@@ -151,6 +168,47 @@ func TestAnalysisEveryOperatorAndPreviousBarsUseProductionCSV(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, test.indices) {
 				t.Fatalf("matches %v want%v", got, test.indices)
+			}
+		})
+	}
+}
+func TestAnalysisEqualPreservesMissingValuesAndNumericPrecision(t *testing.T) {
+	m := analysisTestManager(t)
+	name := "btcusd-m1-2024-01-01-2024-01-02.csv"
+	writeDataFile(t, m, name, "timestamp,close,sma_3,ema_3,weekday,hour\n"+
+		"1704067200000,3,,,1,0\n"+
+		"1704067260000,3,0,,1,1\n"+
+		"1704067320000,3,,0,1,2\n"+
+		"1704067380000,3,0,0,1,3\n"+
+		"1704067440000,3,0.1,0.10,2,4\n"+
+		"1704067500000,3,0.10000000000000002,0.1,2,5\n")
+	tests := []struct {
+		name       string
+		conditions []AnalysisCondition
+		indices    []int64
+	}{
+		{"blank is not zero", []AnalysisCondition{analysisCondition("equal", analysisField("sma_3"), analysisNumber(0))}, []int64{1, 3}},
+		{"two blanks are not equal and near decimals differ", []AnalysisCondition{analysisCondition("equal", analysisField("sma_3"), analysisField("ema_3"))}, []int64{3, 4}},
+		{"numeric constant uses exact parsed value", []AnalysisCondition{analysisCondition("equal", analysisField("sma_3"), analysisNumber(0.1))}, []int64{4}},
+		{"calendar conditions combine", func() []AnalysisCondition {
+			weekday := analysisCondition("equal", analysisField("weekday"), analysisNumber(1))
+			hour := analysisCondition("equal", analysisField("hour"), analysisNumber(0))
+			hour.ID = "hour"
+			return []AnalysisCondition{weekday, hour}
+		}(), []int64{0}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := startTestAnalysis(t, m, test.conditions...)
+			if info.Failed != 0 || info.TotalMatches != int64(len(test.indices)) {
+				t.Fatalf("scan: %+v; want matches at %v", info, test.indices)
+			}
+			r := resultNamed(t, info, name)
+			for occurrence, want := range test.indices {
+				chart, err := m.AnalysisChart(r.ID, occurrence, 0, 0)
+				if err != nil || chart.MatchIndex != want {
+					t.Fatalf("occurrence %d: %+v %v; want row %d", occurrence, chart, err, want)
+				}
 			}
 		})
 	}
@@ -304,8 +362,12 @@ func TestAnalysisMissingFieldsMalformedFilesAndTickPriceAlias(t *testing.T) {
 func TestAnalysisDraftPersistenceProtectsInvalidStateAndValidatesBounds(t *testing.T) {
 	m := analysisTestManager(t)
 	request := defaultAnalysisRequest()
+	request.Conditions[0].Operator = "equal"
 	request.Conditions[0].Left.Offset = 3
 	request.Conditions[0].Right = analysisNumber(-1.2)
+	recent := analysisCondition("occurredWithin", analysisField("weekday"), analysisNumber(1))
+	recent.ID, recent.Comparison = "recent-equal", "equal"
+	request.Conditions = append(request.Conditions, recent)
 	if _, err := m.SaveAnalysisView(request); err != nil {
 		t.Fatal(err)
 	}

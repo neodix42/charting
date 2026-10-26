@@ -1,4 +1,4 @@
-export type AnalysisOperator='above'|'below'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
+export type AnalysisOperator='above'|'below'|'equal'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
 export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:number;timeframe?:string;offset?:number;aggregate?:'value'|'highest'|'lowest'|'';window?:number}
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
 export interface AnalysisRequest {conditions:AnalysisCondition[];categories?:string[]|null}
@@ -28,7 +28,7 @@ export const fieldOperand=(field='close'):AnalysisOperand=>({kind:'field',field,
 export const newAnalysisCondition=(id:string=crypto.randomUUID()):AnalysisCondition=>({id,operator:'above',left:fieldOperand(),right:numberOperand(),upper:numberOperand(100),distance:fieldOperand('atr_14'),multiplier:0.2,bars:3,comparison:'above'});
 export const initialAnalysisView=():AnalysisRequest=>({conditions:[newAnalysisCondition('condition-1')]});
 export const analysisOperators:Array<{id:AnalysisOperator;label:string}>=[
- {id:'above',label:'Is above'},{id:'below',label:'Is below'},
+ {id:'above',label:'Is above'},{id:'below',label:'Is below'},{id:'equal',label:'Is equal'},
  {id:'crossesAbove',label:'Crosses above'},{id:'crossesBelow',label:'Crosses below'},
  {id:'between',label:'Is between'},{id:'withinDistance',label:'Is within a distance'},
  {id:'occurredWithin',label:'Occurred within'},{id:'remainedFor',label:'Remained true for'},

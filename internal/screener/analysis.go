@@ -154,7 +154,7 @@ func conditionOperands(c AnalysisCondition) []*AnalysisOperand {
 }
 func baseAnalysisOperator(op string) bool {
 	switch op {
-	case "above", "below", "crossesAbove", "crossesBelow", "between", "withinDistance", "highest", "lowest":
+	case "above", "below", "equal", "crossesAbove", "crossesBelow", "between", "withinDistance", "highest", "lowest":
 		return true
 	}
 	return false

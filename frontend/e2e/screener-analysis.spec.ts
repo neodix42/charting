@@ -23,10 +23,40 @@ test('Analysis loads only when visible and exposes grouped enriched fields plus 
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Visual condition rows'})).toBeVisible();
  await expect(control(page,'Condition 1 left field').locator('optgroup[label="MACD"] option')).toContainText(['MACD (12, 26)','Histogram (12, 26, 9)']);
- await expect(control(page,'Condition 1 operator').locator('option')).toHaveCount(10);
+ await expect(control(page,'Condition 1 operator').locator('option')).toHaveCount(11);
  await expect(control(page,'Condition 1 left timeframe').locator('option')).toHaveText(['Same as file','d1','h4']);
  await expect(page.getByText('All rows must match (AND). Every closed bar in the selected downloaded CSV files is checked.',{exact:true})).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);
+});
+
+test('Is equal saves, reloads and submits calendar and temporal comparisons',async({page})=>{
+ await open(page,[{...file(0),fields:[...fields,'weekday','hour']}]);
+ await control(page,'Condition 1 left field').selectOption('weekday');await control(page,'Condition 1 operator').selectOption('equal');
+ await control(page,'Condition 1 right constant').fill('1');
+ await page.getByRole('button',{name:'Add condition',exact:false}).click();
+ await control(page,'Condition 2 operator').selectOption('occurredWithin');await control(page,'Condition 2 comparison').selectOption('equal');
+ await control(page,'Condition 2 left field').selectOption('hour');await control(page,'Condition 2 right constant').fill('0');
+ await page.getByRole('button',{name:'Add condition',exact:false}).click();
+ await control(page,'Condition 3 operator').selectOption('remainedFor');await control(page,'Condition 3 comparison').selectOption('equal');
+ await control(page,'Condition 3 right type').selectOption('field');await control(page,'Condition 3 right field').selectOption('close');
+ await control(page,'Condition 3 right bars ago').fill('1');
+ await page.getByRole('button',{name:'Safe Condition',exact:true}).click();
+ await control(page,'Condition name').fill('Monday equality');
+ await page.getByRole('dialog',{name:'Save condition',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Save condition',exact:true})).toHaveCount(0);
+ await control(page,'Condition 1 operator').selectOption('above');
+ await page.getByRole('button',{name:'Load condition Monday equality',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].operator)).toBe('equal');
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(control(page,'Condition 1 operator')).toHaveValue('equal');
+ await expect(control(page,'Condition 2 comparison')).toHaveValue('equal');await expect(control(page,'Condition 3 comparison')).toHaveValue('equal');
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ const request=await page.evaluate(()=>(window as any).__testAnalysisRequest()) as AnalysisRequest;
+ expect(request.conditions).toHaveLength(3);
+ expect(request.conditions[0]).toMatchObject({operator:'equal',left:{field:'weekday'},right:{kind:'number',value:1}});
+ expect(request.conditions[1]).toMatchObject({operator:'occurredWithin',comparison:'equal',left:{field:'hour'},right:{kind:'number',value:0}});
+ expect(request.conditions[2]).toMatchObject({operator:'remainedFor',comparison:'equal',right:{kind:'field',field:'close',offset:1}});
 });
 
 test('visual AND rows submit MACD, cross-timeframe candle and ATR distance operands',async({page})=>{

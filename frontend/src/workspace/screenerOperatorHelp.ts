@@ -3,6 +3,7 @@ import type {AnalysisOperator} from './screenerAnalysis';
 export const analysisOperatorHelp:Record<AnalysisOperator,{description:string;example:string}>={
  above:{description:'The left value is greater than the right value at the current closed bar.',example:'Close is above SMA(200).'},
  below:{description:'The left value is less than the right value at the current closed bar.',example:'Kijun is below Tenkan.'},
+ equal:{description:'The left and right values are exactly equal at the current closed bar. No rounding or tolerance is applied.',example:'Weekday is equal to 1 (Monday).'},
  crossesAbove:{description:'The left value moves from at or below the right value on the preceding closed bar to above it on the current closed bar.',example:'Tenkan crosses above Kijun, comparing the preceding and current closed bars.'},
  crossesBelow:{description:'The left value moves from at or above the right value on the preceding closed bar to below it on the current closed bar.',example:'Tenkan crosses below Kijun, comparing the preceding and current closed bars.'},
  between:{description:'The left value is between the right value and the upper value, including both boundaries.',example:'RSI is between 40 and 60, including both boundaries.'},
