@@ -54,7 +54,7 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
    const renamed={...savedConditions[index],name};savedConditions[index]=renamed;
    sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));return structuredClone(renamed);
   },
-  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,active:true,phase:'indexing',total:files().filter(file=>value.categories==null||value.categories.includes(file.category)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
+  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,tradeSimulation:structuredClone(value.tradeSimulation??null),active:true,phase:'indexing',total:files().filter(file=>value.categories==null||value.categories.includes(file.category)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
   async GetScreenerAnalysis(offset,limit){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit);},
   async GetScreenerAnalysisFiltered(offset,limit,filter){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit,filter);},
   async CancelScreenerAnalysis(){info={...info,active:false,phase:'cancelled',currentFile:''};return page(0,50);},

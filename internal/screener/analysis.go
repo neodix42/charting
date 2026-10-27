@@ -40,7 +40,8 @@ type AnalysisRequest struct {
 	Conditions []AnalysisCondition `json:"conditions"`
 	// A nil selection preserves older saved conditions: apply to every asset.
 	// An explicit empty selection means none and must never silently mean all.
-	Categories []string `json:"categories"`
+	Categories      []string                 `json:"categories"`
+	TradeSimulation *AnalysisTradeSimulation `json:"tradeSimulation,omitempty"`
 }
 type AnalysisCatalog struct {
 	Directory  string     `json:"directory"`
@@ -54,38 +55,40 @@ type AnalysisFilter struct {
 	IncludeEmpty bool     `json:"includeEmpty"`
 }
 type AnalysisResult struct {
-	ID           string `json:"id"`
-	FileID       string `json:"fileId"`
-	Name         string `json:"name"`
-	Symbol       string `json:"symbol"`
-	Description  string `json:"description"`
-	Category     string `json:"category"`
-	Timeframe    string `json:"timeframe"`
-	Status       string `json:"status"`
-	Error        string `json:"error,omitempty"`
-	Rows         int64  `json:"rows"`
-	Matches      int64  `json:"matches"`
-	AssetMatches int64  `json:"assetMatches"`
-	AssetFiles   int    `json:"assetFiles"`
-	FirstTime    int64  `json:"firstTime,omitempty"`
-	LastTime     int64  `json:"lastTime,omitempty"`
+	ID           string                     `json:"id"`
+	FileID       string                     `json:"fileId"`
+	Name         string                     `json:"name"`
+	Symbol       string                     `json:"symbol"`
+	Description  string                     `json:"description"`
+	Category     string                     `json:"category"`
+	Timeframe    string                     `json:"timeframe"`
+	Status       string                     `json:"status"`
+	Error        string                     `json:"error,omitempty"`
+	Rows         int64                      `json:"rows"`
+	Matches      int64                      `json:"matches"`
+	AssetMatches int64                      `json:"assetMatches"`
+	AssetFiles   int                        `json:"assetFiles"`
+	FirstTime    int64                      `json:"firstTime,omitempty"`
+	LastTime     int64                      `json:"lastTime,omitempty"`
+	Simulation   *AnalysisSimulationSummary `json:"simulation,omitempty"`
 }
 type AnalysisInfo struct {
-	Active       bool             `json:"active"`
-	Phase        string           `json:"phase"`
-	Total        int              `json:"total"`
-	Completed    int              `json:"completed"`
-	Failed       int              `json:"failed"`
-	CurrentFile  string           `json:"currentFile"`
-	Progress     float64          `json:"progress"`
-	Rows         int64            `json:"rows"`
-	TotalMatches int64            `json:"totalMatches"`
-	MatchedFiles int              `json:"matchedFiles"`
-	Results      []AnalysisResult `json:"results"`
-	Offset       int              `json:"offset"`
-	Limit        int              `json:"limit"`
-	TotalResults int              `json:"totalResults"`
-	Error        string           `json:"error,omitempty"`
+	Active          bool                     `json:"active"`
+	Phase           string                   `json:"phase"`
+	Total           int                      `json:"total"`
+	Completed       int                      `json:"completed"`
+	Failed          int                      `json:"failed"`
+	CurrentFile     string                   `json:"currentFile"`
+	Progress        float64                  `json:"progress"`
+	Rows            int64                    `json:"rows"`
+	TotalMatches    int64                    `json:"totalMatches"`
+	MatchedFiles    int                      `json:"matchedFiles"`
+	Results         []AnalysisResult         `json:"results"`
+	Offset          int                      `json:"offset"`
+	Limit           int                      `json:"limit"`
+	TotalResults    int                      `json:"totalResults"`
+	Error           string                   `json:"error,omitempty"`
+	TradeSimulation *AnalysisTradeSimulation `json:"tradeSimulation,omitempty"`
 }
 type AnalysisBar struct {
 	Index  int64              `json:"index"`
@@ -163,6 +166,9 @@ func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
 	if err := validateAnalysisCategories(request.Categories); err != nil {
 		return err
 	}
+	if err := validateAnalysisTradeSimulation(request.TradeSimulation, draft); err != nil {
+		return err
+	}
 	if len(request.Conditions) > 32 || (!draft && len(request.Conditions) == 0) {
 		return errors.New("analysis requires between 1 and 32 condition rows")
 	}
@@ -218,6 +224,7 @@ func copyAnalysisRequest(request AnalysisRequest) AnalysisRequest {
 	if request.Categories != nil {
 		request.Categories = append([]string{}, request.Categories...)
 	}
+	request.TradeSimulation = copyAnalysisTradeSimulation(request.TradeSimulation)
 	return request
 }
 
@@ -356,6 +363,7 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 		return info
 	}
 	info.Active, info.Phase, info.CurrentFile, info.Progress, info.Rows, info.Error = a.active, a.phase, a.current, a.progress, a.rows, a.errorText
+	info.TradeSimulation = copyAnalysisTradeSimulation(a.request.TradeSimulation)
 	info.Total = len(a.results)
 	assetMatches, assetFiles := map[string]int64{}, map[string]int{}
 	filtered := []AnalysisResult{}
@@ -384,6 +392,10 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 	info.Results = append(info.Results, filtered[start:start+min(limit, len(filtered)-start)]...)
 	for i := range info.Results {
 		symbol := info.Results[i].Symbol
+		if info.Results[i].Simulation != nil {
+			summary := *info.Results[i].Simulation
+			info.Results[i].Simulation = &summary
+		}
 		info.Results[i].AssetMatches = assetMatches[symbol]
 		info.Results[i].AssetFiles = assetFiles[symbol]
 	}
@@ -497,6 +509,7 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 					a.results[i].Matches = 0
 					a.results[i].FirstTime = 0
 					a.results[i].LastTime = 0
+					a.results[i].Simulation = nil
 				}
 			}
 		} else {
@@ -564,6 +577,7 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 			a.results[i].Matches = 0
 			a.results[i].FirstTime = 0
 			a.results[i].LastTime = 0
+			a.results[i].Simulation = nil
 		} else {
 			a.results[i].Status = "completed"
 		}
@@ -624,6 +638,7 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	if err != nil {
 		return err
 	}
+	simulation := newAnalysisTradeSimulator(s, a.request.TradeSimulation)
 	var checked, reported int64
 	defer func() { m.mu.Lock(); a.rows += checked - reported; a.results[index].Rows = checked; m.mu.Unlock() }()
 	for rowIndex := int64(0); rowIndex < closedCount; rowIndex++ {
@@ -639,6 +654,7 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 			a.results[index].Matches = matches
 			a.results[index].FirstTime = first
 			a.results[index].LastTime = last
+			a.results[index].Simulation = simulation.snapshot(matches)
 			m.mu.Unlock()
 		}
 		row, err := s.row(rowIndex)
@@ -649,6 +665,7 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 		if closed > now {
 			continue
 		}
+		simulation.advance(rowIndex, row)
 		match := true
 		for _, condition := range compiled {
 			ok, e := condition.evaluate(rowIndex, closed)
@@ -671,8 +688,10 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 				first = row.timestamp
 			}
 			last = row.timestamp
+			simulation.match(row)
 		}
 	}
+	simulation.finish()
 	if err = buffered.Flush(); err != nil {
 		return err
 	}
@@ -694,6 +713,7 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	a.results[index].Matches = matches
 	a.results[index].FirstTime = first
 	a.results[index].LastTime = last
+	a.results[index].Simulation = simulation.snapshot(matches)
 	m.mu.Unlock()
 	return nil
 }

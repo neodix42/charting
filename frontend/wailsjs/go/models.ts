@@ -528,7 +528,7 @@ export namespace market {
 }
 
 export namespace screener {
-	
+
 	export class AnalysisBar {
 	    index: number;
 	    time: number;
@@ -753,6 +753,48 @@ export namespace screener {
 	        this.includeEmpty = source["includeEmpty"];
 	    }
 	}
+	export class AnalysisTradeSimulation {
+	    stopLoss: string;
+	    takeProfit: string;
+	    duration: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisTradeSimulation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stopLoss = source["stopLoss"];
+	        this.takeProfit = source["takeProfit"];
+	        this.duration = source["duration"];
+	    }
+	}
+	export class AnalysisSimulationSummary {
+	    takeProfitHits: number;
+	    stopLossHits: number;
+	    expired: number;
+	    insufficientData: number;
+	    invalidLevels: number;
+	    unavailable: number;
+	    profitablePercent: number;
+	    reason?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisSimulationSummary(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.takeProfitHits = source["takeProfitHits"];
+	        this.stopLossHits = source["stopLossHits"];
+	        this.expired = source["expired"];
+	        this.insufficientData = source["insufficientData"];
+	        this.invalidLevels = source["invalidLevels"];
+	        this.unavailable = source["unavailable"];
+	        this.profitablePercent = source["profitablePercent"];
+	        this.reason = source["reason"];
+	    }
+	}
 	export class AnalysisResult {
 	    id: string;
 	    fileId: string;
@@ -769,6 +811,7 @@ export namespace screener {
 	    assetFiles: number;
 	    firstTime?: number;
 	    lastTime?: number;
+	    simulation?: AnalysisSimulationSummary;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisResult(source);
@@ -791,7 +834,26 @@ export namespace screener {
 	        this.assetFiles = source["assetFiles"];
 	        this.firstTime = source["firstTime"];
 	        this.lastTime = source["lastTime"];
+	        this.simulation = this.convertValues(source["simulation"], AnalysisSimulationSummary);
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class AnalysisInfo {
 	    active: boolean;
@@ -809,6 +871,7 @@ export namespace screener {
 	    limit: number;
 	    totalResults: number;
 	    error?: string;
+	    tradeSimulation?: AnalysisTradeSimulation;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisInfo(source);
@@ -831,6 +894,7 @@ export namespace screener {
 	        this.limit = source["limit"];
 	        this.totalResults = source["totalResults"];
 	        this.error = source["error"];
+	        this.tradeSimulation = this.convertValues(source["tradeSimulation"], AnalysisTradeSimulation);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -855,6 +919,7 @@ export namespace screener {
 	export class AnalysisRequest {
 	    conditions: AnalysisCondition[];
 	    categories: string[];
+	    tradeSimulation?: AnalysisTradeSimulation;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisRequest(source);
@@ -864,6 +929,7 @@ export namespace screener {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
 	        this.categories = source["categories"];
+	        this.tradeSimulation = this.convertValues(source["tradeSimulation"], AnalysisTradeSimulation);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1200,7 +1266,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-	
+
 	export class Job {
 	    id: string;
 	    symbol: string;
@@ -1277,8 +1343,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-	
-	
+
 	export class RefreshJob {
 	    id: string;
 	    fileId: string;

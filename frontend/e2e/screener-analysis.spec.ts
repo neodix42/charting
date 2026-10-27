@@ -555,3 +555,85 @@ test('asset headings use full catalog descriptions instead of aggregate-match bo
  await expect(heading).not.toContainText('total matches');await expect(page.getByRole('button',{name:/Inspect arkiususd/})).toContainText('224');
  await expect(control(page,'Result asset category').locator('option[value="ETFs"]')).toHaveCount(1);
 });
+
+test('Simulate trade validates fields and duration, saves only valid duration edits, and can be removed',async({page})=>{
+ await open(page);
+ const add=page.getByRole('button',{name:'Simulate trade',exact:true}),apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Safe Condition',exact:true});
+ const positions=await page.locator('.analysis-add-actions button').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().top));expect(Math.abs(positions[0]-positions[1])).toBeLessThan(2);
+ await add.click();await expect(add).toBeDisabled();await expect(add).toHaveAttribute('aria-expanded','true');
+ await expect(control(page,'Stop Loss field')).toHaveValue('');await expect(control(page,'Take profit field')).toHaveValue('');await expect(control(page,'Trade duration in bars')).toHaveValue('20');
+ await expect(apply).toBeDisabled();await expect(save).toBeDisabled();await expect(page.getByText('Choose a Stop Loss field and a Take profit field to simulate trades.',{exact:true})).toBeVisible();
+ await control(page,'Stop Loss field').selectOption('low');await expect(apply).toBeDisabled();
+ await control(page,'Take profit field').selectOption('ema_200');await expect(apply).toBeEnabled();await expect(save).toBeEnabled();
+ await expect(control(page,'Take profit field').locator('optgroup[label="EMA"] option')).toHaveText(['EMA (200)']);
+ for(const invalid of ['', '0','-1','1.5','10001']){
+  await control(page,'Trade duration in bars').fill(invalid);await expect(apply).toBeDisabled();await expect(save).toBeDisabled();
+  await expect(page.getByText('Trade duration must be a whole number from 1 to 10,000 bars.',{exact:true})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation.duration)).toBe(20);
+ }
+ await control(page,'Trade duration in bars').fill('5');await expect(apply).toBeEnabled();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toEqual({stopLoss:'low',takeProfit:'ema_200',duration:5});
+ await page.getByRole('button',{name:'Remove simulation',exact:true}).click();await expect(control(page,'Stop Loss field')).toHaveCount(0);await expect(add).toBeEnabled();await expect(apply).toBeEnabled();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toBeNull();
+ await apply.click();expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toBeNull();
+});
+
+test('simulation persists through restart, named save, rename and load without applying it',async({page})=>{
+ await open(page);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
+ await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('ema_200');await control(page,'Trade duration in bars').fill('12');
+ await saveCondition(page,'Long setup');
+ const saved=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]);expect(saved.request.tradeSimulation).toEqual({stopLoss:'low',takeProfit:'ema_200',duration:12});
+ const dialog=await openRename(page,'Long setup');await control(page,'Condition name').fill('Saved trade');await dialog.getByRole('button',{name:'Rename',exact:true}).click();await expect(dialog).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0])).toEqual({...saved,name:'Saved trade'});
+ await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[{...file(0),fields:['timestamp','open','high','low','close']}]);
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();
+ await expect(control(page,'Stop Loss field')).toHaveValue('low');await expect(control(page,'Take profit field')).toHaveValue('ema_200');await expect(control(page,'Trade duration in bars')).toHaveValue('12');
+ await expect(control(page,'Take profit field').locator('option:checked')).toContainText('not in current files');
+ await page.getByRole('button',{name:'Remove simulation',exact:true}).click();await expect(control(page,'Stop Loss field')).toHaveCount(0);
+ await page.getByRole('button',{name:'Load condition Saved trade',exact:true}).click();await expect(control(page,'Trade duration in bars')).toHaveValue('12');
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[file(0)]);await page.getByRole('button',{name:'Refresh fields',exact:true}).click();
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual(saved.request.tradeSimulation);
+ await expect(control(page,'Trade duration in bars')).toBeDisabled();await expect(page.getByRole('button',{name:'Remove simulation',exact:true})).toBeDisabled();
+});
+
+test('simulation outcomes use all matches and the applied snapshot, with zero and unavailable cases explicit',async({page})=>{
+ await open(page);
+ await complete(page,[result(0)]);await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('high');await control(page,'Trade duration in bars').fill('5');
+ await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ await page.evaluate(value=>(window as any).__testSetAnalysisInfo({phase:'scanning',results:[value]}),{...result(0,'btcusd',7),status:'running'});
+ await expect(page.getByRole('row',{name:'BTCUSD d1 · 7 matches',exact:true}).locator('.analysis-profit>strong')).toHaveText('Pending');
+ const counts={takeProfitHits:2,stopLossHits:1,expired:1,insufficientData:1,invalidLevels:1,unavailable:1,profitablePercent:200/7};
+ await page.evaluate(value=>(window as any).__testSetAnalysisInfo({results:[value]}),{...result(0,'btcusd',7),status:'running',simulation:counts});
+ await expect(page.getByRole('row',{name:'BTCUSD d1 · 7 matches',exact:true}).locator('.analysis-profit')).toContainText('In progress');
+ await complete(page,[{...result(0,'btcusd',7),simulation:counts},{...result(1,'ethusd',2),simulation:{...counts,takeProfitHits:0,stopLossHits:2,expired:0,insufficientData:0,invalidLevels:0,unavailable:0,profitablePercent:0}},{...result(2,'xauusd',2,'tick'),simulation:{...counts,takeProfitHits:0,stopLossHits:0,expired:0,insufficientData:0,invalidLevels:0,unavailable:2,profitablePercent:0,reason:'Trade simulation requires OHLC bars; tick data is unsupported.'}},{...result(3,'eurusd',0),status:'failed',error:'Unreadable CSV'}]);
+ await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toBeVisible();
+ const first=page.getByRole('row',{name:'BTCUSD d1 · 7 matches',exact:true}),zero=page.getByRole('row',{name:'ETHUSD d1 · 2 matches',exact:true}),unavailable=page.getByRole('row',{name:'XAUUSD tick · 2 matches',exact:true});
+ await expect(first.locator('.analysis-profit>strong')).toHaveText('28.57%');await expect(first.locator('summary')).toHaveText('2 / 7 hit TP');
+ await first.locator('summary').click();await expect(first.locator('details')).toContainText('1 hit SL');await expect(first.locator('details')).toContainText('1 expired');await expect(first.locator('details')).toContainText('1 insufficient future data');await expect(first.locator('details')).toContainText('1 invalid levels');await expect(first.locator('details')).toContainText('1 unavailable');
+ await expect(page.getByRole('dialog',{name:'Analysis match chart',exact:true})).toHaveCount(0);
+ await expect(zero.locator('.analysis-profit>strong')).toHaveText('0%');await expect(unavailable.locator('.analysis-profit>strong')).toHaveText('Unavailable');
+ await unavailable.locator('summary').click();await expect(unavailable.locator('details')).toContainText('tick data is unsupported');
+ await expect(page.getByRole('row',{name:'EURUSD d1 · 0 matches',exact:true}).locator('.analysis-profit')).toContainText('No matching bars');
+ await control(page,'Take profit field').selectOption('ema_200');await control(page,'Trade duration in bars').fill('8');
+ await expect(page.locator('.analysis-simulation-summary')).toContainText('TP: high · 5 bars');
+ await page.getByRole('button',{name:'Remove simulation',exact:true}).click();await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toBeVisible();
+ await expect(page.locator('.analysis-simulation-summary')).toContainText('TP: high · 5 bars');
+ await control(page,'Result asset category').selectOption('Cryptocurrencies');await expect(first).toBeVisible();await expect(unavailable).toHaveCount(0);
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ await complete(page,[result(0)]);await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toHaveCount(0);await expect(page.locator('.analysis-simulation-summary')).toHaveCount(0);
+});
+
+test('normal close flushes the latest complete simulation while an invalid duration stays local',async({page})=>{
+ await open(page);await page.evaluate(()=>(window as any).__testHoldAnalysisSaves());
+ await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('high');await control(page,'Trade duration in bars').fill('6');
+ await control(page,'Trade duration in bars').fill('');
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'simulation-save'}));
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__testReleaseAnalysisSaves());
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'simulation-save',discard:false});
+ expect((await page.evaluate(()=>(window as any).__testAnalysisView())).tradeSimulation).toEqual({stopLoss:'low',takeProfit:'high',duration:6});
+});

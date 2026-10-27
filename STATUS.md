@@ -1,4 +1,16 @@
-# Implementation status — updated 2026-10-27
+# Implementation status — updated 2026-10-28
+
+## Historical trade simulation in Analysis — 2026-10-28
+
+Added **Simulate trade** beside **Add condition**, with Stop Loss and Take profit field selectors, a 1–10,000-bar Duration and Remove simulation. The settings persist in the current draft and named condition sets, including rename/load/restart. Invalid duration edits remain local until corrected and block Apply/Save without replacing the last valid persisted duration. Existing saved conditions omit the new optional configuration and remain compatible.
+
+Each condition match independently simulates a long entry at the next available closed bar's open, using fixed absolute SL/TP values from the matched bar. The entry bar counts toward duration; a strict SL < entry < TP bracket is required. Opening gaps resolve before intrabar extremes, and ambiguous same-bar double touches count as SL. Expired, invalid-level, unsupported and insufficient-future-data outcomes retain their original condition matches. **Profitable, %** is TP hits divided by every match in that file; expandable details show the outcome counts. Applied settings remain visible with the results independently of later draft edits, category filtering and pagination. Active values are marked in progress. Analysis remains read-only and makes no provider or trading requests.
+
+The engine advances once per closed row with two threshold heaps, bounded compaction and a duration-sized expiry ring, using O(duration) memory and O(rows log duration) work. It retains progress, cancellation, duplicate-history handling and existing disk indexes. Configuration and summary copies prevent caller mutation or stale UI responses from changing a running scan. Optional fields use the existing version-1 draft/saved-condition format, with regenerated Wails model bindings; no new dependency or user-data migration.
+
+Verification: full Screener Go race tests, bindings-facade race tests and vet pass. Production CSV cases cover next-bar entry, frozen levels, inclusive touches, entry/active gaps, conservative ties, duration boundaries, incomplete tails, overlapping matches, tick/missing fields, persistence, saved-condition rename, duplicate/category pagination and cancellation during a dense scan. A deterministic independent oracle checks 200 randomized sequences; 50,000-row tests exercise bounded state for durations 1, 7 and 10,000. All **178 frontend unit tests**, typecheck/lint and a clean **32-case Analysis browser suite** pass. Browser regressions cover adding/removing simulation, validation, restart/named condition restoration, missing saved fields, exact applied settings, percentages/outcome counts, pending results and close persistence. README/app guide and D082 describe the semantics.
+
+Linux and Windows production packages and the root Linux executable are rebuilt. Both complete archive inventories/version checks and SHA-256 checksums pass; README file links and `git diff --check` pass. The Linux verification build used `CRYPTODESK_UPDATE_SCREENER=0` to retain the existing 1.51.0 dependency while testing this Analysis change. Native desktop interaction, Windows execution, a hosted Actions run and live provider access have not been exercised for this feature. No system/global installation or downloaded CSV changes were made.
 
 ## Build-time downloader updates and saved-condition Rename — 2026-10-27
 

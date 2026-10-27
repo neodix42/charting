@@ -5,12 +5,12 @@ describe('Analysis draft persistence',()=>{
  it('serializes saves, snapshots edits and coalesces pending changes into the latest draft',async()=>{
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
   const saved=vi.fn(async value=>{if(saved.mock.calls.length===1)await gate;return value;});
-  const writer=new AnalysisViewWriter(saved,()=>{}),first=initialAnalysisView();
-  writer.edit(first);first.conditions[0].right=numberOperand(99);
+  const writer=new AnalysisViewWriter(saved,()=>{}),first={...initialAnalysisView(),tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:3}};
+  writer.edit(first);first.conditions[0].right=numberOperand(99);first.tradeSimulation.duration=10;
   const second=initialAnalysisView();second.conditions[0].left=fieldOperand('ema_200');writer.edit(second);
-  const last={conditions:[{...newAnalysisCondition('last'),operator:'withinDistance' as const,right:fieldOperand('ema_200'),distance:fieldOperand('atr_14'),multiplier:0.2}]};
+  const last={conditions:[{...newAnalysisCondition('last'),operator:'withinDistance' as const,right:fieldOperand('ema_200'),distance:fieldOperand('atr_14'),multiplier:0.2}],tradeSimulation:{stopLoss:'low',takeProfit:'ema_200',duration:5}};
   writer.edit(last);const flushed=writer.flush();expect(saved).toHaveBeenCalledTimes(1);release();await flushed;
-  expect(saved).toHaveBeenCalledTimes(2);expect(saved.mock.calls[0][0].conditions[0].right.value).toBe(0);expect(saved.mock.calls[1][0]).toEqual(last);
+  expect(saved).toHaveBeenCalledTimes(2);expect(saved.mock.calls[0][0].conditions[0].right.value).toBe(0);expect(saved.mock.calls[0][0].tradeSimulation.duration).toBe(3);expect(saved.mock.calls[1][0]).toEqual(last);
  });
  it('retains the latest draft after a failure so close or Retry can flush it',async()=>{
   const onError=vi.fn(),saved=vi.fn().mockRejectedValueOnce(Error('disk full')).mockImplementation(async value=>value);
@@ -64,5 +64,13 @@ describe('Analysis field selection and validation',()=>{
   expect(analysisInputError({...request,categories:null})).toBe('');
   expect(analysisInputError({...request,categories:['Forex']})).toBe('');
   expect(analysisInputError({...request,categories:[]})).toContain('Select at least one asset category');
+ });
+ it('requires both simulation fields and a bounded integer duration, while retaining legacy requests',()=>{
+  const request=initialAnalysisView(),tradeSimulation={stopLoss:'low',takeProfit:'ema_200',duration:20};
+  expect(analysisInputError({...request,tradeSimulation})).toBe('');
+  expect(analysisInputError({...request,tradeSimulation:null})).toBe('');
+  for(const field of ['stopLoss','takeProfit'] as const)expect(analysisInputError({...request,tradeSimulation:{...tradeSimulation,[field]:' '}})).toContain('Choose a Stop Loss field and a Take profit field');
+  for(const duration of [0,-1,1.5,10001,NaN,Infinity])expect(analysisInputError({...request,tradeSimulation:{...tradeSimulation,duration}})).toContain('whole number');
+  for(const duration of [1,10000])expect(analysisInputError({...request,tradeSimulation:{...tradeSimulation,duration}})).toBe('');
  });
 });

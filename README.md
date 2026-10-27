@@ -14,7 +14,7 @@
 - **Public market data without an account.** Binance and Bybit spot/perpetual markets, plus Coinbase spot. No API keys required.
 - **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download one symbol at a time with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
-- **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, and inspect each match on a chart.
+- **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, inspect matches on a chart, and optionally simulate SL/TP outcomes.
 - **Local files and persistence.** SQLite workspace saving, export/import, resumable downloads, remembered Screener choices and named condition sets.
 
 ## Download
@@ -70,7 +70,7 @@ The fixed **Screener** tab sits at the far right of the chart-tab row. Its three
 |---|---|---|
 | **Downloader** | Select symbols, timeframe and dates | Local historical CSV files |
 | **Enrichment** | Choose indicators and parameters | New columns in those same CSV files |
-| **Analysis** | Build and apply visual conditions | Matching assets, occurrence counts and charts of each match |
+| **Analysis** | Build visual conditions and optionally simulate trades | Matching assets, occurrence counts, TP hit rates and match charts |
 
 Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from **Dukascopy** and use its instrument names and available history. Once downloaded, enrichment and analysis run locally against those files.
 
@@ -177,9 +177,19 @@ Below **Apply conditions**, **Asset categories to scan** lists the same categori
 
 You can also enrich Weekday/Hour and add rows such as **Weekday is between 1 and 5** or **Hour is between 8 and 16** for UTC calendar filters.
 
+#### Simulate a trade after each match
+
+Click **Simulate trade** beside **Add condition**, then choose a **Stop Loss** field, a **Take profit** field and a **Duration** from **1–10,000 bars**. Field dropdowns include OHLC and enriched indicator columns. These are absolute price levels taken from the matching candle and held fixed for that trade. **Remove simulation** returns to a conditions-only scan. Simulation settings persist with the draft and named condition sets.
+
+After **Apply conditions**, each match starts an independent **long** simulation at the **next available closed candle's open**. Duration includes that entry candle. Stop Loss must be below the entry price and Take profit above it; missing or invalid levels cannot produce a winning trade. Overlapping matches are simulated independently. Only closed bars in the file are used.
+
+An opening gap reaching a level resolves the trade first. Otherwise, reaching SL or TP counts inclusively; when a candle touches both and their order is unknown, **SL wins the tie**. A trade that reaches neither level during its full duration expires. If the file ends first, an unresolved trade is marked as having insufficient future data.
+
+**Matching assets → Profitable, %** reports **TP hits ÷ all matches × 100** for each file. Expand the counts beneath the percentage to see SL hits, expiries, insufficient data, invalid levels and unavailable data. These outcomes stay in the denominator. Tick files or files without the required price fields report simulation unavailability while keeping their condition matches. This is a TP hit rate; position sizing, fees and monetary profit/loss are not calculated. Editing settings does not change existing results until you apply conditions again.
+
 #### Save and reuse a condition set
 
-Press **Safe Condition** in the right-hand **Saved conditions** panel, then enter a name. It saves the entire set of rows, including operands, operators, parameters, timeframes, offsets and windows.
+Press **Safe Condition** in the right-hand **Saved conditions** panel, then enter a name. It saves the entire set of rows, including operands, operators, parameters, timeframes, offsets, windows and optional trade simulation settings.
 
 Click a saved name to load its rows into the editor. You can adjust the working copy, then press **Apply conditions** to scan; loading a set does not run it automatically. Named sets and the current draft survive restart. Save an edited version under a new name to retain the original snapshot. These settings are stored locally, separately from chart workspace exports.
 
@@ -203,14 +213,14 @@ Click a result row to open the chart around its match. The popup displays candle
 
 *Inspect the surrounding bars and indicator values rather than only a match count. The occurrence counter shows your position in the file's matches.*
 
-Analysis is an on-demand historical scan. It does not run live alerts or calculate strategy profit/loss. After refreshing or changing a dataset, press **Apply conditions** again to rebuild results; stale match charts are rejected. Results are paginated without dropping occurrences.
+Analysis is an on-demand historical scan with optional SL/TP simulation. It does not run live alerts or place trades. After refreshing or changing a dataset, press **Apply conditions** again to rebuild results; stale match charts are rejected. Results are paginated without dropping occurrences.
 
 ### How Screener works
 
 1. **Download:** the Go download manager queues symbols and runs the pinned Dukascopy worker. It writes chronological CSVs and saves committed batches for restart recovery.
 2. **Enrich:** local indicator workers read those CSVs, calculate fields in chronological order, preserve exact backups and publish completed files. Applied recipes retain the parameters needed for later refreshes.
 3. **Refresh:** source history is merged with existing data, then indicator recipes are recalculated over the updated history, including the context needed by recursive indicators.
-4. **Analyse:** the engine indexes local numeric data and evaluates the AND rule at each closed bar, aligning companion timeframes without future lookahead. Disk-backed indexes and bounded caches keep large scans from requiring all histories in memory.
+4. **Analyse:** the engine indexes local numeric data and evaluates the AND rule at each closed bar, aligning companion timeframes without future lookahead. Optional simulations freeze each match's SL/TP fields before entering on the next bar. Disk-backed indexes and bounded caches keep large scans from requiring all histories in memory.
 5. **Inspect:** paginated match indexes supply occurrence counts and bounded chart windows. Rule drafts and named sets persist; scan results are rebuilt when requested.
 
 See the [complete Screener guide](APP_README.md#screener) for file formats, checkpoints, backups, limits and error handling.
