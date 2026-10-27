@@ -38,7 +38,7 @@ function installProviderTransport(lines, request, send = event => process.stdout
     if (!dataURL(args[0])) return originalFetch.apply(this, args);
     await ask('permit');
     // The pinned library creates its 30s network timeout before calling fetch.
-    // Queuing twenty workers can take longer: start that network timeout only
+    // Pacing and provider cooldowns can take longer: start that timeout only
     // after the permit. App cancellation still terminates the owned process.
     const options = {...args[1], signal: AbortSignal.timeout(30000)};
     const response = await originalFetch.call(this, args[0], options);

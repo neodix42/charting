@@ -384,7 +384,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    if(phase==='analysis-refresh'){
     await click('#screener-downloader-tab');await wait(()=>qa('.screener-instrument').length===1499,'complete native instrument catalog');
     for(const symbol of ['btcusd','ethusd']){await input('[aria-label="Search Dukascopy instruments"]',symbol);await click('.screener-instrument input');}
-    await select('[aria-label="Download timeframe"]','d1');await select('[aria-label="Parallel downloads"]','2');
+    await select('[aria-label="Download timeframe"]','d1');
     await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-02');
     await click('[aria-label="Download historical data"] button[type="submit"]');
     await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed');},'two genuine original daily CSVs',90000);
@@ -409,8 +409,8 @@ const desktopSmokeJavaScript = `async function(phase) {
     await input('[aria-label="Download from date"]','2023-12-31');await input('[aria-label="Download to date"]','2024-01-03');
     await wait(()=>q('[aria-label="Download historical data"] button[type="submit"]:not(:disabled)'),'incremental Download action ready');await click('[aria-label="Download historical data"] button[type="submit"]');
     const extended=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return !value.active&&value.jobs.length===2&&value.jobs.every(job=>job.status==='completed'&&job.from==='2023-12-31'&&job.to==='2024-01-03')?value:false;},'native Download prepends only missing earlier data',90000);
-    check(extended.jobs.every(job=>previousFiles.files.some(file=>job.outputPath.endsWith(file.name))&&job.message.includes('1 missing ranges')),'Download extends original files instead of creating date-range duplicates',extended.jobs);
     const extendedFiles=await api.GetScreenerFiles(0,50);
+    check(extended.jobs.every(job=>extendedFiles.files.some(file=>file.symbol===job.symbol&&job.outputPath.endsWith(file.name)&&file.from==='2023-12-31')&&!previousFiles.files.some(file=>job.outputPath.endsWith(file.name))&&job.message.includes('1 missing ranges')),'Download renames the merged history for the expanded range without keeping duplicate files',extended.jobs);
     check(extendedFiles.total===2&&extendedFiles.files.every(file=>file.firstTimestamp===1703980800000&&file.lastTimestamp>1704240000000&&file.fields.includes('sma_2')),'earlier From prepends history, preserves newer bars outside To, and retains applied indicators',extendedFiles);
     await wait(()=>q('[aria-label="Download historical data"] button[type="submit"]:not(:disabled)'),'covered Download action ready');await click('[aria-label="Download historical data"] button[type="submit"]');
     const covered=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return !value.active&&value.jobs.every(job=>job.status==='completed'&&job.message.includes('already available'))?value:false;},'covered native Download completes without a new request');
@@ -423,7 +423,7 @@ const desktopSmokeJavaScript = `async function(phase) {
      check(rows[0]==='timestamp,open,high,low,close,volume,sma_2'&&values.length>2&&values[0][6]===''&&values.every((row,i)=>i===0||Math.abs(Number(row[6])-(Number(values[i-1][4])+Number(row[4]))/2)<1e-8),symbol+' refresh appends real missing/new bars and calculates the existing SMA column for each new row',{rows:values.length,last:values.at(-1)});
      check(values.every((row,i)=>Number(row[0])+86400000<=refreshed.asOf&&(i===0||Number(row[0])>Number(values[i-1][0]))),symbol+' refreshed candles are closed at the shared execution cutoff, unique and chronological');
      const file=(await api.GetScreenerFiles(0,50)).files.find(file=>file.symbol===symbol);
-     check(file.firstTimestamp===Number(values[0][0])&&file.lastTimestamp===Number(values.at(-1)[0])&&file.lastTimestamp>Date.parse(file.to+'T00:00:00Z'),symbol+' UTC period follows the actual appended CSV through its newest bar',file);
+     check(file.firstTimestamp===Number(values[0][0])&&file.lastTimestamp===Number(values.at(-1)[0])&&file.lastTimestamp<Date.parse(file.to+'T00:00:00Z'),symbol+' UTC period follows the actual appended CSV and fits inside the renamed range',file);
     }
     check(refreshed.jobs.every(job=>job.addedRows>0&&job.columns.includes('sma_2')&&job.backupPath),'all refreshed files report appends, applied indicators and retained originals',refreshed.jobs);
     await click('#screener-analysis-tab');await wait(()=>q('[aria-label="Analysis conditions"] button[type="submit"]:not(:disabled)'),'native visual conditions ready');
@@ -475,7 +475,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    if(phase==='enrichment'){
     await click('#screener-downloader-tab');await wait(()=>qa('.screener-instrument').length===1499,'full download catalog');
     for(const symbol of ['btcusd','ethusd']){await input('[aria-label="Search Dukascopy instruments"]',symbol);await click('.screener-instrument input');}
-    await select('[aria-label="Download timeframe"]','d1');await select('[aria-label="Parallel downloads"]','2');
+    await select('[aria-label="Download timeframe"]','d1');
     await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-10');
     await click('[aria-label="Download historical data"] button[type="submit"]');
     const downloaded=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'two real daily downloads',90000);
@@ -532,20 +532,20 @@ const desktopSmokeJavaScript = `async function(phase) {
    if(phase==='screener-resume'){
     for(const symbol of ['btcusd','ethusd']){await input('[aria-label="Search Dukascopy instruments"]',symbol);await click('.screener-instrument input');}
     await input('[aria-label="Search Dukascopy instruments"]','');
-    await select('[aria-label="Download timeframe"]','m1');await select('[aria-label="Parallel downloads"]','2');
+    await select('[aria-label="Download timeframe"]','m1');
     await input('[aria-label="Download from date"]','2024-01-01');await input('[aria-label="Download to date"]','2024-01-10');
     q('.screener-instrument-group summary').click();await sleep(100);
     await click('[aria-label="Download historical data"] button[type="submit"]');
-    const checkpoints=await wait(async()=>{const values=await api.DesktopSmokeScreenerCheckpoints();return ['btcusd','ethusd'].every(symbol=>values[symbol]?.nextIndex>0&&values[symbol].nextIndex<values[symbol].totalSources)?values:false;},'both downloads have committed partial CSV checkpoints',90000);
+    const checkpoints=await wait(async()=>{const values=await api.DesktopSmokeScreenerCheckpoints();return values.btcusd?.nextIndex>0&&values.btcusd.nextIndex<values.btcusd.totalSources&&!values.ethusd?values:false;},'first download has a committed checkpoint while the second waits',90000);
     const info=await api.GetScreener();
-    check(info.active&&info.jobs.every(job=>job.status==='running'),'close while both actual parallel downloads are unfinished',info);
+    check(info.active&&info.concurrency===1&&info.jobs.length===2&&info.jobs[0].status==='running'&&info.jobs[1].status==='queued','close with one actual download in progress and the next asset queued',info);
     check(Object.values(checkpoints).every(value=>value.bytes>0&&value.rows>0),'real CSV prefixes committed before closing',checkpoints);
     report.checkpoints=checkpoints;report.jobs=info.jobs;report.view=await api.GetScreenerView();
    }else{
     const view=await api.GetScreenerView();
-    check(view.symbols.join(',')==='btcusd,ethusd'&&view.timeframe==='m1'&&view.concurrency===2&&view.from==='2024-01-01'&&view.to==='2024-01-10'&&view.collapsedCategories.length===1,'native restart restores exact selections, period, dates, parallelism and category state',view);
-    check(q('[aria-label="Download timeframe"]').value==='m1'&&q('[aria-label="Parallel downloads"]').value==='2'&&!q('.screener-instrument-group').open&&qa('.screener-instrument input:checked').length===2,'native restored controls and closed category are rendered correctly');
-    const info=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'saved real downloads resume automatically and finish',90000);
+    check(view.symbols.join(',')==='btcusd,ethusd'&&view.timeframe==='m1'&&view.concurrency===1&&view.from==='2024-01-01'&&view.to==='2024-01-10'&&view.collapsedCategories.length===1,'native restart restores exact selections, period, dates, sequential downloads and category state',view);
+    check(q('[aria-label="Download timeframe"]').value==='m1'&&!q('[aria-label="Parallel downloads"]')&&!q('.screener-instrument-group').open&&qa('.screener-instrument input:checked').length===2,'native restored controls and closed category are rendered correctly');
+    const info=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));if(value.jobs.filter(job=>job.status==='running').length>1)throw Error('Restarted downloads overlap');return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'saved real downloads resume sequentially and finish',90000);
     report.jobs=info.jobs;report.view=view;report.csv={};
     for(const symbol of ['btcusd','ethusd']){
      const csv=await api.DesktopSmokeScreenerCSV(symbol),lines=csv.trim().split('\n'),times=lines.slice(1).map(line=>Number(line.split(',')[0]));
@@ -565,21 +565,22 @@ const desktopSmokeJavaScript = `async function(phase) {
    await input('[aria-label="Search Dukascopy instruments"]','ethusd');
    await click('.screener-instrument input');
    await select('[aria-label="Download timeframe"]','d1');
-   check(q('[aria-label="Parallel downloads"]').options.length===20&&q('[aria-label="Parallel downloads"]').value==='20','parallel download control defaults to twenty and exposes one through twenty');
-   await select('[aria-label="Parallel downloads"]','2');
+   check(!q('[aria-label="Parallel downloads"]')&&runtime.concurrency===1&&runtime.maxConcurrency===1,'downloads use one worker and expose no parallelism control',runtime);
    await input('[aria-label="Download from date"]','2024-01-01');
    await input('[aria-label="Download to date"]','2024-01-03');
    await click('[aria-label="Download historical data"] button[type="submit"]');
-   let concurrentObserved=false;
+   let sequentialObserved=false,maxRunning=0;
    const finished=await wait(async()=>{
     const value=await api.GetScreener();
-    if(value.jobs.filter(job=>job.status==='running').length===2)concurrentObserved=true;
+    const running=value.jobs.filter(job=>job.status==='running').length;maxRunning=Math.max(maxRunning,running);
+    if(running>1)throw Error('Native download workers overlap');
+    if(running===1&&value.jobs.some(job=>job.status==='queued'))sequentialObserved=true;
     if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value.jobs));
     return value.jobs.length&&value.jobs.every(job=>job.status==='completed')?value:false;
    },'real native Dukascopy CSV download',90000);
    await wait(()=>qa('.screener-job.completed progress').length===2&&qa('.screener-job.completed progress').every(progress=>progress.value===100),'completed per-symbol native progress');
-   check(concurrentObserved&&finished.concurrency===2&&finished.maxConcurrency===20,'two native worker processes download concurrently within the selected limit',finished);
-   check(finished.jobs.length===2&&finished.jobs.map(job=>job.symbol).join(',')==='btcusd,ethusd'&&finished.jobs.every(job=>job.timeframe==='d1'&&job.progress===100),'parallel download preserves selected symbols, timeframe and displayed order',finished.jobs);
+   check(sequentialObserved&&maxRunning===1&&finished.concurrency===1&&finished.maxConcurrency===1,'native assets download sequentially with at most one active worker',finished);
+   check(finished.jobs.length===2&&finished.jobs.map(job=>job.symbol).join(',')==='btcusd,ethusd'&&finished.jobs.every(job=>job.timeframe==='d1'&&job.progress===100),'sequential download preserves selected symbols, timeframe and displayed order',finished.jobs);
    const csv={};
    for(const symbol of ['btcusd','ethusd']){
     csv[symbol]=await api.DesktopSmokeScreenerCSV(symbol);const rows=csv[symbol].trim().split('\n');

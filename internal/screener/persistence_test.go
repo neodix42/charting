@@ -51,8 +51,22 @@ func TestCloseAndRestartAutomaticallyResumesQueueAndRetainsCompletedOutputs(t *t
 	if err = os.Remove(filepath.Join(gates, "ethusd.started")); err != nil {
 		t.Fatal(err)
 	}
+	// A queue saved by the former parallel version must resume with the same
+	// jobs and checkpoints while silently adopting serial downloads.
+	queuePath := filepath.Join(m.profile, "screener-downloads.json")
+	var legacy savedDownloads
+	if err = readState(queuePath, 16*1024*1024, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	legacy.Concurrency = 20
+	if err = writeState(queuePath, legacy); err != nil {
+		t.Fatal(err)
+	}
 	restarted := reopenTestManager(t, m.profile)
-	waitGate(t, gates, "ethusd")
+	if child := waitGate(t, gates, "ethusd"); child.SourceBatchSize != 1 {
+		t.Fatalf("legacy queue resumed parallel source fetching: %+v", child)
+	}
+	assertNotStarted(t, gates, "ltcusd")
 	if got := restarted.Info(); got.Jobs[0].ID != finished.ID || got.Concurrency != 1 || got.Jobs[0].Status != "completed" {
 		t.Fatal(got)
 	}
@@ -74,6 +88,10 @@ func TestCloseAndRestartAutomaticallyResumesQueueAndRetainsCompletedOutputs(t *t
 		t.Fatal("completed symbol downloaded again", files)
 	}
 	assertNoPartials(t, result.Directory)
+	var persisted savedDownloads
+	if err = readState(queuePath, 16*1024*1024, &persisted); err != nil || persisted.Concurrency != 1 {
+		t.Fatal("resumed queue did not persist serial downloads", persisted.Concurrency, err)
+	}
 }
 
 func TestExplicitCancellationDoesNotResumeOnRestart(t *testing.T) {
@@ -109,9 +127,10 @@ func TestViewSelectionDatesAndCategoryExpansionRestoreExactly(t *testing.T) {
 	view.From = "2020-01-01"
 	view.To = "2024-06-01"
 	view.CollapsedCategories = []string{loadCatalog().Groups[0].Name, loadCatalog().Groups[2].Name}
-	if _, err := m.SaveView(view); err != nil {
+	if saved, err := m.SaveView(view); err != nil || saved.Concurrency != 1 {
 		t.Fatal(err)
 	}
+	view.Concurrency = 1
 	reopened := reopenTestManager(t, m.profile)
 	got, err := reopened.View()
 	if err != nil || !reflect.DeepEqual(got, view) {
@@ -135,6 +154,24 @@ func TestViewSelectionDatesAndCategoryExpansionRestoreExactly(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(m.profile, "screener-downloads.json")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("view change created a download queue", err)
+	}
+}
+
+func TestLegacyViewConcurrencyMigratesWithoutLosingSelections(t *testing.T) {
+	profile := t.TempDir()
+	view := defaultView()
+	view.Symbols = []string{"btcusd", "ethusd"}
+	view.Timeframe, view.From, view.To = "h1", "2020-01-01", "2024-06-01"
+	view.Concurrency = 20
+	view.CollapsedCategories = []string{loadCatalog().Groups[0].Name}
+	if err := writeState(filepath.Join(profile, "screener-view.json"), savedView{1, view}); err != nil {
+		t.Fatal(err)
+	}
+	m := reopenTestManager(t, profile)
+	view.Concurrency = 1
+	got, err := m.View()
+	if err != nil || !reflect.DeepEqual(got, view) || m.Info().Error != "" {
+		t.Fatalf("legacy settings lost selections or rejected serial migration: %+v %v", got, err)
 	}
 }
 

@@ -187,7 +187,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) 
 	m.mu.Lock()
 	count := len(m.refreshJobs)
 	m.mu.Unlock()
-	runFilePool(count, func(index int) {
+	runFilePoolWithConcurrency(count, MaxConcurrency, func(index int) {
 		m.mu.Lock()
 		if ctx.Err() != nil {
 			m.refreshJobs[index].Status, m.refreshJobs[index].Message = "cancelled", "Refresh cancelled; original file kept"

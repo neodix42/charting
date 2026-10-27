@@ -1,7 +1,7 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import type {Backend,ScreenerCatalog,ScreenerInfo,ScreenerView} from '../types';
 import {errorText} from '../types';
-import {initialScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
+import {initialScreenerView,normalizeScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
 import {ScreenerEnrichment} from './ScreenerEnrichment';
 import {ScreenerAnalysis,type ScreenerAnalysisHandle} from './ScreenerAnalysis';
 import './ScreenerDownloads.css';
@@ -21,14 +21,14 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const [view,setView]=useState<ScreenerView>(initialScreenerView),[viewReady,setViewReady]=useState(false),[viewError,setViewError]=useState(''),[viewReload,setViewReload]=useState(0),[query,setQuery]=useState('');
  const draft=useRef(view),writer=useRef<ScreenerViewWriter|null>(null);
  const analysis=useRef<ScreenerAnalysisHandle>(null);
- const selected=new Set(view.symbols),collapsed=new Set(view.collapsedCategories),{timeframe,concurrency,from,to}=view;
+ const selected=new Set(view.symbols),collapsed=new Set(view.collapsedCategories),{timeframe,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
  const [downloadFilter,setDownloadFilter]=useState<DownloadFilter>('all'),[downloadPage,setDownloadPage]=useState(0);
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false);
  if(!writer.current)writer.current=new ScreenerViewWriter(value=>api.SaveScreenerView(value),error=>{if(alive.current)setViewError(errorText(error));});
  useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await analysis.current?.flush();}}),[]);
  useEffect(()=>{alive.current=true;lifetime.current++;return ()=>{alive.current=false;lifetime.current++;};},[]);
- useEffect(()=>{if(!visible||viewReady)return;let active=true;void Promise.resolve().then(()=>api.GetScreenerView()).then(value=>{if(active){draft.current=value;setView(value);setViewReady(true);setViewError('');}}).catch(error=>{if(active)setViewError(errorText(error));});return ()=>{active=false;};},[api,visible,viewReady,viewReload]);
+ useEffect(()=>{if(!visible||viewReady)return;let active=true;void Promise.resolve().then(()=>api.GetScreenerView()).then(value=>{if(active){const next=normalizeScreenerView(value);draft.current=next;setView(next);setViewReady(true);setViewError('');if(value.concurrency!==1)writer.current!.edit(next);}}).catch(error=>{if(active)setViewError(errorText(error));});return ()=>{active=false;};},[api,visible,viewReady,viewReload]);
  const changeView=(patch:Partial<ScreenerView>)=>{const next={...draft.current,...patch};draft.current=next;setView(next);setViewError('');writer.current!.edit(next);};
  useEffect(()=>{
   if(!visible)return;
@@ -64,19 +64,17 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  };
  const search=query.trim().toLowerCase();
  const invalidDates=!from||!to||from>=to;
- const invalidConcurrency=!Number.isInteger(concurrency)||concurrency<1||concurrency>20;
  return <section id="screener-panel" className="screener" role="tabpanel" aria-label="Screener" hidden={!visible}>
   <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>setTab('enrichment')}>Enrichment</button></div></div>
   <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"><ScreenerAnalysis ref={analysis} api={api} visible={visible&&tab==='analysis'}/></div>
   <div id="screener-enrichment" role="tabpanel" aria-labelledby="screener-enrichment-tab" hidden={tab!=='enrichment'}><ScreenerEnrichment api={api} visible={visible&&tab==='enrichment'}/></div>
   <div id="screener-downloader" role="tabpanel" aria-labelledby="screener-downloader-tab" hidden={tab!=='downloader'}>
    {(catalogError||infoError||actionError||viewError||info?.error||info&&!info.runtimeAvailable)&&<div className="screener-error" role="alert">{actionError||catalogError||infoError||viewError||info?.error||info?.runtimeError||'The Dukascopy downloader runtime is unavailable.'}{viewError&&<button type="button" onClick={()=>{if(viewReady)void writer.current!.flush().then(()=>setViewError('')).catch(error=>setViewError(errorText(error)));else setViewReload(value=>value+1);}}>Retry saving Screener choices</button>}{(catalogError||infoError||!info?.runtimeAvailable)&&<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry downloader</button>}</div>}
-   <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(viewReady&&selected.size&&!invalidDates&&!invalidConcurrency&&!working&&info?.runtimeAvailable&&!busy)void run(async()=>{await writer.current!.flush();return api.StartScreenerDownload({symbols:instruments.filter(instrument=>selected.has(instrument.id)).map(instrument=>instrument.id),timeframe,from,to,concurrency});});}}>
+   <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(viewReady&&selected.size&&!invalidDates&&!working&&info?.runtimeAvailable&&!busy)void run(async()=>{await writer.current!.flush();return api.StartScreenerDownload({symbols:instruments.filter(instrument=>selected.has(instrument.id)).map(instrument=>instrument.id),timeframe,from,to,concurrency:1});});}}>
     <label>Timeframe<select aria-label="Download timeframe" value={timeframe} disabled={!viewReady||!catalog||working||busy} onChange={event=>changeView({timeframe:event.target.value})}>{(catalog?.timeframes??['d1']).map(value=><option key={value} value={value}>{value}</option>)}</select></label>
-    <label>Parallel downloads<select aria-label="Parallel downloads" title="Maximum simultaneous symbol downloads (1–20 threads)" value={concurrency} disabled={!viewReady||!info||working||busy} onChange={event=>changeView({concurrency:Number(event.target.value)})}>{Array.from({length:20},(_,index)=><option key={index+1} value={index+1}>{index+1}</option>)}</select></label>
     <label>From (UTC)<input type="date" aria-label="Download from date" value={from} max={to||undefined} required disabled={!viewReady||working||busy} onChange={event=>changeView({from:event.target.value})}/></label>
     <label>To (UTC, exclusive)<input type="date" aria-label="Download to date" value={to} min={from||undefined} required disabled={!viewReady||working||busy} onChange={event=>changeView({to:event.target.value})}/></label>
-    <button type="submit" className="primary" disabled={!viewReady||!selected.size||invalidDates||invalidConcurrency||working||busy||!info?.runtimeAvailable||!catalog}>{busy&&!working?'Starting…':`Download ${selected.size||''} ${selected.size===1?'symbol':'symbols'}`}</button>
+    <button type="submit" className="primary" disabled={!viewReady||!selected.size||invalidDates||working||busy||!info?.runtimeAvailable||!catalog}>{busy&&!working?'Starting…':`Download ${selected.size||''} ${selected.size===1?'symbol':'symbols'}`}</button>
     {working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerDownload())}>Cancel downloads</button>}
     {!info?.active&&info?.runtimeAvailable&&info.jobs.some(job=>job.status==='failed'||job.status==='queued')&&<button type="button" disabled={busy} onClick={()=>void run(()=>api.ResumeScreenerDownload())}>Resume downloads</button>}
     <small className="screener-download-directory">CSV destination: <span>{info?.directory||'Loading…'}</span><span>Change the folder in Settings.</span></small>
@@ -95,7 +93,7 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
      {catalog&&!catalog.groups.some(group=>group.instruments.some(instrument=>!search||`${group.name} ${instrument.id} ${instrument.name}`.toLowerCase().includes(search)))&&<p className="screener-loading">No instruments match your search.</p>}
      {catalog&&<p className="screener-catalog-version muted">dukascopy-node {catalog.version} · {instruments.length} supported instruments</p>}
     </section>
-    <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted" aria-label="Download summary">{downloads.filter(job=>job.status==='completed').length} completed · {downloads.filter(job=>job.status==='failed').length} failed · {downloads.length} total · <span aria-label="Applied parallel download limit">Up to {info?.concurrency??20} parallel</span></span></div>
+    <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted" aria-label="Download summary">{downloads.filter(job=>job.status==='completed').length} completed · {downloads.filter(job=>job.status==='failed').length} failed · {downloads.length} total · <span>Sequential downloads</span></span></div>
      <div className="screener-jobs-filter"><label>Show downloads<select aria-label="Download status filter" value={downloadFilter} onChange={event=>{setDownloadFilter(event.target.value as DownloadFilter);setDownloadPage(0);}}><option value="all">All statuses</option><option value="queued">Queued</option><option value="running">Running</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></label><span>{filteredDownloads.length} {filteredDownloads.length===1?'download':'downloads'}</span></div>
      {!info?.jobs.length&&<p className="screener-loading">Select symbols and a common timeframe, then download their CSV files.</p>}
      {!!downloads.length&&!filteredDownloads.length&&<p className="screener-loading">No {downloadFilter} downloads.</p>}

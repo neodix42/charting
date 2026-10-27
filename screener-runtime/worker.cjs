@@ -27,16 +27,19 @@ async function writeAll(handle, text, position) {
 }
 
 // Match getHistoricalRates using only dukascopy-node's public exports. Fetch
-// small, ordered batches so years of ticks never accumulate in memory. Each
+// one source at a time so years of ticks never accumulate in memory. Each
 // source file contains whole UTC aggregation buckets (hour/day/month/year).
 async function download(request, options = {}) {
   if (request.planFile) return require('./incremental-worker.cjs').extendDownload(request, options);
   const api = options.api || require('dukascopy-node');
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));
-  const sourceBatchSize = request.sourceBatchSize ?? 4;
-  if (!Number.isInteger(sourceBatchSize) || sourceBatchSize < 1 || sourceBatchSize > 4) {
+  const requestedBatchSize = request.sourceBatchSize ?? 1;
+  if (!Number.isInteger(requestedBatchSize) || requestedBatchSize < 1 || requestedBatchSize > 4) {
     throw new Error('Source batch size must be an integer between 1 and 4.');
   }
+  // Accept old internal requests while always fetching sequentially. Checkpoints
+  // store the next source index, so an old multi-source batch resumes safely.
+  const sourceBatchSize = 1;
   const config = {
     instrument: request.symbol,
     dates: { from: request.from, to: request.to },

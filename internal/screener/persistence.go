@@ -63,7 +63,7 @@ func validateView(v ViewState) error {
 			validTimeframe = true
 		}
 	}
-	if !validTimeframe || v.Concurrency < 1 || v.Concurrency > MaxConcurrency {
+	if !validTimeframe || v.Concurrency < 1 || v.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid saved timeframe or concurrency")
 	}
 	// A date field may temporarily be empty or reversed while the user edits it.
@@ -165,6 +165,7 @@ func (m *Manager) loadView() error {
 		return err
 	}
 	m.view = copyView(saved.View)
+	m.view.Concurrency = MaxConcurrency
 	return nil
 }
 func (m *Manager) View() (ViewState, error) {
@@ -184,6 +185,7 @@ func (m *Manager) SaveView(view ViewState) (ViewState, error) {
 	if m.closed {
 		return ViewState{}, errors.New("screener is closed")
 	}
+	view.Concurrency = MaxConcurrency
 	if err := writeState(filepath.Join(m.profile, "screener-view.json"), savedView{1, view}); err != nil {
 		return ViewState{}, fmt.Errorf("save Screener selection: %w", err)
 	}
@@ -231,7 +233,7 @@ func (m *Manager) loadDownloads() error {
 	if err != nil || directory != saved.Directory {
 		return errors.New("invalid saved download directory")
 	}
-	if len(saved.Jobs) == 0 || len(saved.Jobs) > 1499 || saved.Concurrency < 1 || saved.Concurrency > MaxConcurrency {
+	if len(saved.Jobs) == 0 || len(saved.Jobs) > 1499 || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid saved download queue limits")
 	}
 	request := Request{Concurrency: saved.Concurrency}
@@ -269,7 +271,7 @@ func (m *Manager) loadDownloads() error {
 	if err := recoverHistoryPublications(directory); err != nil {
 		return fmt.Errorf("recover published histories: %w", err)
 	}
-	m.jobs, m.concurrency, m.batchDirectory, m.publication = saved.Jobs, saved.Concurrency, directory, saved.Publication
+	m.jobs, m.concurrency, m.batchDirectory, m.publication = saved.Jobs, MaxConcurrency, directory, saved.Publication
 	if m.publication == nil {
 		m.publication = map[string]string{}
 	}

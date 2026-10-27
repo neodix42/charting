@@ -71,7 +71,7 @@ if(config.Operation==='enrichment'){
   const api=require(config.Module);
   api.BufferFetcher.prototype.fetchBuffer=async function(url){
     // Let the first shared-session probe finish, then hold subsequent source
-    // fetches to prove all twenty production workers progress concurrently.
+    // fetches so tests can inspect which production workers are active.
     let initial=false;
     try{await fsp.writeFile(path.join(config.Gates,'session-ready'),'',{flag:'wx'});initial=true;}
     catch(error){if(error.code!=='EEXIST')throw error;}
@@ -162,13 +162,17 @@ func waitFileGate(t *testing.T, gates, name string) string {
 	return ""
 }
 
-func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailure(t *testing.T) {
+func TestEnrichmentParallelAndRefreshSerialWorkersContinueAfterIndependentFailure(t *testing.T) {
 	for _, operation := range []string{"enrichment", "refresh"} {
 		t.Run(operation, func(t *testing.T) {
-			m, gates, names, originals := filePoolManager(t, operation, 22, true)
+			workers := 20
+			if operation == "refresh" {
+				workers = 1
+			}
+			m, gates, names, originals := filePoolManager(t, operation, workers+2, true)
 			startFileBatch(t, m, operation)
 			private := map[string]bool{}
-			for _, name := range names[:20] {
+			for _, name := range names[:workers] {
 				directory := waitFileGate(t, gates, name)
 				if private[directory] {
 					t.Fatal("parallel file workers share a scratch or WAF directory")
@@ -177,25 +181,25 @@ func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailur
 			}
 			state := filePoolSnapshot(t, m, operation, names)
 			for index, job := range state.Jobs {
-				if job.Name != names[index] || (index < 20 && job.Status != "running") || (index >= 20 && job.Status != "queued") {
-					t.Fatalf("twenty-worker cap/order was not retained: %+v", state)
+				if job.Name != names[index] || (index < workers && job.Status != "running") || (index >= workers && job.Status != "queued") {
+					t.Fatalf("worker cap/order was not retained: %+v", state)
 				}
 			}
-			assertNotStarted(t, gates, names[20])
-			assertNotStarted(t, gates, names[21])
+			assertNotStarted(t, gates, names[workers])
+			assertNotStarted(t, gates, names[workers+1])
 			releaseGate(t, gates, names[0])
-			waitFileGate(t, gates, names[20])
+			waitFileGate(t, gates, names[workers])
 			state = filePoolSnapshot(t, m, operation, names)
-			if state.Failed != 1 || state.Jobs[21].Status != "queued" {
+			if state.Failed != 1 || state.Jobs[workers+1].Status != "queued" {
 				t.Fatalf("a per-file failure did not refill exactly one worker: %+v", state)
 			}
 			releaseGate(t, gates, names[1])
-			waitFileGate(t, gates, names[21])
+			waitFileGate(t, gates, names[workers+1])
 			for _, name := range names[2:] {
 				releaseGate(t, gates, name)
 			}
 			state = waitFileBatch(t, m, operation, names)
-			if state.Completed != 21 || state.Failed != 1 || state.Cancelled != 0 || state.Progress != 100 {
+			if state.Completed != len(names)-1 || state.Failed != 1 || state.Cancelled != 0 || state.Progress != 100 {
 				t.Fatalf("independent final states: %+v", state)
 			}
 			for index, job := range state.Jobs {
@@ -211,7 +215,7 @@ func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailur
 				}
 				backup, err := os.ReadFile(job.BackupPath)
 				if err != nil || string(backup) != originals[names[index]] {
-					t.Fatalf("parallel publication did not preserve exact original: %s %v", job.Name, err)
+					t.Fatalf("publication did not preserve exact original: %s %v", job.Name, err)
 				}
 				rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
 				if err != nil || len(rows) < 4 {
@@ -221,11 +225,11 @@ func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailur
 					t.Fatalf("real library values were not independently calculated: %q", data)
 				}
 				if operation == "refresh" && (rows[2][6] != "15" || rows[3][6] != "25") {
-					t.Fatalf("parallel refresh did not repair and replay indicators: %q", data)
+					t.Fatalf("refresh did not repair and replay indicators: %q", data)
 				}
 				metadata, err := readFileMetadata(m.directory, job.Name)
 				if err != nil || len(metadata.Recipes) != 1 {
-					t.Fatalf("parallel recipe metadata missing: %s %+v %v", job.Name, metadata, err)
+					t.Fatalf("recipe metadata missing: %s %+v %v", job.Name, metadata, err)
 				}
 				if operation == "refresh" {
 					info, err := m.Refresh(nil)
@@ -240,26 +244,30 @@ func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailur
 	}
 }
 
-func TestEnrichmentAndRefreshCancelOrCloseDrainTwentyWorkersAndCancelQueuedFiles(t *testing.T) {
+func TestEnrichmentParallelAndRefreshSerialCancelOrCloseDrainAndCancelQueuedFiles(t *testing.T) {
 	for _, operation := range []string{"enrichment", "refresh"} {
 		for _, shutdown := range []string{"cancel", "close"} {
 			t.Run(operation+"/"+shutdown, func(t *testing.T) {
-				m, gates, names, originals := filePoolManager(t, operation, 22, false)
+				workers := 20
+				if operation == "refresh" {
+					workers = 1
+				}
+				m, gates, names, originals := filePoolManager(t, operation, workers+2, false)
 				startFileBatch(t, m, operation)
-				for _, name := range names[:20] {
+				for _, name := range names[:workers] {
 					waitFileGate(t, gates, name)
 				}
-				assertNotStarted(t, gates, names[20])
-				// Keep a committed result while cancelling twenty running workers
+				assertNotStarted(t, gates, names[workers])
+				// Keep a committed result while cancelling the running workers
 				// and a queued file. Their teardown must not undo earlier commits.
 				releaseGate(t, gates, names[0])
-				waitFileGate(t, gates, names[20])
+				waitFileGate(t, gates, names[workers])
 				first := filePoolSnapshot(t, m, operation, names).Jobs[0]
 				published, err := os.ReadFile(filepath.Join(m.directory, first.Name))
 				if err != nil || string(published) == originals[names[0]] {
 					t.Fatalf("first result did not publish before cancelling: %v", err)
 				}
-				assertNotStarted(t, gates, names[21])
+				assertNotStarted(t, gates, names[workers+1])
 				if shutdown == "close" {
 					m.Close()
 				} else if operation == "enrichment" {
@@ -271,7 +279,7 @@ func TestEnrichmentAndRefreshCancelOrCloseDrainTwentyWorkersAndCancelQueuedFiles
 				if state.Cancelled != len(names)-1 || state.Completed != 1 || state.Failed != 0 || state.Progress != 100 {
 					t.Fatalf("cancellation did not drain every queued/running file: %+v", state)
 				}
-				assertNotStarted(t, gates, names[21])
+				assertNotStarted(t, gates, names[workers+1])
 				for index, job := range state.Jobs {
 					data, err := os.ReadFile(filepath.Join(m.directory, job.Name))
 					if index == 0 {

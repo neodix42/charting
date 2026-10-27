@@ -255,7 +255,7 @@ const localApi={...api,BufferFetcher:class extends api.BufferFetcher{
 
 
 def provider_smoke(runtime, node, directory):
-    """Exercise the packaged shared-session gate with the pinned HTTP decoder."""
+    """Exercise sequential packaged requests, shared sessions and denial handling."""
     script = r"""
 const fs=require('node:fs/promises'),path=require('node:path');
 const input=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
@@ -268,32 +268,43 @@ const {EventEmitter}=require('node:events');
   await fs.mkdir(directory);
   const session=JSON.stringify({version:2,origin:'https://jetta.dukascopy.com',token:'offline-fixture',userAgent:'CryptoDesk offline fixture'});
   await fs.writeFile(tokenCache,session,{mode:0o600});
-  let requests=0,denied=false;
+  let requests=0,denied=false,inFlight=0,maxInFlight=0;
   global.fetch=async(url,options)=>{
-    requests++;
     if(options.headers.cookie!=='aws-waf-token=offline-fixture')throw Error('Packaged workers did not share the supported session');
-    if(denied)return new Response('Forbidden',{status:403});
-    return new Response(JSON.stringify({timestamp:1704067200000,shift:86400000,multiplier:1,open:10,high:11,low:9,close:10,
-      times:[0],opens:[0],highs:[0],lows:[0],closes:[0],volumes:[1]}),{headers:{'content-type':'application/json'}});
+    requests++;inFlight++;maxInFlight=Math.max(maxInFlight,inFlight);
+    const body=denied?'Forbidden':JSON.stringify({timestamp:1704067200000,shift:86400000,multiplier:1,open:10,high:11,low:9,close:10,
+      times:[0],opens:[0],highs:[0],lows:[0],closes:[0],volumes:[1]});
+    let timer,released=false;
+    const release=()=>{if(!released){released=true;inFlight--;}};
+    const stream=new ReadableStream({
+      start(controller){timer=setTimeout(()=>{controller.enqueue(Buffer.from(body));controller.close();release();},5);},
+      cancel(){clearTimeout(timer);release();}
+    });
+    return new Response(stream,{status:denied?403:200,headers:{'content-type':'application/json'}});
   };
   const lines=new EventEmitter();let permits=0;
   const transport=installProviderTransport(lines,{ownerPipe:true,providerSession:{rateLimit:true}},event=>{
     if(event.operation==='permit')permits++;
     queueMicrotask(()=>lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId})));
   });
-  const config={retryCount:0,failAfterRetryCount:true,wafMode:'auto',wafTokenCache:true};
+  const config={batchSize:1,retryCount:0,failAfterRetryCount:true,wafMode:'auto',wafTokenCache:true};
   const url='https://jetta.dukascopy.com/v1/candles/day/EUR-USD/BID/2024';
-  const make=state=>Array.from({length:20},()=>createProviderFetcher(api,config,state));
-  const values=await Promise.all(make({directory,tokenCache}).map(worker=>worker.fetch([url])));
-  if(requests!==20||values.some(value=>value.length!==1))throw Error('Packaged shared-session downloads failed');
+  const values=[];
+  for(let job=0;job<20;job++)values.push(await createProviderFetcher(api,config,{directory,tokenCache}).fetch([url]));
+  if(requests!==20||values.some(value=>value.length!==1)||maxInFlight!==1||inFlight!==0)throw Error('Packaged sequential shared-session downloads failed');
   denied=true;requests=0;
   const deniedDirectory=path.join(input.directory,'denied-batch');await fs.mkdir(deniedDirectory);
-  const failures=await Promise.allSettled(make({directory:deniedDirectory,tokenCache}).map(worker=>worker.fetch([url])));
-  if(requests!==1||failures.some(result=>result.status!=='rejected'||!result.reason.message.includes('Dukascopy refused access (HTTP 403)')))throw Error('Packaged access-denial gate failed');
+  const failures=[];
+  for(let job=0;job<20;job++){
+    try{await createProviderFetcher(api,config,{directory:deniedDirectory,tokenCache}).fetch([url]);}
+    catch(error){failures.push(error);}
+  }
+  if(requests!==1||failures.length!==20||failures.some(error=>!error.message.includes('Dukascopy refused access (HTTP 403)'))||maxInFlight!==1||inFlight!==0)throw Error('Packaged access-denial gate failed');
   if(await fs.readFile(tokenCache,'utf8')!==session)throw Error('Batch guard discarded the supported session cache');
   await transport.drain();transport.close();
   if(permits!==21)throw Error('Packaged transport did not ask the parent for each request');
-  process.stdout.write(JSON.stringify({passed:true,workers:20,sharedSession:true,ownerPacingPermits:permits,deniedBatchRequests:requests,networkRequired:false})+'\n');
+  process.stdout.write(JSON.stringify({passed:true,workers:1,sequential:true,queuedJobs:20,completedRequests:values.length,maxInFlight,
+    sharedSession:true,ownerPacingPermits:permits,deniedBatchRequests:requests,blockedSubsequentJobs:failures.length-1,networkRequired:false})+'\n');
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
     result = subprocess.run([str(node), "-e", script],

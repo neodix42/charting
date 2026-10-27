@@ -17,9 +17,9 @@ function accessError(error) {
   }
 }
 
-// All Go-owned children in one batch share this gate and the library's supported
-// session cache. Only the initial request is serialized: once it succeeds, up to
-// twenty workers continue normally, using the same cached browser session.
+// Sequential Go-owned download/refresh jobs share the library's supported
+// session cache. This gate also carries the first access denial to later jobs,
+// so the remainder of a refused batch does not repeat browser verification.
 function createProviderFetcher(api, input, state) {
   if (state && (!path.isAbsolute(state.directory) || !path.isAbsolute(state.tokenCache))) {
     throw new Error('Provider session paths must be absolute.');

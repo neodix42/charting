@@ -191,7 +191,7 @@ func TestRequestValidationBeforeMutation(t *testing.T) {
 		{"future", func(r *Request) { r.To = "2026-10-27" }},
 		{"ancient", func(r *Request) { r.From = "0001-01-01" }},
 		{"negative concurrency", func(r *Request) { r.Concurrency = -1 }},
-		{"concurrency above cap", func(r *Request) { r.Concurrency = MaxConcurrency + 1 }},
+		{"concurrency above legacy cap", func(r *Request) { r.Concurrency = legacyMaxConcurrency + 1 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

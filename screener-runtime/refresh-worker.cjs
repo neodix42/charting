@@ -138,7 +138,7 @@ async function* groups(iterator,timestampIndex) {
 async function refresh(request,options={}) {
   const report=options.emit??emit;
   // Every file in a Go batch shares the instant Refresh was clicked, including
-  // files queued behind the twenty active workers and slow CSV scans.
+  // files waiting for earlier assets to finish and slow CSV scans.
   const now=options.now??request.asOf??Date.now();
   if(!Number.isSafeInteger(now)||now<0||now>8640000000000000)throw Error('Refresh cutoff must be a valid Unix millisecond timestamp.');
   if(!path.isAbsolute(request.input)||!path.isAbsolute(request.output)||request.input===request.output)throw Error('Separate absolute input and output paths are required.');
@@ -174,8 +174,7 @@ async function refresh(request,options={}) {
   if(from<now){
     report({type:'progress',progress:2,rows:scanned.rows,message:coverageVerified?'Downloading recent overlap and new data':'Checking complete history for missing data (first refresh or changed source)'});
     try{
-      // Go runs up to twenty file workers. Each worker fetches one source at a
-      // time so their combined upstream concurrency never exceeds twenty.
+      // Go refreshes one asset at a time; its source requests are also serial.
       await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1,providerSession:request.providerSession},
         {api:options.api,pauseMs:options.pauseMs,emit:event=>{if(event.type==='progress')report({...event,progress:2+event.progress*0.58});}});
       hasDownloaded=true;

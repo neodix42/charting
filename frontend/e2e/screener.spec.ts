@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {openTestApp} from './helpers/testApp';
+import {openTestApp,reloadTestApp} from './helpers/testApp';
 import capacity from '../../examples/capacity-20-tabs-180-charts.json' with {type:'json'};
 import type {ScreenerDataFile,ScreenerInfo,Workspace} from '../src/types';
 
@@ -54,17 +54,16 @@ test('completed queue history alone does not count as an existing downloaded ass
  await expect(page.getByRole('form',{name:'Download historical data',exact:true})).toContainText('Download fetches only missing earlier or later ranges');
 });
 
-test('reopening restores selected symbols, timeframe, dates, parallelism and every category expansion',async({page})=>{
+test('reopening restores selected symbols, timeframe, dates and every category expansion',async({page})=>{
  await openTestApp(page);await downloader(page);
  await page.getByRole('checkbox',{name:'Select all Cryptocurrencies',exact:true}).check();
  await page.getByRole('combobox',{name:'Download timeframe',exact:true}).selectOption('m15');
- await page.getByRole('combobox',{name:'Parallel downloads',exact:true}).selectOption('7');
  await page.getByLabel('Download from date',{exact:true}).fill('2021-01-01');await page.getByLabel('Download to date',{exact:true}).fill('2024-01-01');
  const forex=page.locator('details').filter({has:page.locator('summary',{hasText:'Forex'})}),crypto=page.locator('details').filter({has:page.locator('summary',{hasText:'Cryptocurrencies'})});
  await forex.locator('summary').click();await expect(forex).not.toHaveAttribute('open','');
- await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null'))).toMatchObject({symbols:['btcusd','ethusd'],timeframe:'m15',concurrency:7,collapsedCategories:['Forex']});
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null'))).toMatchObject({symbols:['btcusd','ethusd'],timeframe:'m15',concurrency:1,collapsedCategories:['Forex']});
  await page.reload();await downloader(page);
- await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m15');await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toHaveValue('7');
+ await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m15');await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toHaveCount(0);
  await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue('2024-01-01');
  await expect(forex).not.toHaveAttribute('open','');await expect(crypto).toHaveAttribute('open','');
  await expect(page.getByRole('checkbox',{name:'BTCUSD — Bitcoin vs US Dollar',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'ETHUSD — Ethereum vs US Dollar',exact:true})).toBeChecked();
@@ -101,7 +100,7 @@ test('grouped symbols, global selection, shared timeframe and UTC dates produce 
  await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();await expect(page.getByLabel('Selected symbol count',{exact:true})).toHaveText('4 / 4 selected');await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).uncheck();await page.getByRole('checkbox',{name:'Select all Cryptocurrencies',exact:true}).check();
  await page.getByRole('searchbox',{name:'Search Dukascopy instruments',exact:true}).fill('bitcoin');await expect(page.locator('.screener-instrument')).toHaveCount(1);await expect(page.getByRole('checkbox',{name:'BTCUSD — Bitcoin vs US Dollar',exact:true})).toBeChecked();await page.getByRole('searchbox',{name:'Search Dukascopy instruments',exact:true}).clear();
  await page.getByRole('combobox',{name:'Download timeframe',exact:true}).selectOption('m1');await page.getByLabel('Download from date',{exact:true}).fill('2024-01-01');await page.getByLabel('Download to date',{exact:true}).fill('2024-01-03');await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();
- expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toEqual({symbols:['btcusd','ethusd'],timeframe:'m1',from:'2024-01-01',to:'2024-01-03',concurrency:20});
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toEqual({symbols:['btcusd','ethusd'],timeframe:'m1',from:'2024-01-01',to:'2024-01-03',concurrency:1});
  const btc=page.getByRole('article',{name:'BTCUSD download',exact:true}),eth=page.getByRole('article',{name:'ETHUSD download',exact:true});await expect(btc).toContainText('queued');await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toBeDisabled();
  await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map(job=>({...job,status:job.symbol==='btcusd'?'running':'queued',progress:job.symbol==='btcusd'?43:0,message:'Explicit test download progress'}))});});
  await expect(btc.getByRole('progressbar')).toHaveAttribute('value','43');await page.getByRole('tab',{name:'Analysis',exact:true}).click();await expect(page.locator('#screener-analysis').getByRole('heading',{name:'Visual condition rows',exact:true})).toBeVisible();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(btc.getByRole('progressbar')).toHaveAttribute('value','43');
@@ -158,20 +157,29 @@ test('all Analysis operators describe closed-bar semantics on hover and keyboard
  await page.keyboard.press('Escape');await expect(tooltip).toBeHidden();
 });
 
-test('parallel download limits default to twenty, stay within bounds and survive panel switches',async({page})=>{
- await openTestApp(page);await downloader(page);const parallel=page.getByRole('combobox',{name:'Parallel downloads',exact:true});await expect(parallel).toHaveValue('20');await expect(parallel.locator('option')).toHaveCount(20);expect(await parallel.locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(Array.from({length:20},(_,index)=>String(index+1)));
- await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();await parallel.selectOption('1');await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(parallel).toHaveValue('1');await chartTabs(page).first().click();await mainTab(page).click();await expect(parallel).toHaveValue('1');
- await parallel.evaluate(element=>{const select=element as HTMLSelectElement;select.append(new Option('21','21'));select.value='21';select.dispatchEvent(new Event('change',{bubbles:true}));});await expect(page.getByRole('button',{name:'Download 4 symbols',exact:true})).toBeDisabled();expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toBeNull();
- await parallel.selectOption('1');await page.getByRole('button',{name:'Download 4 symbols',exact:true}).click();expect(await page.evaluate(()=>(window as any).__testScreenerRequest().concurrency)).toBe(1);await expect(parallel).toBeDisabled();await expect(page.getByLabel('Applied parallel download limit',{exact:true})).toHaveText('Up to 1 parallel');await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(parallel).toBeEnabled();
- await parallel.selectOption('20');await page.getByRole('button',{name:'Download 4 symbols',exact:true}).click();expect(await page.evaluate(()=>(window as any).__testScreenerRequest().concurrency)).toBe(20);await expect(page.getByLabel('Applied parallel download limit',{exact:true})).toHaveText('Up to 20 parallel');await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
+test('legacy parallel choices migrate to sequential downloads while retaining saved selections',async({page})=>{
+ await openTestApp(page);
+ const legacy={symbols:['btcusd','ethusd'],timeframe:'m15',from:'2021-01-01',to:'2024-01-01',concurrency:20,collapsedCategories:['Forex']};
+ await page.evaluate(value=>sessionStorage.setItem('cryptodesk-explicit-test-screener-view',JSON.stringify(value)),legacy);
+ await reloadTestApp(page);await downloader(page);
+ await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Download summary',{exact:true})).toContainText('Sequential downloads');
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null'))).toEqual({...legacy,concurrency:1});
+ await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m15');
+ await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue('2024-01-01');
+ await expect(page.locator('details').filter({has:page.locator('summary',{hasText:'Forex'})})).not.toHaveAttribute('open','');
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await chartTabs(page).first().click();await mainTab(page).click();
+ await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toEqual({symbols:legacy.symbols,timeframe:legacy.timeframe,from:legacy.from,to:legacy.to,concurrency:1});
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(page.getByRole('button',{name:'Download 2 symbols',exact:true})).toBeEnabled();
 });
 
-test('concurrent symbols keep independent progress, stable queue order and cancel every active job',async({page})=>{
- await openTestApp(page);await downloader(page);await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();await page.getByRole('combobox',{name:'Parallel downloads',exact:true}).selectOption('2');await page.getByRole('button',{name:'Download 4 symbols',exact:true}).click();expect(await page.evaluate(()=>(window as any).__testScreenerRequest().concurrency)).toBe(2);
- await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map((job,index)=>({...job,status:index<2?'running':'queued',progress:index===0?68:index===1?24:0,message:index<2?'Explicit concurrent progress':'Queued behind running symbols'}))});});
- await expect(page.locator('.screener-job.running')).toHaveCount(2);await expect(page.locator('.screener-job.queued')).toHaveCount(2);expect(await page.locator('.screener-job').evaluateAll(jobs=>jobs.map(job=>job.getAttribute('data-symbol')))).toEqual(['eurusd','btcusd','ethusd','xauusd']);await expect(page.getByRole('progressbar',{name:'EURUSD download progress',exact:true})).toHaveAttribute('value','68');await expect(page.getByRole('progressbar',{name:'BTCUSD download progress',exact:true})).toHaveAttribute('value','24');
- await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map(job=>job.symbol==='btcusd'?{...job,progress:47}:job)});});await expect(page.getByRole('progressbar',{name:'BTCUSD download progress',exact:true})).toHaveAttribute('value','47');await expect(page.getByRole('progressbar',{name:'EURUSD download progress',exact:true})).toHaveAttribute('value','68');
- await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(page.locator('.screener-job.cancelled')).toHaveCount(4);await expect(page.locator('.screener-job.running,.screener-job.queued')).toHaveCount(0);await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toBeEnabled();await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toHaveValue('2');
+test('sequential symbols retain completed progress, stable queue order and cancel unfinished jobs',async({page})=>{
+ await openTestApp(page);await downloader(page);await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();await page.getByRole('button',{name:'Download 4 symbols',exact:true}).click();expect(await page.evaluate(()=>(window as any).__testScreenerRequest().concurrency)).toBe(1);
+ await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map((job,index)=>({...job,status:index===0?'completed':index===1?'running':'queued',progress:index===0?100:index===1?24:0,message:index===0?'Explicit completed download':index===1?'Explicit current download':'Queued behind current symbol'}))});});
+ await expect(page.locator('.screener-job.running')).toHaveCount(1);await expect(page.locator('.screener-job.queued')).toHaveCount(2);expect(await page.locator('.screener-job').evaluateAll(jobs=>jobs.map(job=>job.getAttribute('data-symbol')))).toEqual(['eurusd','btcusd','ethusd','xauusd']);await expect(page.getByRole('progressbar',{name:'EURUSD download progress',exact:true})).toHaveAttribute('value','100');await expect(page.getByRole('progressbar',{name:'BTCUSD download progress',exact:true})).toHaveAttribute('value','24');
+ await page.evaluate(()=>{const info=(window as any).__testScreener() as ScreenerInfo;(window as any).__testSetScreener({jobs:info.jobs.map(job=>job.symbol==='btcusd'?{...job,progress:47}:job)});});await expect(page.getByRole('progressbar',{name:'BTCUSD download progress',exact:true})).toHaveAttribute('value','47');await expect(page.getByRole('progressbar',{name:'EURUSD download progress',exact:true})).toHaveAttribute('value','100');
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(page.locator('.screener-job.cancelled')).toHaveCount(3);await expect(page.locator('.screener-job.completed')).toHaveCount(1);await expect(page.locator('.screener-job.running,.screener-job.queued')).toHaveCount(0);await expect(page.getByRole('button',{name:'Download 4 symbols',exact:true})).toBeEnabled();
 });
 
 test('Screener directory is applied separately from the workspace and restored after reload',async({page})=>{

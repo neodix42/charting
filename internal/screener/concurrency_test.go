@@ -61,47 +61,42 @@ func assertNotStarted(t *testing.T, gates, symbol string) {
 	}
 }
 
-func TestTwentyRealWorkersDefaultCapRefillAndStableResultOrder(t *testing.T) {
+func TestSerialDownloadsWaitForEachPublicationAndKeepSelectionOrder(t *testing.T) {
 	manager, gates := gatedManager(t)
-	if info := manager.Info(); info.Concurrency != 20 || info.MaxConcurrency != 20 {
+	if info := manager.Info(); info.Concurrency != 1 || info.MaxConcurrency != 1 {
 		t.Fatalf("bad initial concurrency %+v", info)
 	}
 	request := validRequest()
-	request.Symbols = firstSymbols(22)
-	// An omitted zero value selects the default of twenty.
-	if info, err := manager.Start(request); err != nil || info.Concurrency != 20 {
+	request.Symbols = firstSymbols(4)
+	// Omitting the legacy worker setting still selects serial downloads.
+	if info, err := manager.Start(request); err != nil || info.Concurrency != 1 {
 		t.Fatalf("start: %+v %v", info, err)
 	}
 	privateDirectories := map[string]bool{}
-	for _, symbol := range request.Symbols[:20] {
+	for index, symbol := range request.Symbols {
 		child := waitGate(t, gates, symbol)
 		if child.SourceBatchSize != 1 {
-			t.Fatalf("twenty workers multiply the source request budget: %+v", child)
+			t.Fatalf("source fetching was not serial: %+v", child)
 		}
 		directory := filepath.Dir(child.Output)
 		if privateDirectories[directory] {
-			t.Fatal("concurrent children share WAF token directory")
+			t.Fatal("children share a scratch directory")
 		}
 		privateDirectories[directory] = true
-	}
-	info := manager.Info()
-	for i, job := range info.Jobs {
-		if job.Symbol != request.Symbols[i] {
-			t.Fatal("selection order changed")
+		for i, job := range manager.Info().Jobs {
+			want := "queued"
+			if i < index {
+				want = "completed"
+			} else if i == index {
+				want = "running"
+			}
+			if job.Symbol != request.Symbols[i] || job.Status != want {
+				t.Fatalf("serial publication/order failed at %d: %+v", index, job)
+			}
+			if i > index {
+				assertNotStarted(t, gates, job.Symbol)
+			}
 		}
-		if i < 20 && job.Status != "running" || i >= 20 && job.Status != "queued" {
-			t.Fatalf("pool cap not enforced for job %d: %+v", i, job)
-		}
-	}
-	assertNotStarted(t, gates, request.Symbols[20])
-	assertNotStarted(t, gates, request.Symbols[21])
-	releaseGate(t, gates, request.Symbols[0])
-	waitGate(t, gates, request.Symbols[20])
-	if got := manager.Info(); got.Jobs[0].Status != "completed" || got.Jobs[21].Status != "queued" {
-		t.Fatalf("completion did not refill exactly one slot: %+v", got.Jobs)
-	}
-	assertNotStarted(t, gates, request.Symbols[21])
-	for _, symbol := range request.Symbols[1:] {
 		releaseGate(t, gates, symbol)
 	}
 	finished := waitFinished(t, manager)
@@ -113,32 +108,28 @@ func TestTwentyRealWorkersDefaultCapRefillAndStableResultOrder(t *testing.T) {
 	assertNoPartials(t, finished.Directory)
 }
 
-func TestConfiguredPoolSizeAndSourceRequestBudget(t *testing.T) {
-	for _, test := range []struct{ workers, symbols, batch int }{{1, 2, 4}, {2, 3, 4}, {5, 6, 4}, {6, 7, 3}, {10, 11, 2}, {11, 12, 1}} {
-		t.Run(string(rune('A'+test.workers)), func(t *testing.T) {
+func TestLegacyRequestedConcurrencyCannotEnableParallelDownloads(t *testing.T) {
+	for _, requested := range []int{1, 2, 7, 20} {
+		t.Run(string(rune('A'+requested)), func(t *testing.T) {
 			manager, gates := gatedManager(t)
 			request := validRequest()
-			request.Symbols = firstSymbols(test.symbols)
-			request.Concurrency = test.workers
-			if info, err := manager.Start(request); err != nil || info.Concurrency != test.workers {
-				t.Fatalf("configured concurrency missing: %+v %v", info, err)
+			request.Symbols = firstSymbols(3)
+			request.Concurrency = requested
+			if info, err := manager.Start(request); err != nil || info.Concurrency != 1 || info.MaxConcurrency != 1 {
+				t.Fatalf("legacy concurrency was not normalized: %+v %v", info, err)
 			}
-			for _, symbol := range request.Symbols[:test.workers] {
-				if child := waitGate(t, gates, symbol); child.SourceBatchSize != test.batch {
-					t.Fatalf("unexpected source batch %+v", child)
-				}
+			if child := waitGate(t, gates, request.Symbols[0]); child.SourceBatchSize != 1 {
+				t.Fatalf("source requests may overlap: %+v", child)
 			}
-			if test.workers*test.batch > MaxConcurrency {
-				t.Fatal("test did not enforce aggregate request budget")
-			}
-			assertNotStarted(t, gates, request.Symbols[test.workers])
+			assertNotStarted(t, gates, request.Symbols[1])
+			assertNotStarted(t, gates, request.Symbols[2])
 			manager.Cancel()
 			assertNoPartials(t, manager.Info().Directory)
 		})
 	}
 }
 
-func TestParallelFailureRefillsWithoutBlockingOtherWorker(t *testing.T) {
+func TestSerialFailureAllowsNextQueuedDownload(t *testing.T) {
 	manager, gates := gatedManager(t)
 	request := validRequest()
 	request.Symbols = []string{"btcusd", "eurusd", "ethusd"}
@@ -147,15 +138,17 @@ func TestParallelFailureRefillsWithoutBlockingOtherWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitGate(t, gates, "btcusd")
+	assertNotStarted(t, gates, "eurusd")
+	releaseGate(t, gates, "btcusd")
 	waitGate(t, gates, "eurusd")
+	assertNotStarted(t, gates, "ethusd")
 	releaseGate(t, gates, "eurusd")
 	waitGate(t, gates, "ethusd")
 	info := manager.Info()
-	if got := []string{info.Jobs[0].Status, info.Jobs[1].Status, info.Jobs[2].Status}; !reflect.DeepEqual(got, []string{"running", "failed", "running"}) {
-		t.Fatalf("one failure blocked independent workers: %v", got)
+	if got := []string{info.Jobs[0].Status, info.Jobs[1].Status, info.Jobs[2].Status}; !reflect.DeepEqual(got, []string{"completed", "failed", "running"}) {
+		t.Fatalf("one failure blocked the next queued download: %v", got)
 	}
 	releaseGate(t, gates, "ethusd")
-	releaseGate(t, gates, "btcusd")
 	info = waitFinished(t, manager)
 	if got := []string{info.Jobs[0].Status, info.Jobs[1].Status, info.Jobs[2].Status}; !reflect.DeepEqual(got, []string{"completed", "failed", "completed"}) {
 		t.Fatalf("unexpected results %v", got)
@@ -163,18 +156,18 @@ func TestParallelFailureRefillsWithoutBlockingOtherWorker(t *testing.T) {
 	assertNoPartials(t, info.Directory)
 }
 
-func TestCancelDrainsTwentyWorkersPreservesCompletedAndStopsQueuedDispatch(t *testing.T) {
+func TestCancelDrainsSerialWorkerPreservesCompletedAndStopsQueuedDispatch(t *testing.T) {
 	manager, gates := gatedManager(t)
 	request := validRequest()
-	request.Symbols = firstSymbols(22)
+	request.Symbols = firstSymbols(4)
 	if _, err := manager.Start(request); err != nil {
 		t.Fatal(err)
 	}
-	for _, symbol := range request.Symbols[:20] {
+	for _, symbol := range request.Symbols[:1] {
 		waitGate(t, gates, symbol)
 	}
 	releaseGate(t, gates, request.Symbols[0])
-	waitGate(t, gates, request.Symbols[20])
+	waitGate(t, gates, request.Symbols[1])
 	completed := manager.Info().Jobs[0]
 	before, err := os.ReadFile(completed.OutputPath)
 	if err != nil {
@@ -194,21 +187,21 @@ func TestCancelDrainsTwentyWorkersPreservesCompletedAndStopsQueuedDispatch(t *te
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("completed output changed during cancellation")
 	}
-	assertNotStarted(t, gates, request.Symbols[21])
+	assertNotStarted(t, gates, request.Symbols[2])
 	assertNoPartials(t, info.Directory)
 	if _, err := manager.ConfigureDirectory(t.TempDir()); err != nil {
 		t.Fatalf("cancel returned before pool finished: %v", err)
 	}
 }
 
-func TestShutdownDrainsTwentyWorkersAndLeavesQueuedJobsUnstarted(t *testing.T) {
+func TestShutdownDrainsSerialWorkerAndLeavesQueuedJobsUnstarted(t *testing.T) {
 	manager, gates := gatedManager(t)
 	request := validRequest()
-	request.Symbols = firstSymbols(21)
+	request.Symbols = firstSymbols(3)
 	if _, err := manager.Start(request); err != nil {
 		t.Fatal(err)
 	}
-	for _, symbol := range request.Symbols[:20] {
+	for _, symbol := range request.Symbols[:1] {
 		waitGate(t, gates, symbol)
 	}
 	manager.Close()
@@ -217,7 +210,7 @@ func TestShutdownDrainsTwentyWorkersAndLeavesQueuedJobsUnstarted(t *testing.T) {
 			t.Fatalf("shutdown did not leave a resumable job %+v", job)
 		}
 	}
-	assertNotStarted(t, gates, request.Symbols[20])
+	assertNotStarted(t, gates, request.Symbols[1])
 	if manager.Info().Active {
 		t.Fatal("shutdown left the pool active")
 	}

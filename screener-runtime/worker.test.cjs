@@ -36,7 +36,7 @@ function withTransport(fetcher, batches = []) {
   } };
 }
 
-test('ordered bounded batches retain OHLCV, use one CSV header and report real requests', async t => {
+test('sequential source requests retain OHLCV, use one CSV header and report real requests', async t => {
   const request = await fixture(t);
   const batches = [];
   const events = [];
@@ -47,7 +47,7 @@ test('ordered bounded batches retain OHLCV, use one CSV header and report real r
     events.push(event);
   } });
   assert.equal(rows, 6);
-  assert.deepEqual(batches, [4, 2]);
+  assert.deepEqual(batches, [1, 1, 1, 1, 1, 1]);
   const lines = (await fs.promises.readFile(request.output, 'utf8')).trim().split('\n');
   assert.equal(lines.filter(line => line.startsWith('timestamp,')).length, 1);
   assert.equal(lines[0], 'timestamp,open,high,low,close,volume');
@@ -117,8 +117,8 @@ test('invalid symbol and timeframe never reach the transport', async t => {
   await assert.rejects(download({ ...request, timeframe: '1d' }, { api: never }), /Invalid Dukascopy request/);
 });
 
-test('manager source batch allowance bounds actual simultaneous fetches', async t => {
-  for (const size of [1, 2, 3, 4]) {
+test('default and legacy source batch sizes all allow only one in-flight fetch', async t => {
+  for (const size of [undefined, 1, 2, 3, 4]) {
     const request = { ...await fixture(t), sourceBatchSize: size };
     const batches = [];
     let active = 0;
@@ -131,8 +131,8 @@ test('manager source batch allowance bounds actual simultaneous fetches', async 
       return candlePayload(url);
     }, batches);
     assert.equal(await download(request, { api: bounded, pauseMs: 0, emit() {} }), 6);
-    assert.equal(peak, size);
-    assert.ok(batches.every(count => count <= size));
+    assert.equal(peak, 1);
+    assert.deepEqual(batches, [1, 1, 1, 1, 1, 1]);
     assert.equal(active, 0);
   }
 });

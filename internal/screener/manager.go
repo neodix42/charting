@@ -28,7 +28,11 @@ type Request struct {
 	Concurrency int      `json:"concurrency,omitempty"`
 }
 
-const MaxConcurrency = 20
+// Downloads are deliberately serial, including the library's source fetches.
+// Older profiles and clients may still send the former 1–20 worker setting;
+// accept that persisted shape but always run it with one worker.
+const MaxConcurrency = 1
+const legacyMaxConcurrency = 20
 
 type Job struct {
 	ID         string  `json:"id"`
@@ -54,10 +58,9 @@ type Info struct {
 	Active            bool     `json:"active"`
 }
 
-// Manager runs one selected batch at a time through a bounded symbol worker
-// pool while preserving its jobs in selection order. Each child has a process
-// group/tree, bounded logs and a private temporary directory. The supported WAF
-// session cache is shared by the batch and retained in the local profile.
+// Manager downloads one symbol at a time, preserving selection order. Each
+// child has a process group/tree, bounded logs and a private temporary directory.
+// The supported WAF session cache is shared by the batch and retained in the local profile.
 // Preferences belong to the local profile, never imported workspaces.
 type Manager struct {
 	mu                      sync.Mutex
@@ -208,8 +211,8 @@ func checkDirectory(directory string) error {
 }
 
 func validateRequest(request Request, now time.Time) error {
-	if request.Concurrency < 0 || request.Concurrency > MaxConcurrency {
-		return fmt.Errorf("download concurrency must be between 1 and %d (or omitted for the default)", MaxConcurrency)
+	if request.Concurrency < 0 || request.Concurrency > legacyMaxConcurrency {
+		return errors.New("invalid download concurrency; downloads run one at a time")
 	}
 	catalog := loadCatalog()
 	known := make(map[string]bool)
@@ -297,10 +300,7 @@ func (m *Manager) Start(request Request) (Info, error) {
 	}
 	oldJobs, oldDirectory, oldConcurrency, oldPublication := m.jobs, m.batchDirectory, m.concurrency, m.publication
 	m.jobs, m.batchDirectory, m.publication = jobs, m.directory, map[string]string{}
-	m.concurrency = request.Concurrency
-	if m.concurrency == 0 {
-		m.concurrency = MaxConcurrency
-	}
+	m.concurrency = MaxConcurrency
 	if !m.saveDownloadsLocked() {
 		m.jobs, m.batchDirectory, m.concurrency, m.publication = oldJobs, oldDirectory, oldConcurrency, oldPublication
 		return m.infoLocked(), errors.New(m.stateError)
@@ -389,10 +389,11 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 		return
 	}
 	defer cleanup()
-	// The batch's aggregate upstream request budget stays at twenty, including
-	// the library's per-symbol fetching parallelism. A single symbol retains its
-	// existing four-file bound; twenty symbols fetch one source file each.
-	sourceBatchSize := min(4, MaxConcurrency/workers)
+	// Neither a legacy saved worker count nor the library's internal fetching
+	// may start overlapping downloads. A new symbol starts after its predecessor
+	// has finished and published (or failed).
+	workers = min(workers, MaxConcurrency)
+	sourceBatchSize := 1
 	next := 0
 	var pool sync.WaitGroup
 	pool.Add(workers)
