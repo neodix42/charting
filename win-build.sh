@@ -8,6 +8,7 @@ if [[ $# -eq 1 && ( "$1" == --help || "$1" == -h ) ]]; then
     'Version defaults to VERSION; CRYPTODESK_VERSION=X.Y.Z overrides it.' \
     'Requires Go, Python 3.12+ and 7z (Ubuntu package: 7zip); bootstraps local Node/npm and Wails.' \
     'Downloads and caches the pinned official Microsoft Fixed Version WebView2 runtime.' \
+    'Uses the current Screener dependency pin; build.sh checks for newer downloader versions.' \
     'Packages US/UK English locale packs only; shared runtime resources and licenses remain.' \
     'No Windows installation, MinGW, system installation or administrator access is used.' \
     'Extract the complete ZIP on Windows and run cryptodesk.exe; see APP_README.md.'
@@ -21,6 +22,14 @@ fi
 args=()
 if [[ $# -eq 2 ]]; then
   args=(--webview2-cab "$(realpath -e -- "$2")")
+fi
+# Hold the same lock as build.sh so its downloader update cannot change the
+# live runtime inputs after the Windows builder snapshots application sources.
+mkdir -p "$repo_root/.tools"
+exec 9> "$repo_root/.tools/screener-update.lock"
+if ! flock -n 9; then
+  echo 'Another CryptoDesk build or downloader update is running in this checkout.' >&2
+  exit 1
 fi
 source "$repo_root/scripts/common.sh"
 require_node

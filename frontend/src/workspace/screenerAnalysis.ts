@@ -16,6 +16,7 @@ export interface ScreenerAnalysisBackend {
  SaveScreenerAnalysisView(request:AnalysisRequest):Promise<AnalysisRequest>;
  GetScreenerSavedConditions():Promise<SavedAnalysisCondition[]>;
  SaveScreenerAnalysisCondition(name:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
+ RenameScreenerAnalysisCondition(id:string,name:string):Promise<SavedAnalysisCondition>;
  DeleteScreenerAnalysisCondition(id:string):Promise<void>;
  StartScreenerAnalysis(request:AnalysisRequest):Promise<AnalysisInfo>;
  GetScreenerAnalysis(offset:number,limit:number):Promise<AnalysisInfo>;

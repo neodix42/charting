@@ -26,7 +26,7 @@
 
 [All releases](https://github.com/neodix42/charting/releases) · [Latest SHA-256 checksums](https://github.com/neodix42/charting/releases/latest/download/SHA256SUMS)
 
-**Extract the complete archive.** Ubuntu and Windows packages include the private Node runtime, Dukascopy downloader, indicator library and browser support used by Screener. Keep `screener-runtime` alongside the application; no global Node/npm or runtime `npx` installation is needed.
+**Extract the complete archive.** Ubuntu and Windows packages include the private Node runtime, Dukascopy downloader, indicator library and browser support used by Screener. Keep `screener-runtime` alongside the application; no global Node/npm or runtime `npx` installation is needed. See [updating the Screener downloader](#updating-the-screener-downloader) to check, restore or upgrade its pinned dependency.
 
 The Windows ZIP includes a pinned WebView2 runtime. Keep `WebView2` and `portable.marker` beside the executable in a writable local folder; application data stays in its portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md) and [installation instructions](APP_README.md#run-the-built-release).
 
@@ -183,7 +183,7 @@ Press **Safe Condition** in the right-hand **Saved conditions** panel, then ente
 
 Click a saved name to load its rows into the editor. You can adjust the working copy, then press **Apply conditions** to scan; loading a set does not run it automatically. Named sets and the current draft survive restart. Save an edited version under a new name to retain the original snapshot. These settings are stored locally, separately from chart workspace exports.
 
-Right-click an entry in **Saved conditions** and choose **Delete** to permanently remove that saved set. The list updates after deletion succeeds, and the change persists across restarts. The current working rules remain available on the left. Keyboard users can focus an entry and press **Shift+F10** to open the same menu.
+Right-click an entry in **Saved conditions** and choose **Rename** to edit its name, or **Delete** to permanently remove that saved set. Rename keeps the saved rules, categories and list position; names must be unique. Both changes persist across restarts and leave the current working rules on the left unchanged. Keyboard users can focus an entry and press **Shift+F10** to open the same menu.
 
 #### Apply, inspect and navigate matches
 
@@ -225,6 +225,57 @@ CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQL
 ```
 
 `VERSION` provides the source baseline. Release builds pass `CRYPTODESK_VERSION=X.Y.Z` so packages and manifests carry the release version. Full prerequisites and development instructions are in [APP_README.md](APP_README.md#build-and-develop).
+
+### Updating the Screener downloader
+
+CryptoDesk currently pins **[dukascopy-node 1.51.0](https://github.com/Leo4815162342/dukascopy-node/releases/tag/v1.51.0)** in [screener-runtime/package.json](screener-runtime/package.json) and its lockfile. Release archives already contain this dependency, Node and Chromium. The app imports its private copy directly; `npm install -g`, `npm update` in another folder and standalone `npx dukascopy-node` do not update CryptoDesk. There is no automatic upstream upgrade at app startup.
+
+**Check the bundled version.** From an extracted release folder, run:
+
+```bash
+# Ubuntu
+./screener-runtime/node -p "require('./screener-runtime/node_modules/dukascopy-node/package.json').version"
+```
+
+```powershell
+# Windows PowerShell
+.\screener-runtime\node.exe -p "require('./screener-runtime/node_modules/dukascopy-node/package.json').version"
+```
+
+**For an installed release**, close CryptoDesk and install a complete CryptoDesk package that includes the desired downloader version. On Linux, rerun the new archive's `install-user.sh` if using the application-menu installation. On Windows, preserve the portable `data` folder when replacing application files. Keep CSVs, profiles, checkpoints and provider-session files. Replacing only the npm package is insufficient: the executable embeds the expected downloader version and rejects a mismatch.
+
+**For this source checkout**, run the normal Linux build:
+
+```bash
+./build.sh
+```
+
+Before compiling, the build checks npm's latest stable `dukascopy-node` version. When it is newer, it installs that exact version in a temporary directory and runs the offline Screener runtime tests, public-API checks and catalog validation. Existing asset IDs, category assignments and supported timeframes must remain compatible, and the dependency must use the reviewed Node/Playwright/Chromium combination. Only a passing candidate replaces the source package, lockfile, embedded catalog and local dependencies. The build then packages the matching executable and private runtime. No global npm installation is changed.
+
+If the registry cannot be reached, the build warns and uses the verified existing pin. An incompatible candidate stops the build with an actionable error and leaves the existing dependencies intact. A newer Playwright/browser combination needs reviewed version and checksum updates in [scripts/screener_bundle.py](scripts/screener_bundle.py) before it can be adopted. There is no automatic downgrade or unvalidated fallback to a different package version.
+
+To **build the existing pin without checking npm for updates**, use:
+
+```bash
+CRYPTODESK_UPDATE_SCREENER=0 ./build.sh
+```
+
+This disables version discovery; initial dependency/toolchain downloads may still need network access. Release CI uses this setting so both operating-system packages and their verification use the same committed dependency. After a local automatic upgrade, review and commit the changed package, lockfile and catalog together to use that version in releases.
+
+To inspect or restore local source dependencies independently:
+
+```bash
+source scripts/common.sh
+require_node
+npm ls --prefix screener-runtime dukascopy-node
+npm ci --prefix screener-runtime --ignore-scripts --no-audit --no-fund
+```
+
+The Linux build refreshes `.tools/screener-runtime-linux-amd64`, which source-checkout launches prefer when present. Reinstalling only `screener-runtime/node_modules` does not refresh that staged runtime. An explicitly set `CRYPTODESK_SCREENER_RUNTIME` takes priority; it must point to the matching bundle.
+
+For Windows, run `./win-build.sh` on the Ubuntu build host after updating the source pin; it uses the current lockfile and requires `7z`. After building, restart the rebuilt `./cryptodesk` or install the new Linux archive. Rebuilding the checkout does not update a separate application-menu installation. On Windows, extract the new ZIP while preserving its portable `data` folder. Use the bundled-version commands above in the extracted package to confirm the result.
+
+Updating a dependency does not establish that Dukascopy has cleared an HTTP 403; provider access needs a separate successful live check.
 
 ## Automatic releases
 

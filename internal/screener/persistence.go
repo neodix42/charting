@@ -233,7 +233,7 @@ func (m *Manager) loadDownloads() error {
 	if err != nil || directory != saved.Directory {
 		return errors.New("invalid saved download directory")
 	}
-	if len(saved.Jobs) == 0 || len(saved.Jobs) > 1499 || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
+	if len(saved.Jobs) == 0 || len(saved.Jobs) > len(catalogAssets) || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid saved download queue limits")
 	}
 	request := Request{Concurrency: saved.Concurrency}

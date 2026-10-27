@@ -14,6 +14,8 @@ if [[ $# -gt 0 ]]; then
       'Builds the production Linux desktop app, archive and checksums at repo root.' \
       'Requires Go, Python 3.12+ and GTK3/WebKitGTK 4.1 build dependencies.' \
       'Node/npm are checked and downloaded into .tools/ if needed.' \
+      'Checks npm for a newer downloader and validates it offline before updating source pins.' \
+      'Set CRYPTODESK_UPDATE_SCREENER=0 to build the existing pin without a registry check.' \
       'Version defaults to VERSION; CRYPTODESK_VERSION=X.Y.Z overrides it.' \
       'See APP_README.md for the optional project-local native SDK.'
     exit 0
@@ -21,6 +23,19 @@ if [[ $# -gt 0 ]]; then
   printf '%s\n' 'Usage: ./build.sh (or ./build.sh --help)' >&2
   exit 2
 fi
+
+# Keep source pins stable from the update check through compilation/packaging.
+# A separately invoked updater uses this same project-local lock.
+mkdir -p "$APP_ROOT/.tools"
+exec 9> "$APP_ROOT/.tools/screener-update.lock"
+if ! flock -n 9; then
+  echo 'Another CryptoDesk build or downloader update is running in this checkout.' >&2
+  exit 1
+fi
+export CRYPTODESK_SCREENER_LOCK_FD=9
+source "$APP_ROOT/scripts/common.sh"
+require_node
+python3 "$APP_ROOT/scripts/update_screener.py" --root "$APP_ROOT"
 
 # Keep compilation, pinned tooling, embedded assets and release notices in the
 # existing build workflow. Publish nothing if compilation or packaging fails.

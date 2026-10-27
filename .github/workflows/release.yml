@@ -43,6 +43,8 @@ jobs:
     env:
       CRYPTODESK_VERSION: ${{ needs.plan.outputs.version }}
       VITE_EXPLICIT_TEST_BRIDGE: '0'
+      # Both targets and publication verify the same committed downloader pin.
+      CRYPTODESK_UPDATE_SCREENER: '0'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

@@ -1,11 +1,17 @@
 # CryptoDesk screener runtime
 
 This private runtime ships beside CryptoDesk on Ubuntu and Windows. It runs the
-exact `dukascopy-node` 1.51.0 dependency from `package-lock.json`, using its public
+exact `dukascopy-node` dependency from `package-lock.json`, using its public
 Node API. It never invokes `npx`, installs packages at application startup, changes
 global Node configuration, or substitutes generated market data.
 
-The complete release layout is:
+See [Updating the Screener downloader](../README.md#updating-the-screener-downloader)
+for the automatic version check in `build.sh`, compatibility validation before
+adopting a newer release, and rebuilding the matching application and private
+runtime. Set `CRYPTODESK_UPDATE_SCREENER=0` to build the existing exact pin without
+an upstream version check; release CI uses this setting for both targets.
+
+The release runtime includes:
 
 ```
 screener-runtime/
@@ -44,30 +50,36 @@ columns are `timestamp,askPrice,bidPrice,askVolume,bidVolume`.
 The worker reproduces the library's `getHistoricalRates` validation, date
 normalization, URL generation, fetching, processing and CSV formatting through
 public exports verified in the installed declarations and implementation. It
-fetches at most four source files at a time, keeping the price-data working set
-bounded for long tick ranges. The manager assigns smaller source batches when
-several symbols run together: `min(4, floor(20 / effectiveSymbolWorkers))`.
-This limits the entire batch to at most 20 concurrent source requests. Direct
-worker calls without a manager allowance retain the four-file default.
+fetches one source file at a time, keeping the price-data working set bounded
+for long tick ranges. Downloader and Refresh share a Go-owned request queue
+that permits one active data request, including browser verification, with
+request starts at least two seconds apart. HTTP 429 adds Retry-After/backoff;
+HTTP 403 stops requests and records an access-denial cooldown that survives
+restart. This pacing is an application default, not a published provider quota.
 Source files contain whole UTC aggregation buckets: hourly
 tick sources, daily minute sources, monthly hourly sources, and yearly daily
 sources. Download progress counts actual completed source requests. CSV headers
 are written once, rows stay chronological, and an all-empty range fails visibly.
 
-Go downloads symbols through a bounded worker pool with 1–20 workers, defaulting
-to 20. Fewer selected symbols use fewer workers; queued jobs start as slots
-become available. Job rows stay in selection order regardless of completion
-order, and a failed symbol does not stop the others. Concurrency is a per-batch
-request setting, not part of imported workspace state.
+Go downloads one symbol at a time. Refresh also processes one asset at a time,
+completing its download and indicator recalculation before starting the next.
+Job rows stay in selection order. Older saved parallel-download preferences and
+queues restore sequentially while retaining their other saved choices and work.
+Local Enrichment uses up to 20 file workers without making provider requests.
 
 Go owns cancellation of every child process tree, machine-local preferences,
-private job directories and final publication. Each child has a separate WAF
-token cache inside its exclusively-created temporary directory. Cancellation
-stops dispatch, drains active children and removes those owned directories,
-including token-cache scratch files, before returning. A successful
-download is published atomically using a same-directory hard link. Existing
-files are preserved; repeated requests receive numbered filenames. A filesystem
-without hard-link support returns an explicit publication error. Cancelled jobs remove their owned temporary directories. Failed jobs retain a valid checkpoint for explicit retry. Completed files remain.
+private job directories and final publication. Downloader and Refresh reuse the
+library's supported session cache at `<profile>/screener-provider/waf-token.json`.
+That cache persists across jobs and restarts. Cancellation stops dispatch,
+drains active children and removes their owned temporary directories; completed
+files remain, and failed jobs retain valid checkpoints for explicit retry.
+
+Downloads maintain one CSV per symbol and timeframe, fetching only missing
+ranges and retaining saved bars. Existing overlapping or separate histories are
+consolidated safely, with exact original files retained in hidden backups and
+applied indicators recalculated over the combined history. See the
+[Screener guide](../APP_README.md#screener) for download, refresh, publication,
+backup and restart behavior.
 The destination defaults to `<profile>/screener`; settings are atomically stored
 in `<profile>/screener.json` and do not enter workspace imports or exports.
 
@@ -82,10 +94,11 @@ go test -race ./internal/screener
 The deterministic worker tests inject only transport responses. Production
 decoder, aggregation and CSV formatting come from the pinned installed package.
 The Go tests run real child processes through the production protocol and cover
-validation, pool limits, slot refill, stable result ordering, independent errors,
-cancellation, shutdown, preferences and preservation of existing output. Twenty
-gated helper processes prove simultaneous execution while a 21st job stays queued.
-Transport tests check the worker's actual maximum simultaneous source requests.
+validation, sequential dispatch, stable result ordering, errors, cancellation,
+shutdown, preservation of existing output, and restoration of legacy preferences
+and queued work with sequential downloads. Transport tests check one active
+source request, shared pacing and access-denial handling. Local enrichment tests
+cover its separate file-worker pool.
 The worker syncs each complete source batch and atomically commits checkpoint.json
 with its CSV byte offset, row count, header, last timestamp, frozen UTC range
 and next source index. Normal app close leaves queued jobs and checkpoints for
@@ -93,7 +106,7 @@ automatic restart; explicit Cancel remains cancelled. Restart truncates only
 uncommitted tails and skips completed source files. A completed checkpoint can
 publish without another network request. Invalid/truncated checkpoints fail
 without silently discarding existing data. Go records publication intent before
-linking, so a crash during final publication cannot produce a duplicate CSV.
+final publication to support recovery after interruption.
 The parent-owned stdin pipe stays open while Go owns the worker; EOF terminates
 an orphan worker after an abrupt app exit, including on Windows.
 

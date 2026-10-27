@@ -171,3 +171,38 @@ func TestScreenerDeleteSavedConditionFacadePersists(t *testing.T) {
 		t.Fatalf("facade deletion changed the editable draft: %+v %v", restored, err)
 	}
 }
+
+func TestScreenerRenameSavedConditionFacadePersists(t *testing.T) {
+	profile := t.TempDir()
+	manager := screener.New(profile)
+	t.Cleanup(manager.Close)
+	app := &App{screener: manager}
+	draft, err := app.GetScreenerAnalysisView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := app.SaveScreenerAnalysisCondition("Original", draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renamed, err := app.RenameScreenerAnalysisCondition(saved.ID, "  Renamed  ")
+	if err != nil || renamed.ID != saved.ID || renamed.Name != "Renamed" || !reflect.DeepEqual(renamed.Request, saved.Request) {
+		t.Fatalf("facade rename changed the snapshot: %+v %v", renamed, err)
+	}
+	if _, err := app.RenameScreenerAnalysisCondition(saved.ID, ""); err == nil {
+		t.Fatal("facade did not propagate invalid name errors")
+	}
+	if _, err := app.RenameScreenerAnalysisCondition("missing", "Valid"); err == nil {
+		t.Fatal("facade did not propagate invalid ID errors")
+	}
+	manager.Close()
+	reopened := screener.New(profile)
+	t.Cleanup(reopened.Close)
+	app = &App{screener: reopened}
+	if list, err := app.GetScreenerSavedConditions(); err != nil || !reflect.DeepEqual(list, []screener.SavedAnalysisCondition{renamed}) {
+		t.Fatalf("facade rename did not persist: %+v %v", list, err)
+	}
+	if restored, err := app.GetScreenerAnalysisView(); err != nil || !reflect.DeepEqual(restored, draft) {
+		t.Fatalf("facade rename changed the editable draft: %+v %v", restored, err)
+	}
+}

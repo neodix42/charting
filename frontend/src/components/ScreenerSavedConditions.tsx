@@ -10,8 +10,9 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
 }>(function ScreenerSavedConditions({api,visible,disabled,canSave,request,onLoad},ref){
  const [conditions,setConditions]=useState<SavedAnalysisCondition[]>([]),[ready,setReady]=useState(false),[listError,setListError]=useState(''),[retry,setRetry]=useState(0);
  const [open,setOpen]=useState(false),[name,setName]=useState(''),[saveError,setSaveError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [renaming,setRenaming]=useState<SavedAnalysisCondition|null>(null);
  const [context,setContext]=useState<{condition:SavedAnalysisCondition;x:number;y:number;origin:HTMLButtonElement}|null>(null),[deleteError,setDeleteError]=useState('');
- const menu=useRef<HTMLDivElement>(null),deleteButton=useRef<HTMLButtonElement>(null),restoreDeleteFocus=useRef<HTMLButtonElement|null>(null);
+ const menu=useRef<HTMLDivElement>(null),renameButton=useRef<HTMLButtonElement>(null),restoreDeleteFocus=useRef<HTMLButtonElement|null>(null),dialogOrigin=useRef<HTMLButtonElement|null>(null);
  const input=useRef<HTMLInputElement>(null),dialog=useRef<HTMLElement>(null),trigger=useRef<HTMLButtonElement>(null),mounted=useRef(false),flight=useRef<Promise<void>|null>(null);
  const listEpoch=useRef(0);
  useImperativeHandle(ref,()=>({flush:async()=>{await flight.current;}}),[]);
@@ -29,7 +30,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   const bounds=menu.current.getBoundingClientRect();
   menu.current.style.left=`${Math.max(8,Math.min(context.x,innerWidth-bounds.width-8))}px`;
   menu.current.style.top=`${Math.max(8,Math.min(context.y,innerHeight-bounds.height-8))}px`;
-  deleteButton.current?.focus();
+  renameButton.current?.focus();
  },[context]);
  useEffect(()=>{
   if(!context)return;
@@ -39,7 +40,12 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
    if(event.key==='Escape'||event.key==='Tab'){
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();}
     close();if(context.origin.isConnected)context.origin.focus();
-   }else if(['ArrowUp','ArrowDown','Home','End'].includes(event.key)){event.preventDefault();deleteButton.current?.focus();}
+   }else if(['ArrowUp','ArrowDown','Home','End'].includes(event.key)){
+    event.preventDefault();
+    const items=[...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')??[])],index=items.findIndex(item=>item===document.activeElement);
+    const next=event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length;
+    items[next]?.focus();
+   }
   };
   document.addEventListener('pointerdown',pointer,true);document.addEventListener('keydown',key,true);
   window.addEventListener('resize',close);document.addEventListener('scroll',close,true);
@@ -52,28 +58,31 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
  },[busy,visible]);
  useEffect(()=>{
   if(!open)return;
-  input.current?.focus();
+  input.current?.focus();input.current?.select();
+  const origin=dialogOrigin.current;
   const key=(event:KeyboardEvent)=>{
    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(!flight.current)setOpen(false);}
    if(event.key==='Tab'){
     const items=[...(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')??[])],first=items[0],last=items.at(-1);
-    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+    if(!items.length){event.preventDefault();dialog.current?.focus();}
+    else if(!items.some(item=>item===document.activeElement)){event.preventDefault();(event.shiftKey?last:first)?.focus();}
+    else if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
     else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
    }
   };
   document.addEventListener('keydown',key);
-  return ()=>{document.removeEventListener('keydown',key);if(trigger.current?.isConnected)trigger.current.focus();};
+  return ()=>{document.removeEventListener('keydown',key);if(origin?.isConnected&&!origin.disabled&&origin.getClientRects().length)origin.focus();};
  },[open]);
  const save=()=>{
-  if(flight.current||disabled||!canSave)return;
-  const title=name.trim(),snapshot=structuredClone(request);
+  if(flight.current||disabled||!renaming&&!canSave)return;
+  const title=name.trim();
   if(!title){setSaveError('Enter a condition name.');return;}
   listEpoch.current++;setBusy(true);setSaveError('');
   const operation=(async()=>{
    try{
-    const saved=await api.SaveScreenerAnalysisCondition(title,snapshot);
+    const saved=renaming?await api.RenameScreenerAnalysisCondition(renaming.id,title):await api.SaveScreenerAnalysisCondition(title,structuredClone(request));
     listEpoch.current++;
-    if(mounted.current){setConditions(current=>[...current.filter(item=>item.id!==saved.id),saved]);setOpen(false);setNotice(`Saved “${saved.name}”.`);}
+    if(mounted.current){setConditions(current=>renaming?current.map(item=>item.id===saved.id?saved:item):[...current.filter(item=>item.id!==saved.id),saved]);setOpen(false);setNotice(`${renaming?'Renamed':'Saved'} “${saved.name}”.`);}
    }catch(error){if(mounted.current)setSaveError(errorText(error));throw error;}
    finally{flight.current=null;if(mounted.current)setBusy(false);}
   })();
@@ -82,6 +91,10 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
  const showMenu=(condition:SavedAnalysisCondition,origin:HTMLButtonElement,x:number,y:number)=>{
   if(!visible||!ready||disabled||flight.current||open)return;
   setContext({condition,origin,x,y});setDeleteError('');
+ };
+ const rename=()=>{
+  if(!context||flight.current||disabled||!ready)return;
+  dialogOrigin.current=context.origin;setRenaming(context.condition);setName(context.condition.name);setSaveError('');setNotice('');setContext(null);setOpen(true);
  };
  const remove=()=>{
   if(!context||flight.current||disabled||!ready)return;
@@ -98,8 +111,8 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
  return <>
   <aside className="analysis-saved" aria-label="Saved conditions">
    <header><h2>Saved conditions</h2><span>{conditions.length}</span></header>
-   <button ref={trigger} type="button" className="analysis-save-condition" disabled={!ready||disabled||!canSave||busy} onClick={()=>{setName('');setSaveError('');setNotice('');setOpen(true);}}>Safe Condition</button>
-   <p>Select a condition to load all its rows. Apply conditions runs the scan. Right-click a saved condition to delete it.</p>
+   <button ref={trigger} type="button" className="analysis-save-condition" disabled={!ready||disabled||!canSave||busy} onClick={()=>{dialogOrigin.current=trigger.current;setRenaming(null);setName('');setSaveError('');setNotice('');setOpen(true);}}>Safe Condition</button>
+   <p>Select a condition to load all its rows. Apply conditions runs the scan. Right-click a saved condition to rename or delete it.</p>
    {notice&&<p className="analysis-saved-notice" role="status">{notice}</p>}
    {listError&&<div className="analysis-saved-error" role="alert">{listError}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry saved conditions</button></div>}
    {deleteError&&<p className="analysis-saved-error" role="alert">{deleteError}</p>}
@@ -107,14 +120,14 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
    {ready&&conditions.length===0&&<p className="analysis-saved-empty">No saved conditions yet.</p>}
    <div className="analysis-saved-list">{conditions.map(condition=><button type="button" key={condition.id} disabled={!ready||disabled||busy} aria-label={`Load condition ${condition.name}`} aria-haspopup="menu" aria-expanded={context?.condition.id===condition.id} onContextMenu={event=>{event.preventDefault();event.stopPropagation();showMenu(condition,event.currentTarget,event.clientX,event.clientY);}} onKeyDown={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const bounds=event.currentTarget.getBoundingClientRect();showMenu(condition,event.currentTarget,bounds.left,bounds.bottom);}}} onClick={()=>{setContext(null);setNotice('');setDeleteError('');onLoad(structuredClone(condition.request));}}><strong>{condition.name}</strong><small>{condition.request.conditions.length} {condition.request.conditions.length===1?'row':'rows'} · AND</small></button>)}</div>
   </aside>
-  {visible&&context&&!disabled&&!busy&&!open&&createPortal(<div ref={menu} className="analysis-saved-menu" role="menu" aria-label={`Saved condition ${context.condition.name}`} style={{left:context.x,top:context.y}} onContextMenu={event=>event.preventDefault()}><button ref={deleteButton} type="button" role="menuitem" onClick={remove}>Delete</button></div>,document.body)}
-  {visible&&open&&<div className="modal-backdrop analysis-save-backdrop"><section ref={dialog} className="modal analysis-save-dialog" role="dialog" aria-modal="true" aria-labelledby="analysis-save-title">
-   <form aria-label="Save named condition" onSubmit={event=>{event.preventDefault();save();}}>
-    <div className="modal-header"><h2 id="analysis-save-title">Save condition</h2><button type="button" disabled={busy} aria-label="Close save condition" onClick={()=>setOpen(false)}>×</button></div>
-    <p>Save all {request.conditions.length} condition {request.conditions.length===1?'row':'rows'} together for later use.</p>
-    <label>Condition name<input ref={input} aria-label="Condition name" required maxLength={100} value={name} disabled={busy} onChange={event=>{setName(event.target.value);setSaveError('');}}/></label>
-    {saveError&&<p className="analysis-saved-error" role="alert">{saveError}</p>}
-    <div className="modal-actions"><button type="button" disabled={busy} onClick={()=>setOpen(false)}>Cancel</button><button type="submit" className="primary" disabled={busy||!name.trim()}>{busy?'Saving…':'Save condition'}</button></div>
+  {visible&&context&&!disabled&&!busy&&!open&&createPortal(<div ref={menu} className="analysis-saved-menu" role="menu" aria-label={`Saved condition ${context.condition.name}`} style={{left:context.x,top:context.y}} onContextMenu={event=>event.preventDefault()}><button ref={renameButton} type="button" role="menuitem" tabIndex={-1} onClick={rename}>Rename</button><button type="button" className="danger" role="menuitem" tabIndex={-1} onClick={remove}>Delete</button></div>,document.body)}
+  {visible&&open&&<div className="modal-backdrop analysis-save-backdrop"><section ref={dialog} className="modal analysis-save-dialog" role="dialog" tabIndex={-1} aria-modal="true" aria-labelledby="analysis-save-title">
+   <form aria-label={renaming?'Rename named condition':'Save named condition'} onSubmit={event=>{event.preventDefault();save();}}>
+    <div className="modal-header"><h2 id="analysis-save-title">{renaming?'Rename condition':'Save condition'}</h2><button type="button" disabled={busy} aria-label={renaming?'Close rename condition':'Close save condition'} onClick={()=>setOpen(false)}>×</button></div>
+    <p>{renaming?`Choose a new name for “${renaming.name}”.`:`Save all ${request.conditions.length} condition ${request.conditions.length===1?'row':'rows'} together for later use.`}</p>
+    <label>Condition name<input ref={input} aria-label="Condition name" aria-invalid={!!saveError} aria-describedby={saveError?'analysis-condition-name-error':undefined} required maxLength={100} value={name} disabled={busy} onChange={event=>{setName(event.target.value);setSaveError('');}}/></label>
+    {saveError&&<p id="analysis-condition-name-error" className="analysis-saved-error" role="alert">{saveError}</p>}
+    <div className="modal-actions"><button type="button" disabled={busy} onClick={()=>setOpen(false)}>Cancel</button><button type="submit" className="primary" disabled={busy||!name.trim()}>{renaming?(busy?'Renaming…':'Rename'):(busy?'Saving…':'Save condition')}</button></div>
    </form>
   </section></div>}
  </>;

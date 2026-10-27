@@ -80,6 +80,8 @@ export function OpenTradingView():Promise<void>;
 
 export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 
+export function RenameScreenerAnalysisCondition(arg1:string,arg2:string):Promise<screener.SavedAnalysisCondition>;
+
 export function ResetWorkspace():Promise<storage.Loaded>;
 
 export function ResumeScreenerDownload():Promise<screener.Info>;

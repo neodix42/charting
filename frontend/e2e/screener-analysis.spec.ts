@@ -22,6 +22,11 @@ async function saveCondition(page:Page,name:string){
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});
  await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
 }
+async function openRename(page:Page,name:string){
+ await page.getByRole('button',{name:`Load condition ${name}`,exact:true}).click({button:'right'});
+ await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+ return page.getByRole('dialog',{name:'Rename condition',exact:true});
+}
 
 test('Analysis loads only when visible and exposes grouped enriched fields plus every comparison',async({page})=>{
  await openTestApp(page);expect(await page.evaluate(()=>(window as any).__testAnalysisReads())).toBe(0);
@@ -284,6 +289,134 @@ test('a delayed saved list cannot erase a newly saved condition',async({page})=>
  await expect(page.getByRole('button',{name:'Load condition Keep this',exact:true})).toBeVisible();
 });
 
+test('right-click Rename persists only the name, retaining identity, order, every saved row and category, and the current draft',async({page})=>{
+ await open(page,[file(0),file(1,'eurusd')]);
+ const scope=page.getByRole('group',{name:'Asset categories to scan',exact:true});
+ await scope.getByRole('button',{name:'Deselect all scan categories',exact:true}).click();
+ await scope.getByRole('checkbox',{name:'Scan Forex',exact:true}).check();
+ await control(page,'Condition 1 left field').selectOption('macd_histogram_12_26_9');
+ await page.getByRole('button',{name:'Add condition',exact:false}).click();
+ await control(page,'Condition 2 operator').selectOption('crossesAbove');
+ await control(page,'Condition 2 right type').selectOption('field');await control(page,'Condition 2 right field').selectOption('ema_200');
+ await control(page,'Condition 2 right timeframe').selectOption('d1');await control(page,'Condition 2 right bars ago').fill('1');
+ await saveCondition(page,'Original');await saveCondition(page,'Keep second');
+ const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions());
+ await control(page,'Condition 1 right constant').fill('99');await scope.getByRole('button',{name:'Select all scan categories',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(99);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().categories)).toBeNull();
+ const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
+ const dialog=await openRename(page,'Original');
+ await expect(control(page,'Condition name')).toHaveValue('Original');await expect(control(page,'Condition name')).toBeFocused();
+ expect(await control(page,'Condition name').evaluate((input:HTMLInputElement)=>[input.selectionStart,input.selectionEnd])).toEqual([0,'Original'.length]);
+ await control(page,'Condition name').fill('  Renamed setup  ');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
+ await expect(dialog).toHaveCount(0);
+ const renamed=page.getByRole('button',{name:'Load condition Renamed setup',exact:true});await expect(renamed).toBeFocused();
+ await expect(page.locator('.analysis-saved-list strong')).toHaveText(['Renamed setup','Keep second']);
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual([{...before[0],name:'Renamed setup'},before[1]]);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(draft);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();
+ await expect(page.locator('.analysis-saved-list strong')).toHaveText(['Renamed setup','Keep second']);
+ await expect(control(page,'Condition 1 right constant')).toHaveValue('99');
+ await renamed.click();await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(before[0].request);
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toEqual(before[0].request);
+});
+
+test('saved-condition Rename supports menu navigation, selected text, a trapped dialog and cancellation without mutations',async({page})=>{
+ await open(page);await saveCondition(page,'Original');
+ const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions());
+ const saved=page.getByRole('button',{name:'Load condition Original',exact:true}),menu=page.getByRole('menu',{name:'Saved condition Original',exact:true});
+ await saved.focus();await page.keyboard.press('Shift+F10');
+ const rename=menu.getByRole('menuitem',{name:'Rename',exact:true}),remove=menu.getByRole('menuitem',{name:'Delete',exact:true});
+ await expect(rename).toBeFocused();await page.keyboard.press('ArrowDown');await expect(remove).toBeFocused();
+ await page.keyboard.press('ArrowDown');await expect(rename).toBeFocused();await page.keyboard.press('ArrowUp');await expect(remove).toBeFocused();
+ await page.keyboard.press('Home');await expect(rename).toBeFocused();await page.keyboard.press('End');await expect(remove).toBeFocused();
+ await page.keyboard.press('ArrowUp');await page.keyboard.press('Enter');
+ const dialog=page.getByRole('dialog',{name:'Rename condition',exact:true});await expect(dialog).toBeVisible();await expect(menu).toHaveCount(0);
+ await expect(control(page,'Condition name')).toBeFocused();await page.keyboard.type('Cancelled');await expect(control(page,'Condition name')).toHaveValue('Cancelled');
+ await page.keyboard.press('Tab');await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toBeFocused();
+ await page.keyboard.press('Tab');await expect(dialog.getByRole('button',{name:'Rename',exact:true})).toBeFocused();
+ await page.keyboard.press('Tab');await expect(dialog.getByRole('button',{name:'Close rename condition',exact:true})).toBeFocused();
+ await page.keyboard.press('Shift+Tab');await expect(dialog.getByRole('button',{name:'Rename',exact:true})).toBeFocused();
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(saved).toBeFocused();
+ await openRename(page,'Original');await control(page,'Condition name').fill('Also cancelled');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await expect(saved).toBeFocused();expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual(before);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+});
+
+test('Rename duplicate, invalid-name and storage errors stay inline, preserve entries and draft, and allow retry',async({page})=>{
+ await open(page);await saveCondition(page,'Original');await saveCondition(page,'Other');await control(page,'Condition 1 right constant').fill('42');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(42);
+ const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()),draft=await page.evaluate(()=>(window as any).__testAnalysisView());
+ const dialog=await openRename(page,'Original'),submit=dialog.getByRole('button',{name:'Rename',exact:true});
+ await control(page,'Condition name').fill('   ');await expect(submit).toBeDisabled();
+ await control(page,'Condition name').fill('  other  ');await submit.click();await expect(dialog.getByRole('alert')).toContainText('already exists');
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual(before);
+ await control(page,'Condition name').fill('Invalid\u007f');await submit.click();await expect(dialog.getByRole('alert')).toContainText('control characters');
+ await expect(control(page,'Condition name')).toHaveAttribute('aria-invalid','true');
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual(before);
+ await page.evaluate(()=>(window as any).__testAnalysisErrors({savedRename:'Cannot rename named condition: disk full'}));
+ await control(page,'Condition name').fill('Retry');await submit.click();await expect(dialog.getByRole('alert')).toContainText('disk full');
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual(before);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(draft);
+ await page.evaluate(()=>(window as any).__testAnalysisErrors({}));await control(page,'Condition name').fill('ORIGINAL');await submit.click();
+ await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'Load condition ORIGINAL',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual([{...before[0],name:'ORIGINAL'},before[1]]);
+ expect(await page.evaluate(()=>(window as any).__testAnalysisView())).toEqual(draft);
+});
+
+test('a delayed saved list cannot undo a renamed condition or reorder the list',async({page})=>{
+ await open(page);await saveCondition(page,'Original');await saveCondition(page,'Keep second');
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditions;
+  api.GetScreenerSavedConditions=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
+ });
+ await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSavedList)).toBe('function');
+ const dialog=await openRename(page,'Original');await control(page,'Condition name').fill('Renamed');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
+ await expect(page.locator('.analysis-saved-list strong')).toHaveText(['Renamed','Keep second']);
+ await page.evaluate(()=>(window as any).__releaseSavedList());await page.waitForTimeout(100);
+ await expect(page.locator('.analysis-saved-list strong')).toHaveText(['Renamed','Keep second']);
+});
+
+test('normal close waits for an in-flight saved-condition rename and retains its identity',async({page})=>{
+ await open(page);await saveCondition(page,'Original');
+ const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions());
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,original=api.RenameScreenerAnalysisCondition;
+  api.RenameScreenerAnalysisCondition=(id,name)=>new Promise(resolve=>{(window as any).__releaseNamedRename=async()=>resolve(await original(id,name));});
+ });
+ const dialog=await openRename(page,'Original');await control(page,'Condition name').fill('Pending rename');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseNamedRename)).toBe('function');
+ await expect(dialog.getByRole('button',{name:'Renaming…',exact:true})).toBeDisabled();await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toBeDisabled();
+ await page.keyboard.press('Tab');await expect(dialog).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(dialog).toBeFocused();
+ await page.keyboard.press('Escape');await expect(dialog).toBeVisible();
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'named-condition-rename'}));
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__releaseNamedRename());
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'named-condition-rename',discard:false});
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual([{...before[0],name:'Pending rename'}]);
+});
+
+test('a failed pending rename pauses normal close and leaves the original condition intact',async({page})=>{
+ await open(page);await saveCondition(page,'Original');
+ const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions());
+ await page.evaluate(()=>{
+  window.go!.main!.App!.RenameScreenerAnalysisCondition=()=>new Promise((_resolve,reject)=>{(window as any).__rejectNamedRename=()=>reject(Error('Cannot rename named condition: disk full'));});
+ });
+ const dialog=await openRename(page,'Original');await control(page,'Condition name').fill('Unsaved rename');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__rejectNamedRename)).toBe('function');
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'failed-condition-rename'}));
+ await expect(page.getByRole('button',{name:'Close without saving',exact:true})).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__rejectNamedRename());
+ await expect(dialog.getByRole('alert')).toContainText('disk full');
+ await expect(page.getByText('Close paused: Cannot rename named condition: disk full',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions())).toEqual(before);
+ await expect(dialog.getByRole('button',{name:'Rename',exact:true})).toBeEnabled();
+});
+
 test('right-click Delete removes only the selected saved condition durably and preserves the draft',async({page})=>{
  await open(page);await saveCondition(page,'First');
  await control(page,'Condition 1 right constant').fill('42');await saveCondition(page,'Second');
@@ -315,7 +448,8 @@ test('saved-condition Delete menu supports keyboard and dismissal, and a failed 
  const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
  const saved=page.getByRole('button',{name:'Load condition Protected',exact:true}),menu=page.getByRole('menu',{name:'Saved condition Protected',exact:true});
  await saved.focus();await page.keyboard.press('Shift+F10');await expect(menu).toBeVisible();
- await expect(menu.getByRole('menuitem',{name:'Delete',exact:true})).toBeFocused();
+ await expect(menu.getByRole('menuitem',{name:'Rename',exact:true})).toBeFocused();
+ await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'Delete',exact:true})).toBeFocused();
  await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(saved).toBeFocused();
  await saved.click({button:'right'});await page.getByRole('heading',{name:'Visual condition rows',exact:true}).click();await expect(menu).toHaveCount(0);
  await saved.click({button:'right'});await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(menu).toHaveCount(0);

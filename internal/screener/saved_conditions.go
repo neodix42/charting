@@ -156,3 +156,55 @@ func (m *Manager) DeleteAnalysisCondition(id string) error {
 	}
 	return errors.New("saved condition was not found")
 }
+
+// RenameAnalysisCondition changes only the saved snapshot's name. It never
+// replaces its request with the editable draft or changes its ID or position.
+func (m *Manager) RenameAnalysisCondition(id, name string) (SavedAnalysisCondition, error) {
+	if len(id) != 32 {
+		return SavedAnalysisCondition{}, errors.New("invalid saved condition ID")
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return SavedAnalysisCondition{}, errors.New("invalid saved condition ID")
+	}
+	name, err := conditionName(name)
+	if err != nil {
+		return SavedAnalysisCondition{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return SavedAnalysisCondition{}, errors.New("screener is closed")
+	}
+	conditions, err := m.readSavedConditions()
+	if err != nil {
+		return SavedAnalysisCondition{}, err
+	}
+	for i, condition := range conditions {
+		if condition.ID != id {
+			continue
+		}
+		for _, other := range conditions {
+			if other.ID != id && strings.EqualFold(other.Name, name) {
+				return SavedAnalysisCondition{}, errors.New("a condition with this name already exists; choose another name")
+			}
+		}
+		if condition.Name == name {
+			return condition, nil
+		}
+		condition.Name = name
+		conditions[i] = condition
+		saved := savedAnalysisConditions{Version: 1, Conditions: conditions}
+		encoded, err := json.Marshal(saved)
+		if err != nil {
+			return SavedAnalysisCondition{}, err
+		}
+		if len(encoded)+1 > savedConditionsBytes {
+			return SavedAnalysisCondition{}, errors.New("saved conditions exceed 8 MiB; existing conditions preserved")
+		}
+		if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+			return SavedAnalysisCondition{}, fmt.Errorf("rename named condition: %w", err)
+		}
+		return condition, nil
+	}
+	return SavedAnalysisCondition{}, errors.New("saved condition was not found")
+}

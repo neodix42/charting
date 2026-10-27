@@ -166,7 +166,17 @@ func TestCatalogCompletenessAndCopies(t *testing.T) {
 			}
 		}
 	}
-	if catalog.Version != "1.51.0" || len(seen) != 1499 || len(catalog.Groups) != 39 || len(catalog.Timeframes) != 10 {
+	packageData, err := os.ReadFile("../../screener-runtime/package.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sourcePackage struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err = json.Unmarshal(packageData, &sourcePackage); err != nil {
+		t.Fatal(err)
+	}
+	if catalog.Version == "" || catalog.Version != sourcePackage.Dependencies["dukascopy-node"] || len(seen) == 0 || len(catalog.Groups) == 0 || !reflect.DeepEqual(catalog.Timeframes, []string{"tick", "s1", "m1", "m5", "m15", "m30", "h1", "h4", "d1", "mn1"}) {
 		t.Fatalf("catalog drift: %s / %d / %d", catalog.Version, len(seen), len(catalog.Groups))
 	}
 	catalog.Groups[0].Instruments[0].ID = "mutated"

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import stat
 import subprocess
@@ -14,7 +15,19 @@ import urllib.request
 import zipfile
 
 NODE_VERSION = "24.19.0"
-DUKASCOPY_VERSION = "1.51.0"
+
+
+def pinned_dukascopy_version(root=None):
+    """The exact source dependency is shared by Linux and Windows packages."""
+    root = Path(root) if root is not None else Path(__file__).resolve().parent.parent
+    version = json.loads((root / "screener-runtime/package.json").read_text()).get("dependencies", {}).get("dukascopy-node")
+    if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
+        raise ValueError("Screener dukascopy-node must pin an exact stable version")
+    return version
+
+
+# Exported for packaging test fixtures; validation reads the source pin afresh.
+DUKASCOPY_VERSION = pinned_dukascopy_version()
 TRADING_SIGNALS_VERSION = "8.3.0"
 CSV_PARSE_VERSION = "7.0.3"
 TRADING_SIGNALS_LICENSE_SHA256 = "5d06e6f5a46da619bccc57de12276808f764a438b94c3b4c39c1e527b5f6fb32"
@@ -105,10 +118,11 @@ def required_files(target):
             "node_modules/playwright-core/browsers.json", browser_path(target), (Path(browser_path(target)).parent / "ABOUT").as_posix()}
 
 
-def validate_inventory(manifest, target, files, read):
+def validate_inventory(manifest, target, files, read, dukascopy_version=None):
     """Check an unpacked directory or release archive against its complete inventory."""
+    dukascopy_version = dukascopy_version or pinned_dukascopy_version()
     if (manifest.get("target") != target or manifest.get("nodeVersion") != NODE_VERSION
-            or manifest.get("dukascopyVersion") != DUKASCOPY_VERSION or manifest.get("playwrightVersion") != PLAYWRIGHT_VERSION
+            or manifest.get("dukascopyVersion") != dukascopy_version or manifest.get("playwrightVersion") != PLAYWRIGHT_VERSION
             or manifest.get("chromiumVersion") != CHROMIUM_VERSION or manifest.get("chromiumRevision") != CHROMIUM_REVISION
             or manifest.get("tradingSignalsVersion") != TRADING_SIGNALS_VERSION or manifest.get("csvParseVersion") != CSV_PARSE_VERSION):
         raise ValueError("Screener runtime versions/target differ from the reviewed pins")
@@ -117,7 +131,7 @@ def validate_inventory(manifest, target, files, read):
         raise ValueError("Screener runtime inventory is incomplete or does not match the package")
     if any(files[name][0] <= 0 for name in required_files(target)):
         raise ValueError("Screener runtime contains an empty required file")
-    versions = {"node_modules/dukascopy-node/package.json": DUKASCOPY_VERSION,
+    versions = {"node_modules/dukascopy-node/package.json": dukascopy_version,
                 "node_modules/trading-signals/package.json": TRADING_SIGNALS_VERSION,
                 "node_modules/csv-parse/package.json": CSV_PARSE_VERSION,
                 "node_modules/playwright-core/package.json": PLAYWRIGHT_VERSION}
@@ -136,7 +150,7 @@ def validate_inventory(manifest, target, files, read):
             raise ValueError(f"Incorrect packaged Screener dependency: {name}")
 
 
-def validate_directory(directory, target, allow_runtime_state=False):
+def validate_directory(directory, target, allow_runtime_state=False, dukascopy_version=None):
     files = {}
     for path in directory.rglob("*"):
         if path.is_symlink():
@@ -150,7 +164,7 @@ def validate_directory(directory, target, allow_runtime_state=False):
                 continue
             files[relative] = (path.stat().st_size, bool(path.stat().st_mode & 0o111))
     manifest = json.loads((directory / MANIFEST).read_text())
-    validate_inventory(manifest, target, files, lambda name: (directory / name).read_bytes())
+    validate_inventory(manifest, target, files, lambda name: (directory / name).read_bytes(), dukascopy_version)
     return manifest
 
 
@@ -178,7 +192,10 @@ def assemble(root, target, destination):
     if destination.resolve() == source.resolve():
         raise ValueError("Refusing to replace the Screener source directory")
     package = json.loads((source / "package.json").read_text())
-    for name, version in {"dukascopy-node": DUKASCOPY_VERSION, "trading-signals": TRADING_SIGNALS_VERSION, "csv-parse": CSV_PARSE_VERSION}.items():
+    dukascopy_version = pinned_dukascopy_version(root)
+    if json.loads((root / "internal/screener/catalog.json").read_text()).get("version") != dukascopy_version:
+        raise ValueError("Screener catalog and dependency version differ; regenerate the catalog before building")
+    for name, version in {"dukascopy-node": dukascopy_version, "trading-signals": TRADING_SIGNALS_VERSION, "csv-parse": CSV_PARSE_VERSION}.items():
         if package.get("dependencies", {}).get(name) != version:
             raise ValueError(f"Screener package must pin the reviewed {name} version")
     # The npm trading-signals tarball omits its license. Retain the exact MIT
@@ -223,7 +240,7 @@ def assemble(root, target, destination):
         # carries its full browser resources; chrome://credits exposes notices.
         (runtime / "THIRD_PARTY_NOTICES.md").write_text(
             "# Screener runtime notices\n\n"
-            f"dukascopy-node {DUKASCOPY_VERSION}: https://github.com/Leo4815162342/dukascopy-node (MIT).\n"
+            f"dukascopy-node {dukascopy_version}: https://github.com/Leo4815162342/dukascopy-node (MIT).\n"
             f"trading-signals {TRADING_SIGNALS_VERSION}: https://github.com/bennycode/trading-signals (MIT); licenses/trading-signals-LICENSE from published commit a6893630d0565483bb6b12f7a55f2dee0cfd378e, packages/trading-signals/LICENSE.\n"
             f"csv-parse {CSV_PARSE_VERSION}: https://csv.js.org/parse/ (MIT); node_modules/csv-parse/LICENSE.\n"
             f"Node.js {NODE_VERSION}: {node_url}; license and dependency notices: NODE-LICENSE.\n"
@@ -233,14 +250,14 @@ def assemble(root, target, destination):
             "Runtime archives are SHA-256 pinned in scripts/screener_bundle.py; npm packages use package-lock.json integrity values.\n")
         files = {path.relative_to(runtime).as_posix(): {"bytes": path.stat().st_size, "sha256": sha256(path)}
                  for path in sorted(runtime.rglob("*")) if path.is_file()}
-        manifest = {"target": target, "nodeVersion": NODE_VERSION, "dukascopyVersion": DUKASCOPY_VERSION,
+        manifest = {"target": target, "nodeVersion": NODE_VERSION, "dukascopyVersion": dukascopy_version,
                     "tradingSignalsVersion": TRADING_SIGNALS_VERSION, "csvParseVersion": CSV_PARSE_VERSION,
                     "playwrightVersion": PLAYWRIGHT_VERSION, "chromiumVersion": CHROMIUM_VERSION,
                     "chromiumRevision": CHROMIUM_REVISION, "npmLockSHA256": lock_hash,
                     "nodeArchive": {"url": node_url, "sha256": pin["nodeSHA256"]},
                     "browserArchive": {"url": browser_url, "sha256": pin["browserSHA256"]}, "files": files}
         (runtime / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
-        validate_directory(runtime, target)
+        validate_directory(runtime, target, dukascopy_version=dukascopy_version)
         previous = stage / "previous"
         if destination.exists():
             destination.rename(previous)
