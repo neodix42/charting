@@ -103,6 +103,9 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 	if err := m.loadView(); err != nil {
 		m.viewError = "Restore Screener selection: " + err.Error()
 	}
+	if err := recoverHistoryPublications(m.directory); err != nil {
+		m.lastError = "Recover Screener history: " + err.Error()
+	}
 	if err := m.loadDownloads(); err != nil {
 		m.stateError, m.invalidDownloads = "Restore download queue: "+err.Error(), true
 	}
@@ -173,6 +176,9 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 		return m.infoLocked(), errors.New("cancel or finish analysis before changing the Screener folder")
 	}
 	if err = checkDirectory(directory); err != nil {
+		return m.infoLocked(), err
+	}
+	if err = recoverHistoryPublications(directory); err != nil {
 		return m.infoLocked(), err
 	}
 	if err = m.savePreferences(directory); err != nil {
@@ -275,6 +281,9 @@ func (m *Manager) Start(request Request) (Info, error) {
 		return m.infoLocked(), errors.New(m.runtimeError)
 	}
 	if err := checkDirectory(m.directory); err != nil {
+		return m.infoLocked(), err
+	}
+	if err := recoverHistoryPublications(m.directory); err != nil {
 		return m.infoLocked(), err
 	}
 	jobs := make([]Job, len(request.Symbols))
@@ -594,34 +603,35 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	if ctx.Err() != nil {
 		return "", "", ctx.Err()
 	}
-	base := fmt.Sprintf("%s-%s-%s-%s", job.Symbol, job.Timeframe, job.From, job.To)
-	for suffix := 0; suffix < 10000; suffix++ {
-		name := base
-		if suffix > 0 {
-			name = fmt.Sprintf("%s-%d", base, suffix+1)
-		}
-		output := filepath.Join(directory, name+".csv")
-		m.publication[job.ID] = name + ".csv"
-		if !m.saveDownloadsLocked() {
-			return "", "", errors.New(m.stateError)
-		}
-		// Link publishes atomically on the same filesystem without replacing an
-		// existing name. Repeated downloads receive a fresh numbered filename.
-		if err = os.Link(partial, output); err == nil {
-			if result.Checksum != "" {
-				if metadataErr := writeDownloadedMetadata(directory, name+".csv", partial, result); metadataErr != nil {
-					finalMessage += "; coverage metadata was not saved: " + cleanMessage(metadataErr.Error())
-				}
-			}
-			m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, finalMessage, output
-			m.saveDownloadsLocked()
-			return output, finalMessage, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return "", "", fmt.Errorf("publish downloaded CSV without overwriting existing data: %w", err)
+	name := fmt.Sprintf("%s-%s-%s-%s.csv", job.Symbol, job.Timeframe, job.From, job.To)
+	// A source introduced after the plan was frozen must not cause a second
+	// history. Retry the request with a new plan instead of inventing a suffix.
+	names, err := csvNames(directory)
+	if err != nil {
+		return "", "", err
+	}
+	for _, existing := range names {
+		match := downloadFilename.FindStringSubmatch(strings.ToLower(existing))
+		if match != nil && match[1] == job.Symbol && match[2] == job.Timeframe {
+			return "", "", errors.New("another history appeared while downloading; retry to merge its data")
 		}
 	}
-	return "", "", errors.New("too many existing downloads for this symbol and date range")
+	output := filepath.Join(directory, name)
+	m.publication[job.ID] = name
+	if !m.saveDownloadsLocked() {
+		return "", "", errors.New(m.stateError)
+	}
+	if err = os.Link(partial, output); err != nil {
+		return "", "", fmt.Errorf("publish downloaded CSV without overwriting existing data: %w", err)
+	}
+	if result.Checksum != "" {
+		if metadataErr := writeDownloadedMetadata(directory, name, partial, result); metadataErr != nil {
+			finalMessage += "; coverage metadata was not saved: " + cleanMessage(metadataErr.Error())
+		}
+	}
+	m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, finalMessage, output
+	m.saveDownloadsLocked()
+	return output, finalMessage, nil
 }
 
 type tailBuffer struct{ data []byte }

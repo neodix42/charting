@@ -266,23 +266,78 @@ func (m *Manager) loadDownloads() error {
 			return errors.New("invalid saved publication name")
 		}
 	}
+	if err := recoverHistoryPublications(directory); err != nil {
+		return fmt.Errorf("recover published histories: %w", err)
+	}
 	m.jobs, m.concurrency, m.batchDirectory, m.publication = saved.Jobs, saved.Concurrency, directory, saved.Publication
 	if m.publication == nil {
 		m.publication = map[string]string{}
 	}
+	m.restorePublishedDownloads()
 	for i := range m.jobs {
 		job := &m.jobs[i]
-		// Recover a crash between committing a publication intent and recording
-		// its successful hard link, without making a duplicate completed CSV.
-		if name := m.publication[job.ID]; name != "" && job.Status != "cancelled" {
-			partial, e1 := os.Stat(filepath.Join(m.jobDirectory(*job), "data.part"))
-			output, e2 := os.Stat(filepath.Join(directory, name))
-			if e1 == nil && e2 == nil && os.SameFile(partial, output) {
-				job.Status, job.Progress, job.OutputPath, job.Message = "completed", 100, filepath.Join(directory, name), "Downloaded CSV restored"
-			}
-		}
 		if job.Status == "running" || job.Status == "queued" {
 			job.Status, job.Progress, job.Message = "queued", 0, "Resuming saved download checkpoint"
+		}
+	}
+	return m.reconcileCompletedHistoryPaths(directory)
+}
+
+// Called after the durable publisher has finished any interrupted transaction.
+// The retained private partial proves this is the exact result this queue job
+// published, even if its prior status was failed after a cleanup error.
+func (m *Manager) restorePublishedDownloads() {
+	for i := range m.jobs {
+		job := &m.jobs[i]
+		if name := m.publication[job.ID]; name != "" && job.Status != "cancelled" {
+			partial, e1 := os.Lstat(filepath.Join(m.jobDirectory(*job), "data.part"))
+			output, e2 := os.Lstat(filepath.Join(m.batchDirectory, name))
+			if e1 == nil && e2 == nil && partial.Mode().IsRegular() && output.Mode().IsRegular() && os.SameFile(partial, output) {
+				job.Status, job.Progress, job.OutputPath, job.Message = "completed", 100, filepath.Join(m.batchDirectory, name), "Downloaded CSV restored"
+			}
+		}
+	}
+}
+
+// Refresh may publish and remove its old range filename just before the app
+// exits, without getting to update a previously completed Downloader entry.
+// Repair only an absent, recognized old path with one unambiguous same-asset
+// history. Existing files, symlinks, failed jobs and multiple ranges are left
+// alone; neither publication recovery nor this lookup downloads anything.
+func (m *Manager) reconcileCompletedHistoryPaths(directory string) error {
+	missing := []int{}
+	for index, job := range m.jobs {
+		if job.Status != "completed" || job.OutputPath == "" {
+			continue
+		}
+		match := downloadFilename.FindStringSubmatch(strings.ToLower(filepath.Base(job.OutputPath)))
+		if match == nil || match[1] != job.Symbol || match[2] != job.Timeframe {
+			continue
+		}
+		if _, err := os.Lstat(job.OutputPath); errors.Is(err, os.ErrNotExist) {
+			missing = append(missing, index)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	names, err := csvNames(directory)
+	if err != nil {
+		return fmt.Errorf("find renamed completed histories: %w", err)
+	}
+	byAsset := map[string][]string{}
+	for _, name := range names {
+		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+			key := match[1] + "/" + match[2]
+			byAsset[key] = append(byAsset[key], name)
+		}
+	}
+	for _, index := range missing {
+		job := &m.jobs[index]
+		matches := byAsset[job.Symbol+"/"+job.Timeframe]
+		if len(matches) == 1 {
+			job.OutputPath = filepath.Join(directory, matches[0])
+			m.publication[job.ID] = matches[0]
 		}
 	}
 	return nil
@@ -335,17 +390,31 @@ func (m *Manager) Resume() (Info, error) {
 		return m.infoLocked(), errors.New(m.runtimeError)
 	}
 	before := append([]Job(nil), m.jobs...)
+	if m.batchDirectory != "" {
+		if err := recoverHistoryPublications(m.batchDirectory); err != nil {
+			return m.infoLocked(), fmt.Errorf("recover published histories before retry: %w", err)
+		}
+		m.restorePublishedDownloads()
+		if err := m.reconcileCompletedHistoryPaths(m.batchDirectory); err != nil {
+			return m.infoLocked(), err
+		}
+	}
 	for i := range m.jobs {
 		if m.jobs[i].Status == "failed" {
 			m.jobs[i].Status, m.jobs[i].Message = "queued", "Retrying saved checkpoint"
 		}
 	}
-	if !m.pendingLocked() {
-		return m.infoLocked(), nil
-	}
 	if !m.saveDownloadsLocked() {
 		m.jobs = before
 		return m.infoLocked(), errors.New(m.stateError)
+	}
+	for _, job := range m.jobs {
+		if job.Status == "completed" {
+			m.cleanupJobAt(m.batchDirectory, job)
+		}
+	}
+	if !m.pendingLocked() {
+		return m.infoLocked(), nil
 	}
 	m.beginLocked()
 	return m.infoLocked(), nil

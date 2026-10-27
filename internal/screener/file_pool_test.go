@@ -31,8 +31,9 @@ func filePoolManager(t *testing.T, operation string, count int, failFirst bool) 
 	m := sourceEnrichmentManager(t, false)
 	gates := t.TempDir()
 	names, originals := make([]string, count), map[string]string{}
+	symbols := []string{"audcad", "audchf", "audjpy", "audnzd", "audusd", "cadchf", "cadjpy", "chfjpy", "euraud", "eurcad", "eurchf", "eurgbp", "eurjpy", "eurnok", "eurnzd", "eursek", "eurusd", "gbpaud", "gbpcad", "gbpchf", "gbpjpy", "gbpnzd"}
 	for index := range count {
-		name := fmt.Sprintf("eurusd-d1-2024-01-01-2024-02-%02d.csv", index+1)
+		name := fmt.Sprintf("%s-d1-2024-01-01-2024-02-01.csv", symbols[index])
 		text := refreshCSV
 		if operation == "enrichment" {
 			text = candleCSV
@@ -203,13 +204,13 @@ func TestEnrichmentAndRefreshRunTwentyRealWorkersAndRefillAfterIndependentFailur
 					t.Fatal(err)
 				}
 				if index == 0 {
-					if string(data) != originals[job.Name] {
+					if string(data) != originals[names[index]] {
 						t.Fatal("failed file was overwritten")
 					}
 					continue
 				}
 				backup, err := os.ReadFile(job.BackupPath)
-				if err != nil || string(backup) != originals[job.Name] {
+				if err != nil || string(backup) != originals[names[index]] {
 					t.Fatalf("parallel publication did not preserve exact original: %s %v", job.Name, err)
 				}
 				rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
@@ -253,7 +254,8 @@ func TestEnrichmentAndRefreshCancelOrCloseDrainTwentyWorkersAndCancelQueuedFiles
 				// and a queued file. Their teardown must not undo earlier commits.
 				releaseGate(t, gates, names[0])
 				waitFileGate(t, gates, names[20])
-				published, err := os.ReadFile(filepath.Join(m.directory, names[0]))
+				first := filePoolSnapshot(t, m, operation, names).Jobs[0]
+				published, err := os.ReadFile(filepath.Join(m.directory, first.Name))
 				if err != nil || string(published) == originals[names[0]] {
 					t.Fatalf("first result did not publish before cancelling: %v", err)
 				}
@@ -277,12 +279,12 @@ func TestEnrichmentAndRefreshCancelOrCloseDrainTwentyWorkersAndCancelQueuedFiles
 							t.Fatalf("cancellation changed a committed result: %+v %v", job, err)
 						}
 						backup, err := os.ReadFile(job.BackupPath)
-						if err != nil || string(backup) != originals[job.Name] {
+						if err != nil || string(backup) != originals[names[index]] {
 							t.Fatalf("cancellation changed its exact original backup: %+v %v", job, err)
 						}
 						continue
 					}
-					if err != nil || job.Status != "cancelled" || string(data) != originals[job.Name] {
+					if err != nil || job.Status != "cancelled" || string(data) != originals[names[index]] {
 						t.Fatalf("cancelled file was changed or left active: %+v %v", job, err)
 					}
 				}

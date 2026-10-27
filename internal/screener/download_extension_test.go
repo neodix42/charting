@@ -1,6 +1,7 @@
 package screener
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,38 @@ import (
 	"testing"
 	"time"
 )
+
+func TestCoveredDownloadRejectsAnotherHistoryIntroducedAfterPlanning(t *testing.T) {
+	m := testManager(t)
+	if err := checkDirectory(m.directory); err != nil {
+		t.Fatal(err)
+	}
+	name := "eurusd-d1-2024-01-01-2024-01-04.csv"
+	contents := "timestamp,open,high,low,close,volume\n1704067200000,10,11,9,10,1\n"
+	full := writeDataFile(t, m, name, contents)
+	job := Job{ID: strings.Repeat("a", 32), Symbol: "eurusd", Timeframe: "d1", From: "2024-01-01", To: "2024-01-04", AsOf: time.Now().UnixMilli(), Status: "running"}
+	work := t.TempDir()
+	plan, originals, err := prepareDownloadPlan(job, m.directory, work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, checksum, err := historyFingerprint(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := writeDataFile(t, m, "eurusd-d1-2024-01-02-2024-01-04.csv", contents)
+	m.jobs, m.publication = []Job{job}, map[string]string{}
+	_, _, err = m.publishExtendedDownload(context.Background(), 0, job, m.directory, work, filepath.Join(work, "data.part"), plan, originals, workerEvent{NoChange: true, Checksum: checksum, FirstTimestamp: 1704067200000, LastTimestamp: 1704067200000})
+	if err == nil || !strings.Contains(err.Error(), "another history range appeared") {
+		t.Fatalf("covered download ignored an unplanned history: %v", err)
+	}
+	for _, path := range []string{full, other} {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil || string(data) != contents {
+			t.Fatalf("existing history changed: %q %v", data, readErr)
+		}
+	}
+}
 
 func TestFailedIncrementalDownloadRetainsCompletedRangesForResume(t *testing.T) {
 	m := sourceEnrichmentManager(t, false)
@@ -51,6 +84,7 @@ return Buffer.from(JSON.stringify({timestamp:1704067200000,shift:86400000,multip
 		t.Fatal(err)
 	}
 	info = waitFinished(t, m)
+	full = filepath.Join(m.directory, "eurusd-d1-2024-01-01-2024-01-05.csv")
 	if info.Jobs[0].Status != "completed" || info.Jobs[0].OutputPath != full {
 		t.Fatalf("resume: %+v", info)
 	}
@@ -121,7 +155,7 @@ func TestCrashAfterReplacingExistingDownloadRecoversCommittedFileAndRetainsBacku
 	}
 }
 
-func TestIncrementalDownloadRetainsUppercaseFilenameAcrossRestartAndRefresh(t *testing.T) {
+func TestIncrementalDownloadCanonicalizesUppercaseFilenameAcrossRestartAndRefresh(t *testing.T) {
 	m, trace, _ := refreshManager(t, false)
 	const name = "EURUSD-D1-2024-01-01-2024-01-03.CSV"
 	full := writeDataFile(t, m, name, "timestamp,open,high,low,close,volume\n1704067200000,10,11,9,10,10\n1704153600000,20,21,19,20,10\n")
@@ -130,6 +164,7 @@ func TestIncrementalDownloadRetainsUppercaseFilenameAcrossRestartAndRefresh(t *t
 		t.Fatal(err)
 	}
 	info := waitFinished(t, m)
+	full = filepath.Join(m.directory, "eurusd-d1-2024-01-01-2024-01-04.csv")
 	if info.Jobs[0].Status != "completed" || info.Jobs[0].OutputPath != full {
 		t.Fatalf("uppercase existing filename: %+v", info)
 	}
@@ -163,6 +198,10 @@ func TestDownloadPrependsAndAppendsExistingHistoryAndRecalculatesSavedIndicators
 		t.Fatal(err)
 	}
 	info := waitFinished(t, m)
+	if _, err := os.Stat(full); !os.IsNotExist(err) {
+		t.Fatalf("old range remained: %v", err)
+	}
+	full = filepath.Join(m.directory, "eurusd-d1-2024-01-01-2024-01-06.csv")
 	if info.Jobs[0].Status != "completed" || info.Jobs[0].OutputPath != full {
 		t.Fatalf("existing history was not updated: %+v", info)
 	}
@@ -178,7 +217,7 @@ func TestDownloadPrependsAndAppendsExistingHistoryAndRecalculatesSavedIndicators
 	if strings.Count(string(requests), "\n") != 2 {
 		t.Fatalf("prefix and suffix were not fetched independently: %s", requests)
 	}
-	backups, err := filepath.Glob(filepath.Join(m.directory, ".cryptodesk-download-backups", "*.csv"))
+	backups, err := filepath.Glob(filepath.Join(m.directory, ".cryptodesk-history-publications", "*", "source-0000.csv"))
 	if err != nil || len(backups) != 1 {
 		t.Fatalf("original backup: %v %v", backups, err)
 	}
@@ -186,7 +225,7 @@ func TestDownloadPrependsAndAppendsExistingHistoryAndRecalculatesSavedIndicators
 	if err != nil || string(backup) != original {
 		t.Fatalf("original changed: %q %v", backup, err)
 	}
-	metadata, err := readFileMetadata(m.directory, name)
+	metadata, err := readFileMetadata(m.directory, filepath.Base(full))
 	if err != nil || len(metadata.Coverage) != 1 || metadata.Coverage[0].From != 1704067200000 || metadata.Coverage[0].To != 1704499200000 {
 		t.Fatalf("queried coverage was not retained: %+v %v", metadata, err)
 	}
@@ -207,7 +246,7 @@ func TestDownloadPrependsAndAppendsExistingHistoryAndRecalculatesSavedIndicators
 	if err != nil || page.Total != 1 || page.Files[0].FirstTimestamp == nil || *page.Files[0].FirstTimestamp != 1704067200000 {
 		t.Fatalf("updated file period: %+v %v", page, err)
 	}
-	// Refresh must accept earlier rows even though the original filename is kept.
+	// Refresh must retain the prepended rows after the range filename changes.
 	if _, err = m.StartRefresh(); err != nil {
 		t.Fatal(err)
 	}
@@ -270,10 +309,60 @@ func TestIncrementalDownloadCancelAndRestartKeepOriginalAndSavedRangeCheckpoints
 				restarted := newManager(m.profile, func() (workerRuntime, error) { return m.runtime, nil })
 				defer restarted.Close()
 				info := waitFinished(t, restarted)
+				full = filepath.Join(m.directory, "eurusd-d1-2023-01-01-2024-01-06.csv")
 				if info.Jobs[0].Status != "completed" || info.Jobs[0].OutputPath != full {
 					t.Fatalf("restart did not resume extension: %+v", info)
 				}
 			}
 		})
+	}
+}
+
+func TestDownloadConsolidatesLegacySubsetWithoutFetchingOrLosingIndicators(t *testing.T) {
+	m := sourceEnrichmentManager(t, false)
+	name := "eurusd-d1-2024-01-01-2024-01-04.csv"
+	first := "timestamp,open,high,low,close,volume,sma_2\n1704067200000,10,11,9,10,10,\n1704153600000,20,21,19,20,10,15\n1704240000000,30,31,29,30,10,25\n"
+	writeDataFile(t, m, name, first)
+	old := writeDataFile(t, m, "eurusd-d1-2024-01-02-2024-01-04.csv", "timestamp,open,high,low,close,volume,weekday\n1704153600000,20,21,19,20,10,2\n1704240000000,30,31,29,30,10,3\n")
+	// The saved spans fully cover this request; the real incremental worker
+	// must consolidate locally and never invoke Dukascopy.
+	preload := filepath.Join(t.TempDir(), "no-network.cjs")
+	module, _ := json.Marshal(filepath.Join(filepath.Dir(m.runtime.worker), "node_modules", "dukascopy-node"))
+	if err := os.WriteFile(preload, []byte(fmt.Sprintf("require(%s).BufferFetcher.prototype.fetchBuffer=async()=>{throw Error('Unexpected provider request');};", module)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NODE_OPTIONS", "--require="+preload)
+	request := Request{Symbols: []string{"eurusd"}, Timeframe: "d1", From: "2024-01-01", To: "2024-01-04"}
+	if _, err := m.Start(request); err != nil {
+		t.Fatal(err)
+	}
+	info := waitFinished(t, m)
+	if info.Jobs[0].Status != "completed" {
+		t.Fatalf("merge failed: %+v", info)
+	}
+	names, err := csvNames(m.directory)
+	if err != nil || len(names) != 1 || names[0] != name {
+		t.Fatalf("duplicate histories remain: %v %v", names, err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatalf("superseded file remains: %v", err)
+	}
+	data, err := os.ReadFile(info.Jobs[0].OutputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
+	if err != nil || len(rows) != 4 || strings.Join(rows[0][6:], ",") != "sma_2,weekday" || rows[1][7] != "1" || rows[3][6] != "25" {
+		t.Fatalf("history or indicators lost: %s %v", data, err)
+	}
+	metadata, err := readFileMetadata(m.directory, name)
+	if err != nil || len(metadata.Recipes) != 2 {
+		t.Fatalf("indicator recipes lost: %+v %v", metadata, err)
+	}
+	m.Close()
+	restarted := newManager(m.profile, func() (workerRuntime, error) { return m.runtime, nil })
+	defer restarted.Close()
+	if page, err := restarted.Files(0, 20); err != nil || page.Total != 1 {
+		t.Fatalf("duplicates returned after restart: %+v %v", page, err)
 	}
 }

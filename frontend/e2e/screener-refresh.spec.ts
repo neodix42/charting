@@ -50,6 +50,40 @@ test('completed refresh shows new row counts, recalculated columns and the avail
  await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
 });
 
+for(const action of ['refresh','enrichment'] as const){
+ test(`${action} follows a range rename while running and reloads a failed job's consolidated file`,async({page})=>{
+  await open(page,1);
+  await page.getByRole('button',{name:action==='refresh'?'Refresh data and indicators':'Enrich 1 file',exact:true}).click();
+  const renamed={...file(0),id:'renamed-history',name:'asset0-d1-2023-01-01-2024-02-01.csv',from:'2023-01-01'};
+  await page.evaluate(({action,renamed})=>{
+   const win=window as any,api=win.go.main.App;
+   const getter=action==='refresh'?'GetScreenerRefresh':'GetScreenerEnrichment';
+   const read=action==='refresh'?'__testRefresh':'__testEnrichment';
+   const write=action==='refresh'?'__testSetRefresh':'__testSetEnrichment';
+   const original=api[getter];
+   // Production polling accepts the old file ID as an alias after publication.
+   api[getter]=(ids:string[])=>original(ids.map(id=>id==='refresh-0'?renamed.id:id));
+   win.__testSetEnrichmentFiles([renamed]);
+   const info=win[read]();
+   win[write]({...info,jobs:info.jobs.map((job:object)=>({...job,fileId:renamed.id,name:renamed.name,status:'running',progress:35,message:'Merged saved histories; processing the consolidated file'}))});
+  },{action,renamed});
+  const row=panel(page).locator('tbody tr');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText(renamed.name);
+  await expect(row.getByRole('progressbar')).toHaveAttribute('value','35');
+  await page.evaluate(action=>{
+   const win=window as any,read=action==='refresh'?'__testRefresh':'__testEnrichment',write=action==='refresh'?'__testSetRefresh':'__testSetEnrichment';
+   win.__testSetEnrichmentFiles(win.__testEnrichmentFiles().map((file:ScreenerDataFile)=>({...file,bytes:9000})));
+   const info=win[read]();
+   win[write]({...info,active:false,failed:1,jobs:info.jobs.map((job:object)=>({...job,status:'failed',message:'Processing stopped; consolidated history retained'}))});
+  },action);
+  await expect(row).toContainText('failed');
+  await expect(row).toContainText('8.8 KiB');
+  await expect(row).toContainText('consolidated history retained');
+  await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+ });
+}
+
 test('a stale refresh poll cannot replace a newer started batch',async({page})=>{
  await open(page,1);
  await page.evaluate(()=>{

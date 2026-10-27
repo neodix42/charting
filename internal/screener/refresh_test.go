@@ -96,6 +96,15 @@ func TestRefreshRepairsHistoryReplaysLegacyIndicatorsBacksUpAndPersistsVerifiedC
 	if err != nil || string(backup) != refreshCSV {
 		t.Fatalf("backup is not exact original: %q %v", backup, err)
 	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("old date-range filename remains after refresh: %v", err)
+	}
+	name := info.Jobs[0].Name
+	if name == refreshName || info.Jobs[0].FileID != dataFileID(m.directory, name) {
+		t.Fatalf("refresh did not expose its canonical filename: %+v", info.Jobs[0])
+	}
+	path = filepath.Join(m.directory, name)
+	id = info.Jobs[0].FileID
 	actual, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +113,7 @@ func TestRefreshRepairsHistoryReplaysLegacyIndicatorsBacksUpAndPersistsVerifiedC
 	if err != nil || rows[2][6] != "15" || rows[3][6] != "25" || rows[3][4] != "30" {
 		t.Fatalf("data gap and indicators: %q %v", actual, err)
 	}
-	metadata, err := readFileMetadata(m.directory, refreshName)
+	metadata, err := readFileMetadata(m.directory, name)
 	st, _ := os.Stat(path)
 	if err != nil || !metadata.Verified || !metadataMatches(metadata, st) || len(metadata.Recipes) != 1 || metadata.Recipes[0].Indicator != "sma" {
 		t.Fatalf("durable recipe and coverage metadata: %+v %v", metadata, err)

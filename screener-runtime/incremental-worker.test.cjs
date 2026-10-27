@@ -73,6 +73,89 @@ test('several existing ranges and duplicate CSVs are reused locally without down
  assert.deepEqual((await read(request.output)).map(row=>Number(row.timestamp)),Array.from({length:6},(_,i)=>start+i*day));
 });
 
+test('offline consolidation keeps every overlapping bar and enriched column with stable source priority',async t=>{
+ const originals=[
+  `${headers.join(',')},sma_2\n${[0,1,2].map(n=>`${candle(n).join(',')},${n?String(5+n*10):''}`).join('\n')}\n`,
+  `${headers.join(',')},weekday,hour\n${[2,3,4].map(n=>`${candle(n,n===2?99:undefined).join(',')},${n+1},0`).join('\n')}\n`,
+  csv([candle(1),candle(2)]),
+ ];
+ const request=await fixture(t,originals,{localOnly:true,to:'2024-01-11'}),events=[];
+ await extendDownload(request,{emit:event=>events.push(event),download:()=>assert.fail('offline consolidation reached the provider')});
+ const rows=await read(request.output),result=events.at(-1);
+ assert.deepEqual(rows.map(row=>Number(row.timestamp)),[0,1,2,3,4].map(n=>start+n*day));
+ assert.deepEqual(rows.map(row=>row.close),['10','20','30','40','50']);
+ assert.deepEqual(rows.map(row=>row.sma_2),['','15','25','35','45']);
+ assert.deepEqual(rows.map(row=>row.weekday),['1','2','3','4','5']);
+ assert.ok(rows.every(row=>row.hour==='0'));
+ assert.deepEqual(result.coverage,[{from:start,to:start+5*day}]);
+ assert.deepEqual(result.recipes.map(recipe=>recipe.indicator),['sma','weekday','hour']);
+ assert.equal(result.firstTimestamp,start);assert.equal(result.lastTimestamp,start+4*day);
+ const plan=JSON.parse(await fs.readFile(request.planFile));
+ for(let i=0;i<originals.length;i++)assert.equal(await fs.readFile(plan.inputs[i].input,'utf8'),originals[i]);
+});
+
+test('offline consolidation preserves disjoint verified coverage without filling or claiming missing ranges',async t=>{
+ const request=await fixture(t,[
+  {text:csv([candle(1)]),metadata:{coverage:[{from:start,to:start+2*day}]}},
+  {text:csv([candle(5)]),metadata:{coverage:[{from:start+4*day,to:start+7*day}]}},
+ ],{localOnly:true,to:'2024-01-11'}),events=[];
+ const plan=JSON.parse(await fs.readFile(request.planFile));
+ for(const source of plan.inputs)source.metadata.checksum=(await scan(source.input,'d1')).checksum;
+ await fs.writeFile(request.planFile,JSON.stringify(plan));
+ await extendDownload(request,{emit:event=>events.push(event),download:()=>assert.fail('offline holes were downloaded')});
+ assert.deepEqual((await read(request.output)).map(row=>Number(row.timestamp)),[start+day,start+5*day]);
+ assert.deepEqual(events.at(-1).coverage,[{from:start,to:start+2*day},{from:start+4*day,to:start+7*day}]);
+ assert.equal(events.at(-1).checkedThrough,0);
+ assert.deepEqual(JSON.parse(await fs.readFile(path.join(path.dirname(request.output),'ranges.json'))).ranges,[]);
+});
+
+test('offline subset consolidation writes an output even when the first source already contains every row',async t=>{
+ const original=csv([candle(0),candle(1),candle(2)]);
+ const request=await fixture(t,[original,csv([candle(1)])],{localOnly:true}),events=[];
+ await extendDownload(request,{emit:event=>events.push(event),download:()=>assert.fail('subset consolidation reached the provider')});
+ assert.equal(await fs.readFile(request.output,'utf8'),original);
+ assert.equal(events.at(-1).noChange,true);
+ assert.equal(events.at(-1).rows,3);
+ assert.deepEqual(events.at(-1).coverage,[{from:start,to:start+3*day}]);
+});
+
+test('offline single source reports unchanged content and coverage without extending the requested range',async t=>{
+ const original=csv([candle(1)]),request=await fixture(t,[original],{localOnly:true}),events=[];
+ await extendDownload(request,{emit:event=>events.push(event),download:()=>assert.fail('single source was extended')});
+ assert.equal(events.at(-1).noChange,true);
+ assert.deepEqual(events.at(-1).coverage,[{from:start+day,to:start+2*day}]);
+ const plan=JSON.parse(await fs.readFile(request.planFile));
+ assert.equal(await fs.readFile(plan.inputs[0].input,'utf8'),original);
+ assert.equal(await fs.readFile(request.output,'utf8'),'');
+});
+
+test('offline monthly consolidation retains calendar boundaries across differing month lengths',async t=>{
+ const monthly=n=>[Date.UTC(2024,n,1),10,11,9,10,1];
+ const request=await fixture(t,[csv([monthly(0),monthly(1)]),csv([monthly(1),monthly(2)])],{localOnly:true,timeframe:'mn1',to:'2024-05-01'}),events=[];
+ const plan=JSON.parse(await fs.readFile(request.planFile));plan.asOf=Date.UTC(2024,4,1);
+ await fs.writeFile(request.planFile,JSON.stringify(plan));
+ await extendDownload(request,{emit:event=>events.push(event),download:()=>assert.fail('monthly consolidation reached the provider')});
+ assert.deepEqual((await read(request.output)).map(row=>Number(row.timestamp)),[0,1,2].map(n=>Date.UTC(2024,n,1)));
+ assert.deepEqual(events.at(-1).coverage,[{from:start,to:Date.UTC(2024,3,1)}]);
+});
+
+test('offline consolidation rejects unknown and duplicate fields without altering any source',async t=>{
+ for(const extra of ['unknown','close']){
+  const originals=[csv([candle(0)]),`${headers.join(',')},${extra}\n${candle(1).join(',')},42\n`];
+  const request=await fixture(t,originals,{localOnly:true});
+  await assert.rejects(extendDownload(request,{emit:()=>{},download:()=>assert.fail('invalid source reached the provider')}),/unrecognized|duplicate field/);
+  const plan=JSON.parse(await fs.readFile(request.planFile));
+  for(let i=0;i<originals.length;i++)assert.equal(await fs.readFile(plan.inputs[i].input,'utf8'),originals[i]);
+  assert.equal(await fs.readFile(request.output,'utf8'),'');
+ }
+});
+
+test('offline checkpoints cannot be resumed as provider downloads',async t=>{
+ const request=await fixture(t,[csv([candle(0)]),csv([candle(2)])],{localOnly:true});
+ await extendDownload(request,{emit:()=>{},download:()=>assert.fail('offline checkpoint requested data')});
+ await assert.rejects(extendDownload({...request,localOnly:false},{emit:()=>{},download:()=>assert.fail('offline checkpoint became a provider download')}),/saved range checkpoint/);
+});
+
 test('bounded merge passes support more than eight existing histories',async t=>{
  const request=await fixture(t,Array.from({length:18},()=>csv([candle(0),candle(1)])),{to:'2024-01-03'});
  await extendDownload(request,{emit:()=>{},download:()=>assert.fail('existing duplicate histories were downloaded')});
@@ -139,6 +222,20 @@ test('tick histories retain maximum duplicate multiplicity across overlapping lo
  const rows=await read(request.output);
  assert.equal(rows.length,5);
  assert.deepEqual(rows.map(row=>row.sma_2_bidprice),['','10','10','10.5','11.5']);
+});
+
+test('offline tick consolidation retains distinct ticks and maximum repeated multiplicity',async t=>{
+ const tickHeader='timestamp,askPrice,bidPrice,askVolume,bidVolume,sma_2_bidprice';
+ const repeated=`${start},12,10,3,4`,other=`${start},13,11,3,4`;
+ const request=await fixture(t,[
+  `${tickHeader}\n${repeated},\n${repeated},10\n${other},10.5\n`,
+  `${tickHeader}\n${repeated},\n${repeated},10\n${repeated},10\n${other},10.5\n`,
+ ],{localOnly:true,timeframe:'tick',to:'2024-01-02'}),events=[];
+ await extendDownload(request,{emit:event=>events.push(event),download:()=>assert.fail('offline ticks reached the provider')});
+ const rows=await read(request.output);
+ assert.deepEqual(rows.map(row=>row.bidPrice),['10','10','11','10']);
+ assert.deepEqual(rows.map(row=>row.sma_2_bidprice),['','10','10.5','10.5']);
+ assert.deepEqual(events.at(-1).coverage,[{from:start,to:start+1}]);
 });
 
 test('requests before the Unix epoch remember unavailable earlier intervals without discarding saved data',async t=>{

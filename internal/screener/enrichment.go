@@ -15,15 +15,16 @@ import (
 )
 
 type EnrichmentJob struct {
-	ID         string   `json:"id"`
-	FileID     string   `json:"fileId"`
-	Name       string   `json:"name"`
-	Status     string   `json:"status"`
-	Progress   float64  `json:"progress"`
-	Rows       int64    `json:"rows"`
-	Message    string   `json:"message"`
-	Columns    []string `json:"columns"`
-	BackupPath string   `json:"backupPath,omitempty"`
+	fileIDAliases []string
+	ID            string   `json:"id"`
+	FileID        string   `json:"fileId"`
+	Name          string   `json:"name"`
+	Status        string   `json:"status"`
+	Progress      float64  `json:"progress"`
+	Rows          int64    `json:"rows"`
+	Message       string   `json:"message"`
+	Columns       []string `json:"columns"`
+	BackupPath    string   `json:"backupPath,omitempty"`
 }
 
 type EnrichmentInfo struct {
@@ -86,7 +87,7 @@ func (m *Manager) enrichmentInfoLocked(fileIDs []string) EnrichmentInfo {
 			info.CurrentFile, info.CurrentProgress = job.Name, job.Progress
 		}
 		info.Progress += progress
-		if wanted[job.FileID] {
+		if historyIDWanted(wanted, job.FileID, job.fileIDAliases) {
 			job.Columns = append([]string{}, job.Columns...)
 			info.Jobs = append(info.Jobs, job)
 		}
@@ -131,6 +132,9 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if message := m.enrichmentRuntimeError(); message != "" {
 		return m.enrichmentInfoLocked(nil), errors.New(message)
 	}
+	if err := recoverHistoryPublications(m.directory); err != nil {
+		return m.enrichmentInfoLocked(nil), fmt.Errorf("recover saved history: %w", err)
+	}
 	names, err := csvNames(m.directory)
 	if err != nil {
 		return m.enrichmentInfoLocked(nil), err
@@ -138,13 +142,14 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if len(names) == 0 {
 		return m.enrichmentInfoLocked(nil), errors.New("there are no downloaded CSV files to enrich")
 	}
-	jobs := make([]EnrichmentJob, len(names))
-	for i, name := range names {
+	groups := groupHistories(m.directory, names)
+	jobs := make([]EnrichmentJob, len(groups))
+	for i, group := range groups {
 		var random [16]byte
 		if _, err = rand.Read(random[:]); err != nil {
 			return m.enrichmentInfoLocked(nil), err
 		}
-		jobs[i] = EnrichmentJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, name), Name: name, Status: "queued", Message: "Waiting for enrichment", Columns: []string{}}
+		jobs[i] = EnrichmentJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, group.name), Name: group.name, fileIDAliases: group.ids, Status: "queued", Message: "Waiting for enrichment", Columns: []string{}}
 	}
 	m.enrichmentJobs, m.enrichmentRequest, m.enrichmentActive = jobs, request, true
 	ctx, cancel := context.WithCancel(context.Background())
@@ -178,6 +183,7 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 		m.enrichmentActive, m.enrichmentCancel = false, nil
 		close(m.enrichmentDone)
 	}()
+	legacy := legacyRecipes(ctx, directory)
 	m.mu.Lock()
 	count := len(m.enrichmentJobs)
 	m.mu.Unlock()
@@ -191,7 +197,23 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 		m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "running", "Calculating indicator"
 		job := m.enrichmentJobs[index]
 		m.mu.Unlock()
-		err := m.enrichFile(ctx, index, directory, job, request)
+		var err error
+		if len(job.fileIDAliases) > 1 {
+			job.Name, err = m.consolidateHistory(ctx, directory, job.Name, legacy, func(message string) {
+				m.mu.Lock()
+				m.enrichmentJobs[index].Message = message
+				m.mu.Unlock()
+			})
+			if err == nil {
+				job.FileID = dataFileID(directory, job.Name)
+				m.mu.Lock()
+				m.enrichmentJobs[index].Name, m.enrichmentJobs[index].FileID = job.Name, job.FileID
+				m.mu.Unlock()
+			}
+		}
+		if err == nil {
+			err = m.enrichFile(ctx, index, directory, job, request)
+		}
 		m.mu.Lock()
 		if m.enrichmentJobs[index].Status != "completed" {
 			if ctx.Err() != nil {

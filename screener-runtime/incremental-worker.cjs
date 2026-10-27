@@ -100,6 +100,7 @@ async function extendDownload(request,options={}){
   if(!path.isAbsolute(request.planFile)||path.dirname(request.planFile)!==directory)throw Error('Download plan must be in the private job folder.');
   const plan=await jsonFile(request.planFile);
   if(plan.version!==1||!Array.isArray(plan.inputs)||!plan.inputs.length||!Number.isSafeInteger(plan.asOf))throw Error('Invalid incremental download plan.');
+  const localOnly=request.localOnly===true;
   const from=Date.parse(request.from),to=Math.min(Date.parse(request.to),plan.asOf),closed=closedBoundary(plan.asOf,request.timeframe);
   if(!Number.isFinite(from)||!Number.isFinite(to)||from>=to)throw Error('No available history in the requested UTC date range.');
   const headers=[],names=new Set(),scanned=[],covered=[],savedRecipes=[];
@@ -108,6 +109,8 @@ async function extendDownload(request,options={}){
     if(!stat.isFile()||Number(stat.size)!==source.bytes||Number(stat.mtimeNs/1000000n)!==source.modified)throw Error('Existing CSV changed since the download was queued; original kept.');
     const data=await scan(source.input,request.timeframe);scanned.push(data);
     if(data.last>plan.asOf)throw Error('CSV contains future timestamps; original kept.');
+    const normalized=data.headers.map(key);
+    if(normalized.some(name=>!name)||new Set(normalized).size!==normalized.length)throw Error('CSV contains empty or duplicate field names; original kept.');
     for(const name of data.headers)if(!names.has(key(name))){names.add(key(name));headers.push(name);}
     const metadata=source.metadata??{};
     const valid=metadata.checksum===data.checksum;
@@ -126,17 +129,26 @@ async function extendDownload(request,options={}){
   let snapshot;
   try{snapshot=await jsonFile(snapshotFile);}catch(error){if(error.code!=='ENOENT')throw error;}
   const checksums=scanned.map(data=>data.checksum);
+  // Offline consolidation must not fetch holes between disjoint local files or
+  // claim them as verified coverage. Keep the mode in the restart checkpoint so
+  // it cannot accidentally reuse an unfinished network download's range state.
+  const ranges=localOnly?[]:missing(from,to,covered);
   if(snapshot){
-    if(snapshot.version!==1||JSON.stringify(snapshot.checksums)!==JSON.stringify(checksums)||snapshot.from!==from||snapshot.to!==to||JSON.stringify(snapshot.ranges)!==JSON.stringify(missing(from,to,covered)))throw Error('Existing histories changed since the saved range checkpoint; originals kept.');
+    if(snapshot.version!==1||Boolean(snapshot.localOnly)!==localOnly||JSON.stringify(snapshot.checksums)!==JSON.stringify(checksums)||snapshot.from!==from||snapshot.to!==to||JSON.stringify(snapshot.ranges)!==JSON.stringify(ranges))throw Error('Existing histories changed since the saved range checkpoint; originals kept.');
   }else{
-    snapshot={version:1,checksums,from,to,ranges:missing(from,to,covered)};
+    snapshot={version:1,checksums,from,to,ranges,localOnly};
     await writeCheckpoint(snapshotFile,snapshot);
   }
+  let recipes;
+  if(localOnly)recipes=await recipesFor(headers,savedRecipes);
   if(!snapshot.ranges.length&&plan.inputs.length===1){
-    emit({type:'done',rows:scanned[0].rows,noChange:true,checksum:scanned[0].checksum,firstTimestamp:scanned[0].first,lastTimestamp:scanned[0].last,message:'Requested data is already available; no download needed'});
+    const coverage=union(covered);
+    emit({type:'done',rows:scanned[0].rows,noChange:true,checksum:scanned[0].checksum,firstTimestamp:scanned[0].first,lastTimestamp:scanned[0].last,
+      ...(localOnly?{coverage,recipes,checkedThrough:coverage.length===1?coverage[0].to:0}:{}),message:'Requested data is already available; no download needed'});
     return scanned[0].rows;
   }
-  const recipes=await recipesFor(headers,savedRecipes),downloaded=[];
+  recipes??=await recipesFor(headers,savedRecipes);
+  const downloaded=[];
   for(let index=0;index<snapshot.ranges.length;index++){
     const range=snapshot.ranges[index],folder=path.join(directory,`range-${index}`),output=path.join(folder,'data.part');
     await fs.mkdir(folder,{recursive:true,mode:0o700});
@@ -176,7 +188,7 @@ async function extendDownload(request,options={}){
   const result=await scan(request.output,request.timeframe);
   const noChange=result.checksum===scanned[0].checksum;
   emit({type:'done',rows,noChange,firstTimestamp:result.first,lastTimestamp:result.last,checksum:result.checksum,coverage,recipes,checkedThrough:coverage.length===1?coverage[0].to:0,
-    message:noChange&&!snapshot.ranges.length?'Requested data is already available; no download needed':`Updated existing history: ${rows.toLocaleString('en-US')} rows; ${snapshot.ranges.length} missing ranges downloaded; ${recipes.length} indicator recipes recalculated`});
+    message:localOnly?`Consolidated ${plan.inputs.length} local histories: ${rows.toLocaleString('en-US')} rows; ${recipes.length} indicator recipes recalculated`:noChange&&!snapshot.ranges.length?'Requested data is already available; no download needed':`Updated existing history: ${rows.toLocaleString('en-US')} rows; ${snapshot.ranges.length} missing ranges downloaded; ${recipes.length} indicator recipes recalculated`});
   return rows;
 }
 module.exports={extendDownload,union,missing,nextBar,mergeGroup,mergeFiles};

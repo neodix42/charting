@@ -17,17 +17,18 @@ import (
 )
 
 type RefreshJob struct {
-	ID          string   `json:"id"`
-	FileID      string   `json:"fileId"`
-	Name        string   `json:"name"`
-	Status      string   `json:"status"`
-	Progress    float64  `json:"progress"`
-	Rows        int64    `json:"rows"`
-	AddedRows   int64    `json:"addedRows"`
-	UpdatedRows int64    `json:"updatedRows"`
-	Message     string   `json:"message"`
-	Columns     []string `json:"columns"`
-	BackupPath  string   `json:"backupPath,omitempty"`
+	fileIDAliases []string
+	ID            string   `json:"id"`
+	FileID        string   `json:"fileId"`
+	Name          string   `json:"name"`
+	Status        string   `json:"status"`
+	Progress      float64  `json:"progress"`
+	Rows          int64    `json:"rows"`
+	AddedRows     int64    `json:"addedRows"`
+	UpdatedRows   int64    `json:"updatedRows"`
+	Message       string   `json:"message"`
+	Columns       []string `json:"columns"`
+	BackupPath    string   `json:"backupPath,omitempty"`
 }
 
 type RefreshInfo struct {
@@ -79,7 +80,7 @@ func (m *Manager) refreshInfoLocked(fileIDs []string) RefreshInfo {
 			info.CurrentFile, info.CurrentProgress = job.Name, job.Progress
 		}
 		info.Progress += progress
-		if wanted[job.FileID] {
+		if historyIDWanted(wanted, job.FileID, job.fileIDAliases) {
 			job.Columns = append([]string{}, job.Columns...)
 			info.Jobs = append(info.Jobs, job)
 		}
@@ -121,6 +122,9 @@ func (m *Manager) StartRefresh() (RefreshInfo, error) {
 	if message := m.refreshRuntimeError(); message != "" {
 		return m.refreshInfoLocked(nil), errors.New(message)
 	}
+	if err := recoverHistoryPublications(m.directory); err != nil {
+		return m.refreshInfoLocked(nil), fmt.Errorf("recover saved history: %w", err)
+	}
 	names, err := csvNames(m.directory)
 	if err != nil {
 		return m.refreshInfoLocked(nil), err
@@ -128,13 +132,14 @@ func (m *Manager) StartRefresh() (RefreshInfo, error) {
 	if len(names) == 0 {
 		return m.refreshInfoLocked(nil), errors.New("there are no downloaded CSV files to refresh")
 	}
-	jobs := make([]RefreshJob, len(names))
-	for i, name := range names {
+	groups := groupHistories(m.directory, names)
+	jobs := make([]RefreshJob, len(groups))
+	for i, group := range groups {
 		var random [16]byte
 		if _, err := rand.Read(random[:]); err != nil {
 			return m.refreshInfoLocked(nil), err
 		}
-		jobs[i] = RefreshJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, name), Name: name, Status: "queued", Message: "Waiting for data refresh", Columns: []string{}}
+		jobs[i] = RefreshJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, group.name), Name: group.name, fileIDAliases: group.ids, Status: "queued", Message: "Waiting for data refresh", Columns: []string{}}
 	}
 	m.refreshJobs, m.refreshActive = jobs, true
 	m.refreshAsOf = asOf
@@ -192,7 +197,23 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) 
 		m.refreshJobs[index].Status, m.refreshJobs[index].Message = "running", "Checking saved data and indicator recipes"
 		job := m.refreshJobs[index]
 		m.mu.Unlock()
-		err := m.refreshFile(ctx, index, directory, job, legacy[job.Name], asOf)
+		var err error
+		if len(job.fileIDAliases) > 1 {
+			job.Name, err = m.consolidateHistory(ctx, directory, job.Name, legacy, func(message string) {
+				m.mu.Lock()
+				m.refreshJobs[index].Message = message
+				m.mu.Unlock()
+			})
+			if err == nil {
+				job.FileID = dataFileID(directory, job.Name)
+				m.mu.Lock()
+				m.refreshJobs[index].Name, m.refreshJobs[index].FileID = job.Name, job.FileID
+				m.mu.Unlock()
+			}
+		}
+		if err == nil {
+			err = m.refreshFile(ctx, index, directory, job, legacy[job.Name], asOf)
+		}
 		m.mu.Lock()
 		if m.refreshJobs[index].Status != "completed" {
 			if ctx.Err() != nil {
@@ -367,43 +388,22 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 	if err = unchangedFile(source, original); err != nil {
 		return err
 	}
-	backupFolder := filepath.Join(directory, ".cryptodesk-refresh-backups")
-	if err = os.Mkdir(backupFolder, 0700); err != nil && !errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("create refresh backup folder: %w", err)
-	}
-	if st, err := os.Lstat(backupFolder); err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
-		return errors.New("refresh backup folder must be a real directory")
-	}
-	backup := filepath.Join(backupFolder, job.ID+".csv")
-	if err = os.Link(source, backup); err != nil {
-		return fmt.Errorf("preserve exact original before refreshing: %w", err)
-	}
-	backupMetadata, _ := json.Marshal(struct {
-		Filename string       `json:"filename"`
-		Previous fileMetadata `json:"previous"`
-	}{job.Name, metadata})
-	if err = writeSyncedExclusive(filepath.Join(backupFolder, job.ID+".json"), append(backupMetadata, '\n')); err != nil {
-		return fmt.Errorf("save refresh backup metadata: %w", err)
-	}
-	if parent, err := os.Open(backupFolder); err == nil {
-		_ = parent.Sync()
-		_ = parent.Close()
-	}
+	sources := []downloadSource{{Input: source, Name: job.Name, From: match[3], To: match[4], Bytes: original.Size(), Modified: original.ModTime().UnixMilli(), Metadata: metadata}}
 	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough, Coverage: result.Coverage}
-	if err = writeFileMetadata(directory, job.Name, metadata); err != nil {
-		return fmt.Errorf("save refreshed indicator recipes (original kept): %w", err)
-	}
-	if err = unchangedFile(source, original); err != nil {
+	// Date filenames express an exclusive upper bound. A refresh runs through
+	// its execution instant, so today's partial range ends at tomorrow's date.
+	to := time.UnixMilli(asOf).UTC().Add(24 * time.Hour).Format("2006-01-02")
+	name, err := canonicalHistoryName(match[1], match[2], match[3], to, sources, metadata)
+	if err != nil {
 		return err
 	}
-	if err = os.Rename(output, source); err != nil {
-		return fmt.Errorf("publish refreshed CSV (original kept): %w", err)
+	backup, err := publishHistory(directory, name, output, sources, map[string]os.FileInfo{source: original}, metadata)
+	if err != nil {
+		return fmt.Errorf("publish refreshed history: %w", err)
 	}
-	if parent, err := os.Open(directory); err == nil {
-		_ = parent.Sync()
-		_ = parent.Close()
-	}
+	m.recordHistoryRenameLocked(directory, name, sources)
 	current := &m.refreshJobs[index]
+	current.Name, current.FileID = name, dataFileID(directory, name)
 	current.Status, current.Progress, current.Rows = "completed", 100, result.Rows
 	current.AddedRows, current.UpdatedRows, current.Message = result.AddedRows, result.UpdatedRows, cleanMessage(result.Message)
 	current.Columns, current.BackupPath = append([]string{}, result.Columns...), backup

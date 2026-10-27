@@ -1,4 +1,14 @@
-# Implementation status — updated 2026-10-26
+# Implementation status — updated 2026-10-27
+
+## One Screener history per asset and timeframe — 2026-10-27
+
+Downloader now merges all matching histories into one CSV, fetches only uncovered requested ranges, and renames the output to the combined date bounds. Narrower requests preserve existing rows. Enrichment and Refresh queue one job per asset/timeframe and consolidate legacy overlapping files offline before continuing; the consolidated history remains available even if subsequent provider access is refused. Applied indicator recipes are united and replayed over ordered data, while tick multiplicity and separate timeframes are preserved. File lists, progress and completed download links follow range renames. Analysis remains read-only: run Download, Enrich or Refresh to consolidate legacy duplicates, then Apply again.
+
+A shared publisher retains exact source CSVs and metadata in hidden `.cryptodesk-history-publications` transactions, publishes the complete result and metadata, then removes superseded visible names. Durable recovery covers interruption before publication, between CSV/metadata publication, and during cleanup. Startup and manual Resume reconcile committed download outputs; completed links follow later Refresh renames. External source changes and unexpected competing histories fail visibly without deleting them. Cancellation before publication preserves all originals. Existing backup folders remain untouched.
+
+Verification under ignored `.tools/verification/screener-one-history/`: **111 Python packaging checks, 72 Node runtime tests, 176 frontend unit tests and all 55 Screener browser tests pass**. Go internal and binding/native-tagged whole-app race suites, vet, frontend typecheck/lint and production assets pass. Production worker tests cover subset/overlapping/disjoint histories, indicator unions, missing-range reuse, cancellation, provider refusal after local consolidation, restart and publication recovery; browser regressions cover running and failed jobs after a rename. An additional real-worker regression verifies that local consolidation retains unverified coverage so Refresh still repairs legacy interior gaps. These checks use isolated synthetic data and no live provider request.
+
+Linux and Windows release builds pass and the root Linux executable is rebuilt. Complete archive/runtime inventories, all six packaged worker modules against source, artifact checksums and the actual Linux package's offline runtime smoke pass (`release-packages.json`, `packaged-runtime.json`, `*-build.log`, `*-checksums.log`). `git diff --check` passes after generated bindings are restored. Native desktop interaction, native Windows GUI, live Dukascopy access and a newly hosted Actions run remain unverified.
 
 ## Release browser-bootstrap race — 2026-10-26
 

@@ -1,10 +1,8 @@
 package screener
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -133,6 +131,30 @@ func writeDownloadedMetadata(directory, name, partial string, event workerEvent)
 	return writeFileMetadata(directory, name, metadata)
 }
 
+// Completed queue entries keep pointing to the single published history when
+// Refresh or Enrichment consolidates or renames it after the download finished.
+func (m *Manager) recordHistoryRenameLocked(directory, name string, sources []downloadSource) {
+	if m.batchDirectory != directory {
+		return
+	}
+	previous := map[string]bool{}
+	for _, source := range sources {
+		previous[source.Input] = true
+	}
+	changed := false
+	for i := range m.jobs {
+		job := &m.jobs[i]
+		if job.Status == "completed" && previous[job.OutputPath] && job.OutputPath != filepath.Join(directory, name) {
+			job.OutputPath = filepath.Join(directory, name)
+			m.publication[job.ID] = name
+			changed = true
+		}
+	}
+	if changed {
+		m.saveDownloadsLocked()
+	}
+}
+
 func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Job, directory, work, partial string, plan downloadPlan, originals map[string]os.FileInfo, result workerEvent) (string, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -146,94 +168,64 @@ func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Jo
 	}
 	target := plan.Inputs[0]
 	message := cleanMessage(result.Message)
-	if result.NoChange {
-		if digest, err := hex.DecodeString(result.Checksum); err != nil || len(digest) != 32 {
-			return "", "", errors.New("downloader did not confirm the unchanged history fingerprint")
-		}
-		if result.Coverage != nil {
-			if err := writeDownloadedMetadata(directory, target.Name, target.Input, result); err != nil {
-				return "", "", err
-			}
-		}
-		m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, message, target.Input
-		m.saveDownloadsLocked()
-		return target.Input, message, nil
+	metadataInput := partial
+	if result.NoChange && len(plan.Inputs) == 1 {
+		metadataInput = target.Input
 	}
-	if err := os.Chmod(partial, originals[target.Input].Mode().Perm()); err != nil {
-		return "", "", err
-	}
-	metadata, err := downloadedMetadata(partial, result)
+	metadata, err := downloadedMetadata(metadataInput, result)
 	if err != nil {
 		return "", "", err
+	}
+	if result.NoChange && result.Coverage == nil {
+		// A covered request may skip replay. Retain its existing recipes and
+		// query ledger rather than replacing them with an empty done event.
+		metadata.Recipes, metadata.Coverage = target.Metadata.Recipes, target.Metadata.Coverage
+		metadata.Verified, metadata.CheckedThrough = target.Metadata.Verified, target.Metadata.CheckedThrough
 	}
 	for _, recipe := range metadata.Recipes {
 		if _, err := m.validateEnrichment(recipe); err != nil {
 			return "", "", err
 		}
 	}
-	backupFolder := filepath.Join(directory, ".cryptodesk-download-backups")
-	if err = os.Mkdir(backupFolder, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+	name, err := canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, plan.Inputs, metadata)
+	if err != nil {
 		return "", "", err
 	}
-	if info, err := os.Lstat(backupFolder); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return "", "", errors.New("download backup folder must be a real directory")
-	}
-	backup := filepath.Join(backupFolder, job.ID+".csv")
-	if err = os.Link(target.Input, backup); err != nil {
-		old, backupErr := os.Lstat(backup)
-		if !errors.Is(err, os.ErrExist) || backupErr != nil || !os.SameFile(originals[target.Input], old) {
-			return "", "", fmt.Errorf("preserve original download: %w", err)
+	output := filepath.Join(directory, name)
+	if result.NoChange && len(plan.Inputs) == 1 && target.Name == name {
+		if err := checkHistoryFamily(directory, historyPublication{Name: name, Sources: []historyOriginal{{Name: target.Name}}}); err != nil {
+			return "", "", err
 		}
-	}
-	encoded, _ := json.Marshal(struct {
-		Filename string       `json:"filename"`
-		Previous fileMetadata `json:"previous"`
-	}{target.Name, target.Metadata})
-	backupState := filepath.Join(backupFolder, job.ID+".json")
-	if err = writeSyncedExclusive(backupState, encoded); err != nil {
-		previous, readErr := os.ReadFile(backupState)
-		if !errors.Is(err, os.ErrExist) || readErr != nil || !bytes.Equal(previous, encoded) {
-			return "", "", fmt.Errorf("save original download metadata: %w", err)
+		if result.Coverage != nil {
+			if err := writeFileMetadata(directory, name, metadata); err != nil {
+				return "", "", err
+			}
 		}
+		m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, message, output
+		m.saveDownloadsLocked()
+		return output, message, nil
 	}
-	if folder, err := os.Open(backupFolder); err == nil {
-		_ = folder.Sync()
-		_ = folder.Close()
-	}
-	m.publication[job.ID] = target.Name
-	if !m.saveDownloadsLocked() {
-		return "", "", errors.New(m.stateError)
-	}
-	// Metadata precedes replacement; a crash invalidates its fingerprint safely.
-	if err = writeFileMetadata(directory, target.Name, metadata); err != nil {
-		return "", "", err
-	}
-	publication := filepath.Join(work, "publish.csv")
-	if err = os.Remove(publication); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", "", err
-	}
-	if err = os.Link(partial, publication); err != nil {
-		return "", "", err
-	}
-	if folder, err := os.Open(work); err == nil {
-		_ = folder.Sync()
-		_ = folder.Close()
-	}
-	for filename, original := range originals {
-		if err := unchangedFile(filename, original); err != nil {
+	if metadataInput == target.Input {
+		// Keep the same recovery inode even for a filename-only extension of
+		// already queried empty coverage. The worker's empty partial is owned.
+		if err := os.Remove(partial); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", "", err
+		}
+		if err := os.Link(target.Input, partial); err != nil {
 			return "", "", err
 		}
 	}
-	if err = os.Rename(publication, target.Input); err != nil {
-		return "", "", fmt.Errorf("publish extended download (original kept): %w", err)
+	if err := os.Chmod(partial, originals[target.Input].Mode().Perm()); err != nil {
+		return "", "", err
 	}
-	if folder, err := os.Open(directory); err == nil {
-		_ = folder.Sync()
-		_ = folder.Close()
+	m.publication[job.ID] = name
+	if !m.saveDownloadsLocked() {
+		return "", "", errors.New(m.stateError)
 	}
-	// Keep the private partial hard link until the completed queue commits. The
-	// existing intent/inode recovery then handles a crash after atomic replacement.
-	m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, message, target.Input
+	if _, err = publishHistory(directory, name, partial, plan.Inputs, originals, metadata); err != nil {
+		return "", "", err
+	}
+	m.jobs[index].Status, m.jobs[index].Progress, m.jobs[index].Message, m.jobs[index].OutputPath = "completed", 100, message, output
 	m.saveDownloadsLocked()
-	return target.Input, message, nil
+	return output, message, nil
 }

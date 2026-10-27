@@ -7,6 +7,15 @@ const pageSize=20;
 const requirements={price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume',timestamp:'timestamp (UTC); no price fields required'};
 function size(bytes:number){return bytes<1024?`${bytes} B`:bytes<1024*1024?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1024/1024).toFixed(1)} MiB`;}
 function utcTime(value:number){return new Date(value).toISOString().replace('T',' ').replace(/(?:\.000)?Z$/,' UTC');}
+function terminalCount(info:{completed:number;failed:number;cancelled:number}){return info.completed+info.failed+info.cancelled;}
+function renamedJobs(jobs:{id:string;fileId:string}[],ids:string[],seen:Set<string>){
+ let changed=false;
+ for(const job of jobs){
+  const key=`${job.id}:${job.fileId}`;
+  if(!ids.includes(job.fileId)&&!seen.has(key)){seen.add(key);changed=true;}
+ }
+ return changed;
+}
 
 export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
  const [catalog,setCatalog]=useState<ScreenerIndicators|null>(null),[files,setFiles]=useState<ScreenerFilePage|null>(null),[info,setInfo]=useState<ScreenerEnrichmentInfo|null>(null);
@@ -14,7 +23,7 @@ export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
  const [indicator,setIndicator]=useState('sma'),[parameters,setParameters]=useState<Record<string,string>>({}),[source,setSource]=useState('auto');
  const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false);
  const [catalogError,setCatalogError]=useState(''),[fileError,setFileError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState('');
- const mounted=useRef(false),lifetime=useRef(0),actionBusy=useRef(false),epoch=useRef(0),completed=useRef(0),refreshed=useRef(0);
+ const mounted=useRef(false),lifetime=useRef(0),actionBusy=useRef(false),epoch=useRef(0),completed=useRef(0),refreshed=useRef(0),seenRenames=useRef(new Set<string>());
  useEffect(()=>{mounted.current=true;lifetime.current++;return ()=>{mounted.current=false;lifetime.current++;epoch.current++;};},[]);
  useEffect(()=>{
   if(!visible)return;
@@ -45,11 +54,13 @@ export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
      if(current&&version===epoch.current){
       if(enrichment.status==='fulfilled'){
        const value=enrichment.value;setInfo(value);setInfoError('');
-       if(value.completed!==completed.current){completed.current=value.completed;setReload(value=>value+1);}
+       const count=terminalCount(value),renamed=renamedJobs(value.jobs,ids,seenRenames.current);
+       if(count!==completed.current||renamed){completed.current=count;setReload(value=>value+1);}
       }else setInfoError(errorText(enrichment.reason));
       if(refresh.status==='fulfilled'){
        const value=refresh.value;setRefreshInfo(value);setRefreshError('');
-       if(value.completed!==refreshed.current){refreshed.current=value.completed;setReload(value=>value+1);}
+       const count=terminalCount(value),renamed=renamedJobs(value.jobs,ids,seenRenames.current);
+       if(count!==refreshed.current||renamed){refreshed.current=count;setReload(value=>value+1);}
       }else setRefreshError(errorText(refresh.reason));
      }
     }
@@ -65,15 +76,15 @@ export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
  const run=async(operation:()=>Promise<ScreenerEnrichmentInfo>)=>{
   if(actionBusy.current)return;
   const session=lifetime.current;
-  actionBusy.current=true;epoch.current++;setBusy(true);setActionError('');
-  try{const value=await operation();if(mounted.current&&session===lifetime.current){completed.current=value.completed;setLastAction('enrichment');setInfo(value);setInfoError('');setReload(value=>value+1);}}
+  actionBusy.current=true;epoch.current++;seenRenames.current.clear();setBusy(true);setActionError('');
+  try{const value=await operation();if(mounted.current&&session===lifetime.current){completed.current=terminalCount(value);setLastAction('enrichment');setInfo(value);setInfoError('');setReload(value=>value+1);}}
   catch(error){if(mounted.current&&session===lifetime.current)setActionError(errorText(error));}
   finally{actionBusy.current=false;if(mounted.current&&session===lifetime.current)setBusy(false);}
  };
  const runRefresh=async(cancel=false)=>{
   if(actionBusy.current)return;
-  const session=lifetime.current;actionBusy.current=true;epoch.current++;setBusy(true);setActionError('');
-  try{const value=await(cancel?api.CancelScreenerRefresh():api.StartScreenerRefresh());if(mounted.current&&session===lifetime.current){refreshed.current=value.completed;setLastAction('refresh');setRefreshInfo(value);setRefreshError('');setReload(value=>value+1);}}
+  const session=lifetime.current;actionBusy.current=true;epoch.current++;seenRenames.current.clear();setBusy(true);setActionError('');
+  try{const value=await(cancel?api.CancelScreenerRefresh():api.StartScreenerRefresh());if(mounted.current&&session===lifetime.current){refreshed.current=terminalCount(value);setLastAction('refresh');setRefreshInfo(value);setRefreshError('');setReload(value=>value+1);}}
   catch(error){if(mounted.current&&session===lifetime.current)setActionError(errorText(error));}
   finally{actionBusy.current=false;if(mounted.current&&session===lifetime.current)setBusy(false);}
  };
@@ -100,7 +111,7 @@ export function ScreenerEnrichment({api,visible}:{api:Backend;visible:boolean}){
   {info&&info.total>0&&!showRefresh&&<section className="enrichment-progress" aria-label="Enrichment progress" aria-live="polite"><div><strong>{info.active?'Enriching files':'Enrichment finished'}</strong><span>{info.completed} / {info.total} complete · {info.failed} failed{info.cancelled?` · ${info.cancelled} cancelled`:''}</span></div><progress aria-label="Overall enrichment progress" max={100} value={info.progress??(finished+(info.currentProgress||0)/100)/info.total*100}/>{info.currentFile&&<p>{info.currentFile} · {Math.round(info.currentProgress)}%</p>}</section>}
   {refreshInfo&&refreshInfo.total>0&&showRefresh&&<section className="enrichment-progress" aria-label="Data refresh progress" aria-live="polite"><div><strong>{refreshInfo.active?'Refreshing data and indicators':'Data refresh finished'}</strong><span>{refreshInfo.completed} / {refreshInfo.total} complete · {refreshInfo.failed} failed{refreshInfo.cancelled?` · ${refreshInfo.cancelled} cancelled`:''}</span></div><progress aria-label="Overall data refresh progress" max={100} value={refreshInfo.progress??(refreshFinished+(refreshInfo.currentProgress||0)/100)/refreshInfo.total*100}/>{refreshInfo.currentFile&&<p>{refreshInfo.currentFile} · {Math.round(refreshInfo.currentProgress)}%</p>}{refreshInfo.active&&<button type="button" className="danger" disabled={busy} onClick={()=>void runRefresh(true)}>Cancel refresh</button>}</section>}
   <section className="enrichment-files" aria-label="Downloaded data files"><div className="enrichment-files-heading"><div><h2>Downloaded data files</h2><p>{files?.directory||'Loading Screener folder…'}</p></div><div className="enrichment-file-actions"><button type="button" disabled={working||busy} onClick={()=>setReload(value=>value+1)}>Reload file list</button><button type="button" className="primary" disabled={!files?.total||working||busy||!refreshInfo?.runtimeAvailable} onClick={()=>void runRefresh()}>Refresh data and indicators</button></div></div>
-   <p className="enrichment-refresh-help muted">Refresh first downloads missing and new data through the time you click, then recalculates each file’s applied indicators. New candles must be closed; ticks are included up to that time. The first refresh verifies saved history. Original backups are retained.{refreshInfo?.asOf?` This refresh checks through ${utcTime(refreshInfo.asOf)}.`:''}</p>
+   <p className="enrichment-refresh-help muted">Refresh downloads missing and new data through the time you click, then recalculates each file’s applied indicators. Enrich and Refresh first merge overlapping files into one history per asset and timeframe; filenames follow the expanded range. New candles must be closed; ticks are included up to that time. The first refresh verifies saved history. Original backups are retained.{refreshInfo?.asOf?` This refresh checks through ${utcTime(refreshInfo.asOf)}.`:''}</p>
    {!files&&!fileError&&<p className="screener-loading" role="status">Reading downloaded CSV headers…</p>}
    {files?.total===0&&<p className="screener-loading">No downloaded CSV files. Download historical data in the Downloader tab first.</p>}
    {!!files?.files.length&&<div className="enrichment-table-scroll"><table><thead><tr><th>File</th><th>UTC period</th><th>Available fields</th><th>{showRefresh?'Data refresh':'Enrichment'}</th></tr></thead><tbody>{files.files.map(file=>{
