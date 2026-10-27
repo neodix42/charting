@@ -62,7 +62,10 @@ test('middle-clicking an inactive tab preserves the active maximized chart and i
 test('middle-clicking an inactive tab preserves the focused chart search input',async({page})=>{
  const workspace=await seed(page,1),active=workspace.tabs[1];
  await page.getByRole('button',{name:'Select instrument',exact:true}).click();
- const search=page.getByRole('textbox',{name:'Search instruments',exact:true});await search.fill('ETH');
+ const search=page.getByRole('textbox',{name:'Search instruments',exact:true});
+ // Trusted keyboard selection primes Linux primary selection deterministically.
+ // Tab closure must not paste it into the still-focused search input.
+ await search.fill('Selected instrument text');await search.press('Control+a');await search.fill('ETH');
  await tab(page,workspace.tabs[0].id).click({button:'middle'});
  await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(1);await expect(tab(page,active.id)).toHaveAttribute('aria-selected','true');
  await expect(search).toBeFocused();await expect(search).toHaveValue('ETH');await noCloseDialog(page);

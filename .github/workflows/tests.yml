@@ -1,0 +1,81 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Test checks are independent of release version selection and publication.
+# A newer push replaces obsolete checks only for the same PR or branch.
+concurrency:
+  group: cryptodesk-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      VITE_EXPLICIT_TEST_BRIDGE: '0'
+      CRYPTODESK_UPDATE_SCREENER: '0'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.8'
+          cache: true
+      # These packages provision only the disposable GitHub runner. Local
+      # scripts remain unprivileged and never install system dependencies.
+      - name: Prepare Ubuntu desktop test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            glib-networking gsettings-desktop-schemas dconf-gsettings-backend ca-certificates \
+            fonts-dejavu-core \
+            libnss3 libnspr4 libasound2t64 libxss1
+      - name: Verify domain, storage, frontend and packaging
+        run: |
+          ./scripts/test.sh
+          go test -race -tags webkit2_41 ./...
+          go test -race -tags 'production webkit2_41' .
+          go vet -tags webkit2_41 ./...
+      - name: Verify browser interactions
+        run: |
+          source scripts/common.sh
+          require_node
+          cd frontend
+          npx --no-install playwright install --with-deps chromium
+          npm run test:e2e
+      - name: Preserve browser test diagnostics on success or failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-browser-linux-amd64
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true
+      - name: Assemble the pinned production Screener runtime
+        run: |
+          source scripts/common.sh
+          require_node
+          python3 scripts/screener_bundle.py --target linux-amd64 --destination "$RUNNER_TEMP/screener-runtime"
+      - name: Verify packaged indicators, downloads and provider pacing offline
+        run: python3 scripts/smoke-enrichment-runtime.py "$RUNNER_TEMP/screener-runtime" --report "$RUNNER_TEMP/test-checks/enrichment-runtime.json"
+      - name: Preserve packaged runtime diagnostics on success or failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-runtime-linux-amd64
+          path: ${{ runner.temp }}/test-checks/
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true

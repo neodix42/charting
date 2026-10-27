@@ -1,4 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
+import {analysisMatchMarkers,profitableMatchColor} from '../charts/analysisMarkers';
+import type {AnalysisChart} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
@@ -72,5 +74,37 @@ describe('Analysis field selection and validation',()=>{
   for(const field of ['stopLoss','takeProfit'] as const)expect(analysisInputError({...request,tradeSimulation:{...tradeSimulation,[field]:' '}})).toContain('Choose a Stop Loss field and a Take profit field');
   for(const duration of [0,-1,1.5,10001,NaN,Infinity])expect(analysisInputError({...request,tradeSimulation:{...tradeSimulation,duration}})).toContain('whole number');
   for(const duration of [1,10000])expect(analysisInputError({...request,tradeSimulation:{...tradeSimulation,duration}})).toBe('');
+ });
+});
+
+
+describe('Simulation offsets and risk targets',()=>{
+ it('accepts old field targets and validates bars ago and each supported risk multiple',()=>{
+  const request=initialAnalysisView(),simulation={stopLoss:'low',takeProfit:'high',duration:20};
+  for(const stopLossBarsAgo of [0,1,10000])expect(analysisInputError({...request,tradeSimulation:{...simulation,stopLossBarsAgo}})).toBe('');
+  for(const stopLossBarsAgo of [-1,0.5,10001,NaN,Infinity])expect(analysisInputError({...request,tradeSimulation:{...simulation,stopLossBarsAgo}})).toContain('Stop Loss Bars ago');
+  for(const takeProfitMultiple of [1,2,3])expect(analysisInputError({...request,tradeSimulation:{...simulation,takeProfit:'',takeProfitMultiple}})).toBe('');
+  for(const takeProfitMultiple of [-1,0.5,4,NaN,Infinity])expect(analysisInputError({...request,tradeSimulation:{...simulation,takeProfit:'',takeProfitMultiple}})).toContain('1xSL, 2xSL or 3xSL');
+  expect(analysisInputError({...request,tradeSimulation:{...simulation,takeProfitMultiple:0}})).toBe('');
+  expect(analysisInputError({...request,tradeSimulation:{...simulation,takeProfit:'',takeProfitMultiple:0}})).toContain('Choose a Stop Loss');
+  expect(analysisInputError({...request,tradeSimulation:{...simulation,stopLoss:' ',takeProfitMultiple:2}})).toContain('Choose a Stop Loss');
+ });
+});
+
+describe('Profitable match chart markers',()=>{
+ const chart:AnalysisChart={resultId:'file',name:'test',symbol:'test',timeframe:'d1',occurrence:1,totalMatches:3,matchTime:2000,matchIndex:1,startIndex:0,fields:['close'],bars:[0,1,2].map(index=>({index,time:(index+1)*1000,values:{close:10}}))};
+ it('draws only visible winners, deduplicates timestamps and keeps selected arrow in chronological order',()=>{
+  const data={...chart,profitableMatches:[{index:2,time:3000},{index:1,time:2000},{index:1,time:2000},{index:0,time:1000},{index:3,time:4000},{index:99,time:3000},{index:1,time:NaN}]};
+  const markers=analysisMatchMarkers(data,'orange');
+  expect(markers.map(marker=>[marker.time,marker.shape])).toEqual([[1,'circle'],[2,'circle'],[2,'arrowUp'],[3,'circle']]);
+  expect(markers.filter(marker=>marker.shape==='circle').every(marker=>marker.position==='belowBar'&&marker.color===profitableMatchColor)).toBe(true);
+  expect(markers.find(marker=>marker.shape==='arrowUp')).toMatchObject({color:'orange',text:'Match',position:'belowBar'});
+  expect(data.profitableMatches).toHaveLength(7);
+ });
+ it('keeps winning circles green through theme changes and supports legacy/no-winning chart responses',()=>{
+  const data={...chart,profitableMatches:[{index:1,time:2000}]};
+  for(const color of ['#111111','#ffffff','#ff00ff','#fda352'])expect(analysisMatchMarkers(data,color)[0]).toMatchObject({color:'#16a34a',shape:'circle'});
+  expect(analysisMatchMarkers(chart,'blue')).toEqual([{time:2,position:'belowBar',color:'blue',shape:'arrowUp',text:'Match'}]);
+  expect(analysisMatchMarkers({...chart,profitableMatches:[]},'blue')).toHaveLength(1);
  });
 });

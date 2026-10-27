@@ -529,6 +529,21 @@ export namespace market {
 
 export namespace screener {
 
+	export class AnalysisProfitableMatch {
+	    index: number;
+	    time: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisProfitableMatch(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.time = source["time"];
+	    }
+	}
+
 	export class AnalysisBar {
 	    index: number;
 	    time: number;
@@ -631,6 +646,7 @@ export namespace screener {
 	    startIndex: number;
 	    fields: string[];
 	    bars: AnalysisBar[];
+	    profitableMatches?: AnalysisProfitableMatch[];
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisChart(source);
@@ -649,6 +665,7 @@ export namespace screener {
 	        this.startIndex = source["startIndex"];
 	        this.fields = source["fields"];
 	        this.bars = this.convertValues(source["bars"], AnalysisBar);
+	        this.profitableMatches = this.convertValues(source["profitableMatches"], AnalysisProfitableMatch);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -755,7 +772,9 @@ export namespace screener {
 	}
 	export class AnalysisTradeSimulation {
 	    stopLoss: string;
+	    stopLossBarsAgo?: number;
 	    takeProfit: string;
+	    takeProfitMultiple?: number;
 	    duration: number;
 
 	    static createFrom(source: any = {}) {
@@ -765,7 +784,9 @@ export namespace screener {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.stopLoss = source["stopLoss"];
+	        this.stopLossBarsAgo = source["stopLossBarsAgo"];
 	        this.takeProfit = source["takeProfit"];
+	        this.takeProfitMultiple = source["takeProfitMultiple"];
 	        this.duration = source["duration"];
 	    }
 	}

@@ -121,6 +121,10 @@ func TestAnalysisSimulationOverlapsKeepAllMatchesInDenominatorAndClosedBarsOnly(
 	if result.Matches != 3 || result.Rows != 3 || result.Simulation == nil || result.Simulation.TakeProfitHits != 2 || result.Simulation.InsufficientData != 1 || result.Simulation.ProfitablePercent != 200.0/3 {
 		t.Fatalf("unexpected overlapping closed-bar results: %+v, %+v", result, result.Simulation)
 	}
+	chart, err := m.AnalysisChart(result.ID, 0, 0, 500)
+	if err != nil || len(chart.Bars) != 3 || len(chart.ProfitableMatches) != 2 || chart.ProfitableMatches[0].Index != 0 || chart.ProfitableMatches[1].Index != 1 {
+		t.Fatalf("open candle settled or marked a trade: %+v %v", chart, err)
+	}
 	info.TradeSimulation.StopLoss = "mutated"
 	result.Simulation.TakeProfitHits = 999
 	copy, err := m.Analysis(0, 10)
@@ -153,6 +157,9 @@ func TestAnalysisSimulationUnsupportedFilesKeepMatchingRows(t *testing.T) {
 func TestAnalysisSimulationRequestValidationAndPersistence(t *testing.T) {
 	m := analysisTestManager(t)
 	request := simulationRequest(3)
+	request.TradeSimulation.StopLossBarsAgo = 1
+	request.TradeSimulation.TakeProfitMultiple = 3
+	request.TradeSimulation.TakeProfit = ""
 	request.Categories = []string{categoryForSymbol(t, "btcusd")}
 	if _, err := m.SaveAnalysisView(request); err != nil {
 		t.Fatal(err)
@@ -164,6 +171,8 @@ func TestAnalysisSimulationRequestValidationAndPersistence(t *testing.T) {
 	want := copyAnalysisRequest(request)
 	request.TradeSimulation.Duration = 9000
 	request.TradeSimulation.StopLoss = "changed"
+	request.TradeSimulation.StopLossBarsAgo = 9999
+	request.TradeSimulation.TakeProfitMultiple = 2
 	saved.Request.TradeSimulation.StopLoss = "changed return"
 	m.Close()
 	restored := newManager(m.profile, func() (workerRuntime, error) { return workerRuntime{}, fmt.Errorf("no runtime") })
@@ -221,7 +230,7 @@ func TestAnalysisSimulationRequestValidationAndPersistence(t *testing.T) {
 
 // This deliberately simple oracle is bounded to small test inputs. Production
 // uses a sweep and never rescans a duration-sized horizon for every match.
-func simulationOracle(bars []simulationTestBar, duration int) AnalysisSimulationSummary {
+func simulationOracle(bars []simulationTestBar, config AnalysisTradeSimulation) AnalysisSimulationSummary {
 	var result AnalysisSimulationSummary
 	var matches int64
 	for match, bar := range bars {
@@ -229,7 +238,12 @@ func simulationOracle(bars []simulationTestBar, duration int) AnalysisSimulation
 			continue
 		}
 		matches++
-		if !analysisFinite(bar.stop) || !analysisFinite(bar.profit) {
+		if match < config.StopLossBarsAgo {
+			result.InvalidLevels++
+			continue
+		}
+		stop, profit := bars[match-config.StopLossBarsAgo].stop, bar.profit
+		if !analysisFinite(stop) || (config.TakeProfitMultiple == 0 && !analysisFinite(profit)) {
 			result.InvalidLevels++
 			continue
 		}
@@ -238,24 +252,27 @@ func simulationOracle(bars []simulationTestBar, duration int) AnalysisSimulation
 			result.InsufficientData++
 			continue
 		}
-		if !(bar.stop < bars[entry].open && bars[entry].open < bar.profit) {
+		if config.TakeProfitMultiple > 0 {
+			profit = bars[entry].open + float64(config.TakeProfitMultiple)*(bars[entry].open-stop)
+		}
+		if !analysisFinite(profit) || !(stop < bars[entry].open && bars[entry].open < profit) {
 			result.InvalidLevels++
 			continue
 		}
 		resolved := false
-		for next := entry; next < min(len(bars), entry+duration); next++ {
+		for next := entry; next < min(len(bars), entry+config.Duration); next++ {
 			row := bars[next]
 			switch {
-			case row.open <= bar.stop:
+			case row.open <= stop:
 				result.StopLossHits++
 				resolved = true
-			case row.open >= bar.profit:
+			case row.open >= profit:
 				result.TakeProfitHits++
 				resolved = true
-			case row.low <= bar.stop:
+			case row.low <= stop:
 				result.StopLossHits++
 				resolved = true
-			case row.high >= bar.profit:
+			case row.high >= profit:
 				result.TakeProfitHits++
 				resolved = true
 			}
@@ -264,7 +281,7 @@ func simulationOracle(bars []simulationTestBar, duration int) AnalysisSimulation
 			}
 		}
 		if !resolved {
-			if entry+duration <= len(bars) {
+			if entry+config.Duration <= len(bars) {
 				result.Expired++
 			} else {
 				result.InsufficientData++
@@ -289,6 +306,9 @@ func TestAnalysisSimulationSweepAgreesWithIndependentOverlappingTradeOracle(t *t
 	random := rand.New(rand.NewSource(20261027))
 	for run := 0; run < 200; run++ {
 		duration := 1 + random.Intn(20)
+		config := *simulationRequest(duration).TradeSimulation
+		config.StopLossBarsAgo = random.Intn(6)
+		config.TakeProfitMultiple = random.Intn(4)
 		bars := make([]simulationTestBar, 50+random.Intn(100))
 		for i := range bars {
 			open := 90 + float64(random.Intn(21))
@@ -300,9 +320,12 @@ func TestAnalysisSimulationSweepAgreesWithIndependentOverlappingTradeOracle(t *t
 			if random.Intn(30) == 0 {
 				bar.stop = math.NaN()
 			}
+			if random.Intn(30) == 0 {
+				bar.profit = math.NaN()
+			}
 			bars[i] = bar
 		}
-		simulation := newAnalysisTradeSimulator(simulationTestSeries(), simulationRequest(duration).TradeSimulation)
+		simulation := newAnalysisTradeSimulator(simulationTestSeries(), &config)
 		var matches int64
 		for i, bar := range bars {
 			row := simulationTestRow(bar)
@@ -313,7 +336,7 @@ func TestAnalysisSimulationSweepAgreesWithIndependentOverlappingTradeOracle(t *t
 			}
 		}
 		simulation.finish()
-		got, want := simulation.snapshot(matches), simulationOracle(bars, duration)
+		got, want := simulation.snapshot(matches), simulationOracle(bars, config)
 		if *got != want {
 			t.Fatalf("run %d duration %d: got %+v want %+v", run, duration, got, want)
 		}
@@ -387,8 +410,10 @@ func TestAnalysisSimulationCancellationDoesNotPublishPartialTrades(t *testing.T)
 	if a.results[0].Matches != 0 || a.results[0].Simulation != nil || len(a.matchFiles) != 0 {
 		t.Fatalf("partial trade published: %+v", a.results[0])
 	}
-	if _, err = os.Stat(filepath.Join(work, "test.matches")); err != nil {
-		t.Fatal(err)
+	for _, suffix := range []string{".matches", ".matches.profits"} {
+		if _, err = os.Stat(filepath.Join(work, "test"+suffix)); !os.IsNotExist(err) {
+			t.Fatalf("cancelled scan retained an outcome index %s: %v", suffix, err)
+		}
 	}
 }
 
@@ -424,6 +449,10 @@ func TestAnalysisSimulationDuplicateAndCategoryPagingKeepPerAssetTotals(t *testi
 			t.Fatalf("category page changed denominator: %+v %+v", r, r.Simulation)
 		}
 		seen[r.Symbol] = true
+		chart, err := m.AnalysisChart(r.ID, 0, 0, 2)
+		if err != nil || len(chart.ProfitableMatches) != 1 || chart.ProfitableMatches[0].Index != 0 {
+			t.Fatalf("duplicate/category page changed winning markers: %+v %v", chart, err)
+		}
 	}
 	request.Categories = []string{crypto}
 	if _, err := m.StartAnalysis(request); err != nil {
@@ -477,5 +506,10 @@ func TestAnalysisSimulationCancellationDuringDenseScanClearsPartialSummary(t *te
 	info := m.CancelAnalysis()
 	if info.Active || info.Phase != "cancelled" || info.TotalMatches != 0 || len(info.Results) != 1 || info.Results[0].Simulation != nil || info.Results[0].Status != "cancelled" {
 		t.Fatalf("cancel published partially simulated trades: %+v", info)
+	}
+	for _, suffix := range []string{".matches", ".matches.profits"} {
+		if _, err := os.Stat(filepath.Join(m.analysis.work, info.Results[0].ID+suffix)); !os.IsNotExist(err) {
+			t.Fatalf("cancellation retained partial outcome file %s: %v", suffix, err)
+		}
 	}
 }

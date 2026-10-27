@@ -179,13 +179,17 @@ You can also enrich Weekday/Hour and add rows such as **Weekday is between 1 and
 
 #### Simulate a trade after each match
 
-Click **Simulate trade** beside **Add condition**, then choose a **Stop Loss** field, a **Take profit** field and a **Duration** from **1–10,000 bars**. Field dropdowns include OHLC and enriched indicator columns. These are absolute price levels taken from the matching candle and held fixed for that trade. **Remove simulation** returns to a conditions-only scan. Simulation settings persist with the draft and named condition sets.
+Click **Simulate trade** beside **Add condition**, then choose a **Stop Loss** field and a **Duration** from **1–10,000 bars**. Field dropdowns include OHLC and enriched indicator columns. **Bars ago**, next to Stop Loss, defaults to **0**: use the selected field from the matching candle. Set it to **1** for the preceding candle, or another whole number up to **10,000**. For example, Stop Loss **Low**, Bars ago **1** uses the previous candle's Low. **Remove simulation** returns to a conditions-only scan. Simulation settings persist with the draft and named condition sets.
+
+For **Take profit**, choose a field from the matching candle or **1xSL**, **2xSL**, **3xSL**. These multiples use the distance between the actual next-bar entry and Stop Loss: `TP = entry + multiple × (entry − SL)`. With entry **100**, SL **95** and **2xSL**, TP is **110**. Both levels stay fixed for the trade.
 
 After **Apply conditions**, each match starts an independent **long** simulation at the **next available closed candle's open**. Duration includes that entry candle. Stop Loss must be below the entry price and Take profit above it; missing or invalid levels cannot produce a winning trade. Overlapping matches are simulated independently. Only closed bars in the file are used.
 
 An opening gap reaching a level resolves the trade first. Otherwise, reaching SL or TP counts inclusively; when a candle touches both and their order is unknown, **SL wins the tie**. A trade that reaches neither level during its full duration expires. If the file ends first, an unresolved trade is marked as having insufficient future data.
 
 **Matching assets → Profitable, %** reports **TP hits ÷ all matches × 100** for each file. Expand the counts beneath the percentage to see SL hits, expiries, insufficient data, invalid levels and unavailable data. These outcomes stay in the denominator. Tick files or files without the required price fields report simulation unavailability while keeping their condition matches. This is a TP hit rate; position sizing, fees and monetary profit/loss are not calculated. Editing settings does not change existing results until you apply conditions again.
+
+Click a matching asset to open its chart. A **green dot below the original matching candle** identifies each visible match whose simulated trade hit TP, even when the exit occurred outside the displayed window. The selected match keeps its arrow; **Previous match** and **Next match** navigate occurrences. SL hits, expired trades and incomplete or invalid trades have no green dot.
 
 #### Save and reuse a condition set
 
@@ -220,7 +224,7 @@ Analysis is an on-demand historical scan with optional SL/TP simulation. It does
 1. **Download:** the Go download manager queues symbols and runs the pinned Dukascopy worker. It writes chronological CSVs and saves committed batches for restart recovery.
 2. **Enrich:** local indicator workers read those CSVs, calculate fields in chronological order, preserve exact backups and publish completed files. Applied recipes retain the parameters needed for later refreshes.
 3. **Refresh:** source history is merged with existing data, then indicator recipes are recalculated over the updated history, including the context needed by recursive indicators.
-4. **Analyse:** the engine indexes local numeric data and evaluates the AND rule at each closed bar, aligning companion timeframes without future lookahead. Optional simulations freeze each match's SL/TP fields before entering on the next bar. Disk-backed indexes and bounded caches keep large scans from requiring all histories in memory.
+4. **Analyse:** the engine indexes local numeric data and evaluates the AND rule at each closed bar, aligning companion timeframes without future lookahead. Optional simulations sample SL from the matching or selected earlier bar and enter on the next bar; TP uses a matching-bar field or a multiple of entry-to-SL distance. Disk-backed indexes and bounded caches keep large scans from requiring all histories in memory.
 5. **Inspect:** paginated match indexes supply occurrence counts and bounded chart windows. Rule drafts and named sets persist; scan results are rebuilt when requested.
 
 See the [complete Screener guide](APP_README.md#screener) for file formats, checkpoints, backups, limits and error handling.
@@ -289,7 +293,9 @@ Updating a dependency does not establish that Dukascopy has cleared an HTTP 403;
 
 ## Automatic releases
 
-The [release workflow](.github/workflows/release.yml) runs on pushes to `main`. It runs checks, builds the standard Linux archive and Windows ZIP, and publishes only after both packages pass verification. It increments the highest release tag's patch version, starting at `v0.1.0` when no release exists. Builds do not create source-version bump commits.
+The [release workflow](.github/workflows/release.yml) runs on pushes to `main`. It builds the standard Linux archive and Windows ZIP and publishes them after checking archive contents, architecture, version, source provenance and checksums. It does **not run test suites**. It increments the highest release tag's patch version, starting at `v0.1.0` when no release exists. Builds do not create source-version bump commits.
+
+The separate [Tests workflow](.github/workflows/tests.yml) runs on pushes to `main`, pull requests and manual dispatch. It runs the Go, runtime, packaging, frontend and browser suites, plus an offline smoke check of the packaged Screener runtime. Browser and runtime diagnostics are retained as workflow artifacts. Tests and releases run independently: a failing or delayed test run does not block publication.
 
 Release jobs are serialized; reruns recognize published commits, and stale workflow revisions are prevented from publishing. Packages, checksums and `release.json` use versioned filenames. Actual local verification and remaining platform checks are documented in [STATUS.md](STATUS.md).
 

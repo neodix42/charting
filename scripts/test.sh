@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
-python3 -m unittest discover -s scripts -p 'test_*.py'
 require_node
 (
   cd "$APP_ROOT/screener-runtime"
   npm ci --ignore-scripts --no-audit --no-fund
+)
+# Updater integration tests exercise the installed pinned public API. Install it
+# before Python discovery so fresh CI checkouts run those tests instead of skip.
+python3 -m unittest discover -s scripts -p 'test_*.py'
+(
+  cd "$APP_ROOT/screener-runtime"
   npm test
   npm run catalog -- --check
 )

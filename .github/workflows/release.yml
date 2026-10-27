@@ -70,50 +70,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y 7zip
-      - name: Verify domain, storage, frontend and packaging
-        if: matrix.target == 'linux-amd64'
-        run: |
-          ./scripts/test.sh
-          go test -race -tags webkit2_41 ./...
-          go test -race -tags 'production webkit2_41' .
-          go vet -tags webkit2_41 ./...
-      - name: Verify browser interactions
-        if: matrix.target == 'linux-amd64'
-        run: |
-          source scripts/common.sh
-          require_node
-          cd frontend
-          npx --no-install playwright install --with-deps chromium
-          npm run test:e2e
-      - name: Preserve browser test diagnostics on success or failure
-        if: always() && matrix.target == 'linux-amd64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: diagnostics-browser-linux-amd64
-          path: frontend/test-results/
-          if-no-files-found: ignore
-          retention-days: 7
-          overwrite: true
       - name: Build Ubuntu x64 standard archive
         if: matrix.target == 'linux-amd64'
         run: ./build.sh
-      - name: Verify packaged indicators, downloads and provider pacing offline
-        if: matrix.target == 'linux-amd64'
-        run: python3 scripts/smoke-enrichment-runtime.py "release/cryptodesk-$CRYPTODESK_VERSION-linux-amd64/screener-runtime" --report "$RUNNER_TEMP/release-checks/enrichment-runtime.json"
-      - name: Preserve packaged runtime diagnostics on success or failure
-        if: always() && matrix.target == 'linux-amd64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          # Keep diagnostics outside publish's release-* archive selection.
-          name: diagnostics-linux-amd64
-          path: ${{ runner.temp }}/release-checks/
-          if-no-files-found: ignore
-          retention-days: 7
-          overwrite: true
       - name: Build Windows x64 portable ZIP with WebView2
         if: matrix.target == 'windows-amd64'
         run: ./win-build.sh
-      - name: Verify preinstalled Screener downloader, enrichment and Refresh in each release archive
+      # Publication guards validate the actual artifacts; test suites run in the
+      # independent Tests workflow and never gate this build/publish workflow.
+      - name: Verify archive architecture, provenance and complete runtime inventories
         env:
           RELEASE_TARGET: ${{ matrix.target }}
         run: |

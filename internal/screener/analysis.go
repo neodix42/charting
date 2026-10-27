@@ -95,18 +95,23 @@ type AnalysisBar struct {
 	Time   int64              `json:"time"`
 	Values map[string]float64 `json:"values"`
 }
+type AnalysisProfitableMatch struct {
+	Index int64 `json:"index"`
+	Time  int64 `json:"time"`
+}
 type AnalysisChart struct {
-	ResultID     string        `json:"resultId"`
-	Name         string        `json:"name"`
-	Symbol       string        `json:"symbol"`
-	Timeframe    string        `json:"timeframe"`
-	Occurrence   int           `json:"occurrence"`
-	TotalMatches int64         `json:"totalMatches"`
-	MatchTime    int64         `json:"matchTime"`
-	MatchIndex   int64         `json:"matchIndex"`
-	StartIndex   int64         `json:"startIndex"`
-	Fields       []string      `json:"fields"`
-	Bars         []AnalysisBar `json:"bars"`
+	ResultID          string                    `json:"resultId"`
+	Name              string                    `json:"name"`
+	Symbol            string                    `json:"symbol"`
+	Timeframe         string                    `json:"timeframe"`
+	Occurrence        int                       `json:"occurrence"`
+	TotalMatches      int64                     `json:"totalMatches"`
+	MatchTime         int64                     `json:"matchTime"`
+	MatchIndex        int64                     `json:"matchIndex"`
+	StartIndex        int64                     `json:"startIndex"`
+	Fields            []string                  `json:"fields"`
+	Bars              []AnalysisBar             `json:"bars"`
+	ProfitableMatches []AnalysisProfitableMatch `json:"profitableMatches,omitempty"`
 }
 type analysisState struct {
 	active                                     bool
@@ -629,7 +634,20 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	var profits *os.File
+	published := false
+	defer func() {
+		_ = out.Close()
+		if profits != nil {
+			_ = profits.Close()
+		}
+		if !published {
+			_ = os.Remove(path)
+			if profits != nil {
+				_ = os.Remove(path + ".profits")
+			}
+		}
+	}()
 	buffered := bufio.NewWriterSize(out, 64*1024)
 	var buf [16]byte
 	var matches, first, last int64
@@ -639,6 +657,23 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 		return err
 	}
 	simulation := newAnalysisTradeSimulator(s, a.request.TradeSimulation)
+	if simulation != nil {
+		profits, err = os.OpenFile(path+".profits", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		// One byte per occurrence keeps random outcome updates independent of
+		// the buffered match index. Sparse zero bytes mean not a TP winner.
+		// Outcomes are recorded while scanning, including exits beyond a later
+		// chart's visible window, without retaining every trade in memory.
+		simulation.onTakeProfit = func(occurrence int64) error {
+			_, err := profits.WriteAt([]byte{1}, occurrence)
+			if err != nil {
+				return fmt.Errorf("store profitable analysis matches: %w", err)
+			}
+			return nil
+		}
+	}
 	var checked, reported int64
 	defer func() { m.mu.Lock(); a.rows += checked - reported; a.results[index].Rows = checked; m.mu.Unlock() }()
 	for rowIndex := int64(0); rowIndex < closedCount; rowIndex++ {
@@ -665,7 +700,9 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 		if closed > now {
 			continue
 		}
-		simulation.advance(rowIndex, row)
+		if err = simulation.advance(rowIndex, row); err != nil {
+			return err
+		}
 		match := true
 		for _, condition := range compiled {
 			ok, e := condition.evaluate(rowIndex, closed)
@@ -698,6 +735,17 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	if err = out.Sync(); err != nil {
 		return err
 	}
+	if profits != nil {
+		if err = profits.Truncate(matches); err != nil {
+			return err
+		}
+		if err = profits.Sync(); err != nil {
+			return err
+		}
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
 	for _, dependency := range compiled {
 		for _, series := range dependency.dependencies() {
 			if err = analysisUnchanged(series); err != nil {
@@ -714,6 +762,7 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	a.results[index].FirstTime = first
 	a.results[index].LastTime = last
 	a.results[index].Simulation = simulation.snapshot(matches)
+	published = true
 	m.mu.Unlock()
 	return nil
 }
@@ -827,5 +876,60 @@ func (m *Manager) AnalysisChart(resultID string, occurrence, before, after int) 
 		}
 		chart.Bars = append(chart.Bars, AnalysisBar{Index: i, Time: row.timestamp, Values: values})
 	}
+	if a.request.TradeSimulation != nil && len(chart.Bars) > 0 {
+		profits, err := os.Open(a.matchFiles[resultID] + ".profits")
+		if err != nil {
+			return AnalysisChart{}, err
+		}
+		defer profits.Close()
+		chart.ProfitableMatches, err = readAnalysisProfitableMatches(f, profits, result.Matches, start, chart.Bars[len(chart.Bars)-1].Index+1)
+		if err != nil {
+			return AnalysisChart{}, err
+		}
+	}
 	return chart, nil
+}
+
+// Locate the first visible occurrence with a binary search, then visit at most
+// the chart's 1001 bars. Reading persisted outcomes never reruns a simulation or
+// scans the full match history when navigating to a late occurrence.
+func readAnalysisProfitableMatches(matches, profits *os.File, count, start, end int64) ([]AnalysisProfitableMatch, error) {
+	readMatch := func(occurrence int64) (AnalysisProfitableMatch, error) {
+		var record [16]byte
+		if _, err := matches.ReadAt(record[:], occurrence*16); err != nil {
+			return AnalysisProfitableMatch{}, err
+		}
+		return AnalysisProfitableMatch{Index: int64(binary.LittleEndian.Uint64(record[:8])), Time: int64(binary.LittleEndian.Uint64(record[8:]))}, nil
+	}
+	low, high := int64(0), count
+	for low < high {
+		mid := low + (high-low)/2
+		match, err := readMatch(mid)
+		if err != nil {
+			return nil, err
+		}
+		if match.Index < start {
+			low = mid + 1
+		} else {
+			high = mid
+		}
+	}
+	result := []AnalysisProfitableMatch{}
+	for occurrence := low; occurrence < count; occurrence++ {
+		match, err := readMatch(occurrence)
+		if err != nil {
+			return nil, err
+		}
+		if match.Index >= end {
+			break
+		}
+		var outcome [1]byte
+		if _, err = profits.ReadAt(outcome[:], occurrence); err != nil {
+			return nil, err
+		}
+		if outcome[0] == 1 {
+			result = append(result, match)
+		}
+	}
+	return result, nil
 }

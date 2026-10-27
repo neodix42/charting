@@ -1,7 +1,7 @@
 export type AnalysisOperator='above'|'below'|'equal'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
 export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:number;timeframe?:string;offset?:number;aggregate?:'value'|'highest'|'lowest'|'';window?:number}
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
-export interface AnalysisTradeSimulation {stopLoss:string;takeProfit:string;duration:number}
+export interface AnalysisTradeSimulation {stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
 export interface AnalysisRequest {conditions:AnalysisCondition[];categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean}
@@ -11,7 +11,7 @@ export interface AnalysisCatalog {directory:string;fields:string[];timeframes:st
 export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}
 export interface AnalysisInfo {active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null}
 export interface AnalysisBar {index:number;time:number;values:Record<string,number>}
-export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[]}
+export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];profitableMatches?:Array<{index:number;time:number}>}
 export interface ScreenerAnalysisBackend {
  GetScreenerAnalysisCatalog():Promise<AnalysisCatalog>;
  GetScreenerAnalysisView():Promise<AnalysisRequest>;
@@ -58,7 +58,10 @@ export function analysisInputError(view:AnalysisRequest){
  if(!view.conditions.length)return'Add at least one condition before scanning.';
  if(view.conditions.length>32)return'Use at most 32 conditions.';
  if(view.tradeSimulation){
-  if(!view.tradeSimulation.stopLoss.trim()||!view.tradeSimulation.takeProfit.trim())return'Choose a Stop Loss field and a Take profit field to simulate trades.';
+  const {stopLoss,takeProfit,stopLossBarsAgo=0,takeProfitMultiple=0}=view.tradeSimulation;
+  if(![0,1,2,3].includes(takeProfitMultiple))return'Take profit must use a field, 1xSL, 2xSL or 3xSL.';
+  if(!stopLoss.trim()||!takeProfitMultiple&&!takeProfit.trim())return'Choose a Stop Loss field and a Take profit field or SL multiple to simulate trades.';
+  if(!Number.isInteger(stopLossBarsAgo)||stopLossBarsAgo<0||stopLossBarsAgo>10000)return'Stop Loss Bars ago must be a whole number from 0 to 10,000.';
   if(!Number.isInteger(view.tradeSimulation.duration)||view.tradeSimulation.duration<1||view.tradeSimulation.duration>10000)return'Trade duration must be a whole number from 1 to 10,000 bars.';
  }
  for(const condition of view.conditions){

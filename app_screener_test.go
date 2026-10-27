@@ -150,14 +150,14 @@ func TestScreenerTradeSimulationFacadePersistsAndReportsTargetHitRate(t *testing
 		t.Fatal(err)
 	}
 	path := filepath.Join(manager.Info().Directory, "btcusd-m1-2024-01-01-2024-01-02.csv")
-	if err := os.WriteFile(path, []byte("timestamp,open,high,low,close,stop,profit\n1704067200000,100,105,95,100,90,110\n1704067260000,100,115,95,105,90,110\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("timestamp,open,high,low,close,stop,profit\n1704067200000,100,105,95,100,90,110\n1704067260000,100,115,95,105,95,110\n1704067320000,100,135,95,105,97,110\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	request, err := app.GetScreenerAnalysisView()
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.TradeSimulation = &screener.AnalysisTradeSimulation{StopLoss: "stop", TakeProfit: "profit", Duration: 10}
+	request.TradeSimulation = &screener.AnalysisTradeSimulation{StopLoss: "stop", StopLossBarsAgo: 1, TakeProfitMultiple: 3, Duration: 10}
 	if _, err = app.SaveScreenerAnalysisView(request); err != nil {
 		t.Fatal(err)
 	}
@@ -174,12 +174,16 @@ func TestScreenerTradeSimulationFacadePersistsAndReportsTargetHitRate(t *testing
 			t.Fatal(err)
 		}
 		if !info.Active {
-			if len(info.Results) != 1 || info.TotalMatches != 2 || !reflect.DeepEqual(info.TradeSimulation, request.TradeSimulation) {
+			if len(info.Results) != 1 || info.TotalMatches != 3 || !reflect.DeepEqual(info.TradeSimulation, request.TradeSimulation) {
 				t.Fatalf("facade lost simulation configuration: %+v", info)
 			}
 			summary := info.Results[0].Simulation
-			if summary == nil || summary.TakeProfitHits != 1 || summary.InsufficientData != 1 || summary.ProfitablePercent != 50 {
+			if summary == nil || summary.TakeProfitHits != 1 || summary.InsufficientData != 1 || summary.InvalidLevels != 1 || summary.ProfitablePercent != 100.0/3 {
 				t.Fatalf("facade lost simulation summary: %+v", summary)
+			}
+			chart, err := app.GetScreenerAnalysisChart(info.Results[0].ID, 0, 0, 2)
+			if err != nil || len(chart.ProfitableMatches) != 1 || chart.ProfitableMatches[0].Index != 1 || chart.ProfitableMatches[0].Time != 1704067260000 {
+				t.Fatalf("facade lost winning signal markers: %+v %v", chart, err)
 			}
 			break
 		}

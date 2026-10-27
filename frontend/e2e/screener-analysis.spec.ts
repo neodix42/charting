@@ -562,9 +562,9 @@ test('Simulate trade validates fields and duration, saves only valid duration ed
  const positions=await page.locator('.analysis-add-actions button').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().top));expect(Math.abs(positions[0]-positions[1])).toBeLessThan(2);
  await add.click();await expect(add).toBeDisabled();await expect(add).toHaveAttribute('aria-expanded','true');
  await expect(control(page,'Stop Loss field')).toHaveValue('');await expect(control(page,'Take profit field')).toHaveValue('');await expect(control(page,'Trade duration in bars')).toHaveValue('20');
- await expect(apply).toBeDisabled();await expect(save).toBeDisabled();await expect(page.getByText('Choose a Stop Loss field and a Take profit field to simulate trades.',{exact:true})).toBeVisible();
+ await expect(apply).toBeDisabled();await expect(save).toBeDisabled();await expect(page.getByText('Choose a Stop Loss field and a Take profit field or SL multiple to simulate trades.',{exact:true})).toBeVisible();
  await control(page,'Stop Loss field').selectOption('low');await expect(apply).toBeDisabled();
- await control(page,'Take profit field').selectOption('ema_200');await expect(apply).toBeEnabled();await expect(save).toBeEnabled();
+ await control(page,'Take profit field').selectOption('field:ema_200');await expect(apply).toBeEnabled();await expect(save).toBeEnabled();
  await expect(control(page,'Take profit field').locator('optgroup[label="EMA"] option')).toHaveText(['EMA (200)']);
  for(const invalid of ['', '0','-1','1.5','10001']){
   await control(page,'Trade duration in bars').fill(invalid);await expect(apply).toBeDisabled();await expect(save).toBeDisabled();
@@ -580,14 +580,14 @@ test('Simulate trade validates fields and duration, saves only valid duration ed
 
 test('simulation persists through restart, named save, rename and load without applying it',async({page})=>{
  await open(page);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
- await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('ema_200');await control(page,'Trade duration in bars').fill('12');
+ await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('field:ema_200');await control(page,'Trade duration in bars').fill('12');
  await saveCondition(page,'Long setup');
  const saved=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]);expect(saved.request.tradeSimulation).toEqual({stopLoss:'low',takeProfit:'ema_200',duration:12});
  const dialog=await openRename(page,'Long setup');await control(page,'Condition name').fill('Saved trade');await dialog.getByRole('button',{name:'Rename',exact:true}).click();await expect(dialog).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0])).toEqual({...saved,name:'Saved trade'});
  await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[{...file(0),fields:['timestamp','open','high','low','close']}]);
  await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();
- await expect(control(page,'Stop Loss field')).toHaveValue('low');await expect(control(page,'Take profit field')).toHaveValue('ema_200');await expect(control(page,'Trade duration in bars')).toHaveValue('12');
+ await expect(control(page,'Stop Loss field')).toHaveValue('low');await expect(control(page,'Take profit field')).toHaveValue('field:ema_200');await expect(control(page,'Trade duration in bars')).toHaveValue('12');
  await expect(control(page,'Take profit field').locator('option:checked')).toContainText('not in current files');
  await page.getByRole('button',{name:'Remove simulation',exact:true}).click();await expect(control(page,'Stop Loss field')).toHaveCount(0);
  await page.getByRole('button',{name:'Load condition Saved trade',exact:true}).click();await expect(control(page,'Trade duration in bars')).toHaveValue('12');
@@ -601,7 +601,7 @@ test('simulation persists through restart, named save, rename and load without a
 test('simulation outcomes use all matches and the applied snapshot, with zero and unavailable cases explicit',async({page})=>{
  await open(page);
  await complete(page,[result(0)]);await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('high');await control(page,'Trade duration in bars').fill('5');
+ await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('field:high');await control(page,'Trade duration in bars').fill('5');
  await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
  await page.evaluate(value=>(window as any).__testSetAnalysisInfo({phase:'scanning',results:[value]}),{...result(0,'btcusd',7),status:'running'});
@@ -618,7 +618,7 @@ test('simulation outcomes use all matches and the applied snapshot, with zero an
  await expect(zero.locator('.analysis-profit>strong')).toHaveText('0%');await expect(unavailable.locator('.analysis-profit>strong')).toHaveText('Unavailable');
  await unavailable.locator('summary').click();await expect(unavailable.locator('details')).toContainText('tick data is unsupported');
  await expect(page.getByRole('row',{name:'EURUSD d1 · 0 matches',exact:true}).locator('.analysis-profit')).toContainText('No matching bars');
- await control(page,'Take profit field').selectOption('ema_200');await control(page,'Trade duration in bars').fill('8');
+ await control(page,'Take profit field').selectOption('field:ema_200');await control(page,'Trade duration in bars').fill('8');
  await expect(page.locator('.analysis-simulation-summary')).toContainText('TP: high · 5 bars');
  await page.getByRole('button',{name:'Remove simulation',exact:true}).click();await expect(page.getByRole('columnheader',{name:'Profitable, %',exact:true})).toBeVisible();
  await expect(page.locator('.analysis-simulation-summary')).toContainText('TP: high · 5 bars');
@@ -629,11 +629,75 @@ test('simulation outcomes use all matches and the applied snapshot, with zero an
 
 test('normal close flushes the latest complete simulation while an invalid duration stays local',async({page})=>{
  await open(page);await page.evaluate(()=>(window as any).__testHoldAnalysisSaves());
- await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('high');await control(page,'Trade duration in bars').fill('6');
+ await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await control(page,'Stop Loss field').selectOption('low');await control(page,'Take profit field').selectOption('field:high');await control(page,'Trade duration in bars').fill('6');
  await control(page,'Trade duration in bars').fill('');
  await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'simulation-save'}));
  expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
  await page.evaluate(()=>(window as any).__testReleaseAnalysisSaves());
  await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'simulation-save',discard:false});
  expect((await page.evaluate(()=>(window as any).__testAnalysisView())).tradeSimulation).toEqual({stopLoss:'low',takeProfit:'high',duration:6});
+});
+
+test('SL Bars ago and risk targets validate, persist with named conditions and keep applied summaries stable',async({page})=>{
+ await open(page);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
+ const apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Safe Condition',exact:true}),offset=control(page,'Stop Loss bars ago'),profit=control(page,'Take profit field');
+ await expect(offset).toHaveValue('0');await expect(profit.locator('optgroup[label="Stop Loss distance"] option')).toHaveText(['1xSL','2xSL','3xSL']);
+ await control(page,'Stop Loss field').selectOption('low');await profit.selectOption('risk:1');await expect(apply).toBeEnabled();
+ for(const invalid of ['', '-1','0.5','10001']){
+  await offset.fill(invalid);await expect(apply).toBeDisabled();await expect(save).toBeDisabled();
+  await expect(page.getByText('Stop Loss Bars ago must be a whole number from 0 to 10,000.',{exact:true})).toBeVisible();
+  expect((await page.evaluate(()=>(window as any).__testAnalysisView())).tradeSimulation.stopLossBarsAgo??0).toBe(0);
+ }
+ // Editing another valid control must not discard an invalid local number.
+ await profit.selectOption('risk:3');await expect(offset).toHaveValue('10001');await expect(apply).toBeDisabled();
+ await offset.fill('2');await control(page,'Trade duration in bars').fill('');await offset.fill('3');await expect(control(page,'Trade duration in bars')).toHaveValue('');await expect(apply).toBeDisabled();
+ await control(page,'Trade duration in bars').fill('7');await offset.fill('2');await profit.selectOption('field:high');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toMatchObject({takeProfit:'high',stopLossBarsAgo:2});
+ expect((await page.evaluate(()=>(window as any).__testAnalysisView())).tradeSimulation.takeProfitMultiple).toBeUndefined();
+ await profit.selectOption('risk:2');await saveCondition(page,'Risk target');
+ const saved=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]);
+ expect(saved.request.tradeSimulation).toEqual({stopLoss:'low',stopLossBarsAgo:2,takeProfit:'',takeProfitMultiple:2,duration:7});
+ const rename=await openRename(page,'Risk target');await control(page,'Condition name').fill('Earlier stop');await rename.getByRole('button',{name:'Rename',exact:true}).click();await expect(rename).toHaveCount(0);
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(offset).toHaveValue('2');await expect(profit).toHaveValue('risk:2');await expect(control(page,'Trade duration in bars')).toHaveValue('7');
+ await page.getByRole('button',{name:'Remove simulation',exact:true}).click();await page.getByRole('button',{name:'Load condition Earlier stop',exact:true}).click();
+ await expect(offset).toHaveValue('2');await expect(profit).toHaveValue('risk:2');expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await apply.click();expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual(saved.request.tradeSimulation);await expect(offset).toBeDisabled();
+ await complete(page,[result(0)]);await expect(offset).toBeEnabled();await expect(page.locator('.analysis-simulation-summary')).toContainText('SL: low (2 bars ago) · TP: 2xSL · 7 bars');
+ await offset.fill('1');await profit.selectOption('risk:3');await expect(page.locator('.analysis-simulation-summary')).toContainText('SL: low (2 bars ago) · TP: 2xSL · 7 bars');
+});
+
+test('profitable chart matches render green dots across themes and navigation without leaking chart resources',async({page})=>{
+ await open(page,[file(0)]);await complete(page,[result(0,'btcusd',3)]);
+ const start=Date.UTC(2024,0,1),bars=Array.from({length:9},(_,index)=>({index,time:start+index*86400000,values:{open:100+index,high:104+index,low:98+index,close:102+index}}));
+ const base:AnalysisChart={resultId:'result-0',name:file(0).name,symbol:'btcusd',timeframe:'d1',occurrence:0,totalMatches:3,matchTime:bars[3].time,matchIndex:3,startIndex:0,fields:['open','high','low','close'],bars,profitableMatches:[{index:1,time:bars[1].time},{index:3,time:bars[3].time},{index:6,time:bars[6].time}]};
+ await page.evaluate(charts=>(window as any).__testSetAnalysisCharts(charts),{'result-0:0':base,'result-0:1':{...base,occurrence:1,matchIndex:4,matchTime:bars[4].time,profitableMatches:[]},'result-0:2':{...base,occurrence:2,matchIndex:6,matchTime:bars[6].time,profitableMatches:[{index:6,time:bars[6].time}]}});
+ const greenPixels=()=>page.getByTestId('analysis-chart').locator('canvas').evaluateAll(canvases=>canvases.reduce((count,element)=>{const canvas=element as HTMLCanvasElement,context=canvas.getContext('2d');if(!context)return count;const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;for(let i=0;i<pixels.length;i+=4)if(pixels[i]===22&&pixels[i+1]===163&&pixels[i+2]===74&&pixels[i+3]===255)count++;return count;},0));
+ await page.getByRole('row',{name:'BTCUSD d1 · 3 matches',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});
+ await expect(dialog.getByText('Green dot: match whose simulated trade hit TP.',{exact:true})).toBeVisible();
+ for(const theme of ['dark','light','matrix','cyberpunk','red-sands','light']){
+  await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+  await expect.poll(greenPixels).toBeGreaterThan(15);await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:2});
+ }
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(dialog.getByText('Occurrence 2 of 3',{exact:true})).toBeVisible();
+ await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);await expect.poll(greenPixels).toBe(0);await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:2});
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(dialog.getByText('Occurrence 3 of 3',{exact:true})).toBeVisible();await expect.poll(greenPixels).toBeGreaterThan(15);
+ await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(dialog.getByText('Occurrence 2 of 3',{exact:true})).toBeVisible();await expect.poll(greenPixels).toBe(0);
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+});
+
+
+test('Take profit field names cannot collide with SL multiple choices',async({page})=>{
+ await open(page,[{...file(0),fields:[...fields,'risk:1','field:risk:1']}]);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
+ const profit=control(page,'Take profit field');await control(page,'Stop Loss field').selectOption('low');
+ for(const field of ['risk:1','field:risk:1']){
+  await profit.selectOption(`field:${field}`);await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation.takeProfit)).toBe(field);
+  expect((await page.evaluate(()=>(window as any).__testAnalysisView())).tradeSimulation.takeProfitMultiple).toBeUndefined();
+ }
+ await profit.selectOption('risk:1');await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toEqual({stopLoss:'low',takeProfit:'',takeProfitMultiple:1,duration:20});
+ await profit.selectOption('field:risk:1');await saveCondition(page,'Raw risk field');
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(profit).toHaveValue('field:risk:1');await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual({stopLoss:'low',takeProfit:'risk:1',duration:20});
 });

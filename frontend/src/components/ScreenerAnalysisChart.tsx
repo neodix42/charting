@@ -6,6 +6,7 @@ import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
+import {analysisMatchMarkers,profitableMatchColor} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -45,7 +46,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
    const main=candle?chart.addSeries(CandlestickSeries,{upColor:palette.up,downColor:palette.danger,wickUpColor:palette.up,wickDownColor:palette.danger,borderVisible:false}):chart.addSeries(LineSeries,{color:palette.accent,lineWidth:2,title:data.timeframe==='tick'?'Tick price':'Price'});
    if(candle)main.setData(ordered.map(bar=>({...timed(bar),open:value(bar,'open')!,high:value(bar,'high')!,low:value(bar,'low')!,close:value(bar,'close')!})));
    else main.setData(ordered.map(bar=>Number.isFinite(price(bar))?{...timed(bar),value:price(bar)!}:timed(bar)));
-   const matchMarker=(color:string)=>[{time:data.matchTime/1000 as UTCTimestamp,position:'belowBar' as const,color,shape:'arrowUp' as const,text:'Match'}];
+   const matchMarker=(color:string)=>analysisMatchMarkers(data,color);
    markers=createSeriesMarkers(main,matchMarker(palette.accent));
    const panes=new Map<string,number>();
    const histograms:{series:ReturnType<typeof chart.addSeries<'Histogram'>>;field:string}[]=[];
@@ -93,6 +94,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(10,fontSize)}});},[fontSize]);
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
+  {!!data.profitableMatches?.length&&<p className="analysis-chart-note analysis-chart-legend"><span aria-hidden="true" style={{backgroundColor:profitableMatchColor}}/>Green dot: match whose simulated trade hit TP.</p>}
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
   <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-chart-font-size={chartFontSize(10,fontSize)} data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
   {duplicates&&<p className="analysis-chart-note">Each observation is evaluated. Ticks sharing an identical timestamp display their last price on the chart.</p>}

@@ -532,6 +532,22 @@ class PublicationTests(unittest.TestCase):
                 release.publish(api, root, "0.1.0", COMMIT)
             self.assertEqual(api.writes, [])
 
+    def test_independent_test_workflow_change_still_preserves_github_workflow_permissions(self):
+        # Publication does not depend on test results. GitHub still restricts
+        # creating an old commit's tag when any workflow differs from main.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            release_inputs(root)
+            api = FakeGitHub()
+            api.main_commit = OTHER
+            api.workflows = {
+                COMMIT: {".github/workflows/release.yml": "same", ".github/workflows/tests.yml": "old"},
+                OTHER: {".github/workflows/release.yml": "same", ".github/workflows/tests.yml": "new"},
+            }
+            with self.assertRaisesRegex(ValueError, "workflow changed"):
+                release.publish(api, root, "0.1.0", COMMIT)
+            self.assertEqual(api.writes, [])
+
 
 class GitHubClientTests(unittest.TestCase):
     def test_pagination_reads_every_page_without_mutations(self):
