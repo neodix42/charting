@@ -4,7 +4,7 @@ export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparis
 export interface AnalysisTradeSimulation {stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
 export interface AnalysisRequest {conditions:AnalysisCondition[];categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null}
-export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean}
+export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|''}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest}
 export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
 export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}

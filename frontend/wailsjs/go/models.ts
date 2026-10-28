@@ -528,31 +528,16 @@ export namespace market {
 }
 
 export namespace screener {
-
-	export class AnalysisProfitableMatch {
-	    index: number;
-	    time: number;
-
-	    static createFrom(source: any = {}) {
-	        return new AnalysisProfitableMatch(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.index = source["index"];
-	        this.time = source["time"];
-	    }
-	}
-
+	
 	export class AnalysisBar {
 	    index: number;
 	    time: number;
 	    values: Record<string, number>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisBar(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.index = source["index"];
@@ -574,11 +559,11 @@ export namespace screener {
 	    fields: string[];
 	    bytes: number;
 	    error?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DataFile(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -602,11 +587,11 @@ export namespace screener {
 	    timeframes: string[];
 	    files: DataFile[];
 	    categories: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisCatalog(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -615,7 +600,7 @@ export namespace screener {
 	        this.files = this.convertValues(source["files"], DataFile);
 	        this.categories = source["categories"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -634,6 +619,20 @@ export namespace screener {
 		    return a;
 		}
 	}
+	export class AnalysisProfitableMatch {
+	    index: number;
+	    time: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AnalysisProfitableMatch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.time = source["time"];
+	    }
+	}
 	export class AnalysisChart {
 	    resultId: string;
 	    name: string;
@@ -647,11 +646,11 @@ export namespace screener {
 	    fields: string[];
 	    bars: AnalysisBar[];
 	    profitableMatches?: AnalysisProfitableMatch[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisChart(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.resultId = source["resultId"];
@@ -667,7 +666,7 @@ export namespace screener {
 	        this.bars = this.convertValues(source["bars"], AnalysisBar);
 	        this.profitableMatches = this.convertValues(source["profitableMatches"], AnalysisProfitableMatch);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -694,11 +693,11 @@ export namespace screener {
 	    offset: number;
 	    aggregate: string;
 	    window: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisOperand(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -720,11 +719,11 @@ export namespace screener {
 	    distance: AnalysisOperand;
 	    multiplier: number;
 	    bars: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisCondition(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -737,7 +736,7 @@ export namespace screener {
 	        this.multiplier = source["multiplier"];
 	        this.bars = source["bars"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -759,15 +758,17 @@ export namespace screener {
 	export class AnalysisFilter {
 	    categories: string[];
 	    includeEmpty: boolean;
-
+	    profitableSort?: string;
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisFilter(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.categories = source["categories"];
 	        this.includeEmpty = source["includeEmpty"];
+	        this.profitableSort = source["profitableSort"];
 	    }
 	}
 	export class AnalysisTradeSimulation {
@@ -776,11 +777,11 @@ export namespace screener {
 	    takeProfit: string;
 	    takeProfitMultiple?: number;
 	    duration: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisTradeSimulation(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.stopLoss = source["stopLoss"];
@@ -799,11 +800,11 @@ export namespace screener {
 	    unavailable: number;
 	    profitablePercent: number;
 	    reason?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisSimulationSummary(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.takeProfitHits = source["takeProfitHits"];
@@ -833,11 +834,11 @@ export namespace screener {
 	    firstTime?: number;
 	    lastTime?: number;
 	    simulation?: AnalysisSimulationSummary;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -857,7 +858,7 @@ export namespace screener {
 	        this.lastTime = source["lastTime"];
 	        this.simulation = this.convertValues(source["simulation"], AnalysisSimulationSummary);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -893,11 +894,11 @@ export namespace screener {
 	    totalResults: number;
 	    error?: string;
 	    tradeSimulation?: AnalysisTradeSimulation;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.active = source["active"];
@@ -917,7 +918,7 @@ export namespace screener {
 	        this.error = source["error"];
 	        this.tradeSimulation = this.convertValues(source["tradeSimulation"], AnalysisTradeSimulation);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -936,23 +937,24 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
+	
 	export class AnalysisRequest {
 	    conditions: AnalysisCondition[];
 	    categories: string[];
 	    tradeSimulation?: AnalysisTradeSimulation;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
 	        this.categories = source["categories"];
 	        this.tradeSimulation = this.convertValues(source["tradeSimulation"], AnalysisTradeSimulation);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -971,7 +973,9 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
+	
+	
 	export class Instrument {
 	    id: string;
 	    name: string;
@@ -1054,7 +1058,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
 	export class EnrichmentJob {
 	    id: string;
 	    fileId: string;
@@ -1065,11 +1069,11 @@ export namespace screener {
 	    message: string;
 	    columns: string[];
 	    backupPath?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EnrichmentJob(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1097,11 +1101,11 @@ export namespace screener {
 	    currentFile: string;
 	    currentProgress: number;
 	    jobs: EnrichmentJob[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EnrichmentInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -1118,7 +1122,7 @@ export namespace screener {
 	        this.currentProgress = source["currentProgress"];
 	        this.jobs = this.convertValues(source["jobs"], EnrichmentJob);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1137,16 +1141,16 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
 	export class EnrichmentRequest {
 	    indicator: string;
 	    parameters: Record<string, number>;
 	    source: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EnrichmentRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.indicator = source["indicator"];
@@ -1160,11 +1164,11 @@ export namespace screener {
 	    total: number;
 	    offset: number;
 	    limit: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FilePage(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -1173,7 +1177,7 @@ export namespace screener {
 	        this.offset = source["offset"];
 	        this.limit = source["limit"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1192,7 +1196,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
 	export class IndicatorParameter {
 	    key: string;
 	    label: string;
@@ -1200,11 +1204,11 @@ export namespace screener {
 	    min: number;
 	    max: number;
 	    step: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new IndicatorParameter(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.key = source["key"];
@@ -1222,11 +1226,11 @@ export namespace screener {
 	    input: string;
 	    parameters: IndicatorParameter[];
 	    note?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Indicator(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1236,7 +1240,7 @@ export namespace screener {
 	        this.parameters = this.convertValues(source["parameters"], IndicatorParameter);
 	        this.note = source["note"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1258,17 +1262,17 @@ export namespace screener {
 	export class IndicatorCatalog {
 	    version: string;
 	    indicators: Indicator[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new IndicatorCatalog(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
 	        this.indicators = this.convertValues(source["indicators"], Indicator);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1287,7 +1291,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
 	export class Job {
 	    id: string;
 	    symbol: string;
@@ -1364,7 +1368,8 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
+	
 	export class RefreshJob {
 	    id: string;
 	    fileId: string;
@@ -1377,11 +1382,11 @@ export namespace screener {
 	    message: string;
 	    columns: string[];
 	    backupPath?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RefreshJob(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1411,11 +1416,11 @@ export namespace screener {
 	    currentFile: string;
 	    currentProgress: number;
 	    jobs: RefreshJob[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RefreshInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
@@ -1432,7 +1437,7 @@ export namespace screener {
 	        this.currentProgress = source["currentProgress"];
 	        this.jobs = this.convertValues(source["jobs"], RefreshJob);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1451,7 +1456,7 @@ export namespace screener {
 		    return a;
 		}
 	}
-
+	
 	export class Request {
 	    symbols: string[];
 	    timeframe: string;
@@ -1476,18 +1481,18 @@ export namespace screener {
 	    id: string;
 	    name: string;
 	    request: AnalysisRequest;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SavedAnalysisCondition(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.request = this.convertValues(source["request"], AnalysisRequest);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1513,11 +1518,11 @@ export namespace screener {
 	    to: string;
 	    concurrency: number;
 	    collapsedCategories: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ViewState(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.symbols = source["symbols"];

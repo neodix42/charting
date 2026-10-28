@@ -15,6 +15,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const [loadError,setLoadError]=useState(''),[catalogError,setCatalogError]=useState(''),[saveError,setSaveError]=useState(''),[scanError,setScanError]=useState(''),[actionError,setActionError]=useState('');
  const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[resultCategory,setResultCategory]=useState(''),[selection,setSelection]=useState<AnalysisSelection|null>(null);
  const [simulationInputError,setSimulationInputError]=useState('');
+ const [profitableSort,setProfitableSort]=useState<''|'asc'|'desc'>('');
  const draft=useRef(view),mounted=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false),selectionRef=useRef(selection),chartEpoch=useRef(0),writer=useRef<AnalysisViewWriter|null>(null);
  const panelVisible=useRef(visible);panelVisible.current=visible;
  const savedConditions=useRef<ScreenerSavedConditionsHandle>(null);
@@ -40,12 +41,12 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   const poll=async()=>{
    const revision=epoch.current;
    try{
-    if(!actionBusy.current){const value=await api.GetScreenerAnalysisFiltered(page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false});if(current&&revision===epoch.current){setInfo(value);setScanError('');if(page>0&&page*pageSize>=value.totalResults)setPage(Math.max(0,Math.ceil(value.totalResults/pageSize)-1));}}
+    if(!actionBusy.current){const value=await api.GetScreenerAnalysisFiltered(page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort});if(current&&revision===epoch.current){setInfo(value);setScanError('');if(page>0&&page*pageSize>=value.totalResults)setPage(Math.max(0,Math.ceil(value.totalResults/pageSize)-1));}}
    }catch(error){if(current&&revision===epoch.current)setScanError(errorText(error));}
    finally{if(current)timer=setTimeout(()=>void poll(),750);}
   };
   void poll();return ()=>{current=false;if(timer)clearTimeout(timer);};
- },[api,visible,page,reload,resultCategory]);
+ },[api,visible,page,reload,resultCategory,profitableSort]);
  const change=(next:AnalysisRequest)=>{draft.current=next;setView(next);setSaveError('');writer.current!.edit(next);};
  const closeChart=()=>{chartEpoch.current++;selectionRef.current=null;setSelection(null);};
  useEffect(()=>{if(!visible)closeChart();},[visible]);
@@ -54,7 +55,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   const session=lifetime.current;actionBusy.current=true;epoch.current++;setBusy(true);setActionError('');
   try{
    if(apply){await writer.current!.flush();closeChart();}
-   await operation();const value=await api.GetScreenerAnalysisFiltered(apply?0:page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false});if(mounted.current&&session===lifetime.current){setInfo(value);setScanError('');if(apply)setPage(0);setReload(previous=>previous+1);}
+   await operation();const value=await api.GetScreenerAnalysisFiltered(apply?0:page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort});if(mounted.current&&session===lifetime.current){setInfo(value);setScanError('');if(apply)setPage(0);setReload(previous=>previous+1);}
   }catch(error){if(mounted.current&&session===lifetime.current)setActionError(errorText(error));}
   finally{actionBusy.current=false;if(mounted.current&&session===lifetime.current)setBusy(false);}
  };
@@ -64,7 +65,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   if(occurrence>=0&&occurrence<selected.result.matches){if(revision===chartEpoch.current)setSelection({...selected,occurrence});return;}
   let index=selected.offset+direction;
   while(index>=0){
-   const offset=Math.floor(index/pageSize)*pageSize,chunk=await api.GetScreenerAnalysisFiltered(offset,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false});
+   const offset=Math.floor(index/pageSize)*pageSize,chunk=await api.GetScreenerAnalysisFiltered(offset,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort});
    if(revision!==chartEpoch.current||!mounted.current||!panelVisible.current)return;
    if(index>=chunk.totalResults)break;
    for(;index>=offset&&index<offset+chunk.results.length;index+=direction){
@@ -79,9 +80,12 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const categories=catalog?.categories??[],selectedCategories=new Set(view.categories??categories);
  const selectedFiles=catalog?.files.filter(file=>selectedCategories.has(file.category||'Other')).length??0;
  const changeCategories=(next:string[]|null)=>change({...draft.current,categories:next});
- const changeResultFilter=(category:string)=>{epoch.current++;closeChart();setResultCategory(category);setPage(0);setInfo(previous=>previous?{...previous,results:[],totalResults:0}:null);};
- const results=info?.results??[],groups=new Map<string,Array<{result:typeof results[number];offset:number}>>();
- results.forEach((result,index)=>{const asset=result.symbol||result.name;groups.set(asset,[...(groups.get(asset)??[]),{result,offset:(info?.offset??page*pageSize)+index}]);});
+ const resetResults=()=>{epoch.current++;closeChart();setPage(0);setInfo(previous=>previous?{...previous,results:[],totalResults:0}:null);};
+ const changeResultFilter=(category:string)=>{resetResults();setResultCategory(category);};
+ const changeResultSort=()=>{resetResults();setProfitableSort(value=>value==='desc'?'asc':'desc');};
+ const results=info?.results??[],groups:Array<{asset:string;entries:Array<{result:typeof results[number];offset:number}>}>=[];
+ // Group only adjacent files so multiple timeframes never override percentage order.
+ results.forEach((result,index)=>{const asset=result.symbol||result.name;let group=groups[groups.length-1];if(!group||group.asset!==asset){group={asset,entries:[]};groups.push(group);}group.entries.push({result,offset:(info?.offset??page*pageSize)+index});});
  const working=info?.active??false,invalid=(view.tradeSimulation&&simulationInputError)||analysisInputError(view),error=loadError||catalogError||saveError||actionError||scanError||info?.error;
  const resultSimulation=info?.tradeSimulation;
  return <div className="screener-analysis-layout"><div className="screener-analysis-content">
@@ -104,9 +108,9 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
    {resultSimulation&&<p className="analysis-simulation-summary">Simulated long trades · SL: {resultSimulation.stopLoss} ({resultSimulation.stopLossBarsAgo??0} bars ago) · TP: {resultSimulation.takeProfitMultiple?`${resultSimulation.takeProfitMultiple}xSL`:resultSimulation.takeProfit} · {resultSimulation.duration.toLocaleString('en-US')} bars. Profitable, % = TP hits ÷ all matching bars × 100.</p>}
    {info&&(working||info.total>0)&&<div className="analysis-scan-status" role="status"><div><strong>{working?(info.phase==='indexing'?'Indexing downloaded files':'Scanning closed bars'):info.phase==='cancelled'?'Analysis cancelled':'Analysis complete'}</strong><span>{info.completed} / {info.total} files · {info.rows.toLocaleString('en-US')} rows · {info.failed} failed</span></div><progress aria-label="Analysis scan progress" max={100} value={Math.max(0,Math.min(100,info.progress))}/>{info.currentFile&&<p>{info.currentFile}</p>}</div>}
    {!catalog?.files.length&&catalog&&<p className="analysis-empty">No downloaded files. Download historical data, then enrich it with any indicators you want to compare.</p>}
-   {!groups.size&&!!info?.total&&<p className="analysis-empty">{working?'Waiting for matching files…':resultCategory?'No matching files in this asset category.':info.totalMatches?'No files match the current result filters.':'No closed bars matched all conditions.'}</p>}
-   {!!groups.size&&<div className="analysis-table-scroll"><table><thead><tr><th>Asset / downloaded file</th><th>Timeframe</th><th>Matches</th>{resultSimulation&&<th>Profitable, %</th>}<th>First match (UTC)</th><th>Last match (UTC)</th></tr></thead><tbody>{[...groups].map(([asset,entries])=>[
-    <tr className="analysis-asset" key={`asset:${asset}`}><th colSpan={resultSimulation?6:5}><strong>{asset.toUpperCase()}</strong><span>{entries[0].result.description||catalog?.files.find(file=>file.id===entries[0].result.fileId)?.description||'Description unavailable'}</span></th></tr>,
+   {!groups.length&&!!info?.total&&<p className="analysis-empty">{working?'Waiting for matching files…':resultCategory?'No matching files in this asset category.':info.totalMatches?'No files match the current result filters.':'No closed bars matched all conditions.'}</p>}
+   {!!groups.length&&<div className="analysis-table-scroll"><table><thead><tr><th>Asset / downloaded file</th><th>Timeframe</th><th>Matches</th>{resultSimulation&&<th aria-label="Profitable, %" aria-sort={profitableSort==='asc'?'ascending':profitableSort==='desc'?'descending':'none'}><button type="button" className="analysis-sort" aria-label="Sort by Profitable, %" disabled={busy} onClick={changeResultSort}>Profitable, % <span aria-hidden="true">{profitableSort==='asc'?'▲':profitableSort==='desc'?'▼':'↕'}</span></button></th>}<th>First match (UTC)</th><th>Last match (UTC)</th></tr></thead><tbody>{groups.map(({asset,entries})=>[
+    <tr className="analysis-asset" key={`asset:${asset}:${entries[0].result.id}`}><th colSpan={resultSimulation?6:5}><strong>{asset.toUpperCase()}</strong><span>{entries[0].result.description||catalog?.files.find(file=>file.id===entries[0].result.fileId)?.description||'Description unavailable'}</span></th></tr>,
     ...entries.map(({result,offset})=><tr key={result.id} className={result.error?'analysis-file-failed':result.matches?'analysis-file-match':''} tabIndex={result.matches&&!result.error?0:undefined} aria-label={`${result.symbol.toUpperCase()||result.name} ${result.timeframe} · ${result.matches} matches`} onClick={()=>{if(result.matches&&!result.error){chartEpoch.current++;setSelection({result,offset,occurrence:0});}}} onKeyDown={event=>{if((event.key==='Enter'||event.key===' ')&&event.target===event.currentTarget&&result.matches&&!result.error){event.preventDefault();chartEpoch.current++;setSelection({result,offset,occurrence:0});}}}><td><strong>{result.name}</strong><small>{result.rows.toLocaleString('en-US')} closed rows checked</small>{result.error&&<p role="alert">{result.error}</p>}</td><td>{result.timeframe||'Unknown'}</td><td>{result.matches&&!result.error?<button type="button" aria-label={`Inspect ${result.name} matches`}>{result.matches.toLocaleString('en-US')} ↗</button>:result.error?'Failed':'0'}</td>{resultSimulation&&<AnalysisSimulationCell result={result}/>}<td>{analysisDate(result.firstTime)}</td><td>{analysisDate(result.lastTime)}</td></tr>),
    ])}</tbody></table></div>}
    {!!info?.totalResults&&<nav className="analysis-pagination" aria-label="Analysis file pages"><button type="button" disabled={page===0} onClick={()=>setPage(value=>value-1)}>Previous files</button><span>Files {page*pageSize+1}–{Math.min((page+1)*pageSize,info.totalResults)} of {info.totalResults}</span><button type="button" disabled={(page+1)*pageSize>=info.totalResults} onClick={()=>setPage(value=>value+1)}>Next files</button></nav>}

@@ -51,8 +51,9 @@ type AnalysisCatalog struct {
 	Categories []string   `json:"categories"`
 }
 type AnalysisFilter struct {
-	Categories   []string `json:"categories"`
-	IncludeEmpty bool     `json:"includeEmpty"`
+	Categories     []string `json:"categories"`
+	IncludeEmpty   bool     `json:"includeEmpty"`
+	ProfitableSort string   `json:"profitableSort,omitempty"`
 }
 type AnalysisResult struct {
 	ID           string                     `json:"id"`
@@ -392,6 +393,31 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 			filtered = append(filtered, r)
 		}
 	}
+	if filter.ProfitableSort != "" {
+		// Sort the filtered copy before paging, retaining original order for ties
+		// and placing pending/unavailable percentages last in either direction.
+		percentage := func(r AnalysisResult) (float64, bool) {
+			if r.Matches == 0 || r.Simulation == nil || r.Simulation.Unavailable == r.Matches {
+				return 0, false
+			}
+			value := r.Simulation.ProfitablePercent
+			return value, !math.IsNaN(value) && !math.IsInf(value, 0)
+		}
+		sort.SliceStable(filtered, func(i, j int) bool {
+			left, leftValid := percentage(filtered[i])
+			right, rightValid := percentage(filtered[j])
+			if leftValid != rightValid {
+				return leftValid
+			}
+			if !leftValid {
+				return false
+			}
+			if filter.ProfitableSort == "desc" {
+				return left > right
+			}
+			return left < right
+		})
+	}
 	info.TotalResults = len(filtered)
 	start := min(offset, len(filtered))
 	info.Results = append(info.Results, filtered[start:start+min(limit, len(filtered)-start)]...)
@@ -412,6 +438,9 @@ func (m *Manager) AnalysisFiltered(offset, limit int, filter AnalysisFilter) (An
 	}
 	if err := validateAnalysisCategories(filter.Categories); err != nil {
 		return AnalysisInfo{}, err
+	}
+	if filter.ProfitableSort != "" && filter.ProfitableSort != "asc" && filter.ProfitableSort != "desc" {
+		return AnalysisInfo{}, errors.New("profitable percentage sort must be asc or desc")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -17,6 +17,41 @@ async function complete(page:Page,results:AnalysisResult[]){
 }
 const control=(page:Page,name:string)=>page.getByLabel(name,{exact:true});
 const resources=(page:Page)=>page.evaluate(()=>(window as any).__testAnalysisChartResources());
+
+test('Profitable percentage sorts all pages numerically and preserves category and chart navigation order',async({page})=>{
+ const symbols=['btcusd','ethusd','eurusd'],percentages=[50,0,100,10,90,20,80,30,70,40,60,50];
+ const files=percentages.map((_,index)=>file(index,symbols[index%3]));
+ const counts={takeProfitHits:0,stopLossHits:0,expired:0,insufficientData:0,invalidLevels:0,unavailable:0,profitablePercent:0};
+ const results=percentages.map((percent,index)=>({...result(index,symbols[index%3],1),simulation:{...counts,profitablePercent:percent}}));
+ results.push(result(12,'ethusd',1),{...result(13,'btcusd',1,'tick'),simulation:{...counts,unavailable:1}});
+ await open(page,files);await complete(page,results);
+ await page.evaluate(()=>(window as any).__testSetAnalysisInfo({tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:5}}));
+ const sort=page.getByRole('button',{name:'Sort by Profitable, %',exact:true}),header=page.getByRole('columnheader',{name:'Profitable, %',exact:true});
+ const names=(indices:number[])=>indices.map(index=>results[index].name);
+ const shown=page.locator('.analysis-results tr.analysis-file-match td:first-child>strong');
+ await expect(header).toHaveAttribute('aria-sort','none');
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(shown).toHaveText(names([10,11,12,13]));
+ await sort.click();await expect(header).toHaveAttribute('aria-sort','descending');
+ await expect(shown).toHaveText(names([2,4,6,8,10,0,11,9,7,5]));
+ await expect(page.getByRole('navigation',{name:'Analysis file pages',exact:true})).toContainText('Files 1–10 of 14');
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(shown).toHaveText(names([3,1,12,13]));
+ await sort.click();await expect(header).toHaveAttribute('aria-sort','ascending');
+ await expect(shown).toHaveText(names([1,3,5,7,9,0,11,10,8,6]));
+ await control(page,'Result asset category').selectOption('Cryptocurrencies');
+ await expect(shown).toHaveText(names([1,3,7,9,0,10,6,4,12,13]));
+ await control(page,'Result asset category').selectOption('');await expect(shown).toHaveText(names([1,3,5,7,9,0,11,10,8,6]));
+ await sort.focus();await page.keyboard.press('Enter');await expect(header).toHaveAttribute('aria-sort','descending');
+ await expect(shown).toHaveText(names([2,4,6,8,10,0,11,9,7,5]));
+ await page.getByRole('button',{name:`Inspect ${results[5].name} matches`,exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});
+ await expect(dialog.locator('header h2')).toContainText('EURUSD');
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(dialog.locator('header h2')).toContainText('BTCUSD');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisChartRequests().at(-1)?.resultID)).toBe('result-3');
+ await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(dialog.locator('header h2')).toContainText('EURUSD');
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+});
+
 async function saveCondition(page:Page,name:string){
  await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill(name);
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});

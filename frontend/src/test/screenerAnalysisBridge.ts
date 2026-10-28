@@ -21,6 +21,10 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
   const groups=new Map<string,{matches:number;files:number}>();
   info.results.forEach(result=>{const key=result.symbol||result.name,current=groups.get(key)??{matches:0,files:0};current.matches+=result.matches;if(result.matches)current.files++;groups.set(key,current);});
   const results=info.results.map(result=>({...metadata(result.symbol),...result})).filter(result=>!filter||((filter.categories==null||filter.categories.includes(result.category))&&(filter.includeEmpty||result.matches>0||!!result.error||result.status==='failed'||result.status==='cancelled')));
+  if(filter?.profitableSort){
+   const percentage=(result:AnalysisResult)=>result.matches&&result.simulation&&result.simulation.unavailable!==result.matches&&Number.isFinite(result.simulation.profitablePercent)?result.simulation.profitablePercent:null;
+   results.sort((left,right)=>{const a=percentage(left),b=percentage(right);return a===null?b===null?0:1:b===null?-1:filter.profitableSort==='desc'?b-a:a-b;});
+  }
   return structuredClone({...info,offset,limit,totalResults:results.length,results:results.slice(offset,offset+limit).map(result=>({...result,assetMatches:groups.get(result.symbol||result.name)?.matches??0,assetFiles:groups.get(result.symbol||result.name)?.files??0}))});
  };
  const chart=(result:AnalysisResult,occurrence:number):AnalysisChart=>{
