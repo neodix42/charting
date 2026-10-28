@@ -27,6 +27,8 @@ export function ConfigureScreenerDirectory(arg1:string):Promise<screener.Info>;
 
 export function ConfigureTelegramBot(arg1:string):Promise<telegram.Settings>;
 
+export function ConfigureTelegramBotSettings(arg1:string,arg2:string):Promise<telegram.Settings>;
+
 export function ConfirmClose(arg1:string,arg2:boolean):Promise<void>;
 
 export function DeleteScreenerAnalysisCondition(arg1:string):Promise<void>;
@@ -73,6 +75,8 @@ export function GetScreenerSavedConditions():Promise<Array<screener.SavedAnalysi
 
 export function GetScreenerView():Promise<screener.ViewState>;
 
+export function GetTelegramBotIdentity(arg1:string):Promise<telegram.BotIdentity>;
+
 export function GetTelegramBotSettings():Promise<telegram.Settings>;
 
 export function ImportWorkspace():Promise<storage.Loaded>;
@@ -106,3 +110,5 @@ export function StartScreenerDownload(arg1:screener.Request):Promise<screener.In
 export function StartScreenerEnrichment(arg1:screener.EnrichmentRequest):Promise<screener.EnrichmentInfo>;
 
 export function StartScreenerRefresh():Promise<screener.RefreshInfo>;
+
+export function TestTelegramBot():Promise<telegram.TestResult>;

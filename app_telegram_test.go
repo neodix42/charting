@@ -30,7 +30,7 @@ func TestTelegramSettingsStayOutsidePortableWorkspace(t *testing.T) {
 	}
 	app := &App{store: store, telegram: telegram.NewStore(profile), market: market.New(market.Options{})}
 	defer app.market.Close()
-	if _, err = app.ConfigureTelegramBot("123:explicit-local-token"); err != nil {
+	if _, err = app.ConfigureTelegramBotSettings("123:explicit-local-token", "@neodix"); err != nil {
 		t.Fatal(err)
 	}
 	after, err := store.Export()
@@ -46,7 +46,7 @@ func TestTelegramSettingsStayOutsidePortableWorkspace(t *testing.T) {
 	}
 	reopened := &App{telegram: telegram.NewStore(profile)}
 	settings, err := reopened.GetTelegramBotSettings()
-	if err != nil || settings.APIToken != "123:explicit-local-token" {
+	if err != nil || settings.APIToken != "123:explicit-local-token" || settings.Recipient != "@neodix" {
 		t.Fatal("workspace reset changed the separate bot configuration", err)
 	}
 	if _, err = reopened.ConfigureTelegramBot(""); err != nil {

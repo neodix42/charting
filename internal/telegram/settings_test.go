@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -103,5 +104,43 @@ func TestConcurrentSettingsAndFailedPublication(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Dir(blocked.path))
 	if err != nil || len(entries) != 1 || entries[0].Name() != "telegram-bot.json" {
 		t.Fatal("failed publication retained a temporary secret file", err)
+	}
+}
+
+func TestRecipientSettingsCompatibilityAndCacheInvalidation(t *testing.T) {
+	store := NewStore(t.TempDir())
+	if err := os.WriteFile(store.path, []byte(`{"apiToken":"123:legacy"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if settings, err := store.Read(); err != nil || settings.Recipient != "" || settings.APIToken != "123:legacy" {
+		t.Fatal("legacy token settings changed", err)
+	}
+	if _, err := store.Configure("123:legacy", " @neodix "); err != nil {
+		t.Fatal(err)
+	}
+	store.mu.Lock()
+	config, _ := store.readLocked()
+	config.ChatID, config.BotID = 42, 10
+	data, _ := json.Marshal(config)
+	_ = store.writeLocked(data)
+	store.mu.Unlock()
+	if _, err := store.Configure("123:legacy", "@NeoDix"); err != nil {
+		t.Fatal(err)
+	}
+	config, _ = store.readLocked()
+	if config.ChatID != 42 {
+		t.Fatal("case-only edit lost verified identity")
+	}
+	if _, err := store.Save("456:replacement"); err != nil {
+		t.Fatal(err)
+	}
+	config, _ = store.readLocked()
+	if config.ChatID != 0 || config.BotID != 0 || config.Recipient != "@NeoDix" {
+		t.Fatal("token-only save lost recipient or retained old bot binding")
+	}
+	for _, invalid := range []string{"@", "name", "@bad name", "@../user", "0", "-42", "4503599627370496"} {
+		if _, err := store.Configure("123:legacy", invalid); err == nil {
+			t.Fatal("invalid recipient accepted")
+		}
 	}
 }

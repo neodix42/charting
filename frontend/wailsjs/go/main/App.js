@@ -42,6 +42,10 @@ export function ConfigureTelegramBot(arg1) {
   return window['go']['main']['App']['ConfigureTelegramBot'](arg1);
 }
 
+export function ConfigureTelegramBotSettings(arg1, arg2) {
+  return window['go']['main']['App']['ConfigureTelegramBotSettings'](arg1, arg2);
+}
+
 export function ConfirmClose(arg1, arg2) {
   return window['go']['main']['App']['ConfirmClose'](arg1, arg2);
 }
@@ -134,6 +138,10 @@ export function GetScreenerView() {
   return window['go']['main']['App']['GetScreenerView']();
 }
 
+export function GetTelegramBotIdentity(arg1) {
+  return window['go']['main']['App']['GetTelegramBotIdentity'](arg1);
+}
+
 export function GetTelegramBotSettings() {
   return window['go']['main']['App']['GetTelegramBotSettings']();
 }
@@ -200,4 +208,8 @@ export function StartScreenerEnrichment(arg1) {
 
 export function StartScreenerRefresh() {
   return window['go']['main']['App']['StartScreenerRefresh']();
+}
+
+export function TestTelegramBot() {
+  return window['go']['main']['App']['TestTelegramBot']();
 }

@@ -1626,8 +1626,23 @@ export namespace storage {
 
 export namespace telegram {
 
+	export class BotIdentity {
+	    id: number;
+	    username: string;
+
+	    static createFrom(source: any = {}) {
+	        return new BotIdentity(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.username = source["username"];
+	    }
+	}
 	export class Settings {
 	    apiToken: string;
+	    recipient: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -1636,6 +1651,25 @@ export namespace telegram {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.apiToken = source["apiToken"];
+	        this.recipient = source["recipient"];
+	    }
+	}
+	export class TestResult {
+	    sent: boolean;
+	    code?: string;
+	    botUsername?: string;
+	    messageId?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TestResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sent = source["sent"];
+	        this.code = source["code"];
+	        this.botUsername = source["botUsername"];
+	        this.messageId = source["messageId"];
 	    }
 	}
 
