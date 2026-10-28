@@ -16,6 +16,7 @@ import (
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/screener"
 	"cryptodesk/internal/storage"
+	"cryptodesk/internal/telegram"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -28,6 +29,7 @@ type App struct {
 	market         *market.Service
 	candles        *candlestorage.Manager
 	screener       *screener.Manager
+	telegram       *telegram.Store
 	mu             sync.Mutex
 	revision       int64
 	closeToken     string
@@ -43,6 +45,7 @@ type App struct {
 func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	a := &App{store: store, revision: loaded.Revision, window: loaded.Workspace.Window}
 	a.screener = screener.New(store.Directory())
+	a.telegram = telegram.NewStore(store.Directory())
 	if a.window.Width < 400 {
 		a.window = domain.Window{Width: 1600, Height: 1000}
 	}

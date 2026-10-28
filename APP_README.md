@@ -139,9 +139,13 @@ Provider failures remain visible in their chart. Retry or reselect without losin
 
 ## Settings
 
-Settings has five tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (local chart-candle cache), **Screener** (downloaded CSV folder), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
+Settings has six tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (local chart-candle cache), **Screener** (downloaded CSV folder), **Telegram Bot** (local token for future alerts), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
 
 **Appearance → Font size** scales text across the app, including chart period controls, chart and application status bars, Screener controls and chart canvas labels. Choose **10–24 px**, default **15 px**. It takes effect immediately and persists in workspace autosaves and JSON exports; older workspaces use the default.
+
+**Telegram Bot → Telegram Bot API Token** has one masked input. Paste the token and click **Save Telegram Bot settings**. The token is restored after restarting the app; clear the input and save to remove it. This configuration is reserved for future bot alerts: saving does not validate the token with Telegram or send messages. No Telegram library or network connection is needed for these settings.
+
+The token is stored in `<profile>/telegram-bot.json`, separately from workspace JSON, backups, import/export/reset and diagnostics. Saved files use owner-only permissions on POSIX systems; the value is stored locally without application-level encryption. Pending saves finish before settings close or normal app shutdown. A failed save preserves the previous token and reports a generic error without displaying secret values. If a profile is kept inside the repository, the configuration and temporary token files are ignored by Git.
 
 ## Local candle storage
 
@@ -253,4 +257,4 @@ For a portable backup, export JSON. To copy the database manually, close the app
 
 Memory caches, history request sizes, queues and rendered instances are bounded. The optional disk candle cache is persistent and can grow; it has no automatic deletion. Active series retain at most 10,000 bars in a moving window: older-history loads evict newer bars while preserving the selected historical range, and Return to live reloads the latest window. Full manual desktop, high-DPI and target-release coverage is recorded separately in STATUS.md; automated browser tests do not establish those checks. Exact window position on Wayland is best effort; normal size and maximized state are saved.
 
-Charts by [TradingView](https://www.tradingview.com/), using Apache-2.0 Lightweight Charts. Its creator attribution remains visible. [Third-party notices](docs/THIRD_PARTY_NOTICES.md) and copied licenses ship with the archive. There is no trade execution, wallet, credential storage, hosted TradingView client, paid feature gate, telemetry or automatic updater.
+Charts by [TradingView](https://www.tradingview.com/), using Apache-2.0 Lightweight Charts. Its creator attribution remains visible. [Third-party notices](docs/THIRD_PARTY_NOTICES.md) and copied licenses ship with the archive. There is no trade execution, wallet, exchange credential storage, hosted TradingView client, paid feature gate, telemetry or automatic updater.

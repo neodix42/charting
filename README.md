@@ -60,7 +60,9 @@ First launch opens **one tab with one chart**. New tabs also start with one char
 
 Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. CryptoDesk reads public market data and does not place trades or connect to exchange accounts.
 
-Settings are grouped into **Appearance**, **Storage**, **Screener**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
+Settings are grouped into **Appearance**, **Storage**, **Screener**, **Telegram Bot**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Telegram Bot stores a masked API token for future alerts; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
+
+In **Settings → Telegram Bot**, enter your **Telegram Bot API Token** and click **Save Telegram Bot settings**. Clear the field and save to remove it. This computer's token persists separately from workspace exports and diagnostics. Alerts are not active yet; saving the token sends no Telegram requests or messages.
 
 ## Screener
 

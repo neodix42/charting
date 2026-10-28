@@ -54,3 +54,5 @@ release/
 *.lockfile
 __pycache__/
 /docs/verification/
+telegram-bot.json
+.telegram-bot-*

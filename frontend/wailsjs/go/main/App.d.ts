@@ -4,6 +4,7 @@ import {domain} from '../models';
 import {market} from '../models';
 import {screener} from '../models';
 import {candlestorage} from '../models';
+import {telegram} from '../models';
 import {storage} from '../models';
 
 export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:number,arg5:number):Promise<market.Snapshot>;
@@ -23,6 +24,8 @@ export function ChooseScreenerDirectory():Promise<string>;
 export function ConfigureCandleStorage(arg1:boolean,arg2:string):Promise<candlestorage.Info>;
 
 export function ConfigureScreenerDirectory(arg1:string):Promise<screener.Info>;
+
+export function ConfigureTelegramBot(arg1:string):Promise<telegram.Settings>;
 
 export function ConfirmClose(arg1:string,arg2:boolean):Promise<void>;
 
@@ -69,6 +72,8 @@ export function GetScreenerRefresh(arg1:Array<string>):Promise<screener.RefreshI
 export function GetScreenerSavedConditions():Promise<Array<screener.SavedAnalysisCondition>>;
 
 export function GetScreenerView():Promise<screener.ViewState>;
+
+export function GetTelegramBotSettings():Promise<telegram.Settings>;
 
 export function ImportWorkspace():Promise<storage.Loaded>;
 

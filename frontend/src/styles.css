@@ -70,3 +70,5 @@
 /* Native select menus need their own palette in addition to the closed control. */
 select option,select optgroup{background-color:var(--elevated);color:var(--text)}
 select option:disabled,select optgroup:disabled{color:var(--muted)}
+
+.telegram-bot-setting[hidden]{display:none}.telegram-bot-setting .candle-storage-path{display:flex;flex-direction:column;gap:8px;margin:16px 0}.telegram-bot-setting input{width:100%;min-width:0}.telegram-bot-setting p{line-height:1.6}

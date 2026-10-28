@@ -38,6 +38,10 @@ export function ConfigureScreenerDirectory(arg1) {
   return window['go']['main']['App']['ConfigureScreenerDirectory'](arg1);
 }
 
+export function ConfigureTelegramBot(arg1) {
+  return window['go']['main']['App']['ConfigureTelegramBot'](arg1);
+}
+
 export function ConfirmClose(arg1, arg2) {
   return window['go']['main']['App']['ConfirmClose'](arg1, arg2);
 }
@@ -128,6 +132,10 @@ export function GetScreenerSavedConditions() {
 
 export function GetScreenerView() {
   return window['go']['main']['App']['GetScreenerView']();
+}
+
+export function GetTelegramBotSettings() {
+  return window['go']['main']['App']['GetTelegramBotSettings']();
 }
 
 export function ImportWorkspace() {
