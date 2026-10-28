@@ -167,7 +167,10 @@ func (l *LiveAlerts) check(ctx context.Context, config LiveAlertsConfig, asOf in
 			}
 			if alert != nil {
 				if e = l.deliver(ctx, *alert); e != nil {
-					failures = append(failures, e)
+					// Delivery uses one shared Telegram recipient. Stop after the
+					// first failure instead of repeating a refused/rate-limited
+					// request and consuming claims for every remaining signal.
+					return errors.Join(append(failures, e)...)
 				}
 			}
 		}

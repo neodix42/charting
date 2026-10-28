@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -150,6 +151,69 @@ func TestLiveAlertsAmbiguousSendClaimSurvivesRestart(t *testing.T) {
 	}
 	if restored.Info().Recent[0].Status != "uncertain" {
 		t.Fatal("uncertain outcome disappeared")
+	}
+}
+
+func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T) {
+	for _, failOn := range []int{1, 2} {
+		t.Run(fmt.Sprintf("failure-on-delivery-%d", failOn), func(t *testing.T) {
+			m, l, config, path := liveAlertsFixture(t)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeDataFile(t, m, "btcusd-h1-2024-01-01-2024-01-03.csv", string(data))
+			second, err := m.SaveAnalysisCondition("Second matching condition", defaultAnalysisRequest())
+			if err != nil {
+				t.Fatal(err)
+			}
+			config.ConditionIDs = append(config.ConditionIDs, second.ID)
+			config.Symbols = []string{"btcusd", "eurusd"}
+			if _, err = l.Configure(config); err != nil {
+				t.Fatal(err)
+			}
+			failure := errors.New("Telegram operation failed (rateLimit)")
+			attempted := map[string]bool{}
+			calls := 0
+			l.send = func(_ context.Context, alert LiveAlert) error {
+				calls++
+				attempted[alert.ConditionID+"/"+alert.Symbol+"/"+alert.Timeframe] = true
+				if calls == failOn {
+					return failure
+				}
+				return nil
+			}
+			asOf := time.Date(2024, 1, 1, 2, 30, 0, 0, time.UTC).UnixMilli()
+			if err = l.check(context.Background(), config, asOf); !errors.Is(err, failure) || calls != failOn {
+				t.Fatalf("delivery failure did not stop further requests: %v calls=%d", err, calls)
+			}
+			if len(l.state.Watermarks) != failOn || l.state.Sent != int64(failOn-1) || len(l.state.Recent) != failOn {
+				t.Fatalf("remaining signals were claimed or previous successes lost: %+v", l.state)
+			}
+			for key := range l.state.Watermarks {
+				if !attempted[key] {
+					t.Fatalf("unattempted signal was claimed: %s", key)
+				}
+			}
+			// The failed attempt remains claimed across restart, while later
+			// conditions and assets can still alert for this same latest bar.
+			retryCalls := 0
+			restored, err := NewLiveAlerts(m, func(_ context.Context, alert LiveAlert) error {
+				retryCalls++
+				if attempted[alert.ConditionID+"/"+alert.Symbol+"/"+alert.Timeframe] {
+					t.Fatal("retry repeated an already attempted signal")
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restored.Close()
+			restored.refresh = l.refresh
+			if err = restored.check(context.Background(), config, asOf); err != nil || retryCalls != 4-failOn || len(restored.state.Watermarks) != 4 || restored.state.Sent != 3 {
+				t.Fatalf("remaining signals were not retained for a later check: %v calls=%d state=%+v", err, retryCalls, restored.state)
+			}
+		})
 	}
 }
 

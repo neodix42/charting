@@ -235,7 +235,7 @@ CryptoDesk appends missing data to each selected history sequentially, recalcula
 
 Notifications include the asset symbol and full name, condition name, period, UTC candle-close time, **Entry (signal close)**, **SL**, and **TP**. Entry is an indicative price available when the signal is detected. SL uses the saved field and Bars ago offset; TP uses its saved field or 1xSL/2xSL/3xSL based on this indicative entry. Missing or invalid levels are shown as unavailable. Historical simulation continues to use the actual next candle's open.
 
-Keep CryptoDesk running and the computer awake with network access. Monitoring resumes when an enabled configuration is reopened, without resending already processed candles. A durable delivery claim prevents automatic duplicate sends after restart or an uncertain Telegram response; the status/history shows failed or uncertain deliveries for inspection. Provider errors, unavailable histories and missing indicator fields remain visible. This is a notification service, not trade execution.
+Keep CryptoDesk running and the computer awake with network access. Monitoring resumes when an enabled configuration is reopened, without resending already processed candles. A durable delivery claim prevents automatic duplicate sends after restart or an uncertain Telegram response; the status/history shows failed or uncertain deliveries for inspection. A Telegram error stops the batch; correct its cause and use **Check now** to check remaining assets without repeating the failed attempt. Provider errors, unavailable histories and missing indicator fields remain visible. This is a notification service, not trade execution.
 
 ### How Screener works
 
