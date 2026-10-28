@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-10-28
 
+## Verify and rebuild with dukascopy-node 1.51.1 — 2026-10-28
+
+Upstream v1.51.1 contains merged PR #265 (terminal plain-403 handling) and PR #266 (export-widget headers and tighter 403 handling). The source package, lockfile, embedded catalog, installed dependencies and staged Linux bundle already pinned 1.51.1 when this task began. Confirmed the published npm integrity checksum and retained that exact pin. Updated both guides, third-party notices and Windows packaging documentation, then rebuilt the local `cryptodesk` executable and `cryptodesk-0.1.0-linux-amd64.tar.gz` with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`. Sequential downloads, shared pacing, provider cooldowns and saved-data/checkpoint behavior remain unchanged.
+
+Verification: all **72 runtime worker tests**, **13 updater tests**, **9 bundle tests**, `go test -race ./internal/screener`, `go test -tags bindings .`, catalog regeneration check and the complete production Linux build pass. Inventory validation passes for both staged and packaged Linux runtimes; archive inspection confirms 1.51.1 and the updated app guide; executable/archive SHA-256 checks pass. Logs are in ignored `.tools/verification/dukascopy-1.51.1/`. No live Dukascopy request was made, so restored provider access is not claimed. Windows packaging/execution and native desktop interaction were not rerun. User profiles and downloaded CSVs were not modified.
+
 ## Light startup without a dark flash — 2026-10-28
 
 The native Wails window background, HTML before JavaScript/stylesheets load, root CSS and loading screen now use Light. Fresh/reset workspaces default to Light in Go and the explicit frontend fixture. Saved workspace themes remain intact and are applied in a layout effect before the restored workspace paints. Chart palette fallbacks also use Light. Both user guides describe the startup behavior; this supersedes the original specification's dark default without modifying the retained specification bundle.

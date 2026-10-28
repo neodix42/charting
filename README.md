@@ -244,7 +244,9 @@ CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQL
 
 ### Updating the Screener downloader
 
-CryptoDesk currently pins **[dukascopy-node 1.51.0](https://github.com/Leo4815162342/dukascopy-node/releases/tag/v1.51.0)** in [screener-runtime/package.json](screener-runtime/package.json) and its lockfile. Release archives already contain this dependency, Node and Chromium. The app imports its private copy directly; `npm install -g`, `npm update` in another folder and standalone `npx dukascopy-node` do not update CryptoDesk. There is no automatic upstream upgrade at app startup.
+CryptoDesk currently pins **[dukascopy-node 1.51.1](https://github.com/Leo4815162342/dukascopy-node/releases/tag/v1.51.1)** in [screener-runtime/package.json](screener-runtime/package.json) and its lockfile. Release archives already contain this dependency, Node and Chromium. The app imports its private copy directly; `npm install -g`, `npm update` in another folder and standalone `npx dukascopy-node` do not update CryptoDesk. There is no automatic upstream upgrade at app startup.
+
+Version **1.51.1** includes our [plain HTTP 403 handling fix](https://github.com/Leo4815162342/dukascopy-node/pull/265) and upstream [export-widget request headers and tighter 403 handling](https://github.com/Leo4815162342/dukascopy-node/pull/266). CryptoDesk retains sequential downloads, shared request pacing, provider cooldowns and saved checkpoints.
 
 **Check the bundled version.** From an extracted release folder, run:
 
