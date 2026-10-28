@@ -1,5 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {openTestApp} from './helpers/testApp';
+import {THEME_OPTIONS} from '../src/workspace/themes';
 import type {AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult} from '../src/workspace/screenerAnalysis';
 
 const fields=['timestamp','open','high','low','close','volume','ema_200','atr_14','macd_12_26','macd_histogram_12_26_9'];
@@ -762,7 +763,13 @@ test('Match Inspection stacks recorded Entry/SL/TP below Match and triples the f
   const texts=(window as any).__analysisDrawnTexts,lines=['Match','Entry 105','SL 90','TP 135'].map(text=>texts.findLast((item:any)=>item.text===text));
   return lines.every(Boolean)&&lines.every((line:any,index:number)=>(index===0||line.y>lines[index-1].y)&&line.y<line.height);
  })).toBe(true);
- for(const theme of ['light','matrix','cyberpunk','red-sands','dark']){
+ const initialTheme=await page.evaluate(()=>document.documentElement.dataset.theme);
+ const themeIds=THEME_OPTIONS.map(theme=>theme.id),initialIndex=themeIds.findIndex(theme=>theme===initialTheme);
+ expect(initialIndex).toBeGreaterThanOrEqual(0);
+ // Start with a different palette and return to the original last. Selecting
+ // the current theme is a no-op, so it cannot promise another canvas draw.
+ for(const theme of [...themeIds.slice(initialIndex+1),...themeIds.slice(0,initialIndex+1)]){
+  expect(await page.evaluate(()=>document.documentElement.dataset.theme)).not.toBe(theme);
   await page.evaluate(theme=>{(window as any).__analysisDrawnTexts=[];document.documentElement.dataset.theme=theme;},theme);
   await expect.poll(()=>page.evaluate(()=>['Entry 105','SL 90','TP 135'].every(text=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text===text)))).toBe(true);
  }

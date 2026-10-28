@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-10-28
 
+## CI Match Inspection theme repaint check — 2026-10-28
+
+GitHub Tests run 40733453531, job 122975607146, failed one browser case while the other 196 browser cases and the preceding deterministic/Go checks passed. The Match Inspection test cleared captured canvas labels before assigning Light, which was already the startup theme after D091. React correctly skips a redundant theme update; the assertion then depended on an unrelated initial chart draw still being pending. The isolated pre-fix local run passed, consistent with that scheduling-dependent failure. The test now derives a cycle from the actual current theme and shared theme options, visits every other palette, then returns to the original. Each assignment asserts that the target differs from the current theme before clearing its capture. All price-label, layout, width, navigation and resource-cleanup assertions remain intact; production code, workflow gates and timeouts are unchanged.
+
+Verification: the corrected Match Inspection browser case passes **five consecutive runs** using `npm --prefix frontend run test:e2e -- screener-analysis.spec.ts --grep 'Match Inspection stacks recorded Entry/SL/TP' --repeat-each=5`, including the production frontend build performed by the Playwright configuration. `git diff --check` passes. Local logs are in ignored `.tools/verification/ci-40733453531/`. The complete browser suite, hosted rerun, native desktop checks and live-provider checks were not rerun for this test-only change; hosted verification needs the changed commit to be pushed.
+
 ## Verify and rebuild with dukascopy-node 1.51.1 — 2026-10-28
 
 Upstream v1.51.1 contains merged PR #265 (terminal plain-403 handling) and PR #266 (export-widget headers and tighter 403 handling). The source package, lockfile, embedded catalog, installed dependencies and staged Linux bundle already pinned 1.51.1 when this task began. Confirmed the published npm integrity checksum and retained that exact pin. Updated both guides, third-party notices and Windows packaging documentation, then rebuilt the local `cryptodesk` executable and `cryptodesk-0.1.0-linux-amd64.tar.gz` with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`. Sequential downloads, shared pacing, provider cooldowns and saved-data/checkpoint behavior remain unchanged.
