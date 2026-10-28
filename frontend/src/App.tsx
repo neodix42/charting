@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState,useSyncExternalStore} from 'react';
 import type {Backend,LoadResult,Runtime,Workspace} from './types';
 import {errorText} from './types';
 import {getBridge} from './bridge/api';
@@ -60,7 +60,7 @@ function WorkspaceView({session,onReplace}:{session:Session;onReplace():void}){
  const flush=async()=>{captureAllViewports();await save.flush();await screenerHandle.current?.flush();await settingsHandle.current?.flush();};
  const closeApplication=async(token:string,discard=false)=>{try{if(!discard)await flush();await api.ConfirmClose(token,discard);setCloseToken(null);}catch(e){setCloseToken(token);setNotice(`Close paused: ${errorText(e)}`);}};
  useEffect(()=>{const cancelClose=runtime.EventsOn('prepare-close',(event:{token:string}|string)=>{void closeApplication(typeof event==='string'?event:event.token);});const cancelTimeout=runtime.EventsOn('close-timeout',(event:{reason:string})=>{setCloseToken(null);setNotice(event.reason||'Shutdown timed out. The application remains open; retry closing after saving.');});const cancelStorageError=runtime.EventsOn('candle-storage-error',(message:string)=>setNotice(message));const cancelWindow=runtime.EventsOn('window:state',(size:Workspace['window'])=>{const next=current.current;if(JSON.stringify(next.window)!==JSON.stringify(size))write({...next,window:size});});window.__cryptodeskDiagnostics=()=>({...marketDiagnostics,savedTabs:current.current.tabs.length,savedCharts:current.current.tabs.reduce((n,t)=>n+t.charts.length,0),revision:save.getStatus().revision});void api.FrontendReady().catch(e=>setNotice(errorText(e)));return ()=>{cancelClose();cancelTimeout();cancelStorageError();cancelWindow();save.dispose();delete window.__cryptodeskDiagnostics;};},[]);
- useEffect(()=>{document.documentElement.dataset.theme=workspace.theme;},[workspace.theme]);
+ useLayoutEffect(()=>{document.documentElement.dataset.theme=workspace.theme;},[workspace.theme]);
  useEffect(()=>{document.documentElement.style.fontSize=`${workspace.fontSize??DEFAULT_FONT_SIZE}px`;},[workspace.fontSize]);
  useEffect(()=>{const selected=document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');selected?.scrollIntoView({block:'nearest',inline:'nearest'});if(selected===document.querySelector('[role="tablist"]')?.lastElementChild)document.querySelector<HTMLElement>('.add-tab')?.scrollIntoView({block:'nearest',inline:'nearest'});},[workspace.activeTabId,workspace.tabs.length]);
  useEffect(()=>{const keyboard=(e:KeyboardEvent)=>{const target=e.target as HTMLElement;if(target.matches('input,textarea,select,[contenteditable="true"]')||confirmation||settings||screenerActive.current)return;const ctrl=e.ctrlKey||e.metaKey;if(!ctrl)return;const w=current.current;

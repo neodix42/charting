@@ -113,7 +113,7 @@ func NewTab(name string) Tab {
 func NewWorkspace() Workspace {
 	tab := NewTab("Tab 1")
 	fontSize := 15
-	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "dark", FontSize: &fontSize, DisplayTimezone: "UTC", ChartRightGap: &ChartRightGap{Unit: "bars", Value: 10}, ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
+	return Workspace{SchemaVersion: SchemaVersion, App: "cryptodesk", ID: ID(), Theme: "light", FontSize: &fontSize, DisplayTimezone: "UTC", ChartRightGap: &ChartRightGap{Unit: "bars", Value: 10}, ActiveTabID: tab.ID, Window: Window{Width: 1600, Height: 1000}, Tabs: []Tab{tab}}
 }
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)

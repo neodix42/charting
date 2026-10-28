@@ -13,7 +13,7 @@ const contrast=(first:string,second:string)=>{const [low,high]=[luminance(first)
 
 describe('app theme palettes and persisted choices',()=>{
  it('round-trips every selectable theme without replacing charts or changing the default',()=>{
-  expect(firstWorkspace().theme).toBe('dark');
+  expect(firstWorkspace().theme).toBe('light');
   const workspace=firstWorkspace();workspace.tabs[0].charts[0].view={mode:'historical',fromSec:100,toSec:200,barSpacing:8,rightOffset:0};
   const original=structuredClone(workspace);
   expect(THEME_OPTIONS.map(theme=>theme.id)).toEqual(schema.properties.theme.enum);
@@ -29,7 +29,7 @@ describe('app theme palettes and persisted choices',()=>{
   for(const theme of ['blue','','__proto__','Matrix']){
    expect(isThemeName(theme)).toBe(false);
    expect(()=>reduceWorkspace(workspace,{type:'settings',theme:theme as Workspace['theme']})).toThrow('Unknown theme');
-   expect(getThemePalette(theme)).toBe(THEME_PALETTES.dark);
+   expect(getThemePalette(theme)).toBe(THEME_PALETTES.light);
   }
   expect(workspace).toEqual(original);
  });

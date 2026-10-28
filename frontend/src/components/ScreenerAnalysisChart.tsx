@@ -17,7 +17,7 @@ const price=(row:AnalysisBar)=>value(row,'close')??value(row,'price')??value(row
 const format=(number:number|undefined)=>number===undefined?'—':number.toLocaleString('en-US',{maximumSignificantDigits:10});
 
 function AnalysisPlot({data}:{data:AnalysisChart}){
- const fontSize=useAppearanceFontSize(),[theme,setTheme]=useState(()=>document.documentElement.dataset.theme??'dark'),chartRef=useRef<IChartApi|null>(null),applyTheme=useRef<(theme:string)=>void>(()=>{});
+ const fontSize=useAppearanceFontSize(),[theme,setTheme]=useState(()=>document.documentElement.dataset.theme??'light'),chartRef=useRef<IChartApi|null>(null),applyTheme=useRef<(theme:string)=>void>(()=>{});
  const host=useRef<HTMLDivElement>(null),[shown,setShown]=useState<string[]>(()=>data.fields.filter(field=>!rawFields.has(field.toLowerCase()))),[hover,setHover]=useState<AnalysisBar|null>(null),[chartError,setChartError]=useState('');
  const plotFields=data.fields.filter(field=>!rawFields.has(field.toLowerCase())),selected=shown.filter(field=>plotFields.includes(field));
  const groups=[...new Set(selected.filter(field=>!analysisPriceOverlay(field)).map(analysisFieldGroup))];
@@ -27,14 +27,14 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
  const tradePrices=analysisTradePriceLines(data);
  useEffect(()=>{
-  const update=()=>setTheme(document.documentElement.dataset.theme??'dark');update();
+  const update=()=>setTheme(document.documentElement.dataset.theme??'light');update();
   const observer=new MutationObserver(update);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});analysisChartResources.observers++;
   return ()=>{observer.disconnect();analysisChartResources.observers--;};
  },[]);
  useEffect(()=>{
   if(!host.current)return;
   setChartError('');
-  const palette=getThemePalette(document.documentElement.dataset.theme??'dark'),themeOptions=chartThemeOptions(palette);
+  const palette=getThemePalette(document.documentElement.dataset.theme??'light'),themeOptions=chartThemeOptions(palette);
   const ordered=[...new Map(data.bars.map(bar=>[bar.time,bar])).values()].sort((a,b)=>a.time-b.time);
   const timed=(bar:AnalysisBar)=>({time:bar.time/1000 as UTCTimestamp});
   const candle=ordered.length>0&&ordered.every(bar=>['open','high','low','close'].every(field=>Number.isFinite(value(bar,field))));
@@ -71,7 +71,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
     }
     const options={color:colors[plotFields.indexOf(field)%colors.length],title:analysisFieldLabel(field),priceLineVisible:false,lastValueVisible:true};
     if(/volume(?:\[|$)|histogram/i.test(field)){
-     const series=chart.addSeries(HistogramSeries,options,pane);series.setData(histogramData(field,document.documentElement.dataset.theme??'dark'));histograms.push({series,field});
+     const series=chart.addSeries(HistogramSeries,options,pane);series.setData(histogramData(field,document.documentElement.dataset.theme??'light'));histograms.push({series,field});
     }else{
      const series=chart.addSeries(LineSeries,{...options,lineWidth:1},pane);series.setData(ordered.map(bar=>{const number=value(bar,field);return Number.isFinite(number)?{...timed(bar),value:number!}:timed(bar);}));
     }

@@ -26,4 +26,4 @@ export const THEME_PALETTES:Readonly<Record<ThemeName,ThemePalette>>={
 };
 
 export const isThemeName=(value:string):value is ThemeName=>Object.hasOwn(THEME_PALETTES,value);
-export const getThemePalette=(theme:string):ThemePalette=>isThemeName(theme)?THEME_PALETTES[theme]:THEME_PALETTES.dark;
+export const getThemePalette=(theme:string):ThemePalette=>isThemeName(theme)?THEME_PALETTES[theme]:THEME_PALETTES.light;

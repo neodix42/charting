@@ -37,7 +37,7 @@ test('grouped Screener indicator menus keep options readable, scrollable and act
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  const indicator=page.getByLabel('Enrichment indicator',{exact:true});await expect(indicator.locator('option')).toHaveCount(42);
  await indicator.click();await expect(menu(page).getByRole('option')).toHaveCount(42);expect(await menu(page).getByRole('group').count()).toBeGreaterThan(1);
- await expect(menu(page)).toHaveCSS('background-color',rgb(getThemePalette('dark').elevated));
+ await expect(menu(page)).toHaveCSS('background-color',rgb(getThemePalette('light').elevated));
  const bounds=await menu(page).boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(8);expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(792);
  await indicator.press('End');await expect(menu(page).locator('[data-active=true]')).toBeInViewport();await indicator.press('Enter');
  await expect(menu(page)).toHaveCount(0);await expect(indicator).toBeFocused();

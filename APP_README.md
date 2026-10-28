@@ -139,6 +139,8 @@ Provider failures remain visible in their chart. Retry or reselect without losin
 
 ## Settings
 
+The app starts with a light window and loading screen. New workspaces default to Light; existing workspaces restore their saved theme.
+
 Settings has six tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (local chart-candle cache), **Screener** (downloaded CSV folder), **Telegram Bot** (local token for future alerts), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
 
 **Appearance → Font size** scales text across the app, including chart period controls, chart and application status bars, Screener controls and chart canvas labels. Choose **10–24 px**, default **15 px**. It takes effect immediately and persists in workspace autosaves and JSON exports; older workspaces use the default.

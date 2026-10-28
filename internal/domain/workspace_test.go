@@ -45,8 +45,8 @@ func TestFirstLaunchAndNewTab(t *testing.T) {
 }
 
 func TestThemeWorkspaceRoundTrip(t *testing.T) {
-	if NewWorkspace().Theme != "dark" {
-		t.Fatal("the existing default theme must remain dark")
+	if NewWorkspace().Theme != "light" {
+		t.Fatal("new workspaces must use the light startup theme")
 	}
 	for _, theme := range []string{"dark", "light", "matrix", "cyberpunk", "red-sands"} {
 		t.Run(theme, func(t *testing.T) {
