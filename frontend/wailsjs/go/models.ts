@@ -635,6 +635,7 @@ export namespace screener {
 		}
 	}
 	export class AnalysisTradeLevels {
+	    entry: number;
 	    stopLoss: number;
 	    takeProfit: number;
 	
@@ -644,6 +645,7 @@ export namespace screener {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entry = source["entry"];
 	        this.stopLoss = source["stopLoss"];
 	        this.takeProfit = source["takeProfit"];
 	    }

@@ -182,7 +182,7 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 		t.Fatalf("outcomes not one byte per occurrence: %+v %v", stat, err)
 	}
 	stat, err = os.Stat(m.analysis.matchFiles[result.ID] + ".trades")
-	if err != nil || stat.Size() != result.Matches*17 {
+	if err != nil || stat.Size() != result.Matches*25 {
 		t.Fatalf("trade prices not indexed per occurrence: %+v %v", stat, err)
 	}
 	for _, occurrence := range []int{0, 256, 1024, 2049, 2050} {
@@ -190,7 +190,7 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		if (chart.Trade == nil) != (occurrence == 2050) || chart.Trade != nil && *chart.Trade != (AnalysisTradeLevels{90, 110}) {
+		if (chart.Trade == nil) != (occurrence == 2050) || chart.Trade != nil && *chart.Trade != (AnalysisTradeLevels{100, 90, 110}) {
 			t.Fatalf("wrong occurrence trade prices at %d: %+v", occurrence, chart.Trade)
 		}
 		want := min(2050, occurrence+501) - max(0, occurrence-500)
@@ -243,11 +243,12 @@ func TestAnalysisChartRetainsActualTradePrices(t *testing.T) {
 		multiple int
 		want     *AnalysisTradeLevels
 	}{
-		{"field target with entry gap", []simulationTestBar{matched, simulationBar(105, 115, 95, 105)}, 0, 0, &AnalysisTradeLevels{90, 110}},
-		{"earlier stop outside chart", []simulationTestBar{{100, 105, 80, 100, 80, 200, 0}, matched, simulationBar(105, 115, 95, 105)}, 1, 0, &AnalysisTradeLevels{80, 110}},
-		{"multiple uses next open", []simulationTestBar{matched, simulationBar(105, 140, 95, 110)}, 0, 2, &AnalysisTradeLevels{90, 135}},
-		{"stop loss outcome", []simulationTestBar{matched, simulationBar(100, 105, 80, 100)}, 0, 0, &AnalysisTradeLevels{90, 110}},
-		{"expired trade", []simulationTestBar{matched, simulationBar(100, 105, 95, 100)}, 0, 0, &AnalysisTradeLevels{90, 110}},
+		{"field target with entry gap", []simulationTestBar{matched, simulationBar(105, 115, 95, 105)}, 0, 0, &AnalysisTradeLevels{105, 90, 110}},
+		{"earlier stop outside chart", []simulationTestBar{{100, 105, 80, 100, 80, 200, 0}, matched, simulationBar(105, 115, 95, 105)}, 1, 0, &AnalysisTradeLevels{105, 80, 110}},
+		{"multiple uses next open", []simulationTestBar{matched, simulationBar(105, 140, 95, 110)}, 0, 2, &AnalysisTradeLevels{105, 90, 135}},
+		{"stop loss outcome", []simulationTestBar{matched, simulationBar(100, 105, 80, 100)}, 0, 0, &AnalysisTradeLevels{100, 90, 110}},
+		{"expired trade", []simulationTestBar{matched, simulationBar(100, 105, 95, 100)}, 0, 0, &AnalysisTradeLevels{100, 90, 110}},
+		{"zero stop remains an opened trade", []simulationTestBar{{100, 105, 90, 100, 0, 110, 1}, simulationBar(100, 115, 95, 100)}, 0, 0, &AnalysisTradeLevels{100, 0, 110}},
 		{"missing stop history", []simulationTestBar{matched, simulationBar(100, 120, 95, 100)}, 1, 0, nil},
 		{"invalid entry bracket", []simulationTestBar{matched, simulationBar(80, 100, 75, 85)}, 0, 0, nil},
 		{"no next bar", []simulationTestBar{matched}, 0, 0, nil},
@@ -286,7 +287,7 @@ func TestAnalysisChartRetainsActualTradePrices(t *testing.T) {
 func TestAnalysisTradeEntryWriteErrorsPropagate(t *testing.T) {
 	simulation := newAnalysisTradeSimulator(simulationTestSeries(), simulationRequest(1).TradeSimulation)
 	want := errors.New("trade entry storage failed")
-	simulation.onEntry = func(int64, float64, float64) error { return want }
+	simulation.onEntry = func(int64, float64, float64, float64) error { return want }
 	simulation.match(simulationTestRow(simulationBar(100, 105, 95, 100)))
 	if err := simulation.advance(1, simulationTestRow(simulationBar(100, 115, 95, 100))); !errors.Is(err, want) {
 		t.Fatalf("trade price write error ignored: %v", err)

@@ -107,11 +107,12 @@ describe('Profitable match chart markers',()=>{
   expect(analysisMatchMarkers(chart,'blue')).toEqual([{time:2,position:'belowBar',color:'blue',shape:'arrowUp',text:'Match'}]);
   expect(analysisMatchMarkers({...chart,profitableMatches:[]},'blue')).toHaveLength(1);
  });
- it('places recorded SL and TP below Match without adding a visible shape or requiring a win',()=>{
-  const markers=analysisMatchMarkers({...chart,trade:{stopLoss:90,takeProfit:135}},'orange');
-  expect(markers.map(marker=>marker.text)).toEqual(['Match','SL 90 · TP 135']);
-  expect(markers[1]).toMatchObject({time:2,position:'belowBar',size:0,color:'orange'});
-  expect(analysisMatchMarkers({...chart,trade:{stopLoss:0.000000123456789,takeProfit:0.000000234567891}},'blue')[1].text).toBe('SL 0.000000123456789 · TP 0.000000234567891');
-  for(const invalid of [NaN,Infinity])expect(analysisMatchMarkers({...chart,trade:{stopLoss:90,takeProfit:invalid}},'blue')).toHaveLength(1);
+ it('stacks recorded Entry, SL and TP below Match without adding visible shapes or requiring a win',()=>{
+  const markers=analysisMatchMarkers({...chart,trade:{entry:105,stopLoss:90,takeProfit:135}},'orange');
+  expect(markers.map(marker=>marker.text)).toEqual(['Match','Entry 105','SL 90','TP 135']);
+  for(const marker of markers.slice(1))expect(marker).toMatchObject({time:2,position:'belowBar',size:0,color:'orange'});
+  expect(analysisMatchMarkers({...chart,trade:{entry:0.0000002,stopLoss:0.000000123456789,takeProfit:0.000000234567891}},'blue').slice(1).map(marker=>marker.text)).toEqual(['Entry 0.0000002','SL 0.000000123456789','TP 0.000000234567891']);
+  for(const field of ['entry','stopLoss','takeProfit'])for(const invalid of [NaN,Infinity])expect(analysisMatchMarkers({...chart,trade:{entry:105,stopLoss:90,takeProfit:135,[field]:invalid}},'blue')).toHaveLength(1);
+  expect(analysisMatchMarkers({...chart,trade:{entry:0,stopLoss:-1,takeProfit:1}},'blue')[1].text).toBe('Entry 0');
  });
 });

@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-10-28
 
+## Entry price and vertical trade labels — 2026-10-28
+
+Match Inspection now displays **Entry**, **SL**, and **TP** in vertical order below the selected Match marker and in the accessible readout above the chart. Entry is the actual next-bar open recorded when the applied simulation validates and opens the trade; it remains independent of the matched close, hover row and later draft edits. Temporary per-occurrence trade records now use 25 bytes (entry flag plus three float64 values), retaining direct lookup, zero-valued fields, bounded simulator memory and existing cancellation/replacement cleanup. Saved conditions and downloaded CSVs are unchanged. Wails bindings and both guides include Entry.
+
+The first browser check exposed SL/TP clipping below the chart after stacking the labels. The final code extends the series' default autoscale info with a pixel margin for all four text rows plus marker shapes, reading the current chart font size so global appearance changes remain supported. The existing 3x bar spacing, centered match and green outcome dots are retained.
+
+Verification: `go test -race ./internal/screener`, `go test -tags bindings .`, `go vet ./internal/screener`, frontend typecheck/lint, all **182 unit tests**, production frontend build and the final **37 Analysis browser tests** pass. Backend assertions cover exact next-open entry gaps, field/risk targets, earlier stops, losing/expired/unentered trades, zero-valued stops, draft/caller independence, dense occurrence lookup and entry write errors. Browser checks verify vertical readout positions, actual canvas Entry/SL/TP order and visibility, all five themes, navigation and cleanup. Logs are in ignored `.tools/verification/entry-prices/`. Native desktop interaction and full desktop packaging were not rerun; no live provider requests, dependency changes or user CSV edits were made.
+
 ## Match Inspection trade prices and wider bars — 2026-10-28
 
 For the selected match, Match Inspection now displays the actual **SL / TP prices** beneath the canvas **Match** label and in an accessible text readout above the chart. Prices are recorded when a valid simulated trade opens, including the chosen earlier-bar stop and any risk-multiple target calculated from the next bar's open. Losing, expired and incomplete entered trades retain their actual prices; invalid/unavailable matches or tail matches without entry do not invent prices. The private sparse 17-byte-per-occurrence sidecar is indexed directly on chart lookup, preserves valid zero prices, stays independent of draft edits and is removed with cancelled/failed/replaced analysis results. No CSV changes or simulation outcome semantics change.

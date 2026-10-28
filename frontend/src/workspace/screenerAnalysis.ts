@@ -11,7 +11,7 @@ export interface AnalysisCatalog {directory:string;fields:string[];timeframes:st
 export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}
 export interface AnalysisInfo {active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null}
 export interface AnalysisBar {index:number;time:number;values:Record<string,number>}
-export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];profitableMatches?:Array<{index:number;time:number}>;trade?:{stopLoss:number;takeProfit:number}}
+export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];profitableMatches?:Array<{index:number;time:number}>;trade?:{entry:number;stopLoss:number;takeProfit:number}}
 export interface ScreenerAnalysisBackend {
  GetScreenerAnalysisCatalog():Promise<AnalysisCatalog>;
  GetScreenerAnalysisView():Promise<AnalysisRequest>;

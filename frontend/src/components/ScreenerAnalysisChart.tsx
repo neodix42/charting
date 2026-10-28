@@ -1,12 +1,12 @@
 import {useEffect,useRef,useState} from 'react';
-import {CandlestickSeries,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {CandlestickSeries,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type AutoscaleInfoProvider,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
 import type {AnalysisBar,AnalysisChart,AnalysisResult,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {analysisDate,analysisFieldGroup,analysisFieldLabel,analysisPriceOverlay} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
-import {analysisMatchMarkers,analysisTradePriceText,profitableMatchColor} from '../charts/analysisMarkers';
+import {analysisMatchMarkers,analysisTradePriceLines,profitableMatchColor} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -25,6 +25,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  const signature=selected.join('|');
  const row=hover??data.bars.find(bar=>bar.index===data.matchIndex)??data.bars.find(bar=>bar.time===data.matchTime);
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
+ const tradePrices=analysisTradePriceLines(data);
  useEffect(()=>{
   const update=()=>setTheme(document.documentElement.dataset.theme??'dark');update();
   const observer=new MutationObserver(update);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});analysisChartResources.observers++;
@@ -47,6 +48,13 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
    const main=candle?chart.addSeries(CandlestickSeries,{upColor:palette.up,downColor:palette.danger,wickUpColor:palette.up,wickDownColor:palette.danger,borderVisible:false}):chart.addSeries(LineSeries,{color:palette.accent,lineWidth:2,title:data.timeframe==='tick'?'Tick price':'Price'});
    if(candle)main.setData(ordered.map(bar=>({...timed(bar),open:value(bar,'open')!,high:value(bar,'high')!,low:value(bar,'low')!,close:value(bar,'close')!})));
    else main.setData(ordered.map(bar=>Number.isFinite(price(bar))?{...timed(bar),value:price(bar)!}:timed(bar)));
+   const tradeAutoscale:AutoscaleInfoProvider=original=>{
+    const info=original();if(!info||!tradePrices.length)return info;
+    // Marker autoscaling does not include stacked text heights. Reserve room
+    // for Match plus each price, using the current global chart font size.
+    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4*(tradePrices.length+1)+44)}};
+   };
+   main.applyOptions({autoscaleInfoProvider:tradeAutoscale});
    const matchMarker=(color:string)=>analysisMatchMarkers(data,color);
    markers=createSeriesMarkers(main,matchMarker(palette.accent));
    const panes=new Map<string,number>();
@@ -109,7 +117,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
   {!!data.profitableMatches?.length&&<p className="analysis-chart-note analysis-chart-legend"><span aria-hidden="true" style={{backgroundColor:profitableMatchColor}}/>Green dot: match whose simulated trade hit TP.</p>}
-  {analysisTradePriceText(data)&&<p className="analysis-chart-note" aria-label="Simulated trade prices">{analysisTradePriceText(data)} · prices used for this match’s trade.</p>}
+  {!!tradePrices.length&&<div className="analysis-chart-note analysis-trade-prices" aria-label="Simulated trade prices">{tradePrices.map(line=><span key={line}>{line}</span>)}</div>}
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
   <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-chart-font-size={chartFontSize(10,fontSize)} data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
   {duplicates&&<p className="analysis-chart-note">Each observation is evaluated. Ticks sharing an identical timestamp display their last price on the chart.</p>}

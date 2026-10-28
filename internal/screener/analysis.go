@@ -101,9 +101,13 @@ type AnalysisProfitableMatch struct {
 	Time  int64 `json:"time"`
 }
 type AnalysisTradeLevels struct {
+	Entry      float64 `json:"entry"`
 	StopLoss   float64 `json:"stopLoss"`
 	TakeProfit float64 `json:"takeProfit"`
 }
+
+const analysisTradeRecordSize = 25
+
 type AnalysisChart struct {
 	ResultID          string                    `json:"resultId"`
 	Name              string                    `json:"name"`
@@ -708,12 +712,13 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 		}
 		// Retain actual entry levels, including risk targets based on the next
 		// bar's open. A sparse zero record denotes a trade that never opened.
-		simulation.onEntry = func(occurrence int64, stopLoss, takeProfit float64) error {
-			var record [17]byte
+		simulation.onEntry = func(occurrence int64, entry, stopLoss, takeProfit float64) error {
+			var record [analysisTradeRecordSize]byte
 			record[0] = 1
-			binary.LittleEndian.PutUint64(record[1:9], math.Float64bits(stopLoss))
-			binary.LittleEndian.PutUint64(record[9:], math.Float64bits(takeProfit))
-			if _, err := trades.WriteAt(record[:], occurrence*17); err != nil {
+			binary.LittleEndian.PutUint64(record[1:9], math.Float64bits(entry))
+			binary.LittleEndian.PutUint64(record[9:17], math.Float64bits(stopLoss))
+			binary.LittleEndian.PutUint64(record[17:], math.Float64bits(takeProfit))
+			if _, err := trades.WriteAt(record[:], occurrence*analysisTradeRecordSize); err != nil {
 				return fmt.Errorf("store analysis trade prices: %w", err)
 			}
 			return nil
@@ -798,7 +803,7 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 		if err = profits.Sync(); err != nil {
 			return err
 		}
-		if err = trades.Truncate(matches * 17); err != nil {
+		if err = trades.Truncate(matches * analysisTradeRecordSize); err != nil {
 			return err
 		}
 		if err = trades.Sync(); err != nil {
@@ -953,12 +958,12 @@ func (m *Manager) AnalysisChart(resultID string, occurrence, before, after int) 
 			return AnalysisChart{}, err
 		}
 		defer trades.Close()
-		var record [17]byte
-		if _, err = trades.ReadAt(record[:], int64(occurrence)*17); err != nil {
+		var record [analysisTradeRecordSize]byte
+		if _, err = trades.ReadAt(record[:], int64(occurrence)*analysisTradeRecordSize); err != nil {
 			return AnalysisChart{}, err
 		}
 		if record[0] == 1 {
-			chart.Trade = &AnalysisTradeLevels{StopLoss: math.Float64frombits(binary.LittleEndian.Uint64(record[1:9])), TakeProfit: math.Float64frombits(binary.LittleEndian.Uint64(record[9:]))}
+			chart.Trade = &AnalysisTradeLevels{Entry: math.Float64frombits(binary.LittleEndian.Uint64(record[1:9])), StopLoss: math.Float64frombits(binary.LittleEndian.Uint64(record[9:17])), TakeProfit: math.Float64frombits(binary.LittleEndian.Uint64(record[17:]))}
 		}
 	}
 	return chart, nil

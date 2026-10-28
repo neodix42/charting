@@ -107,7 +107,7 @@ type analysisTradeSimulator struct {
 	index, matches         int64
 	stopHistory            []analysisStopSample
 	onTakeProfit           func(occurrence int64) error
-	onEntry                func(occurrence int64, stopLoss, takeProfit float64) error
+	onEntry                func(occurrence int64, entry, stopLoss, takeProfit float64) error
 }
 
 type analysisStopSample struct {
@@ -281,7 +281,7 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 			s.summary.InvalidLevels++
 		} else {
 			if s.onEntry != nil {
-				if err := s.onEntry(trade.occurrence, trade.stopLoss, trade.takeProfit); err != nil {
+				if err := s.onEntry(trade.occurrence, open, trade.stopLoss, trade.takeProfit); err != nil {
 					return err
 				}
 			}
