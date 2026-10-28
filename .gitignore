@@ -56,3 +56,4 @@ __pycache__/
 /docs/verification/
 telegram-bot.json
 .telegram-bot-*
+screener-live-alerts.json

@@ -1,6 +1,6 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import {errorText} from '../types';
-import type {AnalysisCatalog,AnalysisInfo,AnalysisRequest,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {AnalysisCatalog,AnalysisInfo,AnalysisPeriod,AnalysisRequest,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisDate,analysisInputError,initialAnalysisView,newAnalysisCondition} from '../workspace/screenerAnalysis';
 import {ScreenerAnalysisCondition} from './ScreenerAnalysisCondition';
 import {ScreenerAnalysisChart,type AnalysisSelection} from './ScreenerAnalysisChart';
@@ -78,7 +78,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   throw new Error(direction===1?'This is the last matching occurrence.':'This is the first matching occurrence.');
  };
  const categories=catalog?.categories??[],selectedCategories=new Set(view.categories??categories);
- const selectedFiles=catalog?.files.filter(file=>selectedCategories.has(file.category||'Other')).length??0;
+ const selectedFiles=catalog?.files.filter(file=>selectedCategories.has(file.category||'Other')&&(!view.period||view.period==='all'||file.timeframe===view.period)).length??0;
  const changeCategories=(next:string[]|null)=>change({...draft.current,categories:next});
  const resetResults=()=>{epoch.current++;closeChart();setPage(0);setInfo(previous=>previous?{...previous,results:[],totalResults:0}:null);};
  const changeResultFilter=(category:string)=>{resetResults();setResultCategory(category);};
@@ -98,6 +98,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
      <div className="analysis-add-actions"><button type="button" className="analysis-add" disabled={view.conditions.length>=32} title={view.conditions.length>=32?'Maximum 32 conditions':'Add another AND condition'} onClick={()=>change({...draft.current,conditions:[...draft.current.conditions,newAnalysisCondition()]})}>＋ Add condition</button><button type="button" className="analysis-add" aria-expanded={!!view.tradeSimulation} disabled={!!view.tradeSimulation} onClick={()=>{setSimulationInputError('');change({...draft.current,tradeSimulation:{stopLoss:'',takeProfit:'',duration:20}});}}>Simulate trade</button></div>
      {view.tradeSimulation&&<ScreenerTradeSimulation value={view.tradeSimulation} catalog={catalog} onInputError={setSimulationInputError} onChange={tradeSimulation=>change({...draft.current,tradeSimulation})} onRemove={()=>{setSimulationInputError('');change({...draft.current,tradeSimulation:null});}}/>}
     </fieldset>
+    <fieldset className="analysis-period" disabled={!ready||working||busy}><label>Period of data<select aria-label="Analysis period of data" value={view.period||'all'} onChange={event=>change({...draft.current,period:event.target.value as AnalysisPeriod})}><option value="all">All periods</option><option value="d1">d1 · Daily</option><option value="h1">h1 · Hourly</option></select></label><span>Choose which files to scan. Explicit operand timeframes still use their downloaded companion data.</span></fieldset>
     <div className="analysis-apply-row"><button type="submit" className="primary" disabled={!ready||!selectedFiles||working||busy||!!invalid}>{busy&&!working?'Starting scan…':'Apply conditions'}</button>{working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerAnalysis())}>Cancel analysis</button>}<button type="button" disabled={busy||working} onClick={()=>setReload(value=>value+1)}>Refresh fields</button><span>{invalid|| (catalog?`${selectedFiles.toLocaleString('en-US')} of ${catalog.files.length.toLocaleString('en-US')} files in selected categories`:'Loading downloaded fields…')}</span></div>
     <fieldset className="analysis-scan-categories" disabled={!ready||!catalog||working||busy}><legend>Asset categories to scan</legend><div className="analysis-category-actions"><button type="button" aria-label="Select all scan categories" onClick={()=>changeCategories(null)}>Select all</button><button type="button" aria-label="Deselect all scan categories" onClick={()=>changeCategories([])}>Deselect all</button><span>{selectedCategories.size} / {categories.length} categories selected</span></div><div className="analysis-category-options">{categories.map(category=><label key={category}><input type="checkbox" aria-label={`Scan ${category}`} checked={selectedCategories.has(category)} onChange={event=>{const next=new Set(draft.current.categories??categories);if(event.target.checked)next.add(category);else next.delete(category);changeCategories(categories.filter(item=>next.has(item)));}}/><span>{category}</span></label>)}</div></fieldset>
    </form>

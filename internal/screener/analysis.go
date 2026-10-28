@@ -38,6 +38,8 @@ type AnalysisCondition struct {
 }
 type AnalysisRequest struct {
 	Conditions []AnalysisCondition `json:"conditions"`
+	// Empty preserves legacy requests that scan every downloaded timeframe.
+	Period string `json:"period,omitempty"`
 	// A nil selection preserves older saved conditions: apply to every asset.
 	// An explicit empty selection means none and must never silently mean all.
 	Categories      []string                 `json:"categories"`
@@ -132,8 +134,11 @@ type analysisState struct {
 	done                                       chan struct{}
 	request                                    AnalysisRequest
 	results                                    []AnalysisResult
-	series                                     map[string]*analysisSeries
-	matchFiles                                 map[string]string
+	// Period filtering applies only to base results; other timeframes remain
+	// indexed so explicitly selected companion operands retain closed-bar data.
+	indexFiles []DataFile
+	series     map[string]*analysisSeries
+	matchFiles map[string]string
 	// Duplicate files still count as indexed inputs and remain available as
 	// companion sources, but publish only one canonical set of occurrences.
 	duplicateOf map[string]string
@@ -178,6 +183,9 @@ func baseAnalysisOperator(op string) bool {
 	return false
 }
 func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
+	if request.Period != "" && request.Period != "all" && request.Period != "d1" && request.Period != "h1" {
+		return errors.New("analysis period must be all, d1 or h1")
+	}
 	if err := validateAnalysisCategories(request.Categories); err != nil {
 		return err
 	}
@@ -233,6 +241,10 @@ func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
 		}
 	}
 	return nil
+}
+
+func includesAnalysisPeriod(period, timeframe string) bool {
+	return period == "" || period == "all" || period == timeframe
 }
 func copyAnalysisRequest(request AnalysisRequest) AnalysisRequest {
 	request.Conditions = append([]AnalysisCondition{}, request.Conditions...)
@@ -475,6 +487,9 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	if m.analysisActiveLocked() {
 		return m.analysisInfoLocked(0, 100), errors.New("an analysis is already running")
 	}
+	if m.liveActive {
+		return m.analysisInfoLocked(0, 100), errors.New("finish the Live Alerts check before applying analysis")
+	}
 	if m.enrichmentActive || m.refreshActive || m.active || m.pendingLocked() {
 		return m.analysisInfoLocked(0, 100), errors.New("finish or cancel downloads, data refresh and enrichment before applying analysis")
 	}
@@ -489,13 +504,20 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 		return AnalysisInfo{}, errors.New("select at least one asset category")
 	}
 	files := []DataFile{}
+	indexFiles := []DataFile{}
 	for _, name := range names {
 		file := describeFile(m.directory, name)
 		if includesAnalysisCategory(request.Categories, file.Category) {
-			files = append(files, file)
+			indexFiles = append(indexFiles, file)
+			if includesAnalysisPeriod(request.Period, file.Timeframe) {
+				files = append(files, file)
+			}
 		}
 	}
 	if len(files) == 0 {
+		if request.Period != "" && request.Period != "all" {
+			return AnalysisInfo{}, fmt.Errorf("there are no downloaded %s CSV files in the selected asset categories", request.Period)
+		}
 		return AnalysisInfo{}, errors.New("there are no downloaded CSV files in the selected asset categories")
 	}
 	if err = os.MkdirAll(m.profile, 0700); err != nil {
@@ -507,7 +529,7 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	}
 	m.cleanupAnalysisLocked()
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &analysisState{active: true, phase: "indexing", directory: m.directory, work: work, cancel: cancel, done: make(chan struct{}), request: copyAnalysisRequest(request), series: map[string]*analysisSeries{}, matchFiles: map[string]string{}, results: []AnalysisResult{}, cache: newAnalysisRowCache(), asOf: time.Now().UTC().UnixMilli()}
+	a := &analysisState{active: true, phase: "indexing", directory: m.directory, work: work, cancel: cancel, done: make(chan struct{}), request: copyAnalysisRequest(request), series: map[string]*analysisSeries{}, matchFiles: map[string]string{}, results: []AnalysisResult{}, indexFiles: indexFiles, cache: newAnalysisRowCache(), asOf: time.Now().UTC().UnixMilli()}
 	for _, file := range files {
 		id := file.ID
 		a.results = append(a.results, AnalysisResult{ID: id, FileID: id, Name: file.Name, Symbol: file.Symbol, Description: file.Description, Category: file.Category, Timeframe: file.Timeframe, Status: "queued"})
@@ -562,32 +584,40 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 	}()
 	// Only the background worker mutates/reads series until scanning finishes;
 	// chart requests are rejected while active. Pollers access result summaries.
-	for i := range a.results {
+	resultIndices := make(map[string]int, len(a.results))
+	for i, result := range a.results {
+		resultIndices[result.ID] = i
+	}
+	for i, file := range a.indexFiles {
 		if ctx.Err() != nil {
 			return
 		}
 		m.mu.Lock()
-		r := a.results[i]
-		a.current = r.Name
-		a.results[i].Status = "indexing"
+		resultIndex, isResult := resultIndices[file.ID]
+		a.current = file.Name
+		if isResult {
+			a.results[resultIndex].Status = "indexing"
+		}
 		m.mu.Unlock()
-		s, err := indexAnalysisCSV(ctx, a.directory, r.Name, filepath.Join(a.work, r.ID+".rows"), func(progress float64) {
+		s, err := indexAnalysisCSV(ctx, a.directory, file.Name, filepath.Join(a.work, file.ID+".rows"), func(progress float64) {
 			m.mu.Lock()
-			a.progress = (float64(i) + progress/100) / float64(len(a.results)) * 50
+			a.progress = (float64(i) + progress/100) / float64(len(a.indexFiles)) * 50
 			m.mu.Unlock()
 		})
 		m.mu.Lock()
-		if err != nil {
+		if err != nil && isResult {
 			if ctx.Err() != nil {
-				a.results[i].Status = "cancelled"
+				a.results[resultIndex].Status = "cancelled"
 			} else {
-				a.results[i].Status = "failed"
-				a.results[i].Error = cleanMessage(err.Error())
+				a.results[resultIndex].Status = "failed"
+				a.results[resultIndex].Error = cleanMessage(err.Error())
 			}
-		} else {
+		} else if err == nil {
 			s.cache = a.cache
-			a.series[r.ID] = s
-			a.results[i].Status = "queued"
+			a.series[file.ID] = s
+			if isResult {
+				a.results[resultIndex].Status = "queued"
+			}
 		}
 		m.mu.Unlock()
 	}

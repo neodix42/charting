@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Screener periods and Live Alerts — 2026-10-28
+
+- [x] Historical All periods/d1/h1 scope persists with drafts and named conditions; companion timeframe evaluation remains aligned to closed bars.
+- [x] Explicitly enabled local Live Alerts refresh selected histories and indicators sequentially, evaluate the latest closed bars and prepare verified-recipient Telegram notifications with asset/condition/time/Entry/SL/TP.
+- [x] Restart-safe selections/delivery claims, cancellation, partial failures, storage recovery, Telegram serialization and hidden-panel polling have offline Go/race/browser coverage.
+- [x] Full deterministic/native-tagged checks, packaged runtime smoke and all new browser checks pass; drawing readiness regression fixed with unchanged geometry tolerance (see STATUS.md).
+- [ ] Native desktop Live Alerts interaction, real overnight scheduling, Windows execution and actual Dukascopy-to-Telegram alert delivery are not claimed by offline tests.
+
 ## Product
 
 - [x] First launch exactly1tab/1chart/1×1, verified Go/browser/actual native.

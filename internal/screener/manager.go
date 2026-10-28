@@ -89,6 +89,8 @@ type Manager struct {
 	refreshCancel           context.CancelFunc
 	refreshDone             chan struct{}
 	analysis                *analysisState
+	liveActive              bool
+	liveCancel              context.CancelFunc
 }
 
 func New(profile string) *Manager {
@@ -165,6 +167,9 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	defer m.mu.Unlock()
 	if m.closed {
 		return m.infoLocked(), errors.New("screener is closed")
+	}
+	if m.liveActive {
+		return m.infoLocked(), errors.New("finish the Live Alerts check before changing the Screener folder")
 	}
 	if m.active || m.pendingLocked() {
 		return m.infoLocked(), errors.New("cancel or finish the current downloads before changing their folder")
@@ -268,6 +273,9 @@ func (m *Manager) Start(request Request) (Info, error) {
 	if m.closed {
 		return m.infoLocked(), errors.New("screener is closed")
 	}
+	if m.liveActive {
+		return m.infoLocked(), errors.New("finish the Live Alerts check before starting downloads")
+	}
 	if m.active {
 		return m.infoLocked(), errors.New("a screener download batch is already running")
 	}
@@ -347,6 +355,9 @@ func (m *Manager) Cancel() Info {
 func (m *Manager) Close() {
 	m.mu.Lock()
 	m.closed = true
+	if m.liveCancel != nil {
+		m.liveCancel()
+	}
 	if m.refreshCancel != nil {
 		m.refreshCancel()
 	}

@@ -107,6 +107,9 @@ func (m *Manager) StartRefresh() (RefreshInfo, error) {
 	if m.closed {
 		return m.refreshInfoLocked(nil), errors.New("screener is closed")
 	}
+	if m.liveActive {
+		return m.refreshInfoLocked(nil), errors.New("finish the Live Alerts check before refreshing files")
+	}
 	if m.refreshActive {
 		return m.refreshInfoLocked(nil), errors.New("a data refresh is already running")
 	}

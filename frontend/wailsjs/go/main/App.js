@@ -22,6 +22,10 @@ export function CancelScreenerRefresh() {
   return window['go']['main']['App']['CancelScreenerRefresh']();
 }
 
+export function CheckScreenerLiveAlerts() {
+  return window['go']['main']['App']['CheckScreenerLiveAlerts']();
+}
+
 export function ChooseCandleStorageDirectory() {
   return window['go']['main']['App']['ChooseCandleStorageDirectory']();
 }
@@ -36,6 +40,10 @@ export function ConfigureCandleStorage(arg1, arg2) {
 
 export function ConfigureScreenerDirectory(arg1) {
   return window['go']['main']['App']['ConfigureScreenerDirectory'](arg1);
+}
+
+export function ConfigureScreenerLiveAlerts(arg1) {
+  return window['go']['main']['App']['ConfigureScreenerLiveAlerts'](arg1);
 }
 
 export function ConfigureTelegramBot(arg1) {
@@ -124,6 +132,10 @@ export function GetScreenerFiles(arg1, arg2) {
 
 export function GetScreenerIndicators() {
   return window['go']['main']['App']['GetScreenerIndicators']();
+}
+
+export function GetScreenerLiveAlerts() {
+  return window['go']['main']['App']['GetScreenerLiveAlerts']();
 }
 
 export function GetScreenerRefresh(arg1) {

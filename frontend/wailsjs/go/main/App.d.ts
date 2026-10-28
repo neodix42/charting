@@ -17,6 +17,8 @@ export function CancelScreenerEnrichment():Promise<screener.EnrichmentInfo>;
 
 export function CancelScreenerRefresh():Promise<screener.RefreshInfo>;
 
+export function CheckScreenerLiveAlerts():Promise<screener.LiveAlertsInfo>;
+
 export function ChooseCandleStorageDirectory():Promise<string>;
 
 export function ChooseScreenerDirectory():Promise<string>;
@@ -24,6 +26,8 @@ export function ChooseScreenerDirectory():Promise<string>;
 export function ConfigureCandleStorage(arg1:boolean,arg2:string):Promise<candlestorage.Info>;
 
 export function ConfigureScreenerDirectory(arg1:string):Promise<screener.Info>;
+
+export function ConfigureScreenerLiveAlerts(arg1:screener.LiveAlertsConfig):Promise<screener.LiveAlertsInfo>;
 
 export function ConfigureTelegramBot(arg1:string):Promise<telegram.Settings>;
 
@@ -68,6 +72,8 @@ export function GetScreenerEnrichment(arg1:Array<string>):Promise<screener.Enric
 export function GetScreenerFiles(arg1:number,arg2:number):Promise<screener.FilePage>;
 
 export function GetScreenerIndicators():Promise<screener.IndicatorCatalog>;
+
+export function GetScreenerLiveAlerts():Promise<screener.LiveAlertsInfo>;
 
 export function GetScreenerRefresh(arg1:Array<string>):Promise<screener.RefreshInfo>;
 

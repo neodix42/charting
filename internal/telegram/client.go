@@ -10,9 +10,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
-const TestMessage = "CryptoDesk test notification: Telegram delivery is working. Automatic alerts are not enabled yet."
+const TestMessage = "CryptoDesk test notification: Telegram delivery is working."
 
 type BotIdentity struct {
 	ID       int64  `json:"id"`
@@ -208,12 +209,46 @@ func (s *Store) resolve(ctx context.Context, config configuration, bot BotIdenti
 }
 
 func (s *Store) Test(ctx context.Context) (TestResult, error) {
+	return s.sendMessage(ctx, TestMessage, false)
+}
+
+// SendAlert delivers one plain-text alert to the currently verified recipient.
+// It shares Test's identity checks, settings serialization and no-retry policy.
+func (s *Store) SendAlert(ctx context.Context, message string) error {
+	if !utf8.ValidString(message) || strings.TrimSpace(message) == "" || utf8.RuneCountInString(message) > 4096 {
+		return fail("message")
+	}
+	result, err := s.sendMessage(ctx, message, true)
+	if err != nil {
+		return fail("storage")
+	}
+	if !result.Sent {
+		return fail(result.Code)
+	}
+	return nil
+}
+
+func (s *Store) sendMessage(ctx context.Context, message string, wait bool) (TestResult, error) {
+	// A background alert must queue behind an explicit Settings Test rather
+	// than losing its already-recorded delivery claim to a transient busy state.
+	queueCtx, stopWaiting := context.WithTimeout(ctx, 8*time.Second)
+	defer stopWaiting()
+	if wait {
+		select {
+		case s.sendGate <- struct{}{}:
+		case <-queueCtx.Done():
+			return TestResult{Code: "network"}, nil
+		}
+	} else {
+		select {
+		case s.sendGate <- struct{}{}:
+		default:
+			return TestResult{Code: "busy"}, nil
+		}
+	}
+	defer func() { <-s.sendGate }()
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	if !s.testMu.TryLock() {
-		return TestResult{Code: "busy"}, nil
-	}
-	defer s.testMu.Unlock()
 	s.mu.Lock()
 	config, err := s.readLocked()
 	s.mu.Unlock()
@@ -233,6 +268,17 @@ func (s *Store) Test(ctx context.Context) (TestResult, error) {
 		id, err := s.resolve(ctx, config, bot)
 		if err != nil {
 			return err
+		}
+		// A private recipient can receive multiple asset matches at the same
+		// candle boundary. Pace sends without holding the settings mutex.
+		if delay := time.Until(s.nextSend); delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return fail("network")
+			case <-timer.C:
+			}
 		}
 		// Serialize the final settings check/cache publication/send with edits.
 		s.mu.Lock()
@@ -255,7 +301,8 @@ func (s *Store) Test(ctx context.Context) (TestResult, error) {
 			MessageID int64 `json:"message_id"`
 			Chat      chat  `json:"chat"`
 		}
-		if err = s.client.call(ctx, config.APIToken, "sendMessage", map[string]any{"chat_id": id, "text": TestMessage}, &sent); err != nil {
+		s.nextSend = time.Now().Add(time.Second)
+		if err = s.client.call(ctx, config.APIToken, "sendMessage", map[string]any{"chat_id": id, "text": message}, &sent); err != nil {
 			return err
 		}
 		if sent.MessageID <= 0 || sent.Chat.ID != id || sent.Chat.Type != "private" {

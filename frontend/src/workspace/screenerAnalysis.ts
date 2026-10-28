@@ -3,7 +3,8 @@ export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:num
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
 export interface AnalysisTradeSimulation {stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
-export interface AnalysisRequest {conditions:AnalysisCondition[];categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null}
+export type AnalysisPeriod='all'|'d1'|'h1';
+export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|''}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest}
 export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
@@ -54,6 +55,7 @@ export function analysisFieldGroups(fields:string[]){
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return priceFields.has(base.toLowerCase())||/^(?:sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
 export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
 export function analysisInputError(view:AnalysisRequest){
+ if(view.period&&!['all','d1','h1'].includes(view.period))return'Choose All periods, d1 or h1 before scanning.';
  if(view.categories&&view.categories.length===0)return'Select at least one asset category before scanning.';
  if(!view.conditions.length)return'Add at least one condition before scanning.';
  if(view.conditions.length>32)return'Use at most 32 conditions.';

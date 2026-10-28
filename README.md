@@ -62,17 +62,18 @@ Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+T
 
 Settings are grouped into **Appearance**, **Storage**, **Screener**, **Telegram Bot**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Telegram Bot stores a masked API token and recipient, with a test notification; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light is the default from the native window and initial loading screen onward, and uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
 
-In **Settings → Telegram Bot**, enter your masked **Telegram Bot API Token** and **Recipient** (`@username` or a private chat ID). For `@username`, the app displays the actual bot name and asks the recipient to open it and press **Start**. Click **Test** to save the settings and send one test notification. Token, recipient and verified chat ID persist locally outside workspace exports and diagnostics. Automatic alerts are not active yet; Save sends no messages.
+In **Settings → Telegram Bot**, enter your masked **Telegram Bot API Token** and **Recipient** (`@username` or a private chat ID). For `@username`, the app displays the actual bot name and asks the recipient to open it and press **Start**. Click **Test** to save the settings and send one test notification. Token, recipient and verified chat ID persist locally outside workspace exports and diagnostics. Save sends no messages. Start automatic monitoring explicitly in **Screener → Live Alerts**.
 
 ## Screener
 
-The fixed **Screener** tab sits at the far right of the chart-tab row. Its three screens form one workflow:
+The fixed **Screener** tab sits at the far right of the chart-tab row. Its four screens form one workflow:
 
 | Screen | What you do | What you get |
 |---|---|---|
 | **Downloader** | Select symbols, timeframe and dates | Local historical CSV files |
 | **Enrichment** | Choose indicators and parameters | New columns in those same CSV files |
 | **Analysis** | Build visual conditions and optionally simulate trades | Matching assets, occurrence counts, TP hit rates and match charts |
+| **Live Alerts** | Monitor saved conditions on newly closed d1/h1 candles | Telegram notifications with asset, condition, UTC time and indicative Entry/SL/TP |
 
 Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from **Dukascopy** and use its instrument names and available history. Once downloaded, enrichment and analysis run locally against those files.
 
@@ -175,6 +176,8 @@ Timeframe alignment uses only bars that had **fully closed** at the point being 
 3. Add a second row: **Histogram (12, 26, 9) → Occurred within → Constant 0**. Set **Comparison** to **Crosses above** and **Closed bars** to `3`.
 4. Leave both timeframes at **Same as file** and **Bars ago** at `0`, then press **Apply conditions**.
 
+Choose **Period of data**: **All periods**, **d1** or **h1**. This filters the files scanned, independently of the timeframe selected inside a condition operand. The choice is saved with the draft and named conditions.
+
 Below **Apply conditions**, **Asset categories to scan** lists the same categories as Downloader. All categories start enabled. Use individual checkboxes, **Select all** or **Deselect all** to choose the scan scope. Only downloaded files in the selected categories are evaluated; the selection is retained in the draft and saved condition sets.
 
 You can also enrich Weekday/Hour and add rows such as **Weekday is between 1 and 5** or **Hour is between 8 and 16** for UTC calendar filters.
@@ -203,7 +206,7 @@ Right-click an entry in **Saved conditions** and choose **Rename** to edit its n
 
 #### Apply, inspect and navigate matches
 
-**Apply conditions** checks **every closed historical bar in downloaded files from the selected categories**. The results list groups occurrences by asset/file and timeframe, showing the asset's full catalog description, match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Completed files without matches are hidden; per-file failures remain visible.
+**Apply conditions** checks **every closed historical bar in downloaded files from the selected categories and data period**. The results list groups occurrences by asset/file and timeframe, showing the asset's full catalog description, match count and first/last occurrence. Progress and per-file errors remain visible. Blank warm-up values cannot match; missing fields or companion histories are reported. Completed files without matches are hidden; per-file failures remain visible.
 
 Analysis reads CSVs without modifying them. Identical legacy datasets for the same asset/timeframe produce **one result and one set of occurrences**; legacy files with different ranges can still appear separately until the next **Refresh**, **Enrich** or **Download** consolidates them. Different timeframes remain separate histories.
 
@@ -219,7 +222,20 @@ Click a result row to open the chart around its match. The popup displays candle
 
 *Inspect the surrounding bars and indicator values rather than only a match count. The occurrence counter shows your position in the file's matches.*
 
-Analysis is an on-demand historical scan with optional SL/TP simulation. It does not run live alerts or place trades. After refreshing or changing a dataset, press **Apply conditions** again to rebuild results; stale match charts are rejected. Results are paginated without dropping occurrences.
+Analysis is an on-demand historical scan with optional SL/TP simulation. Automatic Telegram monitoring is configured separately in **Live Alerts**; CryptoDesk does not place trades. After refreshing or changing a dataset, press **Apply conditions** again to rebuild results; stale match charts are rejected. Results are paginated without dropping occurrences.
+
+### Live Alerts: monitor saved conditions
+
+1. Download and enrich the assets you want to monitor at **d1**, **h1**, or both. Save your visual rule sets in Analysis; add **Simulate trade** settings if you want SL/TP levels in notifications.
+2. Configure **Settings → Telegram Bot**, open the displayed bot in Telegram, press **Start**, and use **Test** to verify your recipient.
+3. Open **Screener → Live Alerts**. Select one or more saved conditions, the periods to monitor, and downloaded assets. Use category/search and selection controls to narrow the assets.
+4. Click **Start alerts**. Use **Stop alerts** to pause monitoring and **Check now** for an immediate check. Configuration and processed-bar state survive restart.
+
+CryptoDesk appends missing data to each selected history sequentially, recalculates its previously applied indicators, then tests the latest fully closed candle against each selected saved condition. Scheduled checks follow UTC candle boundaries with a short provider-publication allowance. Missing gaps are downloaded too, but older matching bars are not replayed as alerts. The periods/assets selected in Live Alerts define its scope; explicit companion timeframes inside condition operands still use their own histories.
+
+Notifications include the asset symbol and full name, condition name, period, UTC candle-close time, **Entry (signal close)**, **SL**, and **TP**. Entry is an indicative price available when the signal is detected. SL uses the saved field and Bars ago offset; TP uses its saved field or 1xSL/2xSL/3xSL based on this indicative entry. Missing or invalid levels are shown as unavailable. Historical simulation continues to use the actual next candle's open.
+
+Keep CryptoDesk running and the computer awake with network access. Monitoring resumes when an enabled configuration is reopened, without resending already processed candles. A durable delivery claim prevents automatic duplicate sends after restart or an uncertain Telegram response; the status/history shows failed or uncertain deliveries for inspection. Provider errors, unavailable histories and missing indicator fields remain visible. This is a notification service, not trade execution.
 
 ### How Screener works
 

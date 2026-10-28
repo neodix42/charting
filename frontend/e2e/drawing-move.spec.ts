@@ -92,11 +92,17 @@ for(const type of ['arrowUp','arrowDown','horizontal','trendline'] as const){
   const committed=(await layer(page,chart)).drawings[0];
   await page.reload();await expect(chart.getByLabel('OHLCV')).toContainText('61,000.00');
   await expect.poll(async()=>(await layer(page,chart)).drawings.map(({id,type,points})=>({id,type,points}))).toEqual([{id:moved[0].id,type,points:moved[0].points}]);
-  const restored=(await layer(page,chart)).drawings[0];
-  for(const [index,coordinate] of restored.coordinates.entries()){
-   expect(Math.abs(coordinate.x-committed.coordinates[index].x)).toBeLessThan(1);
-   expect(Math.abs(coordinate.y-committed.coordinates[index].y)).toBeLessThan(1);
-  }
+  // Anchors and OHLC arrive before the chart has measured its price axis and
+  // restored the live right gap. Verify the rendered geometry once that layout
+  // settles, retaining the same subpixel tolerance on every saved anchor.
+  await expect.poll(async()=>{
+   const restored=(await layer(page,chart)).drawings[0];
+   if(!restored||restored.coordinates.length!==committed.coordinates.length)return Infinity;
+   return Math.max(...restored.coordinates.flatMap((coordinate,index)=>[
+    Math.abs(coordinate.x-committed.coordinates[index].x),
+    Math.abs(coordinate.y-committed.coordinates[index].y),
+   ]));
+  },{message:'Restart must restore every drawing anchor within one pixel after chart layout'}).toBeLessThan(1);
   expect(await savedDrawings(page)).toEqual(moved);expect(errors).toEqual([]);
  });
 }

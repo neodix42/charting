@@ -559,6 +559,37 @@ test('scan categories default to all, survive row edits and reload, and are incl
  await expect(page.locator('.analysis-scan-status')).toContainText('0 / 1 files');
 });
 
+test('Analysis data period persists with categories and saved conditions, and limits the submitted scan',async({page})=>{
+ await open(page,[file(0),file(1,'btcusd','h1'),file(2,'ethusd','h4'),file(3,'eurusd')]);
+ const period=control(page,'Analysis period of data'),apply=page.getByRole('button',{name:'Apply conditions',exact:true});
+ await expect(period).toHaveValue('all');await expect(period.locator('option')).toHaveText(['All periods','d1 · Daily','h1 · Hourly']);
+ await expect(page.locator('.analysis-apply-row')).toContainText('4 of 4 files');
+ await period.selectOption('h1');await expect(page.locator('.analysis-apply-row')).toContainText('1 of 4 files');
+ await period.selectOption('d1');await control(page,'Scan Forex').uncheck();
+ await expect(page.locator('.analysis-apply-row')).toContainText('1 of 4 files');
+ await control(page,'Condition 1 right constant').fill('12');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().period)).toBe('d1');
+ await saveCondition(page,'Daily crypto');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]?.request.period)).toBe('d1');
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();
+ await expect(period).toHaveValue('d1');await expect(control(page,'Scan Forex')).not.toBeChecked();
+ await period.selectOption('all');await expect(page.locator('.analysis-apply-row')).toContainText('3 of 4 files');
+ await page.getByRole('button',{name:'Load condition Daily crypto',exact:true}).click();
+ await expect(period).toHaveValue('d1');await expect(control(page,'Condition 1 right constant')).toHaveValue('12');
+ await apply.click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisRequest().period)).toBe('d1');
+ await expect(page.locator('.analysis-scan-status')).toContainText('0 / 1 files');await expect(period).toBeDisabled();
+});
+
+test('Analysis disables a period with no downloaded data and can return to all periods',async({page})=>{
+ await open(page,[file(0)]);
+ const period=control(page,'Analysis period of data'),apply=page.getByRole('button',{name:'Apply conditions',exact:true});
+ await period.selectOption('h1');await expect(apply).toBeDisabled();await expect(page.locator('.analysis-apply-row')).toContainText('0 of 1 files');
+ expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await period.selectOption('all');await expect(apply).toBeEnabled();await apply.click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisRequest().period)).toBe('all');await expect(page.locator('.analysis-scan-status')).toContainText('0 / 1 files');
+});
+
 test('Matching assets filters before ten-record pagination and match navigation keeps the category scope',async({page})=>{
  await open(page);const results=Array.from({length:25},(_,index)=>result(index,index%2?'xauusd':'btcusd',index?1:0));
  await complete(page,results);

@@ -1,4 +1,5 @@
 import type {ScreenerAnalysisBackend} from './workspace/screenerAnalysis';
+import type {ScreenerLiveAlertsBackend} from './workspace/screenerLiveAlerts';
 import type {ThemeName} from './workspace/themes';
 
 export type Exchange = 'binance'|'bybit'|'coinbase';
@@ -48,7 +49,7 @@ export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtime
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}
 export interface ScreenerRefreshInfo {directory:string;active:boolean;asOf?:number;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
-export interface Backend extends ScreenerAnalysisBackend {
+export interface Backend extends ScreenerAnalysisBackend,ScreenerLiveAlertsBackend {
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
  ListInstruments(exchange:Exchange):Promise<Instrument[]>;
  AttachChart(id:string,generation:number,key:FeedKey,fromSec:number,toSec:number):Promise<Snapshot>; DetachChart(leaseId:string):Promise<void>;

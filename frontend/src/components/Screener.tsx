@@ -4,6 +4,7 @@ import {errorText} from '../types';
 import {initialScreenerView,normalizeScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
 import {ScreenerEnrichment} from './ScreenerEnrichment';
 import {ScreenerAnalysis,type ScreenerAnalysisHandle} from './ScreenerAnalysis';
+import {ScreenerLiveAlerts,type ScreenerLiveAlertsHandle} from './ScreenerLiveAlerts';
 import './ScreenerDownloads.css';
 
 const downloadPageSize=10;
@@ -17,16 +18,17 @@ function Selection({label,checked,partial,disabled,onChange}:{label:string;check
 
 export interface ScreenerHandle {flush():Promise<void>}
 export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(function Screener({api,visible},ref){
- const [tab,setTab]=useState<'analysis'|'downloader'|'enrichment'>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
+ const [tab,setTab]=useState<'analysis'|'downloader'|'enrichment'|'live-alerts'>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
  const [view,setView]=useState<ScreenerView>(initialScreenerView),[viewReady,setViewReady]=useState(false),[viewError,setViewError]=useState(''),[viewReload,setViewReload]=useState(0),[query,setQuery]=useState('');
  const draft=useRef(view),writer=useRef<ScreenerViewWriter|null>(null);
  const analysis=useRef<ScreenerAnalysisHandle>(null);
+ const liveAlerts=useRef<ScreenerLiveAlertsHandle>(null);
  const selected=new Set(view.symbols),collapsed=new Set(view.collapsedCategories),{timeframe,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
  const [downloadFilter,setDownloadFilter]=useState<DownloadFilter>('all'),[downloadPage,setDownloadPage]=useState(0);
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false);
  if(!writer.current)writer.current=new ScreenerViewWriter(value=>api.SaveScreenerView(value),error=>{if(alive.current)setViewError(errorText(error));});
- useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await analysis.current?.flush();}}),[]);
+ useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await analysis.current?.flush();await liveAlerts.current?.flush();}}),[]);
  useEffect(()=>{alive.current=true;lifetime.current++;return ()=>{alive.current=false;lifetime.current++;};},[]);
  useEffect(()=>{if(!visible||viewReady)return;let active=true;void Promise.resolve().then(()=>api.GetScreenerView()).then(value=>{if(active){const next=normalizeScreenerView(value);draft.current=next;setView(next);setViewReady(true);setViewError('');if(value.concurrency!==1)writer.current!.edit(next);}}).catch(error=>{if(active)setViewError(errorText(error));});return ()=>{active=false;};},[api,visible,viewReady,viewReload]);
  const changeView=(patch:Partial<ScreenerView>)=>{const next={...draft.current,...patch};draft.current=next;setView(next);setViewError('');writer.current!.edit(next);};
@@ -65,9 +67,10 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const search=query.trim().toLowerCase();
  const invalidDates=!from||!to||from>=to;
  return <section id="screener-panel" className="screener" role="tabpanel" aria-label="Screener" hidden={!visible}>
-  <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>setTab('enrichment')}>Enrichment</button></div></div>
+  <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>setTab('enrichment')}>Enrichment</button><button id="screener-live-alerts-tab" role="tab" aria-controls="screener-live-alerts" aria-selected={tab==='live-alerts'} onClick={()=>setTab('live-alerts')}>Live Alerts</button></div></div>
   <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"><ScreenerAnalysis ref={analysis} api={api} visible={visible&&tab==='analysis'}/></div>
   <div id="screener-enrichment" role="tabpanel" aria-labelledby="screener-enrichment-tab" hidden={tab!=='enrichment'}><ScreenerEnrichment api={api} visible={visible&&tab==='enrichment'}/></div>
+  <div id="screener-live-alerts" role="tabpanel" aria-labelledby="screener-live-alerts-tab" hidden={tab!=='live-alerts'}><ScreenerLiveAlerts ref={liveAlerts} api={api} visible={visible&&tab==='live-alerts'}/></div>
   <div id="screener-downloader" role="tabpanel" aria-labelledby="screener-downloader-tab" hidden={tab!=='downloader'}>
    {(catalogError||infoError||actionError||viewError||info?.error||info&&!info.runtimeAvailable)&&<div className="screener-error" role="alert">{actionError||catalogError||infoError||viewError||info?.error||info?.runtimeError||'The Dukascopy downloader runtime is unavailable.'}{viewError&&<button type="button" onClick={()=>{if(viewReady)void writer.current!.flush().then(()=>setViewError('')).catch(error=>setViewError(errorText(error)));else setViewReload(value=>value+1);}}>Retry saving Screener choices</button>}{(catalogError||infoError||!info?.runtimeAvailable)&&<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry downloader</button>}</div>}
    <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(viewReady&&selected.size&&!invalidDates&&!working&&info?.runtimeAvailable&&!busy)void run(async()=>{await writer.current!.flush();return api.StartScreenerDownload({symbols:instruments.filter(instrument=>selected.has(instrument.id)).map(instrument=>instrument.id),timeframe,from,to,concurrency:1});});}}>

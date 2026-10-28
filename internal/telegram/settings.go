@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -29,14 +30,16 @@ type configuration struct {
 }
 
 type Store struct {
-	mu     sync.Mutex
-	path   string
-	client *client
-	testMu sync.Mutex
+	mu       sync.Mutex
+	path     string
+	client   *client
+	sendGate chan struct{}
+	// Accessed only while sendGate serializes Test and alert deliveries.
+	nextSend time.Time
 }
 
 func NewStore(directory string) *Store {
-	return &Store{path: filepath.Join(directory, "telegram-bot.json"), client: newClient(nil)}
+	return &Store{path: filepath.Join(directory, "telegram-bot.json"), client: newClient(nil), sendGate: make(chan struct{}, 1)}
 }
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,32}$`)

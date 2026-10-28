@@ -117,6 +117,9 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if m.closed {
 		return m.enrichmentInfoLocked(nil), errors.New("screener is closed")
 	}
+	if m.liveActive {
+		return m.enrichmentInfoLocked(nil), errors.New("finish the Live Alerts check before enriching files")
+	}
 	if m.enrichmentActive {
 		return m.enrichmentInfoLocked(nil), errors.New("an enrichment batch is already running")
 	}

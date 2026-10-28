@@ -23,29 +23,36 @@ import (
 // App is the intentionally small privileged webview facade. Feed URLs, filesystem
 // paths and execution capabilities are never accepted from imported workspaces.
 type App struct {
-	ctx            context.Context
-	cancel         context.CancelFunc
-	store          *storage.Store
-	market         *market.Service
-	candles        *candlestorage.Manager
-	screener       *screener.Manager
-	telegram       *telegram.Store
-	mu             sync.Mutex
-	revision       int64
-	closeToken     string
-	closeAllowed   bool
-	closeTimedOut  bool
-	closeTimer     *time.Timer
-	domReady       bool
-	frontendReady  bool
-	closeRequested bool
-	window         domain.Window
+	ctx             context.Context
+	cancel          context.CancelFunc
+	store           *storage.Store
+	market          *market.Service
+	candles         *candlestorage.Manager
+	screener        *screener.Manager
+	telegram        *telegram.Store
+	liveAlerts      *screener.LiveAlerts
+	liveAlertsError string
+	mu              sync.Mutex
+	revision        int64
+	closeToken      string
+	closeAllowed    bool
+	closeTimedOut   bool
+	closeTimer      *time.Timer
+	domReady        bool
+	frontendReady   bool
+	closeRequested  bool
+	window          domain.Window
 }
 
 func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	a := &App{store: store, revision: loaded.Revision, window: loaded.Workspace.Window}
 	a.screener = screener.New(store.Directory())
 	a.telegram = telegram.NewStore(store.Directory())
+	alerts, err := screener.NewLiveAlerts(a.screener, a.sendScreenerLiveAlert)
+	a.liveAlerts = alerts
+	if err != nil {
+		a.liveAlertsError = "Could not restore Live Alerts settings; saved data was preserved: " + err.Error()
+	}
 	if a.window.Width < 400 {
 		a.window = domain.Window{Width: 1600, Height: 1000}
 	}
@@ -94,6 +101,9 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Lock()
 	a.ctx, a.cancel = context.WithCancel(ctx)
 	a.mu.Unlock()
+	if a.liveAlerts != nil && a.liveAlertsError == "" {
+		a.liveAlerts.Start(a.ctx)
+	}
 }
 func (a *App) domready(ctx context.Context) {
 	a.mu.Lock()
@@ -427,6 +437,9 @@ func (a *App) allowCloseLocked() {
 func (a *App) shutdown(ctx context.Context) {
 	if a.cancel != nil {
 		a.cancel()
+	}
+	if a.liveAlerts != nil {
+		a.liveAlerts.Close()
 	}
 	a.market.Close()
 	if a.screener != nil {
