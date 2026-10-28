@@ -6,7 +6,7 @@ import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
-import {analysisMatchMarkers,profitableMatchColor} from '../charts/analysisMarkers';
+import {analysisMatchMarkers,analysisTradePriceText,profitableMatchColor} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -41,6 +41,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
   const chart=createChart(host.current,{...themeOptions,width:Math.max(300,host.current.clientWidth),height,layout:{...themeOptions.layout,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:chartFontSize(10,fontSize),attributionLogo:true},timeScale:{...themeOptions.timeScale,timeVisible:true,secondsVisible:data.timeframe==='tick'||data.timeframe==='s1',rightOffset:3}});
   chartRef.current=chart;analysisChartResources.charts++;
   let markers:ReturnType<typeof createSeriesMarkers<Time>>|undefined;
+  let zoomFrame:number|undefined;
   let observer:ResizeObserver|undefined,resize:()=>void=()=>{},crosshair:MouseEventHandler<Time>|undefined,windowResize=false;
   try{
    const main=candle?chart.addSeries(CandlestickSeries,{upColor:palette.up,downColor:palette.danger,wickUpColor:palette.up,wickDownColor:palette.danger,borderVisible:false}):chart.addSeries(LineSeries,{color:palette.accent,lineWidth:2,title:data.timeframe==='tick'?'Tick price':'Price'});
@@ -77,6 +78,18 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
    };
    chart.panes()[0]?.setStretchFactor(2.5);
    chart.timeScale().fitContent();
+   // The chart applies fit/range changes on its render frame. Zoom after fit
+   // completes, keeping the selected signal centered rather than the last bar.
+   zoomFrame=requestAnimationFrame(()=>{
+    const scale=chart.timeScale(),fittedRange=scale.getVisibleLogicalRange(),fittedSpacing=scale.options().barSpacing;
+    if(fittedRange){
+     const center=Math.max(0,ordered.findIndex(bar=>bar.time===data.matchTime)),span=Math.max(0,(fittedRange.to-fittedRange.from+1)/3-1);
+     scale.setVisibleLogicalRange({from:center-span/2,to:center+span/2});
+    }else scale.applyOptions({barSpacing:fittedSpacing*3});
+    zoomFrame=requestAnimationFrame(()=>{
+     if(host.current){host.current.dataset.fittedBarSpacing=String(fittedSpacing);host.current.dataset.initialBarSpacing=String(scale.options().barSpacing);}
+    });
+   });
    crosshair=event=>{if(typeof event.time==='number')setHover(ordered.find(bar=>bar.time===Math.round(Number(event.time)*1000))??null);else setHover(null);};
    chart.subscribeCrosshairMove(crosshair);analysisChartResources.listeners++;
    resize=()=>{if(host.current)chart.resize(Math.max(300,host.current.clientWidth),height);};
@@ -84,6 +97,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
    else{window.addEventListener('resize',resize);windowResize=true;analysisChartResources.listeners++;}
   }catch(error){setChartError(errorText(error));}
   return ()=>{
+   if(zoomFrame!==undefined)cancelAnimationFrame(zoomFrame);
    if(observer){observer.disconnect();analysisChartResources.observers--;}
    else if(windowResize){window.removeEventListener('resize',resize);analysisChartResources.listeners--;}
    if(crosshair){chart.unsubscribeCrosshairMove(crosshair);analysisChartResources.listeners--;}
@@ -95,6 +109,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
   {!!data.profitableMatches?.length&&<p className="analysis-chart-note analysis-chart-legend"><span aria-hidden="true" style={{backgroundColor:profitableMatchColor}}/>Green dot: match whose simulated trade hit TP.</p>}
+  {analysisTradePriceText(data)&&<p className="analysis-chart-note" aria-label="Simulated trade prices">{analysisTradePriceText(data)} · prices used for this match’s trade.</p>}
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
   <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-chart-font-size={chartFontSize(10,fontSize)} data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
   {duplicates&&<p className="analysis-chart-note">Each observation is evaluated. Ticks sharing an identical timestamp display their last price on the chart.</p>}

@@ -100,6 +100,10 @@ type AnalysisProfitableMatch struct {
 	Index int64 `json:"index"`
 	Time  int64 `json:"time"`
 }
+type AnalysisTradeLevels struct {
+	StopLoss   float64 `json:"stopLoss"`
+	TakeProfit float64 `json:"takeProfit"`
+}
 type AnalysisChart struct {
 	ResultID          string                    `json:"resultId"`
 	Name              string                    `json:"name"`
@@ -113,6 +117,7 @@ type AnalysisChart struct {
 	Fields            []string                  `json:"fields"`
 	Bars              []AnalysisBar             `json:"bars"`
 	ProfitableMatches []AnalysisProfitableMatch `json:"profitableMatches,omitempty"`
+	Trade             *AnalysisTradeLevels      `json:"trade,omitempty"`
 }
 type analysisState struct {
 	active                                     bool
@@ -663,17 +668,23 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	if err != nil {
 		return err
 	}
-	var profits *os.File
+	var profits, trades *os.File
 	published := false
 	defer func() {
 		_ = out.Close()
 		if profits != nil {
 			_ = profits.Close()
 		}
+		if trades != nil {
+			_ = trades.Close()
+		}
 		if !published {
 			_ = os.Remove(path)
 			if profits != nil {
 				_ = os.Remove(path + ".profits")
+			}
+			if trades != nil {
+				_ = os.Remove(path + ".trades")
 			}
 		}
 	}()
@@ -690,6 +701,22 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 		profits, err = os.OpenFile(path+".profits", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
 			return err
+		}
+		trades, err = os.OpenFile(path+".trades", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		// Retain actual entry levels, including risk targets based on the next
+		// bar's open. A sparse zero record denotes a trade that never opened.
+		simulation.onEntry = func(occurrence int64, stopLoss, takeProfit float64) error {
+			var record [17]byte
+			record[0] = 1
+			binary.LittleEndian.PutUint64(record[1:9], math.Float64bits(stopLoss))
+			binary.LittleEndian.PutUint64(record[9:], math.Float64bits(takeProfit))
+			if _, err := trades.WriteAt(record[:], occurrence*17); err != nil {
+				return fmt.Errorf("store analysis trade prices: %w", err)
+			}
+			return nil
 		}
 		// One byte per occurrence keeps random outcome updates independent of
 		// the buffered match index. Sparse zero bytes mean not a TP winner.
@@ -769,6 +796,12 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 			return err
 		}
 		if err = profits.Sync(); err != nil {
+			return err
+		}
+		if err = trades.Truncate(matches * 17); err != nil {
+			return err
+		}
+		if err = trades.Sync(); err != nil {
 			return err
 		}
 	}
@@ -914,6 +947,18 @@ func (m *Manager) AnalysisChart(resultID string, occurrence, before, after int) 
 		chart.ProfitableMatches, err = readAnalysisProfitableMatches(f, profits, result.Matches, start, chart.Bars[len(chart.Bars)-1].Index+1)
 		if err != nil {
 			return AnalysisChart{}, err
+		}
+		trades, err := os.Open(a.matchFiles[resultID] + ".trades")
+		if err != nil {
+			return AnalysisChart{}, err
+		}
+		defer trades.Close()
+		var record [17]byte
+		if _, err = trades.ReadAt(record[:], int64(occurrence)*17); err != nil {
+			return AnalysisChart{}, err
+		}
+		if record[0] == 1 {
+			chart.Trade = &AnalysisTradeLevels{StopLoss: math.Float64frombits(binary.LittleEndian.Uint64(record[1:9])), TakeProfit: math.Float64frombits(binary.LittleEndian.Uint64(record[9:]))}
 		}
 	}
 	return chart, nil

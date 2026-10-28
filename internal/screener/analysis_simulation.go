@@ -107,6 +107,7 @@ type analysisTradeSimulator struct {
 	index, matches         int64
 	stopHistory            []analysisStopSample
 	onTakeProfit           func(occurrence int64) error
+	onEntry                func(occurrence int64, stopLoss, takeProfit float64) error
 }
 
 type analysisStopSample struct {
@@ -279,6 +280,11 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 		if !analysisFinite(trade.takeProfit) || !(trade.stopLoss < open && open < trade.takeProfit) {
 			s.summary.InvalidLevels++
 		} else {
+			if s.onEntry != nil {
+				if err := s.onEntry(trade.occurrence, trade.stopLoss, trade.takeProfit); err != nil {
+					return err
+				}
+			}
 			trade.id, trade.active = index, true
 			s.active[trade.id] = trade
 			s.expiration[(index+int64(s.config.Duration)-1)%int64(s.config.Duration)] = trade

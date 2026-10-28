@@ -410,7 +410,7 @@ func TestAnalysisSimulationCancellationDoesNotPublishPartialTrades(t *testing.T)
 	if a.results[0].Matches != 0 || a.results[0].Simulation != nil || len(a.matchFiles) != 0 {
 		t.Fatalf("partial trade published: %+v", a.results[0])
 	}
-	for _, suffix := range []string{".matches", ".matches.profits"} {
+	for _, suffix := range []string{".matches", ".matches.profits", ".matches.trades"} {
 		if _, err = os.Stat(filepath.Join(work, "test"+suffix)); !os.IsNotExist(err) {
 			t.Fatalf("cancelled scan retained an outcome index %s: %v", suffix, err)
 		}
@@ -507,7 +507,7 @@ func TestAnalysisSimulationCancellationDuringDenseScanClearsPartialSummary(t *te
 	if info.Active || info.Phase != "cancelled" || info.TotalMatches != 0 || len(info.Results) != 1 || info.Results[0].Simulation != nil || info.Results[0].Status != "cancelled" {
 		t.Fatalf("cancel published partially simulated trades: %+v", info)
 	}
-	for _, suffix := range []string{".matches", ".matches.profits"} {
+	for _, suffix := range []string{".matches", ".matches.profits", ".matches.trades"} {
 		if _, err := os.Stat(filepath.Join(m.analysis.work, info.Results[0].ID+suffix)); !os.IsNotExist(err) {
 			t.Fatalf("cancellation retained partial outcome file %s: %v", suffix, err)
 		}

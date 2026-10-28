@@ -189,7 +189,7 @@ An opening gap reaching a level resolves the trade first. Otherwise, reaching SL
 
 **Matching assets → Profitable, %** reports **TP hits ÷ all matches × 100** for each file. Click the column heading to alternate between highest and lowest percentage first across all filtered result pages; pending/unavailable percentages stay last. Expand the counts beneath the percentage to see SL hits, expiries, insufficient data, invalid levels and unavailable data. These outcomes stay in the denominator. Tick files or files without the required price fields report simulation unavailability while keeping their condition matches. This is a TP hit rate; position sizing, fees and monetary profit/loss are not calculated. Editing settings does not change existing results until you apply conditions again.
 
-Click a matching asset to open its chart. A **green dot below the original matching candle** identifies each visible match whose simulated trade hit TP, even when the exit occurred outside the displayed window. The selected match keeps its arrow; **Previous match** and **Next match** navigate occurrences. SL hits, expired trades and incomplete or invalid trades have no green dot.
+Click a matching asset to open its chart. A **green dot below the original matching candle** identifies each visible match whose simulated trade hit TP, even when the exit occurred outside the displayed window. The selected match keeps its arrow, with its actual **SL / TP prices** below **Match** when a trade opened. **Match Inspection** centers the match with bars three times wider than its fitted view; **Previous match** and **Next match** navigate occurrences. SL hits, expired trades and incomplete or invalid trades have no green dot.
 
 #### Save and reuse a condition set
 

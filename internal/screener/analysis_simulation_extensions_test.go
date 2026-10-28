@@ -181,10 +181,17 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 	if err != nil || stat.Size() != result.Matches {
 		t.Fatalf("outcomes not one byte per occurrence: %+v %v", stat, err)
 	}
+	stat, err = os.Stat(m.analysis.matchFiles[result.ID] + ".trades")
+	if err != nil || stat.Size() != result.Matches*17 {
+		t.Fatalf("trade prices not indexed per occurrence: %+v %v", stat, err)
+	}
 	for _, occurrence := range []int{0, 256, 1024, 2049, 2050} {
 		chart, err := m.AnalysisChart(result.ID, occurrence, 500, 500)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if (chart.Trade == nil) != (occurrence == 2050) || chart.Trade != nil && *chart.Trade != (AnalysisTradeLevels{90, 110}) {
+			t.Fatalf("wrong occurrence trade prices at %d: %+v", occurrence, chart.Trade)
 		}
 		want := min(2050, occurrence+501) - max(0, occurrence-500)
 		if len(chart.ProfitableMatches) != want {
@@ -204,7 +211,7 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 	}
 	result = resultNamed(t, waitAnalysis(t, m), name)
 	chart, err := m.AnalysisChart(result.ID, 0, 0, 1)
-	if err != nil || len(chart.ProfitableMatches) != 0 {
+	if err != nil || len(chart.ProfitableMatches) != 0 || chart.Trade != nil {
 		t.Fatalf("disabled simulation leaked previous markers: %+v %v", chart, err)
 	}
 	if _, err := os.Stat(oldWork); !os.IsNotExist(err) {
@@ -224,5 +231,64 @@ func TestAnalysisSimulationProfitOutcomeWriteErrorsPropagate(t *testing.T) {
 	simulation.match(simulationTestRow(simulationBar(100, 105, 95, 100)))
 	if err := simulation.advance(1, simulationTestRow(simulationBar(100, 115, 95, 100))); !errors.Is(err, want) {
 		t.Fatalf("outcome write error ignored: %v", err)
+	}
+}
+
+func TestAnalysisChartRetainsActualTradePrices(t *testing.T) {
+	matched := simulationTestBar{100, 105, 90, 100, 90, 110, 1}
+	for _, test := range []struct {
+		name     string
+		bars     []simulationTestBar
+		offset   int
+		multiple int
+		want     *AnalysisTradeLevels
+	}{
+		{"field target with entry gap", []simulationTestBar{matched, simulationBar(105, 115, 95, 105)}, 0, 0, &AnalysisTradeLevels{90, 110}},
+		{"earlier stop outside chart", []simulationTestBar{{100, 105, 80, 100, 80, 200, 0}, matched, simulationBar(105, 115, 95, 105)}, 1, 0, &AnalysisTradeLevels{80, 110}},
+		{"multiple uses next open", []simulationTestBar{matched, simulationBar(105, 140, 95, 110)}, 0, 2, &AnalysisTradeLevels{90, 135}},
+		{"stop loss outcome", []simulationTestBar{matched, simulationBar(100, 105, 80, 100)}, 0, 0, &AnalysisTradeLevels{90, 110}},
+		{"expired trade", []simulationTestBar{matched, simulationBar(100, 105, 95, 100)}, 0, 0, &AnalysisTradeLevels{90, 110}},
+		{"missing stop history", []simulationTestBar{matched, simulationBar(100, 120, 95, 100)}, 1, 0, nil},
+		{"invalid entry bracket", []simulationTestBar{matched, simulationBar(80, 100, 75, 85)}, 0, 0, nil},
+		{"no next bar", []simulationTestBar{matched}, 0, 0, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			m := analysisTestManager(t)
+			name := "btcusd-m1-2024-01-01-2024-01-02.csv"
+			writeDataFile(t, m, name, simulationCSV(test.bars, 1704067200000))
+			request := simulationRequest(1)
+			request.TradeSimulation.StopLossBarsAgo = test.offset
+			request.TradeSimulation.TakeProfitMultiple = test.multiple
+			if _, err := m.StartAnalysis(request); err != nil {
+				t.Fatal(err)
+			}
+			result := resultNamed(t, waitAnalysis(t, m), name)
+			// Chart prices belong to the applied scan, independently of draft edits.
+			request.TradeSimulation.StopLossBarsAgo = 9999
+			if _, err := m.SaveAnalysisView(request); err != nil {
+				t.Fatal(err)
+			}
+			chart, err := m.AnalysisChart(result.ID, 0, 0, 0)
+			if err != nil || !reflect.DeepEqual(chart.Trade, test.want) {
+				t.Fatalf("trade prices=%+v want=%+v error=%v", chart.Trade, test.want, err)
+			}
+			if chart.Trade != nil {
+				chart.Trade.StopLoss = -999
+				again, err := m.AnalysisChart(result.ID, 0, 0, 0)
+				if err != nil || !reflect.DeepEqual(again.Trade, test.want) {
+					t.Fatalf("caller mutated recorded trade prices: %+v %v", again.Trade, err)
+				}
+			}
+		})
+	}
+}
+
+func TestAnalysisTradeEntryWriteErrorsPropagate(t *testing.T) {
+	simulation := newAnalysisTradeSimulator(simulationTestSeries(), simulationRequest(1).TradeSimulation)
+	want := errors.New("trade entry storage failed")
+	simulation.onEntry = func(int64, float64, float64) error { return want }
+	simulation.match(simulationTestRow(simulationBar(100, 105, 95, 100)))
+	if err := simulation.advance(1, simulationTestRow(simulationBar(100, 115, 95, 100))); !errors.Is(err, want) {
+		t.Fatalf("trade price write error ignored: %v", err)
 	}
 }

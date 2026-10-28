@@ -736,3 +736,37 @@ test('Take profit field names cannot collide with SL multiple choices',async({pa
  await expect(profit).toHaveValue('field:risk:1');await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
  expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual({stopLoss:'low',takeProfit:'risk:1',duration:20});
 });
+
+test('Match Inspection draws recorded SL/TP below Match and triples the fitted bar width',async({page})=>{
+ await open(page,[file(0)]);await complete(page,[result(0,'btcusd',3)]);
+ const start=Date.UTC(2024,0,1),bars=Array.from({length:201},(_,index)=>({index,time:start+index*86400000,values:{open:100,high:140,low:85,close:105}}));
+ const base:AnalysisChart={resultId:'result-0',name:file(0).name,symbol:'btcusd',timeframe:'d1',occurrence:0,totalMatches:3,matchTime:bars[120].time,matchIndex:120,startIndex:0,fields:['open','high','low','close'],bars,trade:{stopLoss:90,takeProfit:135},profitableMatches:[{index:120,time:bars[120].time}]};
+ await page.evaluate(charts=>{
+  (window as any).__testSetAnalysisCharts(charts);
+  const original=CanvasRenderingContext2D.prototype.fillText;
+  (window as any).__analysisDrawnTexts=[];
+  CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){
+   if(text==='Match'||text.startsWith('SL '))(window as any).__analysisDrawnTexts.push({text,y});
+   if(maxWidth===undefined)original.call(this,text,x,y);else original.call(this,text,x,y,maxWidth);
+  };
+ },{'result-0:0':base,'result-0:1':{...base,occurrence:1,matchIndex:121,matchTime:bars[121].time,trade:{stopLoss:95,takeProfit:115},profitableMatches:[]},'result-0:2':{...base,occurrence:2,matchIndex:122,matchTime:bars[122].time,trade:undefined,profitableMatches:[]}});
+ await page.getByRole('row',{name:'BTCUSD d1 · 3 matches',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});
+ const prices=dialog.getByLabel('Simulated trade prices',{exact:true});
+ await expect(prices).toContainText('SL 90 · TP 135');
+ const widthRatio=()=>page.getByTestId('analysis-chart').evaluate(element=>Number((element as HTMLElement).dataset.initialBarSpacing)/Number((element as HTMLElement).dataset.fittedBarSpacing));
+ await expect.poll(widthRatio).toBeCloseTo(3,5);
+ await expect.poll(()=>page.evaluate(()=>{
+  const texts=(window as any).__analysisDrawnTexts,match=texts.findLast((item:any)=>item.text==='Match'),prices=texts.findLast((item:any)=>item.text==='SL 90 · TP 135');
+  return !!match&&!!prices&&prices.y>match.y;
+ })).toBe(true);
+ for(const theme of ['light','matrix','cyberpunk','red-sands','dark']){
+  await page.evaluate(theme=>{(window as any).__analysisDrawnTexts=[];document.documentElement.dataset.theme=theme;},theme);
+  await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='SL 90 · TP 135'))).toBe(true);
+ }
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toContainText('SL 95 · TP 115');
+ await expect.poll(widthRatio).toBeCloseTo(3,5);await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(widthRatio).toBeCloseTo(3,5);
+ await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(prices).toContainText('SL 95 · TP 115');
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+});
