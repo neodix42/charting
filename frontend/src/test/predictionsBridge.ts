@@ -7,7 +7,7 @@ export function predictionsBridge():PredictionsBackend {
  const datasets:PredictionDataset[]=[{id:'bitcoin-daily',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'d1',filename:'btcusd-d1.csv'},{id:'bitcoin-hourly',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'h1',filename:'btcusd-h1.csv'},{id:'euro-daily',symbol:'eurusd',name:'Euro vs US Dollar',period:'d1',filename:'eurusd-d1.csv'}];
  const saved=JSON.parse(sessionStorage.getItem(key)||'null') as {info:PredictionInfo;forecasts:PredictionForecast[]}|null;
  let forecasts:PredictionForecast[]=saved?.forecasts??[],info:PredictionInfo=saved?.info??{settings:{model:'Datadog/Toto-2.0-313m',modelDirectory:'/explicit-test/models'},models:[{id:'Datadog/Toto-2.0-313m',name:'Toto 2.0 · 313M'}],defaultModelDirectory:'/explicit-test/models',forecastDirectory:'/explicit-test/predictions',selection:initialPredictionSelection(),runtime:{ready:false,runtimeReady:true,modelReady:false},active:false,event:{phase:'idle',progress:0,message:''},forecasts:[]};
- const calls={get:0,datasets:0,prepare:0,start:0,cancel:0,configure:0,save:0,forecast:0};
+ const calls={get:0,datasets:0,prepare:0,start:0,cancel:0,configure:0,save:0,forecast:0,remove:0};
  const persist=()=>sessionStorage.setItem(key,JSON.stringify({info,forecasts}));
  const snapshot=()=>structuredClone(info);
  const validate=(value:PredictionSelection)=>{if(![512,1024].includes(value.contextLength)||!Number.isInteger(value.horizon)||value.horizon<1||value.horizon>256)throw Error('Select 512 or 1024 historical bars and 1–256 future bars');};
@@ -23,11 +23,18 @@ export function predictionsBridge():PredictionsBackend {
  return {
   async GetPredictions(){calls.get++;return snapshot();},async GetPredictionDatasets(){calls.datasets++;return structuredClone(datasets);},
   async ConfigurePredictions(settings){calls.configure++;if(info.active)throw Error('Finish or cancel the active prediction before changing model settings');if(!info.models.some(model=>model.id===settings.model))throw Error('Unknown model');info={...info,settings:{...settings,modelDirectory:settings.modelDirectory||info.defaultModelDirectory},runtime:{ready:false,modelReady:false,runtimeReady:true},event:{phase:'idle',progress:0,message:''},error:''};persist();return snapshot();},
-  async SavePredictionSelection(selection){calls.save++;validate(selection);info={...info,selection:structuredClone(selection)};persist();return structuredClone(info.selection);},
+  async SavePredictionSelection(selection){calls.save++;validate(selection);if(selection.forecastId&&!forecasts.some(value=>value.id===selection.forecastId))throw Error('Stored forecast not found');info={...info,selection:structuredClone(selection)};persist();return structuredClone(info.selection);},
   async PreparePredictionModel(){calls.prepare++;if(info.active||info.runtime.ready)return snapshot();info={...info,active:true,error:'',event:{phase:'download',progress:25,message:'Downloading model',downloaded:104857600,total:419430400}};return snapshot();},
   async StartPrediction(selection){calls.start++;validate(selection);if(info.active)throw Error('A prediction is already active');if(!info.runtime.ready)throw Error('Prepare the model first');if(!datasets.some(dataset=>dataset.symbol===selection.asset&&dataset.period===selection.period))throw Error('Choose a downloaded asset and period');info={...info,selection:structuredClone(selection),active:true,error:'',event:{phase:'inference',progress:5,message:'Forecasting closing prices'}};persist();return snapshot();},
   async CancelPrediction(){calls.cancel++;info={...info,active:false,event:{phase:'cancelled',progress:0,message:'Cancelled'}};persist();return snapshot();},
   async GetPredictionForecast(id){calls.forecast++;const forecast=forecasts.find(value=>value.id===id);if(!forecast)throw Error('Stored forecast not found');return structuredClone(forecast);},
+  async DeletePredictionForecast(id){
+   calls.remove++;if(info.active)throw Error('Finish or cancel the active prediction before removing forecasts');
+   if(!forecasts.some(value=>value.id===id))throw Error('Stored forecast not found');
+   const selected=info.selection.forecastId||info.forecasts[0]?.id;
+   forecasts=forecasts.filter(value=>value.id!==id);
+   info={...info,forecasts:info.forecasts.filter(value=>value.id!==id),selection:{...info.selection,forecastId:selected===id?forecasts[0]?.id??'':info.selection.forecastId}};persist();return snapshot();
+  },
   async ChoosePredictionModelDirectory(){return '/explicit-test/chosen-models';},
  };
 }

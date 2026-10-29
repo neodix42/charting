@@ -34,6 +34,10 @@ func (a *App) GetPredictionForecast(id string) (predictions.Forecast, error) {
 	return a.predictions.Forecast(id)
 }
 
+func (a *App) DeletePredictionForecast(id string) (predictions.Info, error) {
+	return a.predictions.DeleteForecast(id)
+}
+
 func (a *App) ChoosePredictionModelDirectory() (string, error) {
 	initial := a.predictions.Info().Settings.ModelDirectory
 	if st, err := os.Stat(initial); err != nil || !st.IsDir() {

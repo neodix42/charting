@@ -7,7 +7,7 @@ const settings=(page:Page)=>page.getByRole('dialog',{name:'Workspace settings',e
 const modelSettings=(page:Page)=>page.getByRole('form',{name:'Prediction model settings',exact:true});
 const calls=(page:Page)=>page.evaluate(()=>(window as any).__testPredictionCalls());
 async function enter(page:Page,ready=true){if(ready)await page.evaluate(()=>(window as any).__testPredictionReady());await tab(page).click();await expect(panel(page).getByLabel('Prediction asset',{exact:true})).toBeVisible();if(ready)await expect(panel(page).getByLabel('Prediction asset',{exact:true})).toBeEnabled();}
-async function run(page:Page,asset='btcusd',horizon='20'){await panel(page).getByLabel('Prediction asset',{exact:true}).selectOption(asset);await panel(page).getByLabel('Prediction future bars',{exact:true}).fill(horizon);await panel(page).getByRole('button',{name:'Start prediction',exact:true}).click();await expect(panel(page).getByRole('progressbar',{name:'Prediction progress',exact:true})).toBeVisible();await page.evaluate(()=>(window as any).__testFinishPrediction());await expect(panel(page).getByTestId('prediction-chart')).toBeVisible();}
+async function run(page:Page,asset='btcusd',horizon='20'){await panel(page).getByLabel('Prediction asset',{exact:true}).selectOption(asset);await panel(page).getByLabel('Prediction future bars',{exact:true}).fill(horizon);await panel(page).getByRole('button',{name:'Start prediction',exact:true}).click();await expect(panel(page).getByRole('progressbar',{name:'Prediction progress',exact:true})).toBeVisible();await page.evaluate(()=>(window as any).__testFinishPrediction());await expect(panel(page).getByRole('progressbar',{name:'Prediction progress',exact:true})).toHaveCount(0);await expect(panel(page).getByTestId('prediction-chart')).toBeVisible();await expect(panel(page).getByTestId('prediction-chart')).toHaveAttribute('data-forecast-bars',horizon);await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText(`${asset}-d1.csv`);}
 async function openSettings(page:Page){await page.getByRole('button',{name:'Open settings',exact:true}).click();await settings(page).getByRole('tab',{name:'Predictions',exact:true}).click();await expect(modelSettings(page).getByLabel('Prediction model',{exact:true})).toBeEnabled();}
 
 test('Predictions is fixed after Screener, pauses chart leases and prepares only after opening',async({page})=>{
@@ -94,4 +94,96 @@ test('a new model folder starts one preparation after the previous preparation w
  await openSettings(page);await modelSettings(page).getByLabel('Prediction model folder',{exact:true}).fill('/second/model-folder');await modelSettings(page).getByRole('button',{name:'Apply prediction settings',exact:true}).click();await expect(modelSettings(page).getByRole('status',{name:'Applied prediction model'})).toContainText('/second/model-folder');expect((await calls(page)).prepare).toBe(1);
  await settings(page).getByRole('button',{name:'Close settings',exact:true}).click();await expect(panel(page).getByRole('progressbar',{name:'Prediction progress',exact:true})).toBeVisible();expect((await calls(page)).prepare).toBe(2);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await tab(page).click();await expect(panel(page).getByRole('progressbar',{name:'Prediction progress',exact:true})).toBeVisible();expect((await calls(page)).prepare).toBe(2);
+});
+
+const stored=(page:Page)=>panel(page).getByLabel('Saved forecasts',{exact:true});
+async function removeForecast(page:Page,id:string){
+ await stored(page).locator(`button[data-forecast-id="${id}"]`).click({button:'right'});
+ await page.getByRole('menuitem',{name:'Remove',exact:true}).click();
+ await expect(stored(page).locator(`button[data-forecast-id="${id}"]`)).toHaveCount(0);
+}
+
+test('Saved forecasts Remove deletes only the unselected forecast durably and preserves the selected chart and inputs',async({page})=>{
+ await openTestApp(page);await enter(page);await run(page);await run(page,'eurusd','10');
+ const before=await page.evaluate(()=>(window as any).__testPredictionInfo()),[selected,other]=before.forecasts;
+ await panel(page).getByLabel('Prediction historical bars',{exact:true}).selectOption('1024');
+ await removeForecast(page,other.id);
+ await expect(stored(page).getByRole('button')).toHaveCount(1);await expect(stored(page).locator('button')).toHaveAttribute('aria-pressed','true');
+ await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('eurusd-d1.csv');
+ await expect(panel(page).getByLabel('Prediction historical bars',{exact:true})).toHaveValue('1024');
+ expect((await calls(page)).remove).toBe(1);expect((await page.evaluate(()=>(window as any).__testPredictionInfo())).forecasts.map((value:any)=>value.id)).toEqual([selected.id]);
+ await reloadTestApp(page);await enter(page);await expect(stored(page).getByRole('button')).toHaveCount(1);await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('eurusd-d1.csv');
+ await expect(panel(page).getByLabel('Prediction historical bars',{exact:true})).toHaveValue('1024');
+});
+
+test('removing the selected forecast opens the remaining forecast and removing the last clears the chart',async({page})=>{
+ await openTestApp(page);await enter(page);await run(page);await run(page,'eurusd','10');
+ const [newest,older]=await page.evaluate(()=>(window as any).__testPredictionInfo().forecasts);
+ await stored(page).locator(`button[data-forecast-id="${older.id}"]`).click();await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('btcusd-d1.csv');
+ await removeForecast(page,older.id);await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('eurusd-d1.csv');
+ await expect(stored(page).locator('button')).toBeFocused();
+ expect(await page.evaluate(()=>(window as any).__testPredictionInfo().selection.forecastId)).toBe(newest.id);
+ await removeForecast(page,newest.id);await expect(stored(page)).toContainText('Completed forecasts appear here.');await expect(stored(page).getByRole('heading')).toBeFocused();
+ await expect(panel(page).getByTestId('prediction-chart')).toHaveCount(0);await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('Select an asset and start a prediction');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testPredictionResources())).toEqual({charts:0,observers:0,listeners:0});
+ expect(await page.evaluate(()=>(window as any).__testPredictionInfo().selection.forecastId)).toBe('');
+ await reloadTestApp(page);await enter(page);await expect(stored(page).getByRole('button')).toHaveCount(0);await expect(panel(page).getByTestId('prediction-chart')).toHaveCount(0);
+});
+
+test('Saved forecast menu supports keyboard, dismissal and focus without removing or changing selection',async({page})=>{
+ await openTestApp(page);await enter(page);await run(page);
+ const forecast=stored(page).getByRole('button'),menu=page.getByRole('menu',{name:'Saved forecast BTCUSD d1',exact:true}),item=page.getByRole('menuitem',{name:'Remove',exact:true});
+ await forecast.focus();await page.keyboard.press('Shift+F10');await expect(menu).toBeVisible();await expect(item).toBeFocused();
+ await page.keyboard.press('End');await expect(item).toBeFocused();await page.keyboard.press('ArrowUp');await expect(item).toBeFocused();
+ await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(forecast).toBeFocused();
+ await forecast.click({button:'right'});await page.evaluate(()=>window.dispatchEvent(new Event('resize')));await expect(menu).toHaveCount(0);await expect(forecast).toBeFocused();
+ await forecast.click({button:'right'});await page.evaluate(()=>document.dispatchEvent(new Event('scroll')));await expect(menu).toHaveCount(0);await expect(forecast).toBeFocused();
+ await forecast.dispatchEvent('keydown',{key:'ContextMenu'});await expect(menu).toBeVisible();await panel(page).getByRole('heading',{name:'Predictions',exact:true}).click();await expect(menu).toHaveCount(0);
+ await forecast.click({button:'right'});await expect(menu).toBeVisible();await page.getByRole('button',{name:'Open settings',exact:true}).click();await expect(menu).toHaveCount(0);await settings(page).getByRole('button',{name:'Close settings',exact:true}).click();
+ await forecast.click({button:'right'});await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect(menu).toHaveCount(0);expect((await calls(page)).remove).toBe(0);
+});
+
+test('Remove flushes pending selection, blocks duplicate requests and normal close awaits deletion',async({page})=>{
+ await openTestApp(page);await enter(page);await run(page);await run(page,'eurusd','10');
+ const older=await page.evaluate(()=>(window as any).__testPredictionInfo().forecasts[1].id);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,save=api.SavePredictionSelection,remove=api.DeletePredictionForecast;
+  api.SavePredictionSelection=async value=>{api.SavePredictionSelection=save;await new Promise<void>(resolve=>(window as any).__releaseRemoveSelection=resolve);return save(value);};
+  api.DeletePredictionForecast=async id=>{(window as any).__forecastRemoveId=id;await new Promise<void>(resolve=>(window as any).__releaseForecastRemove=resolve);return remove(id);};
+ });
+ const origin=stored(page).locator(`button[data-forecast-id="${older}"]`);await origin.click();await origin.click({button:'right'});
+ await page.getByRole('menuitem',{name:'Remove',exact:true}).evaluate(element=>{(element as HTMLButtonElement).click();(element as HTMLButtonElement).click();});
+ await expect(origin).toBeDisabled();expect(await page.evaluate(()=>(window as any).__forecastRemoveId)).toBeUndefined();
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'forecast-remove-close'}));expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__releaseRemoveSelection());await expect.poll(()=>page.evaluate(()=>(window as any).__forecastRemoveId)).toBe(older);
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();await page.evaluate(()=>(window as any).__releaseForecastRemove());
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'forecast-remove-close',discard:false});
+ await expect(origin).toHaveCount(0);expect((await calls(page)).remove).toBe(1);
+});
+
+test('failed pending Remove preserves forecasts and chart and pauses normal close until retry',async({page})=>{
+ await openTestApp(page);await enter(page);await run(page);
+ await page.evaluate(()=>{const api=window.go!.main!.App!;(window as any).__originalForecastRemove=api.DeletePredictionForecast;api.DeletePredictionForecast=async()=>{await new Promise<void>(resolve=>(window as any).__rejectForecastRemove=resolve);throw Error('Cannot remove forecast: read-only folder');};});
+ const origin=stored(page).getByRole('button');await origin.click({button:'right'});await page.getByRole('menuitem',{name:'Remove',exact:true}).click();
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'failed-forecast-remove'}));expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();await page.evaluate(()=>(window as any).__rejectForecastRemove());
+ await expect(stored(page).getByRole('alert')).toContainText('read-only folder');await expect(origin).toBeEnabled();await expect(origin).toBeFocused();await expect(panel(page).getByTestId('prediction-chart')).toBeVisible();await expect(page.getByText('Save failed during shutdown. Your changes remain open.',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>{window.go!.main!.App!.DeletePredictionForecast=(window as any).__originalForecastRemove;});
+ await origin.click({button:'right'});await page.getByRole('menuitem',{name:'Remove',exact:true}).click();await expect(origin).toHaveCount(0);await page.getByRole('button',{name:'Retry save and close',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'failed-forecast-remove',discard:false});
+});
+
+test('stale status and forecast reads cannot restore a removed selected forecast',async({page})=>{
+ await openTestApp(page);await enter(page);await run(page);await run(page,'eurusd','10');
+ const [newest,older]=await page.evaluate(()=>(window as any).__testPredictionInfo().forecasts);
+ await page.evaluate(id=>{
+  const api=window.go!.main!.App!,get=api.GetPredictions,forecast=api.GetPredictionForecast;
+  api.GetPredictions=async()=>{api.GetPredictions=get;const value=await get();return new Promise(resolve=>(window as any).__releaseStaleForecastList=()=>resolve(value));};
+  api.GetPredictionForecast=async value=>{if(value!==id)return forecast(value);const snapshot=await forecast(value);return new Promise(resolve=>(window as any).__releaseRemovedForecast=()=>resolve(snapshot));};
+ },older.id);
+ await stored(page).locator(`button[data-forecast-id="${older.id}"]`).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseRemovedForecast)).toBe('function');
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseStaleForecastList)).toBe('function');await removeForecast(page,older.id);
+ await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('eurusd-d1.csv');
+ await page.evaluate(()=>{(window as any).__releaseRemovedForecast();(window as any).__releaseStaleForecastList();});
+ await expect(stored(page).getByRole('button')).toHaveCount(1);await expect(stored(page).locator('button')).toHaveAttribute('data-forecast-id',newest.id);await expect(panel(page).getByLabel('Selected forecast',{exact:true})).toContainText('eurusd-d1.csv');
 });

@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-10-29
 
+## Saved forecast removal — 2026-10-29, `predictions` branch
+
+**Predictions → Saved forecasts** now has a themed right-click **Remove** menu, also reachable with Shift+F10 or the context-menu key. Removing the displayed snapshot selects the newest remaining forecast, or clears the chart after the last. Deletion is limited to one validated regular snapshot inside the forecast folder; CSVs, models, other forecasts and workspace state are preserved. Selection changes persist before removal and roll back on unlink failure. The newest-100 list backfills older snapshots. Unavailable restored selections no longer prevent new predictions, while their original settings and malformed files remain intact until the user changes selection.
+
+Pending selection writes finish before deletion; duplicate requests, stale status/chart reads and normal-close races are covered. Failed removals preserve the history/chart and remain visible. Active preparation/inference prevents removal. Keyboard focus returns after dismissal or removal.
+
+Verification so far: independent Go package race tests, Wails facade and native production-tagged race tests, native vet, frontend typecheck/lint and **198 unit tests** pass. All **18 Predictions browser tests** pass, with the final resize/scroll focus regression rerun successfully. Tests cover selected/unselected/last removal, restart, inventory backfill, invalid paths/symlinks, write/unlink failure rollback, active work, stale saves/reads and pending shutdown. No model download, real profile or network alert was used. Combined hosted CI and final Linux/Windows archive verification are pending; evidence is in ignored `.tools/verification/prediction-removal/`. Native desktop interaction and Windows execution remain unverified.
+
 ## Enrichment periods and Short simulations — 2026-10-29
 
 **Screener → Enrichment → Period** now selects All periods or any supported Downloader timeframe, including m1/m5/h1/d1. The Enrich button counts matching files across the complete inventory, independently of the 20-row page. Backend selection runs before grouping and consolidation, so excluded CSVs, metadata and backups remain untouched. The file/progress table stays visible for all periods, and Refresh remains global. Batch period is removed from per-file worker requests and applied recipes so future Refresh replay remains independent of the original selection.

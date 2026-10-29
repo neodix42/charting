@@ -156,12 +156,19 @@ func validateForecast(forecast Forecast) error {
 }
 
 func (m *Manager) loadForecasts() error {
+	forecasts, err := m.forecastInventory("")
+	m.forecasts = forecasts
+	return err
+}
+
+func (m *Manager) forecastInventory(excludeID string) ([]ForecastSummary, error) {
+	forecasts := []ForecastSummary{}
 	directory, err := os.Open(m.forecastDirectory)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return forecasts, nil
 	}
 	if err != nil {
-		return err
+		return forecasts, err
 	}
 	defer directory.Close()
 	names := []string{}
@@ -169,7 +176,7 @@ func (m *Manager) loadForecasts() error {
 		entries, readErr := directory.ReadDir(256)
 		for _, entry := range entries {
 			id := strings.TrimSuffix(entry.Name(), ".json")
-			if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") && forecastID.MatchString(id) {
+			if id != excludeID && entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") && forecastID.MatchString(id) {
 				names = append(names, entry.Name())
 			}
 		}
@@ -181,7 +188,7 @@ func (m *Manager) loadForecasts() error {
 			break
 		}
 		if readErr != nil {
-			return readErr
+			return forecasts, readErr
 		}
 	}
 	var failures []error
@@ -197,7 +204,7 @@ func (m *Manager) loadForecasts() error {
 			failures = append(failures, fmt.Errorf("restore forecast %s: %w", name, err))
 			continue
 		}
-		m.forecasts = append(m.forecasts, summary(forecast))
+		forecasts = append(forecasts, summary(forecast))
 	}
-	return errors.Join(failures...)
+	return forecasts, errors.Join(failures...)
 }

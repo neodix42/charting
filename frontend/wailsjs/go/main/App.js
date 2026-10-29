@@ -82,6 +82,10 @@ export function ConfirmClose(arg1, arg2) {
   return window['go']['main']['App']['ConfirmClose'](arg1, arg2);
 }
 
+export function DeletePredictionForecast(arg1) {
+  return window['go']['main']['App']['DeletePredictionForecast'](arg1);
+}
+
 export function DeleteScreenerAnalysisCondition(arg1) {
   return window['go']['main']['App']['DeleteScreenerAnalysisCondition'](arg1);
 }

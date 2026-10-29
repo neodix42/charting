@@ -56,6 +56,14 @@ func New(profile string, source func() ([]Dataset, error), runtime ModelRuntime)
 	if err = m.loadForecasts(); err != nil {
 		m.restoreError = cleanError(err)
 	}
+	if m.selection.ForecastID != "" {
+		// External removal or corruption must not trap every later selection
+		// edit or prediction behind an unavailable reference. Keep the saved
+		// settings and snapshot bytes intact until the user changes selection.
+		if _, err := m.Forecast(m.selection.ForecastID); err != nil {
+			m.selection.ForecastID = ""
+		}
+	}
 	if runtime != nil {
 		m.status = runtime.Inspect(m.settings)
 	} else {
@@ -205,6 +213,11 @@ func (m *Manager) SaveSelection(selection Selection) (Selection, error) {
 	if m.settingsError != "" {
 		return m.selection, errors.New(m.settingsError)
 	}
+	if selection.ForecastID != "" {
+		if _, err := m.Forecast(selection.ForecastID); err != nil {
+			return m.selection, fmt.Errorf("selected forecast is no longer available: %w", err)
+		}
+	}
 	if err := writeJSON(m.settingsPath, savedSettings{Version: 1, Settings: m.settings, Selection: selection}, false); err != nil {
 		return m.selection, fmt.Errorf("save prediction selection: %w", err)
 	}
@@ -308,6 +321,11 @@ func (m *Manager) Start(selection Selection) (Info, error) {
 	}
 	if m.runtime == nil || !m.status.Ready {
 		return m.infoLocked(), errors.New("prepare the local model and runtime before starting a prediction")
+	}
+	if selection.ForecastID != "" {
+		if _, err := m.Forecast(selection.ForecastID); err != nil {
+			return m.infoLocked(), fmt.Errorf("selected forecast is no longer available: %w", err)
+		}
 	}
 	if err = writeJSON(m.settingsPath, savedSettings{Version: 1, Settings: m.settings, Selection: selection}, false); err != nil {
 		return m.infoLocked(), fmt.Errorf("save prediction selection: %w", err)

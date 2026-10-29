@@ -14,7 +14,7 @@ export interface PredictionsBackend {
  GetPredictions():Promise<PredictionInfo>;GetPredictionDatasets():Promise<PredictionDataset[]>;
  ConfigurePredictions(settings:PredictionSettings):Promise<PredictionInfo>;SavePredictionSelection(selection:PredictionSelection):Promise<PredictionSelection>;
  PreparePredictionModel():Promise<PredictionInfo>;StartPrediction(selection:PredictionSelection):Promise<PredictionInfo>;CancelPrediction():Promise<PredictionInfo>;
- GetPredictionForecast(id:string):Promise<PredictionForecast>;ChoosePredictionModelDirectory():Promise<string>;
+ GetPredictionForecast(id:string):Promise<PredictionForecast>;DeletePredictionForecast(id:string):Promise<PredictionInfo>;ChoosePredictionModelDirectory():Promise<string>;
 }
 export const initialPredictionSelection=():PredictionSelection=>({asset:'',period:'d1',contextLength:512,horizon:20,forecastId:''});
 export const predictionModelKey=(settings:PredictionSettings)=>JSON.stringify([settings.model,settings.modelDirectory]);

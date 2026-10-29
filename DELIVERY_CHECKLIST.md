@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Saved forecast removal — 2026-10-29, `predictions` branch
+
+- [x] Saved forecasts offer right-click/keyboard Remove, persistent successor selection, last-chart clearing and newest-100 inventory backfill.
+- [x] Removal preserves source CSVs/models/unrelated snapshots, validates private paths and handles selection/write/unlink failures, restart and stale UI requests.
+- [x] Independent/facade/native race tests, native vet, frontend checks, 198 unit tests and 18 Predictions browser cases pass; final menu focus regression also passes.
+- [ ] Combined hosted CI and final Linux/Windows archive checks are pending; see STATUS.md.
+- [ ] Native desktop interaction and Windows execution remain unverified.
+
 ## Enrichment periods and Short simulations — 2026-10-29
 
 - [x] Catalog-based Enrichment Period scopes the entire batch before consolidation and leaves other periods unchanged; counts span all pages and recipes remain reusable by Refresh.

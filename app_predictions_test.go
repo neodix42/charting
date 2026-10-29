@@ -150,3 +150,53 @@ func TestPredictionFacadeSeparatesSnapshotsAndRestoresPreferences(t *testing.T) 
 		t.Fatal("facade accepted arbitrary forecast path")
 	}
 }
+
+func TestPredictionForecastRemovalFacadePersistsWithoutChangingSourceOrWorkspace(t *testing.T) {
+	a, workspace := predictionFacade(t)
+	path := filepath.Join(a.screener.Info().Directory, "btcusd-d1-2024-01-01-2026-10-29.csv")
+	var source strings.Builder
+	source.WriteString("timestamp,close\n")
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 600; i++ {
+		fmt.Fprintf(&source, "%d,%d\n", start.AddDate(0, 0, i).UnixMilli(), 1000+i)
+	}
+	if err := os.WriteFile(path, []byte(source.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.StartPrediction(predictions.Selection{Asset: "btcusd", Period: "d1", ContextLength: 512, Horizon: 20}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for a.GetPredictions().Active {
+		if time.Now().After(deadline) {
+			t.Fatal("prediction did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	before := a.GetPredictions()
+	if len(before.Forecasts) != 1 {
+		t.Fatalf("forecast missing before removal: %+v", before)
+	}
+	id := before.Forecasts[0].ID
+	removed, err := a.DeletePredictionForecast(id)
+	if err != nil || len(removed.Forecasts) != 0 || removed.Selection.ForecastID != "" || removed.Settings != before.Settings {
+		t.Fatalf("facade removal: %+v %v", removed, err)
+	}
+	if _, err := a.GetPredictionForecast(id); err == nil {
+		t.Fatal("removed forecast still exists")
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != source.String() {
+		t.Fatal("forecast removal changed market data", err)
+	}
+	if actual, err := a.store.Load(); err != nil || !reflect.DeepEqual(actual, workspace) {
+		t.Fatal("forecast removal changed the chart workspace", err)
+	}
+	a.predictions.Close()
+	a.predictions = predictions.New(a.store.Directory(), a.predictionDatasets, facadePredictionRuntime{})
+	if restored := a.GetPredictions(); len(restored.Forecasts) != 0 || restored.Selection.ForecastID != "" {
+		t.Fatalf("removed forecast restored on restart: %+v", restored)
+	}
+	if _, err := a.DeletePredictionForecast("../../predictions.json"); err == nil {
+		t.Fatal("removal accepted a path instead of an ID")
+	}
+}

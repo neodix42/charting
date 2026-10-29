@@ -277,6 +277,8 @@ The first visit prepares a private Python/CPU inference runtime and downloads th
 
 The default Linux model folder is `~/.local/share/cryptodesk/predictions/models`, shown alongside the current folder in Settings and adjustable there. Forecasts are saved independently under `<profile>/predictions/forecasts`, with their creation time, input cutoff, source CSV checksum, model revision, historical context and quantiles. Saved forecasts can be reopened after restart; prediction never adds forecast rows or columns to real CSVs. Use Screener Refresh first when you want newer actual bars.
 
+To delete a saved forecast, right-click its entry in **Saved forecasts** and choose **Remove**. This deletes that forecast snapshot and remembers the change across restarts; actual market data and downloaded models are preserved. If you remove the displayed forecast, the newest remaining forecast opens, or the chart clears when none remain.
+
 These are model estimates, not guaranteed coverage or validated trading signals. Forecast quality on your assets needs separate historical evaluation. See the [Predictions guide](APP_README.md#predictions) for setup, storage and input checks.
 
 ## Build from source
