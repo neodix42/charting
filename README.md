@@ -30,7 +30,7 @@
 
 **Extract the complete archive.** Ubuntu and Windows packages include the private Node runtime, Dukascopy downloader, indicator library and browser support used by Screener. Keep `screener-runtime` alongside the application; no global Node/npm or runtime `npx` installation is needed. See [updating the Screener downloader](#updating-the-screener-downloader) to check, restore or upgrade its pinned dependency.
 
-Keep the included **`jforex-runtime`** folder beside the executable for forex charts. JForex additionally needs **Java 17 or newer** installed separately. Its pinned vendor SDK downloads into the private app profile on the first connection; it is separate from the preinstalled Screener downloader.
+For forex charts on **Linux**, run the archive's `./install-user.sh` to install the bridge in **`$HOME/.local/share/cryptodesk-app/jforex-runtime`**. Launching from a source checkout or another folder uses this same installation. An absolute `XDG_DATA_HOME` selects the corresponding user-data location. On **Windows**, keep the included **`jforex-runtime`** folder beside the executable. JForex additionally needs **Java 17 or newer** installed separately. Its pinned vendor SDK downloads into the private app profile on the first connection; it is separate from the preinstalled Screener downloader.
 
 The Windows ZIP includes a pinned WebView2 runtime. Keep `WebView2` and `portable.marker` beside the executable in a writable local folder; application data stays in its portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md) and [installation instructions](APP_README.md#run-the-built-release).
 
@@ -76,7 +76,7 @@ In **Settings → Telegram Bot**, enter your masked **Telegram Bot API Token** a
 
 ## Dukascopy forex charts
 
-1. Install **Java 17+**; Windows users can use [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64), with Java on `PATH` or `JAVA_HOME` set to its installation folder.
+1. Install **Java 17+**, and on Linux run the release's `./install-user.sh`. Linux prefers **`/usr/bin/java`**, followed by Java on `PATH`, then `JAVA_HOME/bin/java`; an IDE's `JAVA_HOME` does not replace the system runtime. Windows users can use [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64), with Java on `PATH` or `JAVA_HOME` set to its installation folder.
 2. Open **Settings → Dukascopy**, select **Demo** or **Live**, enter **JForex Username** and **JForex Password**, then click **Test connection**. First setup downloads about **43 MB** of checksum-pinned SDK dependencies; **Cancel test** stops a pending connection check. Live accounts can use the optional displayed PIN challenge.
 3. Select **Dukascopy** in a chart's source dropdown, then choose a **Forex** pair. The list is discovered from the authenticated account, rather than a promised universal instrument list.
 

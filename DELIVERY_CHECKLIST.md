@@ -2,13 +2,21 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
-## Responsive JForex charts and Settings — 2026-10-29, `predictions` branch
+## Installed JForex paths and workspace preservation — 2026-10-29
+
+- [x] Linux selects the user's installed bridge independently of checkout/executable paths; Windows portability and explicit test overrides remain supported.
+- [x] System Java takes priority over an IDE's JAVA_HOME; discovery never rewrites installed runtimes or changes global settings.
+- [x] Runtime discovery, native race and bridge packaging checks pass; an isolated copy of the real saved workspace loads all 4 tabs and 11 charts without resetting the original.
+- [x] Mixed-market restart/export/import regression includes Dukascopy/forex drawings alongside crypto spot and perpetual feeds.
+
+## Responsive JForex charts and Settings — 2026-10-29, `main` branch
 
 - [x] Running-bridge thread evidence identifies synchronous historical HTTP loading blocking the shared command queue.
 - [x] Asynchronous bounded history, independent controls/live subscriptions, 45-second data deadlines, cancellation and stale callback protection pass real SDK-interface regressions.
 - [x] Login deadline/cancellation recovers a blocked control process; Settings close saves credentials then cancels pending checks without stale response waits.
 - [x] Wider responsive Settings tabs and corrected Dukascopy labels pass 18 JForex, 27 Predictions/Telegram and 4 appearance browser cases, plus Go/native/Java/Python/frontend checks.
-- [ ] Final Linux/Windows archives and hosted CI are pending; see STATUS.md.
+- [x] Final Linux/Windows archives pass complete inventories, clean source provenance and checksums; hosted release run 40923934923 publishes v0.1.25.
+- [x] Final hosted Tests run 40923934860 passes, including 254 browser cases; see STATUS.md.
 - [ ] Updated-bridge Live historical/tick delivery and native desktop/Windows GUI execution remain unverified; Live login/catalog success is user-reported.
 
 ## Saved forecast removal — 2026-10-29, `predictions` branch

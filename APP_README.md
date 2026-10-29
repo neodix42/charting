@@ -25,23 +25,25 @@ sudo apt install -y \
 
 GTK3 provides the desktop window, WebKitGTK the embedded interface/JavaScript engine, and libsoup3 plus GLib networking the webview's HTTP/TLS support. NSS/NSPR, ALSA and X11 support libraries serve the private Screener Chromium. APT installs transitive dependencies automatically; the [Ubuntu package catalog](https://packages.ubuntu.com/noble/amd64/libwebkit2gtk-4.1-0) lists the WebKitGTK runtime dependencies. Keep the supplied `screener-runtime` folder beside the application: Node, dukascopy-node, trading-signals and Chromium are already included.
 
-For **Dukascopy forex charts**, also install **Java 17 or newer** and keep the supplied `jforex-runtime` folder beside the executable:
+For **Dukascopy forex charts**, also install **Java 17 or newer**:
 
 ```bash
 sudo apt install -y openjdk-17-jre-headless
 java -version
 ```
 
-A JRE is sufficient to run forex charts; building the bridge needs a JDK. On Windows, install [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64) or another compatible Java runtime. CryptoDesk discovers `JAVA_HOME/bin/java` first, then `java` on `PATH`; restart the app after changing Java. The JForex desktop platform is not required. Crypto charts, Screener and Predictions do not require Java.
+A JRE is sufficient to run forex charts; building the bridge needs a JDK. Linux prefers `/usr/bin/java`, then `java` on `PATH`, then `JAVA_HOME/bin/java`. This keeps an IDE's JDK from replacing the system runtime. On Windows, install [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64) or another compatible Java runtime; Java on `PATH` takes priority over `JAVA_HOME`. Restart the app after changing Java. The JForex desktop platform is not required. Crypto charts, Screener and Predictions do not require Java.
 
 Use a graphical desktop session with working graphics drivers. GitHub releases build on Ubuntu 24.04; locally built archives require a glibc version compatible with their build host. Workspace storage remains in the normal user profile unless `--data-dir` is supplied. The separate Linux archive with bundled GTK/WebKit has been retired.
 
-Optional user-local installation for the **Linux archive**:
+User-local installation for the **Linux archive** (required to install or update its forex bridge):
 
 ```bash
 ./install-user.sh --dry-run
 ./install-user.sh
 ```
+
+Linux always reads the installed bridge from `$HOME/.local/share/cryptodesk-app/jforex-runtime`, including when the executable runs from a checkout or Downloads. An absolute `XDG_DATA_HOME` changes the base to `$XDG_DATA_HOME/cryptodesk-app/jforex-runtime`, matching the installer. Working-directory changes and `--data-dir` do not select another bridge. Missing or damaged installations show a setup error instead of silently using a checkout's JAR. Discovery only reads files; install/update explicitly with the release's installer. Windows retains its portable sibling bridge.
 
 This writes the app under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local/share/cryptodesk-app`), registers its application launcher and installs the same diamond logo shown in the app's top-left corner. The launcher uses an absolute PNG icon path, with SVG and eight PNG sizes also registered in the user icon theme. The native window embeds a smaller copy that GTK accepts on X11; the matching `cryptodesk` desktop identity provides Wayland taskbar association. Windows builds carry the same logo in their executable resources.
 
@@ -82,7 +84,7 @@ cd frontend && npm run test:e2e
 
 Both Linux and Windows builds compile our JForex bridge with Java 17 bytecode, using checksum-pinned SDK **3.6.51 / API 2.13.99** artifacts from Dukascopy's official Maven repository and Maven Central. The approximately **43 MB** SDK build cache lives under `.tools/jforex-sdk/cache`; vendor SDK JARs are excluded from release archives. Each package contains only `cryptodesk-jforex.jar`, `SDK-ARTIFACTS.json`, `JFOREX-PROVENANCE.json`, `LICENSE` and `THIRD_PARTY_NOTICES.md` inside `jforex-runtime`. Package validation checks all five files, their hashes and matching `version.json` provenance.
 
-For source-checkout development before a full build, run `python3 scripts/jforex_bundle.py --output jforex-runtime`. `python3 scripts/jforex_bundle.py --test` verifies the bridge and actual SDK bootstrap without account credentials; initial SDK downloads still need network access. `CRYPTODESK_JFOREX_RUNTIME` can explicitly select another complete bridge folder. This is independent of the Screener runtime override.
+For source-checkout development, build with `./build.sh` and run `./scripts/install-user.sh` to install the built release, or use an already installed bridge. `python3 scripts/jforex_bundle.py --test` verifies the bridge and actual SDK bootstrap without account credentials; initial SDK downloads still need network access. To deliberately test another build in isolation, run `python3 scripts/jforex_bundle.py --output jforex-runtime` and set `CRYPTODESK_JFOREX_RUNTIME` to that complete folder's absolute path. This explicit override is independent of the Screener runtime override; normal discovery never selects a checkout's JAR.
 
 Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
 
@@ -154,7 +156,7 @@ Provider failures remain visible in their chart. Retry or reselect without losin
 
 ### Connect JForex
 
-1. Install **Java 17+** and retain the release's `jforex-runtime` folder beside the executable.
+1. Install **Java 17+**. On Linux run the release's `./install-user.sh` to install/update the bridge under your user-data directory. On Windows retain the release's `jforex-runtime` folder beside the executable.
 2. Open **Settings → Dukascopy**. Choose **Demo** or **Live**, enter **JForex Username** and the masked **JForex Password**, then click **Save credentials** or **Test connection**. Test saves the current draft before checking connectivity. Opening Settings alone never logs in.
 3. On the first connection, the app downloads the pinned JForex SDK and dependencies (51 files, approximately **43 MB**) into the private profile. Downloaded files are checked against their exact sizes and SHA-256 before loading. Completed files are reused after interruption. **Cancel test** stops a pending Test or PIN challenge and preserves saved credentials. Closing Settings also cancels a pending check after any credential save finishes. First-time SDK preparation can take several minutes on a slow network; an individual login request has a 60-second deadline.
 4. Select **Dukascopy** in a chart's source dropdown. Open its instrument list to choose a **Forex** pair, such as EUR/USD, GBP/USD or USD/JPY. Search ignores case and supports symbols, base/quote currencies and the displayed pair name.

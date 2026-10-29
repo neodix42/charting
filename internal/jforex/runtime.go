@@ -25,71 +25,81 @@ type commandFactory func(context.Context) (*exec.Cmd, error)
 
 func discoverRuntime() bridgeRuntime {
 	name := "java"
+	systemJava := ""
 	if runtime.GOOS == "windows" {
 		name += ".exe"
+	} else if runtime.GOOS == "linux" {
+		systemJava = "/usr/bin/java"
 	}
-	java := ""
-	if home := strings.TrimSpace(os.Getenv("JAVA_HOME")); home != "" {
-		candidate := filepath.Join(home, "bin", name)
-		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
-			java = candidate
-		}
-	}
-	if java == "" {
-		java, _ = exec.LookPath(name)
-	}
-	if java != "" {
-		if absolute, err := filepath.Abs(java); err == nil {
-			java = absolute
-		}
-	}
-	candidates := []string{}
+	result := bridgeRuntime{java: findJava(name, systemJava, os.Getenv("JAVA_HOME"))}
 	if explicit := strings.TrimSpace(os.Getenv("CRYPTODESK_JFOREX_RUNTIME")); explicit != "" {
-		candidates = append(candidates, explicit)
-	} else {
-		if executable, err := os.Executable(); err == nil {
+		result.directory, result.err = filepath.Abs(explicit)
+	} else if runtime.GOOS == "windows" {
+		// Windows archives retain their portable sibling runtime. Linux uses the
+		// user's installation even when launched from a checkout or Downloads.
+		var executable string
+		executable, result.err = os.Executable()
+		if result.err == nil {
 			if resolved, err := filepath.EvalSymlinks(executable); err == nil {
 				executable = resolved
 			}
-			candidates = append(candidates, filepath.Join(filepath.Dir(executable), "jforex-runtime"))
+			result.directory = filepath.Join(filepath.Dir(executable), "jforex-runtime")
 		}
-		if cwd, err := os.Getwd(); err == nil {
-			for directory := cwd; ; directory = filepath.Dir(directory) {
-				if _, err := os.Stat(filepath.Join(directory, "go.mod")); err == nil {
-					candidates = append(candidates, filepath.Join(directory, "jforex-runtime"))
-					break
-				}
-				parent := filepath.Dir(directory)
-				if parent == directory {
-					break
-				}
-				directory = parent
-			}
-		}
+	} else {
+		result.directory, result.err = installedRuntimeDirectory()
 	}
-	result := bridgeRuntime{java: java}
-	for _, directory := range candidates {
-		absolute, err := filepath.Abs(directory)
-		if err != nil {
-			continue
-		}
-		if result.directory == "" {
-			result.directory = absolute
-		}
-		if info, err := os.Stat(filepath.Join(absolute, "cryptodesk-jforex.jar")); err == nil && info.Mode().IsRegular() {
-			result.directory = absolute
-			if _, err := readSDKManifest(filepath.Join(absolute, "SDK-ARTIFACTS.json")); err != nil {
-				result.err = err
-				return result
-			}
-			if java == "" {
-				result.err = errors.New("Java 17 or newer is required for Dukascopy charts; install a Java runtime and restart CryptoDesk")
-			}
-			return result
-		}
+	if result.err != nil {
+		result.err = errors.New("Could not locate the installed JForex bridge folder in your user profile")
+		return result
 	}
-	result.err = errors.New("The JForex bridge is missing; restore the complete jforex-runtime folder beside CryptoDesk or run python3 scripts/jforex_bundle.py --output jforex-runtime in a source checkout")
+	if info, err := os.Stat(filepath.Join(result.directory, "cryptodesk-jforex.jar")); err != nil || !info.Mode().IsRegular() {
+		result.err = errors.New("The installed JForex bridge is missing; run ./install-user.sh from the extracted Linux release to install it in your user data folder, or restore the complete jforex-runtime folder beside CryptoDesk on Windows")
+		return result
+	}
+	if _, err := readSDKManifest(filepath.Join(result.directory, "SDK-ARTIFACTS.json")); err != nil {
+		result.err = err
+		return result
+	}
+	if result.java == "" {
+		result.err = errors.New("Java 17 or newer is required for Dukascopy charts; install a Java runtime and restart CryptoDesk")
+	}
 	return result
+}
+
+func installedRuntimeDirectory() (string, error) {
+	// Match install-user.sh, including an explicitly configured absolute XDG
+	// location. A relative XDG value must never depend on the working directory.
+	base := os.Getenv("XDG_DATA_HOME")
+	if !filepath.IsAbs(base) {
+		home, err := os.UserHomeDir()
+		if err != nil || !filepath.IsAbs(home) {
+			return "", errors.New("Could not locate your home directory")
+		}
+		base = filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(base, "cryptodesk-app", "jforex-runtime"), nil
+}
+
+func findJava(name, systemPath, javaHome string) string {
+	// IDEs commonly export their own JAVA_HOME. Prefer the system runtime on
+	// Linux, then PATH, retaining JAVA_HOME as a fallback for other installations.
+	path := ""
+	if info, err := os.Stat(systemPath); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 {
+		path = systemPath
+	}
+	if path == "" {
+		path, _ = exec.LookPath(name)
+	}
+	if path == "" && strings.TrimSpace(javaHome) != "" {
+		candidate := filepath.Join(strings.TrimSpace(javaHome), "bin", name)
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			path = candidate
+		}
+	}
+	if path != "" {
+		path, _ = filepath.Abs(path)
+	}
+	return path
 }
 
 func (r bridgeRuntime) command(ctx context.Context) (*exec.Cmd, error) {

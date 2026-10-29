@@ -21,13 +21,16 @@ func TestMixedMarketsSaveRestartExportImportAndInvalidPreservation(t *testing.T)
 	})
 	first := loadTest(t, s)
 	w := first.Workspace
-	w.Tabs[0].Grid = domain.Grid{Rows: 2, Columns: 2, RowFractions: []float64{.5, .5}, ColumnFractions: []float64{.5, .5}}
-	for len(w.Tabs[0].Charts) < 4 {
+	w.Tabs[0].Grid = domain.Grid{Rows: 2, Columns: 3, RowFractions: []float64{.5, .5}, ColumnFractions: []float64{1.0 / 3, 1.0 / 3, 1.0 / 3}}
+	for len(w.Tabs[0].Charts) < 5 {
 		w.Tabs[0].Charts = append(w.Tabs[0].Charts, domain.NewChart())
 	}
 	w.Tabs[0].Charts[1].Market = "perpetual" // Same Binance native symbol as spot.
 	w.Tabs[0].Charts[2].Exchange, w.Tabs[0].Charts[2].Market, w.Tabs[0].Charts[2].Instrument = "bybit", "perpetual", "XAGUSDT"
 	w.Tabs[0].Charts[3].Exchange, w.Tabs[0].Charts[3].Instrument = "coinbase", "BTC-USD"
+	forex := &w.Tabs[0].Charts[4]
+	forex.Exchange, forex.Market, forex.Instrument = "dukascopy", "forex", "EURUSD"
+	forex.Drawings = []domain.Drawing{{ID: domain.ID(), Type: "horizontal", Exchange: forex.Exchange, Market: forex.Market, Instrument: forex.Instrument, Points: []domain.DrawingPoint{{Time: 1700000000, Price: 1.05}}}}
 	ack, err := s.Save(first.Revision, "mixed-markets", 1, w)
 	if err != nil {
 		t.Fatal(err)
