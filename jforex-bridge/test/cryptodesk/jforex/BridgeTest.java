@@ -7,7 +7,9 @@ import java.awt.image.BufferedImage;
 import java.lang.reflect.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
+import java.util.function.BooleanSupplier;
 
 /** Explicit offline SDK-interface fakes exercise production protocol and lifecycle. */
 public final class BridgeTest {
@@ -36,6 +38,11 @@ public final class BridgeTest {
         return fake(ITick.class, (method, args) -> switch (method) { case "getTime" -> time; case "getBid" -> bid; default -> null; });
     }
     static void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
+    static void await(BooleanSupplier ready, String message) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (!ready.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(5);
+        check(ready.getAsBoolean(), message);
+    }
     static JsonObject request(String op) { JsonObject out = new JsonObject(); out.addProperty("id", "test-" + op); out.addProperty("op", op); return out; }
     static JsonObject feed(String instrument) { return JsonParser.parseString("{\"exchange\":\"dukascopy\",\"market\":\"forex\",\"instrument\":\"" + instrument + "\",\"timeframe\":\"1m\"}").getAsJsonObject(); }
     static JsonObject good(Bridge bridge, JsonObject request) { JsonObject response = bridge.handle(request); check(response.get("ok").getAsBoolean(), response.toString()); return response; }
@@ -43,7 +50,7 @@ public final class BridgeTest {
         Path cache = Files.createTempDirectory("cryptodesk-jforex-test-");
         List<JsonObject> events = Collections.synchronizedList(new ArrayList<>());
         AtomicBoolean connected = new AtomicBoolean(), offline = new AtomicBoolean();
-        Set<Instrument> subscribed = new HashSet<>();
+        Set<Instrument> subscribed = ConcurrentHashMap.newKeySet();
         AtomicInteger factories = new AtomicInteger(), historyCalls = new AtomicInteger(), authArgs = new AtomicInteger();
         AtomicReference<Object[]> historyArguments = new AtomicReference<>();
         AtomicReference<IStrategy> strategy = new AtomicReference<>();
@@ -53,13 +60,22 @@ public final class BridgeTest {
             case "getBarStart" -> ((Long) values[1]) / 60000 * 60000;
             case "getBar" -> active.get();
             case "getLastTick" -> tick(now + 500, 1.14);
-            case "getBars" -> { historyCalls.incrementAndGet(); historyArguments.set(values); yield List.of(bar(now - 120000, 1.07, 1.10, 1.06, 1.08), bar(now - 60000, 1.08, 1.12, 1.07, 1.10), active.get()); }
+            case "getBars" -> throw new AssertionError("blocking historical SDK method must not be used");
+            case "readBars" -> {
+                historyCalls.incrementAndGet(); historyArguments.set(values);
+                LoadingDataListener listener = (LoadingDataListener) values[7];
+                for (IBar item : List.of(bar(now - 120000, 1.07, 1.10, 1.06, 1.08), bar(now - 60000, 1.08, 1.12, 1.07, 1.10), active.get()))
+                    listener.newBar((Instrument) values[0], (Period) values[1], OfferSide.BID, item.getTime(), item.getOpen(), item.getClose(), item.getLow(), item.getHigh(), item.getVolume());
+                ((LoadingProgressListener) values[8]).loadingFinished(true, now - 120000, now, now);
+                yield null;
+            }
             default -> null;
         });
         IDataService dataService = fake(IDataService.class, (method, values) -> method.equals("isOfflineTime") ? offline.get() : null);
         IContext context = fake(IContext.class, (method, values) -> switch (method) {
             case "getHistory" -> history; case "getDataService" -> dataService;
-            case "setSubscribedInstruments" -> { check(values.length == 2 && Boolean.TRUE.equals(values[1]), "subscription must wait before requesting history"); subscribed.addAll((Set<Instrument>) values[0]); yield null; }
+            case "getSubscribedInstruments" -> new HashSet<>(subscribed);
+            case "setSubscribedInstruments" -> { check(values.length == 2 && Boolean.FALSE.equals(values[1]), "control subscriptions must not wait for history"); subscribed.clear(); subscribed.addAll((Set<Instrument>) values[0]); yield null; }
             default -> null;
         });
         IClient client = fake(IClient.class, (method, values) -> switch (method) {
@@ -99,6 +115,7 @@ public final class BridgeTest {
             active.set(originalActive);
             JsonObject subscription = request("subscribe"); subscription.addProperty("subscriptionId", "view-1"); subscription.add("feedKey", feed("EURUSD"));
             good(bridge, subscription); check(subscribed.contains(Instrument.EURUSD), "active chart owns SDK subscription");
+            await(() -> { synchronized (events) { return events.stream().anyMatch(event -> event.has("bars")) && events.get(events.size() - 1).has("health") && events.get(events.size() - 1).getAsJsonObject("health").get("state").getAsString().equals("live"); } }, "asynchronous seed publishes bars and readiness");
             JsonObject liveBars = events.stream().filter(event -> event.has("bars")).reduce((first, second) -> second).orElseThrow();
             check(liveBars.getAsJsonArray("bars").size() == 3, "initial subscription publishes real SDK candles");
             JsonObject seededHealth = events.get(events.size() - 1).getAsJsonObject("health");

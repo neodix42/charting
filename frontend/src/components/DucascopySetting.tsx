@@ -7,14 +7,20 @@ const loadError='Could not load JForex settings. Saved credentials have been pre
 const saveError='Could not save JForex credentials. Please retry.';
 const testError='Could not test the JForex connection. Check your connection, credentials and Java runtime, then retry.';
 const challengeError='Could not load the JForex PIN image. Check your connection, credentials and Java runtime, then retry.';
-const connectionGuards=new Set(['Close or reselect active DucasCopy charts before changing JForex credentials','Close the active Dukascopy charts and finish connection requests before changing these credentials']);
+const connectionGuards=new Set(['Close or reselect active Dukascopy charts before changing JForex credentials','Close the active Dukascopy charts and finish connection requests before changing these credentials']);
 const safeSaveError=(reason:unknown)=>{const message=reason instanceof Error?reason.message:typeof reason==='string'?reason:'';return connectionGuards.has(message)?message:saveError;};
 
 export const DucascopySetting=forwardRef<DucascopySettingHandle,{api:Backend;visible:boolean}>(function DucascopySetting({api,visible},ref){
  const [info,setInfo]=useState<DucascopyInfo|null>(null),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[environment,setEnvironment]=useState<DucascopySettings['environment']>('demo'),[clearPassword,setClearPassword]=useState(false),[loading,setLoading]=useState(false),[operation,setOperation]=useState<'save'|'test'|'challenge'|null>(null),[error,setError]=useState(''),[status,setStatus]=useState(''),[retry,setRetry]=useState(0),[challenge,setChallenge]=useState(''),[pin,setPIN]=useState(''),[cancelling,setCancelling]=useState(false);
- const alive=useRef(false),pending=useRef<Promise<void>|null>(null),cancellation=useRef<Promise<void>|null>(null),cancelRequested=useRef(false);
+ const alive=useRef(false),pending=useRef<Promise<void>|null>(null),cancellation=useRef<Promise<void>|null>(null),cancelRequested=useRef(false),generation=useRef(0),savingRequest=useRef<Promise<DucascopyInfo>|null>(null),requestKind=useRef<'save'|'test'|'challenge'|null>(null);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
- useImperativeHandle(ref,()=>({flush:async()=>{await pending.current;await cancellation.current;}}),[]);
+ useImperativeHandle(ref,()=>({flush:async()=>{
+  const write=savingRequest.current;
+  if(write)try{await write;}catch{throw Error(saveError);}
+  if(pending.current&&requestKind.current!=='save')cancel();
+  await cancellation.current;
+  if(requestKind.current==='save')await pending.current;
+ }}),[]);
  useEffect(()=>{
   if(!visible||info)return;let current=true;setLoading(true);setError('');
   void api.GetDucascopy().then(next=>{if(current){setInfo(next);setUsername(next.username);setEnvironment(next.environment);setLoading(false);}}).catch(()=>{if(current){setError(loadError);setLoading(false);}});
@@ -30,29 +36,37 @@ export const DucascopySetting=forwardRef<DucascopySettingHandle,{api:Backend;vis
  const perform=(kind:'save'|'test'|'challenge')=>{
   if(pending.current||cancellation.current||!info||!valid||(kind!=='save'&&clearPassword))return;
   cancelRequested.current=false;setOperation(kind);setError('');setStatus('');
+  const version=++generation.current;requestKind.current=kind;
+  const current=()=>alive.current&&generation.current===version;
   const request:DucascopySettings={username:username.trim(),password:clearPassword?'':password,environment,...(clearPassword?{clearPassword:true}:{})};
   let saving=true;
-  const task=Promise.resolve().then(()=>api.ConfigureDucascopy(request)).then(async saved=>{
+  const write=Promise.resolve().then(()=>api.ConfigureDucascopy(request));savingRequest.current=write;
+  const task=write.then(async saved=>{
    saving=false;
-   if(alive.current){setInfo(saved);setUsername(saved.username);setEnvironment(saved.environment);setPassword('');setClearPassword(false);}
-   if(cancelRequested.current)return;
-   if(kind==='save'){changed();if(alive.current){setPIN('');setChallenge('');setStatus(saved.passwordConfigured?'JForex credentials saved.':'Saved JForex password removed.');}return;}
-   if(kind==='challenge'){const next=await api.GetDucascopyLoginChallenge();if(cancelRequested.current)return;if(!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(next.imageDataUrl))throw Error(challengeError);if(alive.current){setPIN('');setChallenge(next.imageDataUrl);}return;}
+   savingRequest.current=null;
+   if(current()){setInfo(saved);setUsername(saved.username);setEnvironment(saved.environment);setPassword('');setClearPassword(false);}
+   if(cancelRequested.current||!current())return;
+   if(kind==='save'){changed();if(current()){setPIN('');setChallenge('');setStatus(saved.passwordConfigured?'JForex credentials saved.':'Saved JForex password removed.');}return;}
+   if(kind==='challenge'){const next=await api.GetDucascopyLoginChallenge();if(cancelRequested.current||!current())return;if(!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(next.imageDataUrl))throw Error(challengeError);if(current()){setPIN('');setChallenge(next.imageDataUrl);}return;}
    const tested=await(environment==='live'&&pin.trim()?api.TestDucascopyConnectionWithPIN(pin.trim()):api.TestDucascopyConnection());
-   if(cancelRequested.current)return;
+   if(cancelRequested.current||!current())return;
    if(tested.connected)changed();
-   if(alive.current){setInfo(tested);setPIN('');setChallenge('');if(tested.connected)setStatus(`Connected to JForex ${tested.environment==='live'?'Live':'Demo'} · ${tested.instrumentCount} forex pairs available.`);else setError(tested.error||testError);}
-  }).catch(reason=>{if(cancelRequested.current)return;const message=saving?safeSaveError(reason):kind==='challenge'?challengeError:testError;if(alive.current){setError(message);setPIN('');setChallenge('');}if(saving)throw new Error(message);}).finally(()=>{pending.current=null;if(alive.current)setOperation(null);});
+   if(current()){setInfo(tested);setPIN('');setChallenge('');if(tested.connected)setStatus(`Connected to JForex ${tested.environment==='live'?'Live':'Demo'} · ${tested.instrumentCount} forex pairs available.`);else setError(tested.error||testError);}
+  }).catch(reason=>{if(cancelRequested.current||!current())return;const message=saving?safeSaveError(reason):kind==='challenge'?challengeError:testError;if(current()){setError(message);setPIN('');setChallenge('');}if(saving)throw new Error(message);}).finally(()=>{if(generation.current===version){pending.current=null;savingRequest.current=null;requestKind.current=null;if(alive.current)setOperation(null);}});
   pending.current=task;void task.catch(()=>{});
  };
  const cancel=()=>{
-  if(!pending.current||operation==='save'||cancellation.current)return;
+  if(!pending.current||requestKind.current==='save'||cancellation.current)return;
+  const version=generation.current,write=savingRequest.current;
   cancelRequested.current=true;setCancelling(true);setPIN('');setChallenge('');setError('');
-  const task=Promise.resolve().then(()=>api.CancelDucascopyConnectionTest()).then(async()=>{await pending.current;if(alive.current)setStatus('JForex connection check canceled.');}).catch(()=>{cancelRequested.current=false;if(alive.current)setError('Could not cancel the JForex connection check. Please retry.');}).finally(()=>{cancellation.current=null;if(alive.current)setCancelling(false);});
-  cancellation.current=task;void task;
+  const task=Promise.resolve().then(async()=>{if(write)await write;await api.CancelDucascopyConnectionTest();}).then(()=>{
+   if(generation.current===version){generation.current++;pending.current=null;savingRequest.current=null;requestKind.current=null;}
+   if(alive.current){setOperation(null);setStatus('JForex connection check canceled.');}
+  }).catch(()=>{cancelRequested.current=false;if(alive.current)setError('Could not cancel the JForex connection check. Please retry.');throw Error('Could not cancel the JForex connection check. Please retry.');}).finally(()=>{cancellation.current=null;if(alive.current)setCancelling(false);});
+  cancellation.current=task;void task.catch(()=>{});
  };
- return <form hidden={!visible} className="settings-section ducascopy-setting" aria-label="Ducas Copy settings" onSubmit={event=>{event.preventDefault();perform('save');}}>
-  <h3>JForex connection</h3><p>Use your Dukascopy JForex credentials for forex history and live Bid quotes. Select DucasCopy as the chart source after saving.</p>
+ return <form hidden={!visible} className="settings-section ducascopy-setting" aria-label="Dukascopy settings" onSubmit={event=>{event.preventDefault();perform('save');}}>
+  <h3>JForex connection</h3><p>Use your Dukascopy JForex credentials for forex history and live Bid quotes. Select Dukascopy as the chart source after saving.</p>
   {loading&&<p role="status">Loading JForex settings…</p>}
   <label className="setting-row"><span><strong>Environment</strong><small>Use credentials for the selected JForex environment.</small></span><select aria-label="JForex environment" value={environment} disabled={disabled} onChange={event=>{setEnvironment(event.target.value as DucascopySettings['environment']);edit();}}><option value="demo">Demo</option><option value="live">Live</option></select></label>
   <label className="candle-storage-path"><span>JForex Username</span><input aria-label="JForex Username" autoComplete="off" autoCapitalize="off" spellCheck={false} maxLength={256} value={username} disabled={disabled} onChange={event=>{setUsername(event.target.value);edit();}}/></label>

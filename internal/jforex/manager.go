@@ -214,7 +214,7 @@ func (m *Manager) ensure(ctx context.Context, login bool, pin string, force bool
 	config := m.config
 	if config.Username == "" || config.Password == "" {
 		m.mu.Unlock()
-		return nil, &exchange.Error{Kind: "restricted", Message: "Configure a Dukascopy JForex username and password in Settings → Ducas Copy before opening a forex chart"}
+		return nil, &exchange.Error{Kind: "restricted", Message: "Configure a Dukascopy JForex username and password in Settings → Dukascopy before opening a forex chart"}
 	}
 	p := m.process
 	if p != nil {
@@ -272,10 +272,12 @@ func (m *Manager) ensure(ctx context.Context, login bool, pin string, force bool
 		Connected       bool `json:"connected"`
 		InstrumentCount int  `json:"instrumentCount"`
 	}
-	if err := p.call(ctx, request, &result); err != nil {
+	loginContext, cancelLogin := context.WithTimeout(ctx, 60*time.Second)
+	defer cancelLogin()
+	if err := p.call(loginContext, request, &result); err != nil {
 		// A failed login may retain the SDK's CAPTCHA challenge for an explicit
 		// retry with PIN, but never loops or retries credentials automatically.
-		if ctx.Err() != nil && !authenticated {
+		if loginContext.Err() != nil {
 			p.finish(errors.New("The JForex login was canceled before completion"))
 		}
 		m.mu.Lock()

@@ -27,6 +27,14 @@ public final class Bridge implements AutoCloseable {
     private final AtomicLong revision = new AtomicLong();
     private final AtomicBoolean reconnecting = new AtomicBoolean();
     private final ScheduledExecutorService reconnect = Executors.newSingleThreadScheduledExecutor(r -> daemon(r, "jforex-reconnect"));
+    private final ScheduledThreadPoolExecutor deadlines = new ScheduledThreadPoolExecutor(1, r -> daemon(r, "jforex-deadlines"));
+    private final ExecutorService data = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(32), r -> daemon(r, "jforex-history"));
+    private final Set<DataJob> dataJobs = ConcurrentHashMap.newKeySet();
+    private final Object instrumentLock = new Object();
+    private final Map<Instrument, Integer> historyUsers = new HashMap<>();
+    private final Set<Instrument> requestedInstruments = new HashSet<>();
+    private final long historyTimeoutMillis;
     private volatile IClient client;
     private volatile IContext context;
     private volatile boolean closing;
@@ -63,7 +71,9 @@ public final class Bridge implements AutoCloseable {
                         sub.lastTime = start;
                         sub.last = bar;
                         emitBars(sub, List.of(bar));
-                        health(sub.id, "live", "Receiving JForex Bid ticks", tick.getTime());
+                        if (sub.seedError != null) health(sub.id, "error", sub.seedError, tick.getTime());
+                        else if (sub.loading) health(sub.id, "reconciling", "Receiving JForex Bid ticks; loading historical candles", tick.getTime());
+                        else health(sub.id, "live", "Receiving JForex Bid ticks", tick.getTime());
                     }
                 } catch (Exception ignored) { health(sub.id, "reconciling", "Waiting for JForex candle cache", 0); }
             }
@@ -83,18 +93,60 @@ public final class Bridge implements AutoCloseable {
     };
 
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output) {
+        this(factory, output, 45_000);
+    }
+    Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis) {
         this.factory = factory; this.output = output;
+        this.historyTimeoutMillis = historyTimeoutMillis;
+        deadlines.setRemoveOnCancelPolicy(true);
         reconnect.scheduleWithFixedDelay(this::heartbeat, 15, 15, TimeUnit.SECONDS);
     }
     private void heartbeat() {
         if (closing || client == null || !client.isConnected() || context == null) return;
         for (Subscription sub : subscriptions.values()) {
             try {
-                if (context.getDataService().isOfflineTime(System.currentTimeMillis(), sub.instrument))
+                if (sub.seedError != null) health(sub.id, "error", sub.seedError, 0);
+                else if (sub.loading) health(sub.id, "reconciling", "Loading JForex Bid candles; live quotes remain subscribed", 0);
+                else if (context.getDataService().isOfflineTime(System.currentTimeMillis(), sub.instrument))
                     health(sub.id, "marketClosed", "JForex reports this forex market is closed", 0);
                 else health(sub.id, "live", "Connected to JForex Bid feed", 0);
             } catch (Exception ignored) { health(sub.id, "live", "Connected to JForex Bid feed", 0); }
         }
+    }
+
+    // Only control work uses the command queue. A slow SDK HTTP history load
+    // must never queue login checks, subscriptions or unsubscribe behind it.
+    void dispatch(JsonObject request, Consumer<JsonObject> reply) {
+        if (request.has("op") && "history".equals(request.get("op").getAsString())) {
+            String id = request.has("id") ? request.get("id").getAsString() : "";
+            AtomicBoolean replied = new AtomicBoolean();
+            Consumer<JsonObject> once = response -> { if (replied.compareAndSet(false, true)) reply.accept(response); };
+            submitData(() -> once.accept(handle(request)),
+                message -> once.accept(failure(id, "timeout", message)));
+        } else reply.accept(handle(request));
+    }
+
+    private DataJob submitData(Runnable action, Consumer<String> failed) {
+        DataJob job = new DataJob(failed);
+        dataJobs.add(job);
+        job.task = new FutureTask<>(() -> {
+            try { if (!job.finished.get()) action.run(); }
+            finally { job.finish(); }
+            return null;
+        });
+        job.timeout = deadlines.schedule(() -> job.fail("JForex historical data loading timed out. Live quotes can continue; retry the chart to reload history."), historyTimeoutMillis, TimeUnit.MILLISECONDS);
+        try { data.execute(job.task); }
+        catch (RejectedExecutionException error) { job.fail("JForex history request queue is full. Retry after the pending requests finish."); }
+        return job;
+    }
+
+    private final class DataJob {
+        final AtomicBoolean finished = new AtomicBoolean(); final Consumer<String> failed;
+        volatile FutureTask<Void> task; volatile Future<?> timeout;
+        DataJob(Consumer<String> failed) { this.failed = failed; }
+        void finish() { if (finished.compareAndSet(false, true)) { if (timeout != null) timeout.cancel(false); dataJobs.remove(this); } }
+        void fail(String message) { if (finished.compareAndSet(false, true)) { if (task != null) task.cancel(true); if (timeout != null) timeout.cancel(false); dataJobs.remove(this); failed.accept(message); } }
+        void cancel() { fail("JForex historical data request was canceled."); }
     }
 
     JsonObject handle(JsonObject request) {
@@ -107,7 +159,7 @@ public final class Bridge implements AutoCloseable {
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature());
                 case "instruments" -> instruments();
-                case "history" -> { try { yield history(request); } finally { releaseInstruments(); } }
+                case "history" -> history(request);
                 case "subscribe" -> subscribe(request);
                 case "unsubscribe" -> unsubscribe(text(request, "subscriptionId", 128));
                 case "disconnect" -> { disconnect(); yield Map.of(); }
@@ -144,7 +196,7 @@ public final class Bridge implements AutoCloseable {
                     allHealth("reconciling", "JForex reconnected; refreshing recent candles");
                     reconnect.execute(() -> {
                         for (Subscription sub : subscriptions.values()) {
-                            try { seed(sub); } catch (Exception ignored) { health(sub.id, "error", "JForex reconnect reconciliation failed", 0); }
+                            scheduleSeed(sub);
                         }
                     });
                 }
@@ -203,7 +255,7 @@ public final class Bridge implements AutoCloseable {
     private void tryReconnect() {
         try {
             if (closing || client == null || client.isConnected()) return;
-            if (!client.isReconnectAllowed()) { allHealth("offline", "JForex session expired. Reconnect from Settings → Ducas Copy."); return; }
+            if (!client.isReconnectAllowed()) { allHealth("offline", "JForex session expired. Reconnect from Settings → Dukascopy."); return; }
             allHealth("reconciling", "Reconnecting JForex session");
             client.reconnect();
         } catch (Exception ignored) { allHealth("offline", "JForex reconnect failed"); }
@@ -243,20 +295,28 @@ public final class Bridge implements AutoCloseable {
         long from = optionalLong(request, "from"), to = optionalLong(request, "to");
         if (from < 0 || to < 0 || from > 32503680000L || to > 32503680000L || (from > 0 && to > 0 && from >= to))
             throw new Failure("internal", "Invalid JForex history range");
-        ensureInstrument(feed.instrument);
-        IHistory history = context.getHistory();
-        long until = to > 0 ? to * 1000 - 1 : System.currentTimeMillis();
-        long end = history.getBarStart(feed.period, until);
-        // Count-based loading bounds each SDK request, including sparse/weekend ranges.
-        List<IBar> source = history.getBars(feed.instrument, feed.period, OfferSide.BID, Filter.WEEKENDS, limit, end, 0);
-        long current = history.getBarStart(feed.period, System.currentTimeMillis());
-        TreeMap<Long, JsonObject> result = new TreeMap<>();
-        for (IBar bar : source) {
-            if (inactiveFlat(feed.instrument, bar, current)) continue;
-            if (bar.getTime() / 1000 < from || (to > 0 && bar.getTime() / 1000 >= to)) continue;
-            result.put(bar.getTime(), candle(bar, bar.getTime() < current));
+        synchronized (instrumentLock) { historyUsers.merge(feed.instrument, 1, Integer::sum); }
+        try {
+            ensureInstrument(feed.instrument);
+            IHistory history = context.getHistory();
+            long until = to > 0 ? to * 1000 - 1 : System.currentTimeMillis();
+            long end = history.getBarStart(feed.period, until);
+            // Count-based loading crosses weekends without synthesizing candles.
+            List<IBar> source = readBars(history, feed.instrument, feed.period, limit, end);
+            long current = history.getBarStart(feed.period, System.currentTimeMillis());
+            TreeMap<Long, JsonObject> result = new TreeMap<>();
+            for (IBar bar : source) {
+                if (inactiveFlat(feed.instrument, bar, current)) continue;
+                if (bar.getTime() / 1000 < from || (to > 0 && bar.getTime() / 1000 >= to)) continue;
+                result.put(bar.getTime(), candle(bar, bar.getTime() < current));
+            }
+            return new ArrayList<>(result.values());
+        } finally {
+            synchronized (instrumentLock) {
+                historyUsers.computeIfPresent(feed.instrument, (instrument, count) -> count == 1 ? null : count - 1);
+                releaseInstruments();
+            }
         }
-        return new ArrayList<>(result.values());
     }
 
     private Object subscribe(JsonObject request) throws Exception {
@@ -269,15 +329,30 @@ public final class Bridge implements AutoCloseable {
         try {
             ensureInstrument(feed.instrument);
             health(id, "reconciling", "Loading JForex Bid candles", 0);
-            seed(sub);
+            scheduleSeed(sub);
             return Map.of("subscribed", true);
         } catch (Exception error) { subscriptions.remove(id, sub); releaseInstruments(); throw error; }
     }
 
-    private void seed(Subscription sub) throws Exception {
+    private void scheduleSeed(Subscription sub) {
+        long generation = sub.seedGeneration.incrementAndGet();
+        if (sub.seed != null) sub.seed.cancel();
+        sub.loading = true; sub.seedError = null;
+        sub.seed = submitData(() -> {
+            try { seed(sub, generation); }
+            catch (Exception ignored) { if (!Thread.currentThread().isInterrupted()) seedFailed(sub, generation, "JForex historical data could not be loaded. Live quotes remain subscribed; retry the chart to reload history."); }
+        }, message -> seedFailed(sub, generation, message));
+    }
+    private void seedFailed(Subscription sub, long generation, String message) {
+        synchronized (sub) {
+            if (subscriptions.get(sub.id) != sub || closing || !sub.seedGeneration.compareAndSet(generation, generation + 1)) return;
+            sub.loading = false; sub.seedError = message; health(sub.id, "error", message, 0);
+        }
+    }
+    private void seed(Subscription sub, long generation) throws Exception {
         IHistory history = context.getHistory();
         long current = history.getBarStart(sub.period, System.currentTimeMillis());
-        List<IBar> source = history.getBars(sub.instrument, sub.period, OfferSide.BID, Filter.WEEKENDS, 500, current, 0);
+        List<IBar> source = readBars(history, sub.instrument, sub.period, 500, current);
         TreeMap<Long, JsonObject> bars = new TreeMap<>();
         for (IBar bar : source) if (!inactiveFlat(sub.instrument, bar, current)) bars.put(bar.getTime(), candle(bar, bar.getTime() < current));
         try {
@@ -287,7 +362,8 @@ public final class Bridge implements AutoCloseable {
         IBar active = history.getBar(sub.instrument, sub.period, OfferSide.BID, 0);
         if (active != null && !inactiveFlat(sub.instrument, active, current)) bars.put(active.getTime(), candle(active, active.getTime() < current));
         synchronized (sub) {
-            if (subscriptions.get(sub.id) != sub || closing) return;
+            if (subscriptions.get(sub.id) != sub || closing || sub.seedGeneration.get() != generation || Thread.currentThread().isInterrupted()) return;
+            sub.loading = false; sub.seedError = null;
             if (!bars.isEmpty()) {
                 if (sub.last != null && sub.lastTime >= bars.lastKey()
                         && sub.last.get("sourceRevision").getAsLong() > bars.lastEntry().getValue().get("sourceRevision").getAsLong())
@@ -301,6 +377,51 @@ public final class Bridge implements AutoCloseable {
         }
     }
 
+    private List<IBar> readBars(IHistory history, Instrument instrument, Period period, int limit, long end) throws Exception {
+        CompletableFuture<List<IBar>> result = new CompletableFuture<>();
+        ConcurrentNavigableMap<Long, IBar> bars = new ConcurrentSkipListMap<>();
+        AtomicBoolean canceled = new AtomicBoolean();
+        LoadingDataListener listener = new LoadingDataListener() {
+            public void newTick(Instrument ignored, long time, double ask, double bid, double askVolume, double bidVolume) { }
+            public void newBar(Instrument item, Period interval, OfferSide side, long time, double open, double close, double low, double high, double volume) {
+                if (canceled.get() || result.isDone()) return;
+                if (!instrument.equals(item) || !period.equals(interval) || side != OfferSide.BID) {
+                    result.completeExceptionally(new Failure("internal", "JForex returned invalid historical data")); return;
+                }
+                bars.put(time, new LoadedBar(time, open, high, low, close, volume));
+                if (bars.size() > limit) result.completeExceptionally(new Failure("internal", "JForex historical data exceeded its requested limit"));
+            }
+        };
+        LoadingProgressListener progress = new LoadingProgressListener() {
+            public void dataLoaded(long start, long end, long current, String information) { }
+            public void loadingFinished(boolean complete, long start, long end, long current) {
+                if (canceled.get()) return;
+                if (complete) result.complete(new ArrayList<>(bars.values()));
+                else result.completeExceptionally(new Failure("offline", "JForex historical data loading failed or was canceled. Retry the chart; live quotes remain independent."));
+            }
+            public boolean stopJob() { return canceled.get() || closing || result.isCompletedExceptionally(); }
+        };
+        try {
+            IContext activeContext = context;
+            long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(historyTimeoutMillis);
+            while (activeContext != null && !activeContext.getSubscribedInstruments().contains(instrument)) {
+                if (closing || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                if (System.nanoTime() >= readyBy) throw new TimeoutException();
+                Thread.sleep(10);
+            }
+            if (activeContext == null || closing) throw new InterruptedException();
+            history.readBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, limit, end, 0, listener, progress);
+            return result.get(historyTimeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException error) {
+            throw new Failure("timeout", "JForex historical data loading timed out. Retry the chart to reload history.");
+        } catch (ExecutionException error) {
+            if (error.getCause() instanceof Failure failure) throw failure;
+            throw error;
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt(); throw error;
+        } finally { canceled.set(true); }
+    }
+
     private boolean inactiveFlat(Instrument instrument, IBar bar, long current) {
         // IHistory explicitly includes a current in-progress flat bar even with
         // WEEKENDS filtering. Do not invent a Saturday/current-closure candle.
@@ -311,24 +432,32 @@ public final class Bridge implements AutoCloseable {
     }
 
     private Object unsubscribe(String id) {
-        subscriptions.remove(id);
+        Subscription sub = subscriptions.remove(id);
+        if (sub != null && sub.seed != null) sub.seed.cancel();
         releaseInstruments();
         return Map.of();
     }
     private void releaseInstruments() {
-        if (client == null || !client.isConnected()) return;
-        Set<Instrument> needed = new HashSet<>();
-        for (Subscription sub : subscriptions.values()) needed.add(sub.instrument);
-        Set<Instrument> unused = new HashSet<>(client.getSubscribedInstruments()); unused.removeAll(needed);
-        if (!unused.isEmpty()) client.unsubscribeInstruments(unused);
+        synchronized (instrumentLock) {
+            if (client == null || !client.isConnected()) return;
+            Set<Instrument> needed = new HashSet<>(historyUsers.keySet());
+            for (Subscription sub : subscriptions.values()) needed.add(sub.instrument);
+            Set<Instrument> unused = new HashSet<>(requestedInstruments);
+            unused.addAll(client.getSubscribedInstruments()); unused.removeAll(needed);
+            if (!unused.isEmpty()) client.unsubscribeInstruments(unused);
+            requestedInstruments.removeAll(unused);
+        }
     }
     private void ensureInstrument(Instrument instrument) {
-        Set<Instrument> wanted = new HashSet<>(client.getSubscribedInstruments());
-        if (wanted.add(instrument)) context.setSubscribedInstruments(wanted, true);
+        synchronized (instrumentLock) {
+            requestedInstruments.add(instrument);
+            // readBars owns cache readiness; control commands never wait for history.
+            context.setSubscribedInstruments(new HashSet<>(requestedInstruments), false);
+        }
     }
     private Feed feed(JsonObject value) {
         if (value == null || !"dukascopy".equals(text(value, "exchange", 32)) || !"forex".equals(text(value, "market", 32)))
-            throw new Failure("unknownInstrument", "Select a DucasCopy forex instrument");
+            throw new Failure("unknownInstrument", "Select a Dukascopy forex instrument");
         String symbol = text(value, "instrument", 32), timeframe = text(value, "timeframe", 8);
         Instrument instrument = null;
         for (Instrument item : available) if (item.name().equals(symbol)) { instrument = item; break; }
@@ -337,7 +466,7 @@ public final class Bridge implements AutoCloseable {
         if (period == null) throw new Failure("unsupportedInterval", "Unsupported JForex chart period");
         return new Feed(instrument, period);
     }
-    private void requireConnected() { if (closing || client == null || !client.isConnected() || context == null) throw new Failure("offline", "Connect JForex in Settings → Ducas Copy first"); }
+    private void requireConnected() { if (closing || client == null || !client.isConnected() || context == null) throw new Failure("offline", "Connect JForex in Settings → Dukascopy first"); }
     private JsonObject candle(IBar bar, boolean closed) {
         double o = bar.getOpen(), h = bar.getHigh(), l = bar.getLow(), c = bar.getClose(), v = bar.getVolume();
         if (bar.getTime() <= 0 || bar.getTime() % 1000 != 0 || !finite(o, h, l, c, v) || o <= 0 || l <= 0 || c <= 0 || h < Math.max(o, c) || l > Math.min(o, c) || v < 0)
@@ -366,20 +495,23 @@ public final class Bridge implements AutoCloseable {
     }
     private void allHealth(String state, String reason) { for (String id : subscriptions.keySet()) health(id, state, reason, 0); }
     private void health(String id, String state, String reason, long tradeTime) {
+        Subscription sub = subscriptions.get(id);
+        if (sub == null || closing) return;
         JsonObject out = new JsonObject(); out.addProperty("event", "health"); out.addProperty("subscriptionId", id);
         JsonObject health = new JsonObject(); health.addProperty("state", state); health.addProperty("reason", reason); health.addProperty("lastMessageAt", System.currentTimeMillis() / 1000);
-        Subscription sub = subscriptions.get(id);
-        long lastTrade = Math.max(tradeTime, sub == null ? 0 : sub.lastTickTime);
+        long lastTrade = Math.max(tradeTime, sub.lastTickTime);
         if (lastTrade > 0) health.addProperty("lastTradeAt", lastTrade / 1000);
         out.add("health", health); output.accept(out);
     }
     private void disconnect() {
         closing = true; subscriptions.clear(); available = Set.of(); context = null; connectedOnce = false;
+        for (DataJob job : dataJobs) job.cancel();
+        synchronized (instrumentLock) { historyUsers.clear(); requestedInstruments.clear(); }
         IClient old = client; client = null;
         if (old != null) { try { if (strategyId >= 0) old.stopStrategy(strategyId); } catch (Exception ignored) { } try { old.disconnect(); } catch (Exception ignored) { } }
         strategyId = -1;
     }
-    public void close() { disconnect(); reconnect.shutdownNow(); }
+    public void close() { disconnect(); reconnect.shutdownNow(); deadlines.shutdownNow(); data.shutdownNow(); }
     static JsonObject failure(String id, String kind, String message) {
         JsonObject out = new JsonObject(); out.addProperty("id", id); out.addProperty("ok", false);
         JsonObject error = new JsonObject(); error.addProperty("kind", kind); error.addProperty("message", message); out.add("error", error); return out;
@@ -402,8 +534,14 @@ public final class Bridge implements AutoCloseable {
     static boolean finite(double... values) { for (double value : values) if (!Double.isFinite(value)) return false; return true; }
     static Thread daemon(Runnable task, String name) { Thread thread = new Thread(task, name); thread.setDaemon(true); return thread; }
     static record Feed(Instrument instrument, Period period) { }
+    static record LoadedBar(long time, double open, double high, double low, double close, double volume) implements IBar {
+        public long getTime() { return time; } public double getOpen() { return open; }
+        public double getHigh() { return high; } public double getLow() { return low; }
+        public double getClose() { return close; } public double getVolume() { return volume; }
+    }
     static final class Subscription {
         final String id; final Instrument instrument; final Period period; long lastTime; volatile long lastTickTime; JsonObject last;
+        final AtomicLong seedGeneration = new AtomicLong(); volatile DataJob seed; volatile boolean loading; volatile String seedError;
         Subscription(String id, Instrument instrument, Period period) { this.id = id; this.instrument = instrument; this.period = period; }
     }
     static final class Failure extends RuntimeException {
@@ -431,7 +569,7 @@ public final class Bridge implements AutoCloseable {
                     commands.execute(() -> {
                         try {
                             JsonObject request = JsonParser.parseString(command).getAsJsonObject();
-                            send.accept(bridge.handle(request));
+                            bridge.dispatch(request, send);
                         } catch (Exception ignored) { send.accept(failure("", "internal", "Invalid JForex JSON request")); }
                     });
                 } else {

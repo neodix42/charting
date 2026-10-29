@@ -8,7 +8,7 @@ export function ducascopyBridge(){
  let connected=false,tests=0;
  const pairs=[['EUR','USD'],['GBP','USD'],['USD','JPY']];
  const info=():DucascopyInfo=>({username:saved.username,environment:saved.environment,passwordConfigured:!!saved.password,runtimeAvailable:true,runtimeDirectory:'/explicit-test/jforex',javaPath:'/explicit-test/java/bin/java',connected,instrumentCount:connected?pairs.length:0});
- const connect=()=>{if(!saved.username||!saved.password)throw Error('Save JForex credentials in Settings → Ducas Copy.');connected=true;};
+ const connect=()=>{if(!saved.username||!saved.password)throw Error('Save JForex credentials in Settings → Dukascopy.');connected=true;};
  const instruments=():Instrument[]=>{connect();return pairs.map(([baseAsset,quoteAsset])=>({nativeId:baseAsset+quoteAsset,market:'forex',baseAsset,quoteAsset,priceIncrement:quoteAsset==='JPY'?'0.001':'0.00001',sizeIncrement:'0.001',availability:'available',supportedIntervals:intervals,providerMetadata:{priceType:'bid',volumeUnit:`million ${baseAsset}`,description:`${baseAsset} / ${quoteAsset} · explicit JForex test fixture`}}));};
  const api:Pick<Backend,'GetDucascopy'|'ConfigureDucascopy'|'TestDucascopyConnection'|'GetDucascopyLoginChallenge'|'TestDucascopyConnectionWithPIN'|'CancelDucascopyConnectionTest'>={
   async GetDucascopy(){return info();},

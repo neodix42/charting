@@ -24,7 +24,7 @@ func (a *App) ConfigureDucascopy(settings jforex.Settings) (jforex.Info, error) 
 	changed := before.Username != strings.TrimSpace(settings.Username) || before.Environment != environment || settings.Password != "" || settings.ClearPassword
 	firstSetup := !before.PasswordConfigured
 	if changed && !firstSetup && a.market != nil && a.market.ProviderActive("dukascopy") {
-		return before, errors.New("Close or reselect active DucasCopy charts before changing JForex credentials")
+		return before, errors.New("Close or reselect active Dukascopy charts before changing JForex credentials")
 	}
 	info, err := a.jforex.Configure(settings)
 	if err == nil && changed && a.market != nil {

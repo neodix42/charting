@@ -1,6 +1,6 @@
 # CryptoDesk
 
-CryptoDesk is an Ubuntu and Windows desktop chart workspace for crypto spot/perpetual and forex markets built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. Binance, Bybit and Coinbase use public feeds without API keys or accounts. The DucasCopy forex source uses your Dukascopy JForex Demo/Live credentials and the included Java bridge. Releases run without a development server.
+CryptoDesk is an Ubuntu and Windows desktop chart workspace for crypto spot/perpetual and forex markets built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. Binance, Bybit and Coinbase use public feeds without API keys or accounts. The Dukascopy forex source uses your Dukascopy JForex Demo/Live credentials and the included Java bridge. Releases run without a development server.
 
 Open the symbol dropdown to browse both **Spot** and **Perpetual** instruments on Binance and Bybit. Each row shows its market type on the right; identical names such as BTCUSDT remain separate choices. The chart keeps the selected market on save/restart and uses its own historical/live feed and candle cache. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported, including XAGUSDT silver contracts. Dated futures and options are excluded. Coinbase currently supplies spot instruments. Search by symbol, base/quote asset or market label. If a provider category is restricted, available symbols remain usable alongside an explicit warning and Retry discovery.
 
@@ -25,7 +25,7 @@ sudo apt install -y \
 
 GTK3 provides the desktop window, WebKitGTK the embedded interface/JavaScript engine, and libsoup3 plus GLib networking the webview's HTTP/TLS support. NSS/NSPR, ALSA and X11 support libraries serve the private Screener Chromium. APT installs transitive dependencies automatically; the [Ubuntu package catalog](https://packages.ubuntu.com/noble/amd64/libwebkit2gtk-4.1-0) lists the WebKitGTK runtime dependencies. Keep the supplied `screener-runtime` folder beside the application: Node, dukascopy-node, trading-signals and Chromium are already included.
 
-For **DucasCopy forex charts**, also install **Java 17 or newer** and keep the supplied `jforex-runtime` folder beside the executable:
+For **Dukascopy forex charts**, also install **Java 17 or newer** and keep the supplied `jforex-runtime` folder beside the executable:
 
 ```bash
 sudo apt install -y openjdk-17-jre-headless
@@ -113,7 +113,7 @@ Each chart has its own exchange, searchable native instrument, horizontal period
 
 Centered in the top header alongside the CryptoDesk logo, shared period buttons and an **Indicators** dropdown apply to every existing chart in the current tab, including charts hidden by maximization. Grid, Add chart and Duplicate controls sit to their right, immediately before the save indicator. Its width stays fixed while changes are pending, saving, saved or awaiting retry, keeping neighboring controls in place. Narrow windows use compact action icons with tooltips. Tab names remain in the tab row. A period click updates all those charts immediately and returns them to live view. The shared period is highlighted only when every chart agrees; individual chart controls can still override it. For an indicator, configure its parameters once and press **OK** to add an independent instance to every chart in the tab. Existing indicators are retained, other tabs stay unchanged, and all changes are saved. If any chart already has 12 indicators, the shared dropdown is disabled until an indicator is removed from that chart.
 
-Weekly candles start Monday at 00:00 UTC. Binance, Bybit and DucasCopy provide native weekly candles. Coinbase weekly history is derived from actual daily candles, with live updates from its public trades; incomplete weekly coverage remains provisional.
+Weekly candles start Monday at 00:00 UTC. Binance, Bybit and Dukascopy provide native weekly candles. Coinbase weekly history is derived from actual daily candles, with live updates from its public trades; incomplete weekly coverage remains provisional.
 
 ### Drawing tools
 
@@ -150,14 +150,14 @@ Live status and public-data details stay in the chart’s bottom-left footer, in
 
 Provider failures remain visible in their chart. Retry or reselect without losing configuration. Prices are never synthesized as a fallback. Coinbase live intervals derive from deduplicated trades, rather than relabelling its five-minute candle channel. An initial/reconnected partial bucket has provisional volume: the last REST snapshot or explicitly observed-only trades, never REST plus all buffered trade volume. Public Coinbase aliased USDC products are labelled/rejected; choose the actual USD product explicitly.
 
-## DucasCopy forex charts
+## Dukascopy forex charts
 
 ### Connect JForex
 
 1. Install **Java 17+** and retain the release's `jforex-runtime` folder beside the executable.
-2. Open **Settings → Ducas Copy**. Choose **Demo** or **Live**, enter **JForex Username** and the masked **JForex Password**, then click **Save credentials** or **Test connection**. Test saves the current draft before checking connectivity. Opening Settings alone never logs in.
-3. On the first connection, the app downloads the pinned JForex SDK and dependencies (51 files, approximately **43 MB**) into the private profile. Downloaded files are checked against their exact sizes and SHA-256 before loading. Completed files are reused after interruption. **Cancel test** stops a pending Test or PIN challenge; it preserves saved credentials and existing chart streams. Connection setup can take several minutes on a slow network.
-4. Select **DucasCopy** in a chart's source dropdown. Open its instrument list to choose a **Forex** pair, such as EUR/USD, GBP/USD or USD/JPY. Search ignores case and supports symbols, base/quote currencies and the displayed pair name.
+2. Open **Settings → Dukascopy**. Choose **Demo** or **Live**, enter **JForex Username** and the masked **JForex Password**, then click **Save credentials** or **Test connection**. Test saves the current draft before checking connectivity. Opening Settings alone never logs in.
+3. On the first connection, the app downloads the pinned JForex SDK and dependencies (51 files, approximately **43 MB**) into the private profile. Downloaded files are checked against their exact sizes and SHA-256 before loading. Completed files are reused after interruption. **Cancel test** stops a pending Test or PIN challenge and preserves saved credentials. Closing Settings also cancels a pending check after any credential save finishes. First-time SDK preparation can take several minutes on a slow network; an individual login request has a 60-second deadline.
+4. Select **Dukascopy** in a chart's source dropdown. Open its instrument list to choose a **Forex** pair, such as EUR/USD, GBP/USD or USD/JPY. Search ignores case and supports symbols, base/quote currencies and the displayed pair name.
 
 The list comes from the logged-in account's available instruments, filtered to fiat currency pairs. Availability can differ between Demo and Live accounts; the app discovers it instead of using a hardcoded symbol list. Crypto, metal and other CFD instruments are not included in this chart source. Instrument availability and the optional Live PIN flow follow the SDK's [IClient interface](https://www.dukascopy.com/client/javadoc3/com/dukascopy/api/system/IClient.html).
 
@@ -178,13 +178,15 @@ The JForex bridge runs only for requested forex discovery/history/quotes. Inacti
 
 `<profile>` is normally `~/.local/share/cryptodesk` on Linux, the Windows portable `data` folder, or the directory selected with `--data-dir`. Credentials persist separately from workspace JSON/export/import/reset and diagnostics. The settings file uses **0600 permissions on POSIX systems** and stores the password **without application-level encryption**; the saved password is never returned to the webview. Leave Password blank to retain it for the same username/environment, or check **Remove saved password** and save. A new username or environment requires its password.
 
-Before changing an existing identity, close its active forex charts or select another source; this prevents mixing account-specific history. First-time setup can recover charts selected before credentials were entered. Pending saves/tests finish before Settings closes or the app shuts down normally; use **Cancel test** to stop a lengthy check. Test does not place orders, and CryptoDesk has no trade-execution integration. Automated SDK/bridge and fixture checks do not establish successful Demo/Live account connectivity; no real-account login has yet been verified. See [STATUS.md](STATUS.md).
+Before changing an existing identity, close its active forex charts or select another source; this prevents mixing account-specific history. First-time setup can recover charts selected before credentials were entered. Closing Settings or shutting down normally waits for credential saves and cancels pending connection/PIN checks. A canceled or expired login discards a blocked bridge so the next explicit attempt can start cleanly; saved credentials remain available. Test does not place orders, and CryptoDesk has no trade-execution integration. A successful Test confirms authentication and account discovery; historical-data and live-quote availability are checked separately on the chart. See [STATUS.md](STATUS.md) for observed verification.
 
 ## Settings
 
 The app starts with a light window and loading screen. New workspaces default to Light; existing workspaces restore their saved theme.
 
-Settings has eight tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (public crypto chart-candle cache), **Screener** (CSV folder and worker count), **Predictions** (local model and folder), **Ducas Copy** (JForex credentials and connection test), **Telegram Bot** (alert token and recipient), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
+Settings has eight tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (public crypto chart-candle cache), **Screener** (CSV folder and worker count), **Predictions** (local model and folder), **Dukascopy** (JForex credentials and connection test), **Telegram Bot** (alert token and recipient), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
+
+The wider Settings dialog displays the tabs together on larger desktops and wraps them into rows on smaller windows or at larger font sizes.
 
 **Appearance → Font size** scales text across the app, including chart period controls, chart and application status bars, Screener controls and chart canvas labels. Choose **10–24 px**, default **15 px**. It takes effect immediately and persists in workspace autosaves and JSON exports; older workspaces use the default.
 
@@ -196,7 +198,7 @@ The token, recipient and verified chat identity are stored in `<profile>/telegra
 
 ## Local candle storage
 
-This optional SQLite cache serves public crypto chart feeds. DucasCopy uses its separate, account/environment-scoped SDK cache described above.
+This optional SQLite cache serves public crypto chart feeds. Dukascopy uses its separate, account/environment-scoped SDK cache described above.
 
 **Store candle data locally** in **Settings → Storage** is **off by default**. Check it, edit the **Storage folder** path or use **Choose folder…**, then click **Apply**. Checkbox and folder edits take effect together only when Apply succeeds. Clearing the path and applying selects the default folder. Failed configuration changes remain visible and preserve the previously applied setting; Apply can retry the same configuration after a storage error.
 

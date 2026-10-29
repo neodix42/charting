@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Responsive JForex charts and Settings — 2026-10-29, `predictions` branch
+
+- [x] Running-bridge thread evidence identifies synchronous historical HTTP loading blocking the shared command queue.
+- [x] Asynchronous bounded history, independent controls/live subscriptions, 45-second data deadlines, cancellation and stale callback protection pass real SDK-interface regressions.
+- [x] Login deadline/cancellation recovers a blocked control process; Settings close saves credentials then cancels pending checks without stale response waits.
+- [x] Wider responsive Settings tabs and corrected Dukascopy labels pass 18 JForex, 27 Predictions/Telegram and 4 appearance browser cases, plus Go/native/Java/Python/frontend checks.
+- [ ] Final Linux/Windows archives and hosted CI are pending; see STATUS.md.
+- [ ] Updated-bridge Live historical/tick delivery and native desktop/Windows GUI execution remain unverified; Live login/catalog success is user-reported.
+
 ## Saved forecast removal — 2026-10-29, `predictions` branch
 
 - [x] Saved forecasts offer right-click/keyboard Remove, persistent successor selection, last-chart clearing and newest-100 inventory backfill.
@@ -22,8 +31,8 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 
 ## JForex forex chart bridge — 2026-10-29, `predictions` branch
 
-- [x] Optional DucasCopy source and Forex identity, account-based fiat pair discovery, native Bid history/live bridge and all seven UTC chart intervals.
-- [x] Settings → Ducas Copy supports Demo/Live credentials, Test connection, transient Live PIN challenges, cancellation and first-configuration recovery without mixing account caches.
+- [x] Optional Dukascopy source and Forex identity, account-based fiat pair discovery, native Bid history/live bridge and all seven UTC chart intervals.
+- [x] Settings → Dukascopy supports Demo/Live credentials, Test connection, transient Live PIN challenges, cancellation and first-configuration recovery without mixing account caches.
 - [x] Private settings, shared process/subscription lifecycle, quote-health preservation and owner-exit cleanup have offline protocol/race/facade coverage; the actual SDK initializes without credentials.
 - [x] Linux/Windows packaging and user installation include and validate our bridge plus exact SDK dependency manifest. Java 17+ prerequisites and first-use SDK installation are documented.
 - [x] Local Linux/Windows archives, checksums/inventories and actual isolated Linux installation pass. Hosted Tests run 40866094626 passes all 238 browser cases, Java 17 bootstrap and the full deterministic/runtime suite; see STATUS.md.

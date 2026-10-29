@@ -2,14 +2,14 @@ import {test,expect,type Page} from '@playwright/test';
 import {openTestApp,reloadTestApp} from './helpers/testApp';
 
 const dialog=(page:Page)=>page.getByRole('dialog',{name:'Workspace settings',exact:true});
-const form=(page:Page)=>dialog(page).getByRole('form',{name:'Ducas Copy settings',exact:true});
+const form=(page:Page)=>dialog(page).getByRole('form',{name:'Dukascopy settings',exact:true});
 const username=(page:Page)=>form(page).getByLabel('JForex Username',{exact:true});
 const password=(page:Page)=>form(page).getByLabel('JForex Password',{exact:true});
 const environment=(page:Page)=>form(page).getByLabel('JForex environment',{exact:true});
 const save=(page:Page)=>form(page).getByRole('button',{name:'Save credentials',exact:true});
 const connectionTest=(page:Page)=>form(page).getByRole('button',{name:'Test connection',exact:true});
 const picker=(page:Page)=>page.getByLabel('Instruments',{exact:true});
-async function openSettings(page:Page){await page.getByRole('button',{name:'Open settings',exact:true}).click();await dialog(page).getByRole('tab',{name:'Ducas Copy',exact:true}).click();await expect(username(page)).toBeEnabled();}
+async function openSettings(page:Page){await page.getByRole('button',{name:'Open settings',exact:true}).click();await dialog(page).getByRole('tab',{name:'Dukascopy',exact:true}).click();await expect(username(page)).toBeEnabled();}
 async function credentials(page:Page){await page.evaluate(()=>window.go!.main!.App!.ConfigureDucascopy({username:'explicit-demo',password:'explicit-private-fixture-password',environment:'demo'}));}
 async function selectSource(page:Page){await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('dukascopy');}
 
@@ -52,16 +52,16 @@ test('JForex save and transport failures preserve drafts and hide sensitive back
 });
 
 test('changing an active JForex identity explains how to release charts without exposing the password',async({page})=>{
- await openTestApp(page);await credentials(page);await page.evaluate(()=>{window.go!.main!.App!.ConfigureDucascopy=async()=>{throw Error('Close or reselect active DucasCopy charts before changing JForex credentials');};});
+ await openTestApp(page);await credentials(page);await page.evaluate(()=>{window.go!.main!.App!.ConfigureDucascopy=async()=>{throw Error('Close or reselect active Dukascopy charts before changing JForex credentials');};});
  await openSettings(page);await username(page).fill('another-demo');await password(page).fill('private-replacement-password');await save(page).click();
- await expect(form(page).getByRole('alert')).toHaveText('Close or reselect active DucasCopy charts before changing JForex credentials');await expect(password(page)).toHaveValue('private-replacement-password');await expect(page.locator('body')).not.toContainText('private-replacement-password');
+ await expect(form(page).getByRole('alert')).toHaveText('Close or reselect active Dukascopy charts before changing JForex credentials');await expect(password(page)).toHaveValue('private-replacement-password');await expect(page.locator('body')).not.toContainText('private-replacement-password');
 });
 
 test('late hidden settings reads cannot replace current JForex drafts and load failures retry without secrets',async({page})=>{
  await openTestApp(page);await page.evaluate(()=>{const api=window.go!.main!.App!,read=api.GetDucascopy;let count=0;api.GetDucascopy=async()=>{if(++count===1)throw Error('private-load-password');if(count===2)return new Promise(resolve=>{(window as any).__releaseOldJForex=async()=>resolve({...await read(),username:'obsolete-demo'});});return read();};});
- await page.getByRole('button',{name:'Open settings',exact:true}).click();await dialog(page).getByRole('tab',{name:'Ducas Copy',exact:true}).click();await expect(form(page).getByRole('alert')).toContainText('Could not load JForex settings. Saved credentials have been preserved.');await expect(page.locator('body')).not.toContainText('private-load-password');
+ await page.getByRole('button',{name:'Open settings',exact:true}).click();await dialog(page).getByRole('tab',{name:'Dukascopy',exact:true}).click();await expect(form(page).getByRole('alert')).toContainText('Could not load JForex settings. Saved credentials have been preserved.');await expect(page.locator('body')).not.toContainText('private-load-password');
  await form(page).getByRole('button',{name:'Retry JForex settings',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseOldJForex)).toBe('function');
- await dialog(page).getByRole('tab',{name:'Appearance',exact:true}).click();await dialog(page).getByRole('tab',{name:'Ducas Copy',exact:true}).click();await expect(username(page)).toBeEnabled();await username(page).fill('current-demo');await password(page).fill('current-private-password');await page.evaluate(()=>(window as any).__releaseOldJForex());await expect(username(page)).toHaveValue('current-demo');await expect(password(page)).toHaveValue('current-private-password');
+ await dialog(page).getByRole('tab',{name:'Appearance',exact:true}).click();await dialog(page).getByRole('tab',{name:'Dukascopy',exact:true}).click();await expect(username(page)).toBeEnabled();await username(page).fill('current-demo');await password(page).fill('current-private-password');await page.evaluate(()=>(window as any).__releaseOldJForex());await expect(username(page)).toHaveValue('current-demo');await expect(password(page)).toHaveValue('current-private-password');
 });
 
 test('Live PIN challenge stays transient, tests once and clears after use and identity changes',async({page})=>{
@@ -79,7 +79,7 @@ test('JForex runtime prerequisites and returned authentication failures are visi
  await openSettings(page);await expect(form(page)).toContainText('Java 17 or newer is required. Install a Java runtime and restart CryptoDesk.');await connectionTest(page).click();await expect(form(page).getByRole('alert')).toHaveText('JForex rejected the credentials. Check the selected environment and password.');expect(await page.evaluate(()=>(window as any).__testDucascopyTests())).toBe(0);
 });
 
-test('DucasCopy lists discovered forex pairs, displays Bid quotes and persists the selected forex feed',async({page})=>{
+test('Dukascopy lists discovered forex pairs, displays Bid quotes and persists the selected forex feed',async({page})=>{
  await openTestApp(page);await credentials(page);await selectSource(page);await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Forex');await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toContainText('EUR/USD');await expect(page.getByLabel('OHLCV',{exact:true})).toContainText('1.06000');await expect(page.getByLabel('Price side',{exact:true})).toHaveText('Bid');await expect(page.getByLabel('OHLCV',{exact:true})).toContainText('million EUR');await expect(page.getByLabel('Last quote',{exact:true})).toContainText('Quote');
  await page.getByRole('button',{name:'Select instrument',exact:true}).click();await expect(picker(page).getByRole('button',{name:'EUR/USD Forex',exact:true})).toBeVisible();await expect(picker(page).getByRole('button',{name:'GBP/USD Forex',exact:true})).toBeVisible();await expect(picker(page).getByRole('button',{name:'USD/JPY Forex',exact:true})).toBeVisible();await expect(picker(page).locator('.product-market.perpetual')).toHaveCount(0);
  await picker(page).getByRole('textbox',{name:'Search instruments',exact:true}).fill('uSd/JpY');await expect(picker(page).getByRole('button')).toHaveCount(2);await picker(page).getByRole('button',{name:'USD/JPY Forex',exact:true}).click();await expect(page.getByLabel('OHLCV',{exact:true})).toContainText('151.000');
@@ -89,8 +89,8 @@ test('DucasCopy lists discovered forex pairs, displays Bid quotes and persists t
  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('coinbase');await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Spot');await expect(page.getByLabel('Price side',{exact:true})).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>(window as any).__testSubscriptions())).toMatchObject([{feedKey:{exchange:'coinbase',market:'spot',instrument:'BTC-USD'}}]);
 });
 
-test('saving credentials recovers a DucasCopy source selected before setup and refreshes its instrument catalog',async({page})=>{
- await openTestApp(page);expect(await page.evaluate(()=>window.go!.main!.App!.GetDucascopy())).toMatchObject({username:'',passwordConfigured:false});await selectSource(page);await expect(page.locator('.chart-message')).toContainText('Save JForex credentials in Settings → Ducas Copy.');await page.getByRole('button',{name:'Select instrument',exact:true}).click();await expect(picker(page).getByRole('alert')).toContainText('Save JForex credentials');await page.getByRole('button',{name:'Close instrument selector',exact:true}).click();
+test('saving credentials recovers a Dukascopy source selected before setup and refreshes its instrument catalog',async({page})=>{
+ await openTestApp(page);expect(await page.evaluate(()=>window.go!.main!.App!.GetDucascopy())).toMatchObject({username:'',passwordConfigured:false});await selectSource(page);await expect(page.locator('.chart-message')).toContainText('Save JForex credentials in Settings → Dukascopy.');await page.getByRole('button',{name:'Select instrument',exact:true}).click();await expect(picker(page).getByRole('alert')).toContainText('Save JForex credentials');await page.getByRole('button',{name:'Close instrument selector',exact:true}).click();
  await openSettings(page);await username(page).fill('recovered-demo');await password(page).fill('private-recovered-password');await save(page).click();await expect(form(page).getByRole('status')).toHaveText('JForex credentials saved.');await dialog(page).getByRole('button',{name:'Close settings',exact:true}).click();
  await expect(page.getByLabel('OHLCV',{exact:true})).toContainText('1.06000');await page.getByRole('button',{name:'Select instrument',exact:true}).click();await expect(picker(page).getByRole('button',{name:'EUR/USD Forex',exact:true})).toBeVisible();expect(await page.evaluate(()=>(window as any).__testDucascopyTests())).toBe(0);
 });
@@ -117,6 +117,54 @@ for(const kind of ['test','challenge'] as const)test(`a pending JForex ${kind} c
  await dialog(page).getByRole('tab',{name:'Appearance',exact:true}).click();await dialog(page).getByRole('button',{name:'Close settings',exact:true}).click();await page.waitForTimeout(100);await expect(dialog(page)).toBeVisible();
  await page.evaluate(()=>(window as any).__releaseJForexCancel());await expect(dialog(page)).toHaveCount(0);await expect(page.locator('body')).not.toContainText('private-fixture-password');
  await openSettings(page);await expect(username(page)).toHaveValue('explicit-demo');await expect(password(page)).toHaveValue('');await expect(connectionTest(page)).toBeEnabled();await expect(form(page).getByRole('button',{name:'Cancel test',exact:true})).toHaveCount(0);expect((await page.evaluate(()=>window.go!.main!.App!.GetDucascopy())).passwordConfigured).toBe(true);
+});
+
+for(const kind of ['test','challenge'] as const)test(`closing Settings cancels a pending JForex ${kind} without waiting for its stale response`,async({page})=>{
+ await openTestApp(page);await credentials(page);
+ await page.evaluate(({kind})=>{
+  const api=window.go!.main!.App!,read=api.GetDucascopy;let cancelCalls=0;
+  if(kind==='test')api.TestDucascopyConnection=()=>new Promise(resolve=>(window as any).__lateJForex=async()=>resolve({...await read(),username:'obsolete-login',connected:true}));
+  else api.GetDucascopyLoginChallenge=()=>new Promise(resolve=>(window as any).__lateJForex=()=>resolve({imageDataUrl:'data:image/png;base64,AAAA'}));
+  api.CancelDucascopyConnectionTest=async()=>{cancelCalls++;return read();};
+  (window as any).__testAutomaticCancelCalls=()=>cancelCalls;
+ },{kind});
+ await openSettings(page);
+ if(kind==='challenge'){await environment(page).selectOption('live');await password(page).fill('private-close-password');await form(page).getByRole('button',{name:'Load PIN challenge',exact:true}).click();}else await connectionTest(page).click();
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__lateJForex)).toBe('function');
+ await dialog(page).getByRole('button',{name:'Close settings',exact:true}).click();await expect(dialog(page)).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testAutomaticCancelCalls())).toBe(1);
+ await openSettings(page);await expect(username(page)).toHaveValue('explicit-demo');await page.evaluate(()=>(window as any).__lateJForex());
+ await expect(username(page)).toHaveValue('explicit-demo');await expect(form(page).getByRole('img',{name:'JForex login PIN challenge',exact:true})).toHaveCount(0);
+ await expect(connectionTest(page)).toBeEnabled();await expect(password(page)).toHaveValue('');
+});
+
+test('Cancel test releases the controls while an obsolete transport response is still pending',async({page})=>{
+ await openTestApp(page);await credentials(page);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,test=api.TestDucascopyConnection,read=api.GetDucascopy;let calls=0;
+  api.TestDucascopyConnection=()=>++calls===1?new Promise(resolve=>(window as any).__obsoleteJForexTest=async()=>resolve({...await read(),username:'obsolete-login',connected:false,error:'obsolete failure'})):test();
+ });
+ await openSettings(page);await connectionTest(page).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__obsoleteJForexTest)).toBe('function');
+ await form(page).getByRole('button',{name:'Cancel test',exact:true}).click();await expect(connectionTest(page)).toBeEnabled();
+ await connectionTest(page).click();await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 3 forex pairs available.');
+ await page.evaluate(()=>(window as any).__obsoleteJForexTest());await expect(username(page)).toHaveValue('explicit-demo');await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 3 forex pairs available.');await expect(form(page).getByRole('alert')).toHaveCount(0);
+});
+
+test('a cancellation failure preserves Settings and credentials until close is retried',async({page})=>{
+ await openTestApp(page);await credentials(page);
+ await page.evaluate(()=>{const api=window.go!.main!.App!,read=api.GetDucascopy;let attempts=0;api.TestDucascopyConnection=()=>new Promise(()=>{});api.CancelDucascopyConnectionTest=async()=>{if(++attempts===1)throw Error('private-cancel-payload');return read();};});
+ await openSettings(page);await connectionTest(page).click();await expect(form(page).getByRole('button',{name:'Cancel test',exact:true})).toBeVisible();
+ await dialog(page).getByRole('button',{name:'Close settings',exact:true}).click();await expect(form(page).getByRole('alert')).toHaveText('Could not cancel the JForex connection check. Please retry.');await expect(dialog(page)).toBeVisible();await expect(page.locator('body')).not.toContainText('private-cancel-payload');
+ await dialog(page).getByRole('button',{name:'Close settings',exact:true}).click();await expect(dialog(page)).toHaveCount(0);expect((await page.evaluate(()=>window.go!.main!.App!.GetDucascopy())).passwordConfigured).toBe(true);
+});
+
+test('wider Settings displays every renamed tab and wraps them inside narrow windows',async({page})=>{
+ await openTestApp(page);await page.getByRole('button',{name:'Open settings',exact:true}).click();
+ expect((await dialog(page).boundingBox())!.width).toBeGreaterThanOrEqual(1000);
+ const tabs=dialog(page).getByRole('tablist',{name:'Settings pages',exact:true});await expect(tabs.getByRole('tab',{name:'Dukascopy',exact:true})).toBeVisible();
+ const fits=()=>tabs.evaluate(element=>element.scrollWidth<=element.clientWidth+1&&[...element.children].every(child=>{const box=child.getBoundingClientRect(),bounds=element.getBoundingClientRect();return box.left>=bounds.left-1&&box.right<=bounds.right+1&&box.top>=bounds.top-1&&box.bottom<=bounds.bottom+1;}));
+ expect(await fits()).toBe(true);await page.setViewportSize({width:700,height:900});expect(await fits()).toBe(true);
+ await tabs.getByRole('tab',{name:'Appearance',exact:true}).focus();await page.keyboard.press('End');await expect(tabs.getByRole('tab',{name:'Debug',exact:true})).toBeFocused();await expect(dialog(page).getByRole('tabpanel')).toContainText('Dukascopy uses your saved JForex credentials');
 });
 
 test('Sunday forex requests cross the weekend for initial, older, refreshed and indicator history',async({page})=>{

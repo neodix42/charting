@@ -5,6 +5,7 @@ import (
 	"context"
 	"cryptodesk/internal/domain"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -521,6 +522,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 		switch op {
 		case "connect":
 			connections++
+			if scenario == "hang-retest" && connections > 1 {
+				select {}
+			}
 			_ = json.Unmarshal(request["username"], &username)
 			_ = json.Unmarshal(request["password"], &password)
 			var pin string
@@ -595,5 +599,68 @@ func TestRuntimeCommandContainsNoCredentialsAndIsolatesJavaHome(t *testing.T) {
 	cmd := runtime.preparedCommand(ctx)
 	if cmd.Dir != runtime.privateDirectory || !reflect.DeepEqual(cmd.Args, []string{"java", "-Djava.awt.headless=true", "-Duser.home=" + runtime.privateDirectory, "-Djava.util.prefs.userRoot=" + filepath.Join(runtime.privateDirectory, "preferences"), "-cp", filepath.Join(dir, "cryptodesk-jforex.jar") + string(os.PathListSeparator) + filepath.Join(runtime.sdkDirectory, "lib", "*"), "cryptodesk.jforex.Bridge"}) {
 		t.Fatal(cmd.Args, cmd.Dir)
+	}
+}
+
+func TestCanceledOrExpiredRetestReleasesBlockedControlQueueWithoutRetryingCredentials(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		t.Run(fmt.Sprint("deadline=", deadline), func(t *testing.T) {
+			m, count := testManager(t, "hang-retest")
+			if _, err := m.TestConnection(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			m.mu.Lock()
+			process := m.process
+			m.mu.Unlock()
+			var ctx context.Context
+			var cancel context.CancelFunc
+			if deadline {
+				ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			} else {
+				ctx, cancel = context.WithCancel(context.Background())
+			}
+			defer cancel()
+			done := make(chan error, 1)
+			go func() { _, err := m.TestConnection(ctx); done <- err }()
+			until := time.Now().Add(2 * time.Second)
+			for {
+				process.mu.Lock()
+				pending := len(process.pending)
+				process.mu.Unlock()
+				if pending > 0 || ctx.Err() != nil {
+					break
+				}
+				if time.Now().After(until) {
+					t.Fatal("retest did not reach the actual bridge request")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if !deadline {
+				m.CancelConnectionTest()
+			}
+			select {
+			case err := <-done:
+				want := context.Canceled
+				if deadline {
+					want = context.DeadlineExceeded
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("cancellation result: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("cancellation did not release the connection request")
+			}
+			select {
+			case <-process.done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("blocked SDK command queue survived cancellation")
+			}
+			if count.Load() != 1 || m.Info().Connected || !m.Info().PasswordConfigured {
+				t.Fatal("cancellation retried credentials, retained a dead connection or discarded configuration")
+			}
+			if _, err := m.TestConnection(context.Background()); err != nil || count.Load() != 2 {
+				t.Fatal("next explicit test did not start a responsive bridge", err)
+			}
+		})
 	}
 }
