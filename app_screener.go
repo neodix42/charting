@@ -20,6 +20,10 @@ func (a *App) ConfigureScreenerDirectory(directory string) (screener.Info, error
 	return a.screener.ConfigureDirectory(directory)
 }
 
+func (a *App) ConfigureScreenerConcurrency(concurrency int) (screener.Info, error) {
+	return a.screener.ConfigureConcurrency(concurrency)
+}
+
 func (a *App) ChooseScreenerDirectory() (string, error) {
 	initial := a.screener.Info().Directory
 	if st, err := os.Stat(initial); err != nil || !st.IsDir() {

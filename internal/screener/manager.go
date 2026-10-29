@@ -28,11 +28,11 @@ type Request struct {
 	Concurrency int      `json:"concurrency,omitempty"`
 }
 
-// Downloads are deliberately serial, including the library's source fetches.
-// Older profiles and clients may still send the former 1–20 worker setting;
-// accept that persisted shape but always run it with one worker.
-const MaxConcurrency = 1
-const legacyMaxConcurrency = 20
+// One machine-local limit bounds Downloader, enrichment and manual refresh.
+// Source requests inside each child remain serial and share provider pacing.
+const MaxConcurrency = 20
+const DefaultConcurrency = 5
+const legacyMaxConcurrency = MaxConcurrency
 
 type Job struct {
 	ID         string  `json:"id"`
@@ -76,6 +76,7 @@ type Manager struct {
 	batchDirectory          string
 	publication             map[string]string
 	stateError, viewError   string
+	settingsError           string
 	invalidDownloads        bool
 	view                    ViewState
 	enrichmentJobs          []EnrichmentJob
@@ -101,9 +102,9 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 	if err == nil {
 		profile = absolute
 	}
-	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: MaxConcurrency}
+	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: DefaultConcurrency}
 	if err := m.loadPreferences(); err != nil {
-		m.lastError = "Load screener settings: " + err.Error()
+		m.settingsError = "Load screener settings (original state preserved): " + err.Error()
 	}
 	if err := m.loadView(); err != nil {
 		m.viewError = "Restore Screener selection: " + err.Error()
@@ -143,7 +144,7 @@ func (m *Manager) infoLocked() Info {
 	if err != nil {
 		fileError = err.Error()
 	}
-	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active}
+	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, m.settingsError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active}
 }
 func (m *Manager) Info() Info { m.mu.Lock(); defer m.mu.Unlock(); return m.infoLocked() }
 
@@ -168,6 +169,9 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	if m.closed {
 		return m.infoLocked(), errors.New("screener is closed")
 	}
+	if m.settingsError != "" {
+		return m.infoLocked(), errors.New(m.settingsError)
+	}
 	if m.liveActive {
 		return m.infoLocked(), errors.New("finish the Live Alerts check before changing the Screener folder")
 	}
@@ -189,7 +193,7 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	if err = recoverHistoryPublications(directory); err != nil {
 		return m.infoLocked(), err
 	}
-	if err = m.savePreferences(directory); err != nil {
+	if err = m.savePreferences(directory, m.concurrency); err != nil {
 		return m.infoLocked(), fmt.Errorf("save screener settings: %w", err)
 	}
 	if directory != m.directory {
@@ -198,6 +202,30 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 		m.refreshJobs = nil
 	}
 	m.directory, m.lastError = directory, ""
+	return m.infoLocked(), nil
+}
+
+// ConfigureConcurrency changes only the authoritative local preference. UI
+// drafts, legacy requests and saved queue metadata cannot overwrite it.
+func (m *Manager) ConfigureConcurrency(concurrency int) (Info, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if concurrency < 1 || concurrency > MaxConcurrency {
+		return m.infoLocked(), errors.New("Screener parallel workers must be between 1 and 20")
+	}
+	if m.closed {
+		return m.infoLocked(), errors.New("screener is closed")
+	}
+	if m.settingsError != "" {
+		return m.infoLocked(), errors.New(m.settingsError)
+	}
+	if m.active || m.pendingLocked() || m.enrichmentActive || m.refreshActive || m.liveActive || m.analysisActiveLocked() {
+		return m.infoLocked(), errors.New("finish or cancel downloads, enrichment, refresh, Live Alerts and Analysis before changing Screener parallel workers")
+	}
+	if err := m.savePreferences(m.directory, concurrency); err != nil {
+		return m.infoLocked(), fmt.Errorf("save Screener parallel workers: %w", err)
+	}
+	m.concurrency, m.lastError = concurrency, ""
 	return m.infoLocked(), nil
 }
 
@@ -217,7 +245,7 @@ func checkDirectory(directory string) error {
 
 func validateRequest(request Request, now time.Time) error {
 	if request.Concurrency < 0 || request.Concurrency > legacyMaxConcurrency {
-		return errors.New("invalid download concurrency; downloads run one at a time")
+		return errors.New("invalid legacy download concurrency; use a value between 0 and 20")
 	}
 	catalog := loadCatalog()
 	known := make(map[string]bool)
@@ -306,11 +334,10 @@ func (m *Manager) Start(request Request) (Info, error) {
 		}
 		jobs[i] = Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: request.Timeframe, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"}
 	}
-	oldJobs, oldDirectory, oldConcurrency, oldPublication := m.jobs, m.batchDirectory, m.concurrency, m.publication
+	oldJobs, oldDirectory, oldPublication := m.jobs, m.batchDirectory, m.publication
 	m.jobs, m.batchDirectory, m.publication = jobs, m.directory, map[string]string{}
-	m.concurrency = MaxConcurrency
 	if !m.saveDownloadsLocked() {
-		m.jobs, m.batchDirectory, m.concurrency, m.publication = oldJobs, oldDirectory, oldConcurrency, oldPublication
+		m.jobs, m.batchDirectory, m.publication = oldJobs, oldDirectory, oldPublication
 		return m.infoLocked(), errors.New(m.stateError)
 	}
 	// A replacement batch discards only this application's old failed scratch
@@ -400,9 +427,8 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 		return
 	}
 	defer cleanup()
-	// Neither a legacy saved worker count nor the library's internal fetching
-	// may start overlapping downloads. A new symbol starts after its predecessor
-	// has finished and published (or failed).
+	// Each child retains one internal source request at a time. The configured
+	// number of independent symbol jobs shares a single provider limiter.
 	workers = min(workers, MaxConcurrency)
 	sourceBatchSize := 1
 	next := 0
@@ -688,7 +714,8 @@ func (m *Manager) loadPreferences() error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var prefs struct {
-		Directory string `json:"directory"`
+		Directory   string          `json:"directory"`
+		Concurrency json.RawMessage `json:"concurrency"`
 	}
 	if err = decoder.Decode(&prefs); err != nil {
 		return err
@@ -700,16 +727,25 @@ func (m *Manager) loadPreferences() error {
 	if err != nil {
 		return err
 	}
-	m.directory = directory
+	concurrency := DefaultConcurrency
+	if len(prefs.Concurrency) > 0 {
+		var saved *int
+		if err = json.Unmarshal(prefs.Concurrency, &saved); err != nil || saved == nil || *saved < 1 || *saved > MaxConcurrency {
+			return errors.New("saved Screener parallel workers must be an integer between 1 and 20")
+		}
+		concurrency = *saved
+	}
+	m.directory, m.concurrency = directory, concurrency
 	return nil
 }
-func (m *Manager) savePreferences(directory string) error {
+func (m *Manager) savePreferences(directory string, concurrency int) error {
 	if err := os.MkdirAll(m.profile, 0700); err != nil {
 		return err
 	}
 	data, err := json.Marshal(struct {
-		Directory string `json:"directory"`
-	}{directory})
+		Directory   string `json:"directory"`
+		Concurrency int    `json:"concurrency"`
+	}{directory, concurrency})
 	if err != nil {
 		return err
 	}

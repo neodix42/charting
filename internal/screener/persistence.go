@@ -26,7 +26,7 @@ type ViewState struct {
 }
 
 func defaultView() ViewState {
-	return ViewState{Symbols: []string{}, Timeframe: "d1", From: "2010-01-01", To: time.Now().UTC().Format("2006-01-02"), Concurrency: MaxConcurrency, CollapsedCategories: []string{}}
+	return ViewState{Symbols: []string{}, Timeframe: "d1", From: "2010-01-01", To: time.Now().UTC().Format("2006-01-02"), Concurrency: DefaultConcurrency, CollapsedCategories: []string{}}
 }
 func copyView(v ViewState) ViewState {
 	v.Symbols = append([]string{}, v.Symbols...)
@@ -165,7 +165,7 @@ func (m *Manager) loadView() error {
 		return err
 	}
 	m.view = copyView(saved.View)
-	m.view.Concurrency = MaxConcurrency
+	m.view.Concurrency = m.concurrency
 	return nil
 }
 func (m *Manager) View() (ViewState, error) {
@@ -174,7 +174,9 @@ func (m *Manager) View() (ViewState, error) {
 	if m.viewError != "" {
 		return ViewState{}, errors.New(m.viewError)
 	}
-	return copyView(m.view), nil
+	view := copyView(m.view)
+	view.Concurrency = m.concurrency
+	return view, nil
 }
 func (m *Manager) SaveView(view ViewState) (ViewState, error) {
 	if err := validateView(view); err != nil {
@@ -185,7 +187,7 @@ func (m *Manager) SaveView(view ViewState) (ViewState, error) {
 	if m.closed {
 		return ViewState{}, errors.New("screener is closed")
 	}
-	view.Concurrency = MaxConcurrency
+	view.Concurrency = m.concurrency
 	if err := writeState(filepath.Join(m.profile, "screener-view.json"), savedView{1, view}); err != nil {
 		return ViewState{}, fmt.Errorf("save Screener selection: %w", err)
 	}
@@ -271,7 +273,7 @@ func (m *Manager) loadDownloads() error {
 	if err := recoverHistoryPublications(directory); err != nil {
 		return fmt.Errorf("recover published histories: %w", err)
 	}
-	m.jobs, m.concurrency, m.batchDirectory, m.publication = saved.Jobs, MaxConcurrency, directory, saved.Publication
+	m.jobs, m.batchDirectory, m.publication = saved.Jobs, directory, saved.Publication
 	if m.publication == nil {
 		m.publication = map[string]string{}
 	}

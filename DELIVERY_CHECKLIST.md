@@ -2,6 +2,13 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Configurable Screener workers — 2026-10-29
+
+- [x] Settings → Screener applies and persists Worker threads, default 5, valid range 1–20, alongside the download folder and outside workspace exports.
+- [x] Downloader, Enrichment and manual Refresh obey the configured pool; legacy queue/view values cannot replace it and resume uses the current preference.
+- [x] Production worker tests cover real concurrent transport calls, caps, stable order, cancellation/checkpoints, shared pacing and 403/429 cooldowns; settings/browser persistence and error handling pass.
+- [ ] Native desktop interaction, live provider downloads and Windows execution for this change remain unverified; see STATUS.md for automated checks and build status.
+
 ## Screener periods and Live Alerts — 2026-10-28
 
 - [x] Historical All periods/d1/h1 scope persists with drafts and named conditions; companion timeframe evaluation remains aligned to closed bars.

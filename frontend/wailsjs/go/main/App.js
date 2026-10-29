@@ -38,6 +38,10 @@ export function ConfigureCandleStorage(arg1, arg2) {
   return window['go']['main']['App']['ConfigureCandleStorage'](arg1, arg2);
 }
 
+export function ConfigureScreenerConcurrency(arg1) {
+  return window['go']['main']['App']['ConfigureScreenerConcurrency'](arg1);
+}
+
 export function ConfigureScreenerDirectory(arg1) {
   return window['go']['main']['App']['ConfigureScreenerDirectory'](arg1);
 }

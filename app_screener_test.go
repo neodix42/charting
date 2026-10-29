@@ -36,15 +36,24 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	if _, err := app.StartScreenerEnrichment(screener.EnrichmentRequest{Indicator: "unsupported"}); err == nil {
 		t.Fatal("facade accepted unsupported enrichment")
 	}
-	if info := app.GetScreener(); info.Concurrency != 1 || info.MaxConcurrency != 1 {
-		t.Fatalf("unexpected sequential download defaults: %+v", info)
+	if info := app.GetScreener(); info.Concurrency != 5 || info.MaxConcurrency != 20 {
+		t.Fatalf("unexpected Screener worker defaults: %+v", info)
+	}
+	configured, err := app.ConfigureScreenerConcurrency(7)
+	if err != nil || configured.Concurrency != 7 {
+		t.Fatalf("configure Screener workers: %+v, %v", configured, err)
+	}
+	for _, invalid := range []int{-1, 0, 21} {
+		if rejected, err := app.ConfigureScreenerConcurrency(invalid); err == nil || rejected.Concurrency != 7 {
+			t.Fatalf("invalid worker count changed configuration: %+v, %v", rejected, err)
+		}
 	}
 	if got := app.GetScreener().Directory; got != filepath.Join(profile, "screener") {
 		t.Fatalf("default folder: %q", got)
 	}
 	destination := filepath.Join(profile, "selected", "market data")
-	configured, err := app.ConfigureScreenerDirectory(destination)
-	if err != nil || configured.Directory != destination {
+	configured, err = app.ConfigureScreenerDirectory(destination)
+	if err != nil || configured.Directory != destination || configured.Concurrency != 7 {
 		t.Fatalf("configure directory: %+v, %v", configured, err)
 	}
 	if _, err = app.StartScreenerDownload(screener.Request{Symbols: []string{"not-a-real-instrument"}, Timeframe: "d1", From: "2024-01-01", To: "2024-01-02"}); err == nil {
@@ -75,11 +84,14 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	if got := reopened.Info().Directory; got != destination {
 		t.Fatalf("preference did not restore: %q", got)
 	}
+	if got := reopened.Info().Concurrency; got != 7 {
+		t.Fatalf("worker preference did not restore: %d", got)
+	}
 	if saved, err := reopened.SavedAnalysisConditions(); err != nil || len(saved) != 1 || saved[0].Name != "My condition" {
 		t.Fatalf("named condition did not restore: %+v %v", saved, err)
 	}
 	configured, err = app.ConfigureScreenerDirectory("  ")
-	if err != nil || configured.Directory != filepath.Join(profile, "screener") {
+	if err != nil || configured.Directory != filepath.Join(profile, "screener") || configured.Concurrency != 7 {
 		t.Fatalf("empty path did not reset to profile default: %+v, %v", configured, err)
 	}
 }

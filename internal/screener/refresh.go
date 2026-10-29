@@ -149,7 +149,7 @@ func (m *Manager) StartRefresh() (RefreshInfo, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.refreshCancel, m.refreshDone = cancel, make(chan struct{})
 	m.wg.Add(1)
-	go m.runRefresh(ctx, m.directory, asOf)
+	go m.runRefresh(ctx, m.directory, asOf, m.concurrency)
 	return m.refreshInfoLocked(nil), nil
 }
 
@@ -168,7 +168,7 @@ func (m *Manager) CancelRefresh() RefreshInfo {
 	return m.refreshInfoLocked(nil)
 }
 
-func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) {
+func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64, concurrency int) {
 	defer m.wg.Done()
 	defer func() {
 		m.mu.Lock()
@@ -190,7 +190,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64) 
 	m.mu.Lock()
 	count := len(m.refreshJobs)
 	m.mu.Unlock()
-	runFilePoolWithConcurrency(count, MaxConcurrency, func(index int) {
+	runFilePoolWithConcurrency(count, concurrency, func(index int) {
 		m.mu.Lock()
 		if ctx.Err() != nil {
 			m.refreshJobs[index].Status, m.refreshJobs[index].Message = "cancelled", "Refresh cancelled; original file kept"

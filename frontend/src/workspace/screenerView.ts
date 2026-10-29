@@ -1,7 +1,9 @@
 import type {ScreenerView} from '../types';
 
-export const initialScreenerView=():ScreenerView=>({symbols:[],timeframe:'d1',from:'2010-01-01',to:new Date().toISOString().slice(0,10),concurrency:1,collapsedCategories:[]});
-export const normalizeScreenerView=(value:ScreenerView):ScreenerView=>structuredClone({...value,concurrency:1});
+export const initialScreenerView=():ScreenerView=>({symbols:[],timeframe:'d1',from:'2010-01-01',to:new Date().toISOString().slice(0,10),concurrency:5,collapsedCategories:[]});
+// This compatibility field describes a view; only Settings changes the shared
+// worker preference. Download submissions always read the current backend info.
+export const normalizeScreenerView=(value:ScreenerView):ScreenerView=>structuredClone({...value,concurrency:Number.isInteger(value.concurrency)&&value.concurrency>=1&&value.concurrency<=20?value.concurrency:5});
 
 /** One writer, coalescing edits while a previous durable save is pending. */
 export class ScreenerViewWriter {

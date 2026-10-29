@@ -2,18 +2,13 @@ package screener
 
 import "sync"
 
-// Local enrichment uses independent child processes and scratch directories,
-// keeping at most twenty files active. Network refresh explicitly uses one
-// worker. run still visits queued files after cancellation so their owners can
-// mark every job terminal without starting a child process. The batch owner
-// does not finish until all workers have drained.
-const fileBatchConcurrency = 20
-
-func runFilePool(count int, run func(int)) {
-	runFilePoolWithConcurrency(count, fileBatchConcurrency, run)
-}
+// File batches use independent child processes and scratch directories,
+// keeping at most the configured number of files active. Queued files are still
+// visited after cancellation so their owners can mark every job terminal
+// without starting a child process. The batch waits for all workers to drain.
 
 func runFilePoolWithConcurrency(count, concurrency int, run func(int)) {
+	concurrency = min(MaxConcurrency, max(1, concurrency))
 	indexes := make(chan int)
 	var workers sync.WaitGroup
 	for range min(concurrency, count) {

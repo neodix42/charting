@@ -1,4 +1,14 @@
-# Implementation status — updated 2026-10-28
+# Implementation status — updated 2026-10-29
+
+## Configurable parallel Screener workers — 2026-10-29
+
+Settings → Screener now provides **Worker threads**, an explicitly applied machine-local setting from **1–20**, default **5**. Downloader, local Enrichment and manual Refresh use this shared limit, captured when each batch starts. Each worker has private scratch/output files; the existing shared publication journal preserves canonical histories and backups. Job order, per-file progress, cancellation and completed results are retained. Active work blocks a worker-setting change, and pending settings writes participate in the normal close handshake.
+
+The setting is atomically saved beside the download folder in `screener.json`, outside workspace exports. Directory-only profiles adopt 5 while retaining their folder. Old download requests, selection drafts and queue metadata cannot overwrite the current setting; automatic restart and Resume use it. Invalid settings and failed writes preserve the prior applied value and original configuration. The native serial-download smoke scenarios explicitly select one worker.
+
+Each child still fetches one source file at a time. Shared two-second request-start pacing, initial browser-session setup, persisted 403/429 cooldowns and checkpoints apply across the parallel workers. Live Alerts retain their sequential automatic refresh. Both user guides and Wails bindings are updated.
+
+Verification: `go test -race ./internal/screener`, configured-pool/persistence/provider regressions, bindings-facade race tests, native production app race tests, native vet and desktop-smoke compilation pass. All **186 frontend unit tests**, typecheck/lint and **51 focused browser tests** pass, covering worker settings, Downloader, Enrichment, Refresh, Live Alerts and appearance. Actual production child-process tests demonstrate five pending data responses concurrently, a queued sixth asset, checkpoint retention on close and one refused request blocking subsequent queued requests. `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh` rebuilt the local Linux executable/archive with the existing downloader pin; their SHA-256 checks pass. Logs are in ignored `.tools/verification/screener-concurrency/`; hosted Tests and release checks are monitored after pushing. Native GUI interaction, live Dukascopy access, Windows execution and actual Telegram delivery have not been exercised for this change; tests use isolated profiles and substituted transports.
 
 ## Analysis periods and Telegram Live Alerts — 2026-10-28
 

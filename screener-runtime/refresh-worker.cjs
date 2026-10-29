@@ -174,7 +174,8 @@ async function refresh(request,options={}) {
   if(from<now){
     report({type:'progress',progress:2,rows:scanned.rows,message:coverageVerified?'Downloading recent overlap and new data':'Checking complete history for missing data (first refresh or changed source)'});
     try{
-      // Go refreshes one asset at a time; its source requests are also serial.
+      // Each Go file worker fetches its source requests serially; the owner
+      // shares request pacing and cooldowns across parallel file workers.
       await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1,providerSession:request.providerSession},
         {api:options.api,pauseMs:options.pauseMs,emit:event=>{if(event.type==='progress')report({...event,progress:2+event.progress*0.58});}});
       hasDownloaded=true;

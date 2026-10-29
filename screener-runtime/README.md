@@ -61,11 +61,14 @@ tick sources, daily minute sources, monthly hourly sources, and yearly daily
 sources. Download progress counts actual completed source requests. CSV headers
 are written once, rows stay chronological, and an all-empty range fails visibly.
 
-Go downloads one symbol at a time. Refresh also processes one asset at a time,
-completing its download and indicator recalculation before starting the next.
-Job rows stay in selection order. Older saved parallel-download preferences and
-queues restore sequentially while retaining their other saved choices and work.
-Local Enrichment uses up to 20 file workers without making provider requests.
+Go downloads and refreshes multiple files in parallel, using **Settings →
+Screener → Worker threads**: **5** by default, configurable from **1–20**.
+Each refresh worker completes its download and indicator recalculation before
+taking another file. Job rows stay in selection order. Resumed queues use the
+saved setting; older profiles without it default to 5. Local Enrichment uses the
+same configured file-worker limit without making provider requests. Source
+requests remain sequential inside each worker, with shared two-second request
+start pacing, initial session setup and provider cooldowns across workers.
 
 Go owns cancellation of every child process tree, machine-local preferences,
 private job directories and final publication. Downloader and Refresh reuse the
@@ -94,11 +97,11 @@ go test -race ./internal/screener
 The deterministic worker tests inject only transport responses. Production
 decoder, aggregation and CSV formatting come from the pinned installed package.
 The Go tests run real child processes through the production protocol and cover
-validation, sequential dispatch, stable result ordering, errors, cancellation,
+validation, bounded parallel dispatch, stable result ordering, errors, cancellation,
 shutdown, preservation of existing output, and restoration of legacy preferences
-and queued work with sequential downloads. Transport tests check one active
-source request, shared pacing and access-denial handling. Local enrichment tests
-cover its separate file-worker pool.
+and queued work using the saved global worker limit. Transport tests check
+sequential source requests within each worker, shared pacing and access-denial
+handling. Local enrichment tests cover its configurable file-worker pool.
 The worker syncs each complete source batch and atomically commits checkpoint.json
 with its CSV byte offset, row count, header, last timestamp, frozen UTC range
 and next source index. Normal app close leaves queued jobs and checkpoints for

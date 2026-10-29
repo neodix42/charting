@@ -58,6 +58,7 @@ export interface Backend extends ScreenerAnalysisBackend,ScreenerLiveAlertsBacke
  GetCandleStorage():Promise<CandleStorageInfo>;ConfigureCandleStorage(enabled:boolean,directory:string):Promise<CandleStorageInfo>;ChooseCandleStorageDirectory():Promise<string>;
  GetTelegramBotSettings():Promise<TelegramBotSettings>;ConfigureTelegramBot(token:string):Promise<TelegramBotSettings>;ConfigureTelegramBotSettings(token:string,recipient:string):Promise<TelegramBotSettings>;GetTelegramBotIdentity(token:string):Promise<TelegramBotIdentity>;TestTelegramBot():Promise<TelegramTestResult>;
  GetScreenerCatalog():Promise<ScreenerCatalog>;GetScreener():Promise<ScreenerInfo>;ConfigureScreenerDirectory(directory:string):Promise<ScreenerInfo>;ChooseScreenerDirectory():Promise<string>;
+ ConfigureScreenerConcurrency(concurrency:number):Promise<ScreenerInfo>;
  StartScreenerDownload(request:ScreenerDownloadRequest):Promise<ScreenerInfo>;CancelScreenerDownload():Promise<ScreenerInfo>;
  ResumeScreenerDownload():Promise<ScreenerInfo>;GetScreenerView():Promise<ScreenerView>;SaveScreenerView(view:ScreenerView):Promise<ScreenerView>;
  GetScreenerIndicators():Promise<ScreenerIndicators>;GetScreenerFiles(offset:number,limit:number):Promise<ScreenerFilePage>;

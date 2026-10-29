@@ -12,7 +12,7 @@
 
 - **A workspace that remembers your layout.** Up to 20 chart tabs and 9 charts per tab, with independent instruments, periods, indicators and drawings.
 - **Public market data without an account.** Binance and Bybit spot/perpetual markets, plus Coinbase spot. No API keys required.
-- **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download one symbol at a time with shared request pacing.
+- **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download multiple symbols in parallel with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
 - **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, inspect matches on a chart, and optionally simulate SL/TP outcomes.
 - **Local files and persistence.** SQLite workspace saving, export/import, resumable downloads, remembered Screener choices and named condition sets.
@@ -86,9 +86,9 @@ Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from 
 1. Open **Screener → Downloader**. Search or expand categories such as crypto assets, forex, commodities, indices, stocks, ETFs and bonds.
 2. Select the instruments you want—for example, **BTCUSD** and **ETHUSD**.
 3. Choose one common timeframe and UTC date range. **From** is inclusive; **To** is exclusive. Available history depends on the instrument.
-4. Press **Download**. Symbols download sequentially, with one active data request at a time. Additional symbols wait in the queue; progress, completed paths and provider errors appear per symbol.
+4. Press **Download**. Up to **5 symbols download in parallel** by default. Additional symbols wait in the queue; progress, completed paths and provider errors appear per symbol.
 
-Downloader and **Refresh data and indicators** each process **one asset at a time**. Their shared request queue allows only **one active data request**, including browser verification, and spaces request starts at least **two seconds apart**. This is CryptoDesk's conservative default, not a published Dukascopy quota. HTTP **429** pauses the queue using `Retry-After` or exponential backoff. Wait reasons appear in each job's status, and cooldowns survive app restart.
+Set **Settings → Screener → Worker threads** to **1–20**, default **5**. This saved setting controls Downloader, Enrich and **Refresh data and indicators**, including resumed downloads. Finish or cancel active work before changing it. Each download worker fetches one source file at a time. The shared provider queue spaces request starts at least **two seconds apart**, while requests from different workers can overlap after the initial browser-session check. This is CryptoDesk's conservative pacing policy, not a published Dukascopy quota. HTTP **429** pauses the queue using `Retry-After` or exponential backoff. Wait reasons appear in each job's status, and cooldowns survive app restart.
 
 An HTTP **403** is an access refusal, and does not establish that a rate limit was exceeded. CryptoDesk stops requests and records a **15-minute access-denial cooldown**, extended if the provider asks for longer. The error shows when to retry manually; restarting or clicking Resume during the cooldown sends no new request. Existing CSVs and committed checkpoints are retained. If access is still refused after the cooldown, use [Dukascopy support](https://www.dukascopy.bank/contact/); reducing the rate cannot guarantee that a WAF refusal will clear. The upstream library also treats [rate limits separately from browser verification](https://github.com/Leo4815162342/dukascopy-node/blob/master/src/buffer-fetcher/rate-limit.ts).
 
@@ -102,7 +102,7 @@ The Downloads panel shows **10 jobs per page**, with totals for **completed** an
 
 The pinned [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node) integration supports **1,499 instruments across 39 categories** and ten timeframes: **tick, s1, m1, m5, m15, m30, h1, h4, d1 and mn1**. Choose `d1` for daily indicator research or an intraday interval for hour-based conditions.
 
-Downloads continue when you switch screens. **Closing the app pauses unfinished downloads; the next launch resumes them automatically from committed batches.** Symbol selection, timeframe, dates and category open/closed states are remembered. Older saved parallel-download choices and queued downloads are restored sequentially. Completed files are retained. **Cancel downloads** discards unfinished work and stops automatic continuation; **Resume downloads** can retry failed or paused jobs.
+Downloads continue when you switch screens. **Closing the app pauses unfinished downloads; the next launch resumes them automatically from committed batches.** Symbol selection, timeframe, dates and category open/closed states are remembered. Resumed queues use the saved Worker threads setting; older profiles without that setting start with 5. Completed files are retained. **Cancel downloads** discards unfinished work and stops automatic continuation; **Resume downloads** can retry failed or paused jobs.
 
 Use **Settings → Screener → Screener download folder** to change the destination. The default on Linux is `~/.local/share/cryptodesk/screener`; Windows portable builds use `data/screener`. Changing the setting does not move previous files. Network/provider failures are reported visibly. If the bundled downloader is unavailable, the screen reports the runtime error and offers **Retry downloader**; restore the complete release archive before retrying.
 
@@ -117,7 +117,7 @@ Use **Settings → Screener → Screener download folder** to change the destina
 3. Press **Enrich** to calculate it for **all CSV files in the folder**, including files on other list pages. Overall and per-file progress show completion or errors.
 4. Repeat for the indicators you want to compare in Analysis.
 
-The file list uses **20 rows per page**. Enrich and Refresh process all applicable files across every page. **Enrich** calculates local indicators using up to **20 parallel file workers**, without making provider requests. **Refresh** processes **one asset at a time**, completing its download and indicator recalculation before starting the next. Overall and per-file progress show completed, active and queued work.
+The file list uses **20 rows per page**. Enrich and Refresh process all applicable files across every page using the saved **Worker threads** setting, default **5** parallel files. **Enrich** calculates local indicators without making provider requests. Each **Refresh** worker finishes downloading its asset before recalculating its indicators. Overall and per-file progress show completed, active and queued work.
 
 The bundled [trading-signals](https://github.com/bennycode/trading-signals) integration provides **40 technical indicators** across moving averages, momentum, trend, volatility and volume. Examples include SMA/EMA, RSI, MACD, Ichimoku/Tenkan/Kijun, ATR, Bollinger bands, Donchian channels, stochastic oscillators, ADX, OBV and VWAP.
 
@@ -262,7 +262,7 @@ CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQL
 
 CryptoDesk currently pins **[dukascopy-node 1.51.1](https://github.com/Leo4815162342/dukascopy-node/releases/tag/v1.51.1)** in [screener-runtime/package.json](screener-runtime/package.json) and its lockfile. Release archives already contain this dependency, Node and Chromium. The app imports its private copy directly; `npm install -g`, `npm update` in another folder and standalone `npx dukascopy-node` do not update CryptoDesk. There is no automatic upstream upgrade at app startup.
 
-Version **1.51.1** includes our [plain HTTP 403 handling fix](https://github.com/Leo4815162342/dukascopy-node/pull/265) and upstream [export-widget request headers and tighter 403 handling](https://github.com/Leo4815162342/dukascopy-node/pull/266). CryptoDesk retains sequential downloads, shared request pacing, provider cooldowns and saved checkpoints.
+Version **1.51.1** includes our [plain HTTP 403 handling fix](https://github.com/Leo4815162342/dukascopy-node/pull/265) and upstream [export-widget request headers and tighter 403 handling](https://github.com/Leo4815162342/dukascopy-node/pull/266). CryptoDesk retains shared request pacing, provider cooldowns and saved checkpoints across parallel downloads.
 
 **Check the bundled version.** From an extracted release folder, run:
 

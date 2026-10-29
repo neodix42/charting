@@ -162,13 +162,10 @@ func waitFileGate(t *testing.T, gates, name string) string {
 	return ""
 }
 
-func TestEnrichmentParallelAndRefreshSerialWorkersContinueAfterIndependentFailure(t *testing.T) {
+func TestConfiguredEnrichmentAndRefreshWorkersContinueAfterIndependentFailure(t *testing.T) {
 	for _, operation := range []string{"enrichment", "refresh"} {
 		t.Run(operation, func(t *testing.T) {
-			workers := 20
-			if operation == "refresh" {
-				workers = 1
-			}
+			workers := DefaultConcurrency
 			m, gates, names, originals := filePoolManager(t, operation, workers+2, true)
 			startFileBatch(t, m, operation)
 			private := map[string]bool{}
@@ -244,14 +241,11 @@ func TestEnrichmentParallelAndRefreshSerialWorkersContinueAfterIndependentFailur
 	}
 }
 
-func TestEnrichmentParallelAndRefreshSerialCancelOrCloseDrainAndCancelQueuedFiles(t *testing.T) {
+func TestConfiguredEnrichmentAndRefreshCancelOrCloseDrainAndCancelQueuedFiles(t *testing.T) {
 	for _, operation := range []string{"enrichment", "refresh"} {
 		for _, shutdown := range []string{"cancel", "close"} {
 			t.Run(operation+"/"+shutdown, func(t *testing.T) {
-				workers := 20
-				if operation == "refresh" {
-					workers = 1
-				}
+				workers := DefaultConcurrency
 				m, gates, names, originals := filePoolManager(t, operation, workers+2, false)
 				startFileBatch(t, m, operation)
 				for _, name := range names[:workers] {
@@ -312,5 +306,46 @@ func TestFileBatchProgressIncludesAllRunningAndTerminalJobs(t *testing.T) {
 	m.mu.Unlock()
 	if math.Abs(enrichment.Progress-65) > 1e-9 || math.Abs(refresh.Progress-65) > 1e-9 {
 		t.Fatalf("aggregate progress excluded running/terminal workers: %+v %+v", enrichment, refresh)
+	}
+}
+
+func TestFileBatchesUseConfiguredLimitsIncludingTwenty(t *testing.T) {
+	for _, tc := range []struct {
+		operation string
+		workers   int
+	}{{"enrichment", 1}, {"enrichment", 2}, {"enrichment", 20}, {"refresh", 2}} {
+		t.Run(fmt.Sprintf("%s/%d", tc.operation, tc.workers), func(t *testing.T) {
+			m, gates, names, _ := filePoolManager(t, tc.operation, tc.workers+2, false)
+			configureTestConcurrency(t, m, tc.workers)
+			startFileBatch(t, m, tc.operation)
+			for _, name := range names[:tc.workers] {
+				waitFileGate(t, gates, name)
+			}
+			state := filePoolSnapshot(t, m, tc.operation, names)
+			for i, job := range state.Jobs {
+				want := "running"
+				if i >= tc.workers {
+					want = "queued"
+					assertNotStarted(t, gates, names[i])
+				}
+				if job.Status != want {
+					t.Fatalf("configured worker limit was ignored: %+v", state)
+				}
+			}
+			if _, err := m.ConfigureConcurrency(3); err == nil || m.Info().Concurrency != tc.workers {
+				t.Fatal("active file batch changed its worker snapshot")
+			}
+			if tc.operation == "enrichment" {
+				m.CancelEnrichment()
+			} else {
+				m.CancelRefresh()
+			}
+			state = waitFileBatch(t, m, tc.operation, names)
+			if state.Active || state.Cancelled != len(names) || state.Failed != 0 || state.Completed != 0 {
+				t.Fatalf("bounded file pool did not drain: %+v", state)
+			}
+			assertNoEnrichmentScratch(t, m.directory)
+			assertNoRefreshScratch(t, m.directory)
+		})
 	}
 }

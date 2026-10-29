@@ -7,6 +7,7 @@ import {THEME_OPTIONS} from '../workspace/themes';
 import {ChartGapSetting} from './ChartGapSetting';
 import {CandleStorageSetting} from './CandleStorageSetting';
 import {ScreenerDirectorySetting} from './ScreenerDirectorySetting';
+import {ScreenerConcurrencySetting,type ScreenerConcurrencySettingHandle} from './ScreenerConcurrencySetting';
 import {TelegramBotSetting,type TelegramBotSettingHandle} from './TelegramBotSetting';
 
 const pages=['Appearance','Storage','Screener','Telegram Bot','Export','Debug'] as const;
@@ -19,8 +20,10 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
  const [page,setPage]=useState<SettingsPage>('Appearance'),[zone,setZone]=useState(workspace.displayTimezone),[diagnostics,setDiagnostics]=useState<Record<string,unknown>|null>(null);
  const tabs=useRef<Array<HTMLButtonElement|null>>([]);
  const telegram=useRef<TelegramBotSettingHandle>(null);
- useImperativeHandle(ref,()=>({flush:async()=>{await telegram.current?.flush();}}),[]);
- const close=()=>{void Promise.resolve().then(()=>telegram.current?.flush()).then(onClose).catch(()=>{});};
+ const screenerWorkers=useRef<ScreenerConcurrencySettingHandle>(null);
+ const flush=async()=>{await telegram.current?.flush();await screenerWorkers.current?.flush();};
+ useImperativeHandle(ref,()=>({flush}),[]);
+ const close=()=>{void Promise.resolve().then(flush).then(onClose).catch(()=>{});};
  const timezones=Array.from(new Set(['UTC','system',Intl.DateTimeFormat().resolvedOptions().timeZone,'America/New_York','Europe/London','Europe/Berlin','Asia/Dubai','Asia/Tokyo','Asia/Singapore','Australia/Sydney']));
  const selectPage=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
   const target=event.key==='ArrowRight'?(index+1)%pages.length:event.key==='ArrowLeft'?(index+pages.length-1)%pages.length:event.key==='Home'?0:event.key==='End'?pages.length-1:-1;
@@ -40,6 +43,7 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
    {page==='Screener'&&<ScreenerDirectorySetting api={api}/>}
    {page==='Export'&&<div className="settings-section"><h3>Portable workspace</h3><p>Export chart settings, appearance and layout as JSON. Import replaces the workspace after validation and confirmation, with a backup of the current state.</p><div className="button-row"><button onClick={()=>void onNative('export')}>Export JSON…</button><button onClick={()=>void onNative('import')}>Import JSON…</button><button className="danger" onClick={onReset}>Reset workspace…</button></div></div>}
    {page==='Debug'&&<><div className="settings-section"><h3>Diagnostics</h3><p>Check active resources and backend health. Inactive tabs retain configuration and release their market leases.</p><button onClick={()=>void onDiagnostics().then(setDiagnostics).catch(error=>onError(errorText(error)))}>Refresh diagnostics</button>{diagnostics&&<pre className="diagnostics">{JSON.stringify(diagnostics,null,2)}</pre>}</div><div className="settings-section attribution"><strong>Lightweight Charts™ by TradingView</strong><p>This independent application uses public market data. Market access and freshness depend on the provider and network. No exchange account or trading API credentials are used.</p><button className="text-button" onClick={()=>void api.OpenTradingView().catch(error=>onError(errorText(error)))}>TradingView ↗</button></div></>}
+   <ScreenerConcurrencySetting ref={screenerWorkers} api={api} visible={page==='Screener'}/>
    <TelegramBotSetting ref={telegram} api={api} visible={page==='Telegram Bot'}/>
   </div>
  </section></div>;

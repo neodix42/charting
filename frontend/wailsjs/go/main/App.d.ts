@@ -25,6 +25,8 @@ export function ChooseScreenerDirectory():Promise<string>;
 
 export function ConfigureCandleStorage(arg1:boolean,arg2:string):Promise<candlestorage.Info>;
 
+export function ConfigureScreenerConcurrency(arg1:number):Promise<screener.Info>;
+
 export function ConfigureScreenerDirectory(arg1:string):Promise<screener.Info>;
 
 export function ConfigureScreenerLiveAlerts(arg1:screener.LiveAlertsConfig):Promise<screener.LiveAlertsInfo>;

@@ -21,6 +21,7 @@ func reopenTestManager(t *testing.T, profile string) *Manager {
 
 func TestCloseAndRestartAutomaticallyResumesQueueAndRetainsCompletedOutputs(t *testing.T) {
 	m, gates := gatedManager(t)
+	configureTestConcurrency(t, m, 1)
 	r := validRequest()
 	r.Symbols = []string{"btcusd", "ethusd", "ltcusd"}
 	r.Concurrency = 1
@@ -51,8 +52,7 @@ func TestCloseAndRestartAutomaticallyResumesQueueAndRetainsCompletedOutputs(t *t
 	if err = os.Remove(filepath.Join(gates, "ethusd.started")); err != nil {
 		t.Fatal(err)
 	}
-	// A queue saved by the former parallel version must resume with the same
-	// jobs and checkpoints while silently adopting serial downloads.
+	// Legacy queue metadata must not override the authoritative local setting.
 	queuePath := filepath.Join(m.profile, "screener-downloads.json")
 	var legacy savedDownloads
 	if err = readState(queuePath, 16*1024*1024, &legacy); err != nil {
@@ -90,12 +90,13 @@ func TestCloseAndRestartAutomaticallyResumesQueueAndRetainsCompletedOutputs(t *t
 	assertNoPartials(t, result.Directory)
 	var persisted savedDownloads
 	if err = readState(queuePath, 16*1024*1024, &persisted); err != nil || persisted.Concurrency != 1 {
-		t.Fatal("resumed queue did not persist serial downloads", persisted.Concurrency, err)
+		t.Fatal("resumed queue did not persist the configured workers", persisted.Concurrency, err)
 	}
 }
 
 func TestExplicitCancellationDoesNotResumeOnRestart(t *testing.T) {
 	m, gates := gatedManager(t)
+	configureTestConcurrency(t, m, 1)
 	r := validRequest()
 	r.Symbols = []string{"btcusd", "ethusd"}
 	r.Concurrency = 1
@@ -127,10 +128,10 @@ func TestViewSelectionDatesAndCategoryExpansionRestoreExactly(t *testing.T) {
 	view.From = "2020-01-01"
 	view.To = "2024-06-01"
 	view.CollapsedCategories = []string{loadCatalog().Groups[0].Name, loadCatalog().Groups[2].Name}
-	if saved, err := m.SaveView(view); err != nil || saved.Concurrency != 1 {
+	if saved, err := m.SaveView(view); err != nil || saved.Concurrency != DefaultConcurrency {
 		t.Fatal(err)
 	}
-	view.Concurrency = 1
+	view.Concurrency = DefaultConcurrency
 	reopened := reopenTestManager(t, m.profile)
 	got, err := reopened.View()
 	if err != nil || !reflect.DeepEqual(got, view) {
@@ -168,10 +169,10 @@ func TestLegacyViewConcurrencyMigratesWithoutLosingSelections(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := reopenTestManager(t, profile)
-	view.Concurrency = 1
+	view.Concurrency = DefaultConcurrency
 	got, err := m.View()
 	if err != nil || !reflect.DeepEqual(got, view) || m.Info().Error != "" {
-		t.Fatalf("legacy settings lost selections or rejected serial migration: %+v %v", got, err)
+		t.Fatalf("legacy settings lost selections or overrode global workers: %+v %v", got, err)
 	}
 }
 

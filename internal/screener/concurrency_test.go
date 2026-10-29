@@ -32,6 +32,13 @@ func gatedManager(t *testing.T) (*Manager, string) {
 	return manager, gates
 }
 
+func configureTestConcurrency(t *testing.T, manager *Manager, concurrency int) {
+	t.Helper()
+	if info, err := manager.ConfigureConcurrency(concurrency); err != nil || info.Concurrency != concurrency {
+		t.Fatalf("configure workers %d: %+v %v", concurrency, info, err)
+	}
+}
+
 func waitGate(t *testing.T, gates, symbol string) helperRequest {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -63,12 +70,13 @@ func assertNotStarted(t *testing.T, gates, symbol string) {
 
 func TestSerialDownloadsWaitForEachPublicationAndKeepSelectionOrder(t *testing.T) {
 	manager, gates := gatedManager(t)
-	if info := manager.Info(); info.Concurrency != 1 || info.MaxConcurrency != 1 {
+	if info := manager.Info(); info.Concurrency != DefaultConcurrency || info.MaxConcurrency != MaxConcurrency {
 		t.Fatalf("bad initial concurrency %+v", info)
 	}
+	configureTestConcurrency(t, manager, 1)
 	request := validRequest()
 	request.Symbols = firstSymbols(4)
-	// Omitting the legacy worker setting still selects serial downloads.
+	// An omitted legacy request field cannot replace the configured limit.
 	if info, err := manager.Start(request); err != nil || info.Concurrency != 1 {
 		t.Fatalf("start: %+v %v", info, err)
 	}
@@ -108,20 +116,21 @@ func TestSerialDownloadsWaitForEachPublicationAndKeepSelectionOrder(t *testing.T
 	assertNoPartials(t, finished.Directory)
 }
 
-func TestLegacyRequestedConcurrencyCannotEnableParallelDownloads(t *testing.T) {
+func TestLegacyRequestedConcurrencyCannotOverrideConfiguredDownloads(t *testing.T) {
 	for _, requested := range []int{1, 2, 7, 20} {
 		t.Run(string(rune('A'+requested)), func(t *testing.T) {
 			manager, gates := gatedManager(t)
+			configureTestConcurrency(t, manager, 2)
 			request := validRequest()
 			request.Symbols = firstSymbols(3)
 			request.Concurrency = requested
-			if info, err := manager.Start(request); err != nil || info.Concurrency != 1 || info.MaxConcurrency != 1 {
+			if info, err := manager.Start(request); err != nil || info.Concurrency != 2 || info.MaxConcurrency != MaxConcurrency {
 				t.Fatalf("legacy concurrency was not normalized: %+v %v", info, err)
 			}
 			if child := waitGate(t, gates, request.Symbols[0]); child.SourceBatchSize != 1 {
 				t.Fatalf("source requests may overlap: %+v", child)
 			}
-			assertNotStarted(t, gates, request.Symbols[1])
+			waitGate(t, gates, request.Symbols[1])
 			assertNotStarted(t, gates, request.Symbols[2])
 			manager.Cancel()
 			assertNoPartials(t, manager.Info().Directory)
@@ -131,6 +140,7 @@ func TestLegacyRequestedConcurrencyCannotEnableParallelDownloads(t *testing.T) {
 
 func TestSerialFailureAllowsNextQueuedDownload(t *testing.T) {
 	manager, gates := gatedManager(t)
+	configureTestConcurrency(t, manager, 1)
 	request := validRequest()
 	request.Symbols = []string{"btcusd", "eurusd", "ethusd"}
 	request.Concurrency = 2
@@ -158,6 +168,7 @@ func TestSerialFailureAllowsNextQueuedDownload(t *testing.T) {
 
 func TestCancelDrainsSerialWorkerPreservesCompletedAndStopsQueuedDispatch(t *testing.T) {
 	manager, gates := gatedManager(t)
+	configureTestConcurrency(t, manager, 1)
 	request := validRequest()
 	request.Symbols = firstSymbols(4)
 	if _, err := manager.Start(request); err != nil {
@@ -196,6 +207,7 @@ func TestCancelDrainsSerialWorkerPreservesCompletedAndStopsQueuedDispatch(t *tes
 
 func TestShutdownDrainsSerialWorkerAndLeavesQueuedJobsUnstarted(t *testing.T) {
 	manager, gates := gatedManager(t)
+	configureTestConcurrency(t, manager, 1)
 	request := validRequest()
 	request.Symbols = firstSymbols(3)
 	if _, err := manager.Start(request); err != nil {

@@ -159,7 +159,7 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	m.enrichmentCancel = cancel
 	m.enrichmentDone = make(chan struct{})
 	m.wg.Add(1)
-	go m.runEnrichment(ctx, m.directory, request)
+	go m.runEnrichment(ctx, m.directory, request, m.concurrency)
 	return m.enrichmentInfoLocked(nil), nil
 }
 
@@ -178,7 +178,7 @@ func (m *Manager) CancelEnrichment() EnrichmentInfo {
 	return m.enrichmentInfoLocked(nil)
 }
 
-func (m *Manager) runEnrichment(ctx context.Context, directory string, request EnrichmentRequest) {
+func (m *Manager) runEnrichment(ctx context.Context, directory string, request EnrichmentRequest, concurrency int) {
 	defer m.wg.Done()
 	defer func() {
 		m.mu.Lock()
@@ -190,7 +190,7 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 	m.mu.Lock()
 	count := len(m.enrichmentJobs)
 	m.mu.Unlock()
-	runFilePool(count, func(index int) {
+	runFilePoolWithConcurrency(count, concurrency, func(index int) {
 		m.mu.Lock()
 		if ctx.Err() != nil {
 			m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "cancelled", "Enrichment cancelled; original file kept"

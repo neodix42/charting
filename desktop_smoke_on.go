@@ -527,6 +527,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     report.enrichment={page,csv};
    }
   }else if(phase==='screener-resume'||phase==='screener-resume-restore'){
+   if(phase==='screener-resume')await api.ConfigureScreenerConcurrency(1);
    await click('[role="tab"][aria-controls="screener-panel"]');await click('#screener-downloader-tab');
    await wait(()=>qa('.screener-instrument').length===1499,'native resumed catalog');
    if(phase==='screener-resume'){
@@ -554,6 +555,8 @@ const desktopSmokeJavaScript = `async function(phase) {
     }
    }
   }else if(phase==='screener'){
+   check((await api.GetScreener()).concurrency===5,'fresh Screener defaults to five workers');
+   await api.ConfigureScreenerConcurrency(1);
    await click('[role="tab"][aria-controls="screener-panel"]');
    await wait(()=>!q('[data-testid="chart-cell"]'),'native Screener chart cleanup');
    await click('#screener-downloader-tab');
@@ -565,7 +568,7 @@ const desktopSmokeJavaScript = `async function(phase) {
    await input('[aria-label="Search Dukascopy instruments"]','ethusd');
    await click('.screener-instrument input');
    await select('[aria-label="Download timeframe"]','d1');
-   check(!q('[aria-label="Parallel downloads"]')&&runtime.concurrency===1&&runtime.maxConcurrency===1,'downloads use one worker and expose no parallelism control',runtime);
+   check(!q('[aria-label="Parallel downloads"]')&&runtime.concurrency===1&&runtime.maxConcurrency===20,'single-worker setting is applied independently of Downloader selections',runtime);
    await input('[aria-label="Download from date"]','2024-01-01');
    await input('[aria-label="Download to date"]','2024-01-03');
    await click('[aria-label="Download historical data"] button[type="submit"]');
@@ -579,7 +582,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     return value.jobs.length&&value.jobs.every(job=>job.status==='completed')?value:false;
    },'real native Dukascopy CSV download',90000);
    await wait(()=>qa('.screener-job.completed progress').length===2&&qa('.screener-job.completed progress').every(progress=>progress.value===100),'completed per-symbol native progress');
-   check(sequentialObserved&&maxRunning===1&&finished.concurrency===1&&finished.maxConcurrency===1,'native assets download sequentially with at most one active worker',finished);
+   check(sequentialObserved&&maxRunning===1&&finished.concurrency===1&&finished.maxConcurrency===20,'native assets respect the explicitly selected single worker',finished);
    check(finished.jobs.length===2&&finished.jobs.map(job=>job.symbol).join(',')==='btcusd,ethusd'&&finished.jobs.every(job=>job.timeframe==='d1'&&job.progress===100),'sequential download preserves selected symbols, timeframe and displayed order',finished.jobs);
    const csv={};
    for(const symbol of ['btcusd','ethusd']){
