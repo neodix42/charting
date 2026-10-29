@@ -78,4 +78,4 @@ printf '\n%s\n' \
   "Linux archive: $APP_ROOT/$RELEASE_NAME.tar.gz" \
   "Checksums: $APP_ROOT/cryptodesk-SHA256SUMS" \
   'Runtime requirements: GTK3, WebKitGTK 4.1 and libsoup3; JForex forex charts also require Java 17+.' \
-  'Keep the sibling jforex-runtime folder with the executable; see README.md for Ubuntu prerequisites.'
+  'For forex charts, run ./scripts/install-user.sh to install/update the user-local JForex bridge; see README.md.'

@@ -8,6 +8,9 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] System Java takes priority over an IDE's JAVA_HOME; discovery never rewrites installed runtimes or changes global settings.
 - [x] Runtime discovery, native race and bridge packaging checks pass; an isolated copy of the real saved workspace loads all 4 tabs and 11 charts without resetting the original.
 - [x] Mixed-market restart/export/import regression includes Dukascopy/forex drawings alongside crypto spot and perpetual feeds.
+- [x] Linux/Windows archives at implementation commit 7e025b0 pass clean-source provenance, complete inventory and checksum validation; root Linux executable rebuilt.
+- [x] Hosted Desktop release run 40929447201 publishes v0.1.26 successfully.
+- [ ] Hosted Tests run 40929447051 is pending; native GUI execution remains unverified.
 
 ## Responsive JForex charts and Settings — 2026-10-29, `main` branch
 
