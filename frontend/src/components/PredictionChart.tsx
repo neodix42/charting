@@ -20,12 +20,12 @@ export function PredictionChart({forecast}:{forecast:PredictionForecast}){
   chartRef.current=chart;predictionChartResources.charts++;
   let resize:ResizeObserver|undefined,theme:MutationObserver|undefined,band:PredictionBand|undefined,mouse:MouseEventHandler<Time>|undefined;
   try{
-   const history=chart.addSeries(LineSeries,{color:palette.text,lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:'Historical close'});
+   const history=chart.addSeries(LineSeries,{color:palette.text,lineWidth:2,priceLineVisible:false,lastValueVisible:false});
    // Numeric coordinates encode ordinal bars. Both axis and crosshair formatters
    // map them to real history timestamps or +N; they never imply future dates.
    history.setData(forecast.history.map((bar,index)=>({time:index+1 as UTCTimestamp,value:bar.close})));
    const last=forecast.history.at(-1)!,anchor={time:forecast.history.length as UTCTimestamp,value:last.close};
-   const median=chart.addSeries(LineSeries,{color:palette.accent,lineWidth:2,priceLineVisible:false,lastValueVisible:false,title:'Median forecast'});
+   const median=chart.addSeries(LineSeries,{color:palette.accent,lineWidth:2,priceLineVisible:false,lastValueVisible:false});
    median.setData([anchor,...forecast.points.map(point=>({time:forecast.history.length+point.step as UTCTimestamp,value:point.median}))]);
    const boundOptions={color:'#00000000',lineWidth:1 as const,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false};
    for(const field of ['lower','upper'] as const)chart.addSeries(LineSeries,boundOptions).setData([anchor,...forecast.points.map(point=>({time:forecast.history.length+point.step as UTCTimestamp,value:point[field]}))]);

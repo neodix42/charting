@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-10-29
 
+## Predictions asset search and forecast labels — 2026-10-29
+
+Predictions now offers a case-insensitive **Filter assets** field for asset names and symbols. It narrows dropdown options without changing the selected asset/period, reports empty results and restores the full list when cleared. Enter in the search field does not start inference. Saved forecast entries show their recorded model ID, independently of the current model setting. Historical Close and Median forecast labels remain in the legend, with duplicate series titles removed from the chart.
+
+Verification: frontend typecheck/lint and all **12 existing Predictions browser cases** pass. An additional isolated browser inspection verifies mixed-case name/symbol matching, whitespace trimming, empty/reset results, selection/period retention, actual themed-popup filtering, Enter behavior, snapshot model provenance after changing the active model, and absence of series-title canvas labels. The light-theme screenshot is in ignored `.tools/verification/predictions-ui/`. Checks use explicit offline fixtures; no real profile or market CSV was changed. Hosted CI has not been rerun for this UI follow-up; the earlier implementation run is recorded below.
+
 ## Local Toto 2.0 Predictions — 2026-10-29, `predictions` branch
 
 The fixed **Predictions** tab follows Screener, independently of saved chart tabs. It selects a downloaded asset/period, the latest 512 or 1024 fully closed Close values and a 1–256-bar horizon (default 20). Settings adds the default **Datadog/Toto-2.0-313m** model and adjustable model folder. Opening Predictions prepares missing dependencies and weights with progress/cancellation; opening Settings alone does not download them. The chart uses historical timestamps and relative future bar numbers, a median line and shaded estimated P10–P90 band. Tool navigation releases live chart subscriptions and retains viewport/close-handshake behavior.
