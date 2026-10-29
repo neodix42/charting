@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Local Predictions — 2026-10-29, `predictions` branch
+
+- [x] Independent Predictions page/settings default to Toto-2.0-313m, with downloaded asset/period, 512/1024 closed-bar context and future horizon default 20.
+- [x] Real model preparation and inference pass on isolated synthetic inputs; source CSV is unchanged and timestamped forecasts restore identically after restart.
+- [x] Private pinned runtime/model downloads, cancellation, closed-data validation, independent settings and immutable snapshot persistence have automated coverage.
+- [x] All 191 frontend unit tests, 12 Predictions browser cases and 33 related regressions pass, including failure paths and close handling; native build/checksums pass.
+- [ ] Hosted branch CI verification is pending; see STATUS.md.
+- [ ] Native desktop interaction, Windows execution and financial forecast quality/calibration remain unverified.
+
 ## Configurable Screener workers — 2026-10-29
 
 - [x] Settings → Screener applies and persists Worker threads, default 5, valid range 1–20, alongside the download folder and outside workspace exports.

@@ -6,6 +6,10 @@ export function AttachChart(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AttachChart'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CancelPrediction() {
+  return window['go']['main']['App']['CancelPrediction']();
+}
+
 export function CancelScreenerAnalysis() {
   return window['go']['main']['App']['CancelScreenerAnalysis']();
 }
@@ -30,12 +34,20 @@ export function ChooseCandleStorageDirectory() {
   return window['go']['main']['App']['ChooseCandleStorageDirectory']();
 }
 
+export function ChoosePredictionModelDirectory() {
+  return window['go']['main']['App']['ChoosePredictionModelDirectory']();
+}
+
 export function ChooseScreenerDirectory() {
   return window['go']['main']['App']['ChooseScreenerDirectory']();
 }
 
 export function ConfigureCandleStorage(arg1, arg2) {
   return window['go']['main']['App']['ConfigureCandleStorage'](arg1, arg2);
+}
+
+export function ConfigurePredictions(arg1) {
+  return window['go']['main']['App']['ConfigurePredictions'](arg1);
 }
 
 export function ConfigureScreenerConcurrency(arg1) {
@@ -96,6 +108,18 @@ export function GetFeedSnapshot(arg1, arg2) {
 
 export function GetHistory(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetHistory'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function GetPredictionDatasets() {
+  return window['go']['main']['App']['GetPredictionDatasets']();
+}
+
+export function GetPredictionForecast(arg1) {
+  return window['go']['main']['App']['GetPredictionForecast'](arg1);
+}
+
+export function GetPredictions() {
+  return window['go']['main']['App']['GetPredictions']();
 }
 
 export function GetScreener() {
@@ -178,6 +202,10 @@ export function OpenTradingView() {
   return window['go']['main']['App']['OpenTradingView']();
 }
 
+export function PreparePredictionModel() {
+  return window['go']['main']['App']['PreparePredictionModel']();
+}
+
 export function RecoverWorkspace(arg1) {
   return window['go']['main']['App']['RecoverWorkspace'](arg1);
 }
@@ -194,6 +222,10 @@ export function ResumeScreenerDownload() {
   return window['go']['main']['App']['ResumeScreenerDownload']();
 }
 
+export function SavePredictionSelection(arg1) {
+  return window['go']['main']['App']['SavePredictionSelection'](arg1);
+}
+
 export function SaveScreenerAnalysisCondition(arg1, arg2) {
   return window['go']['main']['App']['SaveScreenerAnalysisCondition'](arg1, arg2);
 }
@@ -208,6 +240,10 @@ export function SaveScreenerView(arg1) {
 
 export function SaveWorkspace(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveWorkspace'](arg1, arg2, arg3, arg4);
+}
+
+export function StartPrediction(arg1) {
+  return window['go']['main']['App']['StartPrediction'](arg1);
 }
 
 export function StartScreenerAnalysis(arg1) {

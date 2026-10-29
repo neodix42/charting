@@ -4,7 +4,7 @@
 
 **Live market charts and a visual historical Screener for Ubuntu and Windows.** Follow public spot and perpetual markets, download historical datasets, calculate indicators, and find the bars where your conditions matched—all from one desktop workspace.
 
-[Download](#download) · [Charting features](#charting-features) · [Screener](#screener) · [Visual filters](#analysis-build-smart-filters-visually) · [Build from source](#build-from-source) · [Full user guide](APP_README.md)
+[Download](#download) · [Charting features](#charting-features) · [Screener](#screener) · [Visual filters](#analysis-build-smart-filters-visually) · [Predictions](#predictions) · [Build from source](#build-from-source) · [Full user guide](APP_README.md)
 
 ![CryptoDesk light-theme workspace with two BTCUSDT charts, moving averages, volume and MACD](docs/screenshots/chart-workspace.png)
 
@@ -15,6 +15,7 @@
 - **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download multiple symbols in parallel with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
 - **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, inspect matches on a chart, and optionally simulate SL/TP outcomes.
+- **Local forecasts.** Use Toto 2.0 with downloaded Close histories, plot the median and estimated 10th–90th percentile band, and retain dated forecast snapshots separately from market data.
 - **Local files and persistence.** SQLite workspace saving, export/import, resumable downloads, remembered Screener choices and named condition sets.
 
 ## Download
@@ -56,17 +57,17 @@ First launch opens **one tab with one chart**. New tabs also start with one char
 - **Flexible layouts:** drag tabs/charts, resize grid tracks, maximize a chart, rename tabs and duplicate layouts. Shared period and indicator controls apply to the current tab's charts.
 - **Display controls:** Dark, Light, Matrix (black/lime), Cyberpunk and Red Sands themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Theme** updates the interface, opened dropdown menus and chart colors immediately and remembers your choice. **Font size** scales interface text and chart labels from **10–24 px** (default **15**).
 - **Automatic saving:** SQLite persistence, JSON workspace export/import and recovery snapshots. Optional local candle storage reuses genuine downloaded chart history across restarts.
-- **Efficient live feeds:** only the active chart tab renders and subscribes. Opening Screener saves chart views and releases live chart subscriptions; returning restores the selected tab. Connection and provisional-data states remain visible.
+- **Efficient live feeds:** only the active chart tab renders and subscribes. Opening Screener or Predictions saves chart views and releases live chart subscriptions; returning restores the selected tab. Connection and provisional-data states remain visible.
 
 Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. CryptoDesk reads public market data and does not place trades or connect to exchange accounts.
 
-Settings are grouped into **Appearance**, **Storage**, **Screener**, **Telegram Bot**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Telegram Bot stores a masked API token and recipient, with a test notification; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light is the default from the native window and initial loading screen onward, and uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
+Settings are grouped into **Appearance**, **Storage**, **Screener**, **Predictions**, **Telegram Bot**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Predictions selects the local model and its storage folder; Telegram Bot stores a masked API token and recipient, with a test notification; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light is the default from the native window and initial loading screen onward, and uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
 
 In **Settings → Telegram Bot**, enter your masked **Telegram Bot API Token** and **Recipient** (`@username` or a private chat ID). For `@username`, the app displays the actual bot name and asks the recipient to open it and press **Start**. Click **Test** to save the settings and send one test notification. Token, recipient and verified chat ID persist locally outside workspace exports and diagnostics. Save sends no messages. Start automatic monitoring explicitly in **Screener → Live Alerts**.
 
 ## Screener
 
-The fixed **Screener** tab sits at the far right of the chart-tab row. Its four screens form one workflow:
+The fixed **Screener** tab sits beside **Predictions**, to the right of the chart tabs. Its four screens form one workflow:
 
 | Screen | What you do | What you get |
 |---|---|---|
@@ -248,6 +249,16 @@ Keep CryptoDesk running and the computer awake with network access. Monitoring r
 5. **Inspect:** paginated match indexes supply occurrence counts and bounded chart windows. Rule drafts and named sets persist; scan results are rebuilt when requested.
 
 See the [complete Screener guide](APP_README.md#screener) for file formats, checkpoints, backups, limits and error handling.
+
+## Predictions
+
+Open the fixed **Predictions** tab next to Screener. Choose a downloaded asset, its candle period, the latest **512 or 1024 closed bars**, and the number of future bars (**20** by default, **1–256** supported). Click **Start** after model preparation finishes. The chart plots historical Close, the median forecast and a shaded estimated **10th–90th percentile** band. Future points are labelled **+1, +2, …** relative to the final observed closed bar; the app does not guess market holidays or future session dates.
+
+The first visit prepares a private Python/CPU inference runtime and downloads the selected model with progress and cancellation. **Settings → Predictions** defaults to **[Datadog/Toto-2.0-313m](https://huggingface.co/Datadog/Toto-2.0-313m)**; its weights are about **1.2 GB**, with additional runtime storage required. Smaller and larger official Toto 2.0 checkpoints are available in the model selector. Downloads use pinned versions and checksums and can resume after interruption. No global Python installation, GPU or API key is needed. After preparation, inference uses local files without sending your history to a prediction service.
+
+The default Linux model folder is `~/.local/share/cryptodesk/predictions/models`, shown alongside the current folder in Settings and adjustable there. Forecasts are saved independently under `<profile>/predictions/forecasts`, with their creation time, input cutoff, source CSV checksum, model revision, historical context and quantiles. Saved forecasts can be reopened after restart; prediction never adds forecast rows or columns to real CSVs. Use Screener Refresh first when you want newer actual bars.
+
+These are model estimates, not guaranteed coverage or validated trading signals. Forecast quality on your assets needs separate historical evaluation. See the [Predictions guide](APP_README.md#predictions) for setup, storage and input checks.
 
 ## Build from source
 

@@ -9,8 +9,9 @@ import {CandleStorageSetting} from './CandleStorageSetting';
 import {ScreenerDirectorySetting} from './ScreenerDirectorySetting';
 import {ScreenerConcurrencySetting,type ScreenerConcurrencySettingHandle} from './ScreenerConcurrencySetting';
 import {TelegramBotSetting,type TelegramBotSettingHandle} from './TelegramBotSetting';
+import {PredictionSettings,type PredictionSettingsHandle} from './PredictionSettings';
 
-const pages=['Appearance','Storage','Screener','Telegram Bot','Export','Debug'] as const;
+const pages=['Appearance','Storage','Screener','Predictions','Telegram Bot','Export','Debug'] as const;
 type SettingsPage=typeof pages[number];
 const pageID=(page:SettingsPage)=>page.toLowerCase().replaceAll(' ','-');
 export interface WorkspaceSettingsHandle {flush():Promise<void>}
@@ -21,7 +22,8 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
  const tabs=useRef<Array<HTMLButtonElement|null>>([]);
  const telegram=useRef<TelegramBotSettingHandle>(null);
  const screenerWorkers=useRef<ScreenerConcurrencySettingHandle>(null);
- const flush=async()=>{await telegram.current?.flush();await screenerWorkers.current?.flush();};
+ const predictions=useRef<PredictionSettingsHandle>(null);
+ const flush=async()=>{await telegram.current?.flush();await screenerWorkers.current?.flush();await predictions.current?.flush();};
  useImperativeHandle(ref,()=>({flush}),[]);
  const close=()=>{void Promise.resolve().then(flush).then(onClose).catch(()=>{});};
  const timezones=Array.from(new Set(['UTC','system',Intl.DateTimeFormat().resolvedOptions().timeZone,'America/New_York','Europe/London','Europe/Berlin','Asia/Dubai','Asia/Tokyo','Asia/Singapore','Australia/Sydney']));
@@ -45,6 +47,7 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
    {page==='Debug'&&<><div className="settings-section"><h3>Diagnostics</h3><p>Check active resources and backend health. Inactive tabs retain configuration and release their market leases.</p><button onClick={()=>void onDiagnostics().then(setDiagnostics).catch(error=>onError(errorText(error)))}>Refresh diagnostics</button>{diagnostics&&<pre className="diagnostics">{JSON.stringify(diagnostics,null,2)}</pre>}</div><div className="settings-section attribution"><strong>Lightweight Charts™ by TradingView</strong><p>This independent application uses public market data. Market access and freshness depend on the provider and network. No exchange account or trading API credentials are used.</p><button className="text-button" onClick={()=>void api.OpenTradingView().catch(error=>onError(errorText(error)))}>TradingView ↗</button></div></>}
    <ScreenerConcurrencySetting ref={screenerWorkers} api={api} visible={page==='Screener'}/>
    <TelegramBotSetting ref={telegram} api={api} visible={page==='Telegram Bot'}/>
+   <PredictionSettings ref={predictions} api={api} visible={page==='Predictions'}/>
   </div>
  </section></div>;
 });

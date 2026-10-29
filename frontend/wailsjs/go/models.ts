@@ -527,6 +527,286 @@ export namespace market {
 
 }
 
+export namespace predictions {
+
+	export class Dataset {
+	    id: string;
+	    symbol: string;
+	    name: string;
+	    period: string;
+	    filename: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Dataset(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.symbol = source["symbol"];
+	        this.name = source["name"];
+	        this.period = source["period"];
+	        this.filename = source["filename"];
+	    }
+	}
+	export class Event {
+	    phase: string;
+	    progress: number;
+	    message: string;
+	    downloaded?: number;
+	    total?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Event(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.progress = source["progress"];
+	        this.message = source["message"];
+	        this.downloaded = source["downloaded"];
+	        this.total = source["total"];
+	    }
+	}
+	export class Point {
+	    step: number;
+	    lower: number;
+	    median: number;
+	    upper: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Point(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.step = source["step"];
+	        this.lower = source["lower"];
+	        this.median = source["median"];
+	        this.upper = source["upper"];
+	    }
+	}
+	export class Observation {
+	    time: number;
+	    close: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Observation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.close = source["close"];
+	    }
+	}
+	export class Forecast {
+	    id: string;
+	    createdAt: number;
+	    asOf: number;
+	    model: string;
+	    modelRevision: string;
+	    symbol: string;
+	    assetName: string;
+	    period: string;
+	    contextLength: number;
+	    horizon: number;
+	    sourceFile: string;
+	    sourceHash: string;
+	    history: Observation[];
+	    points: Point[];
+
+	    static createFrom(source: any = {}) {
+	        return new Forecast(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.createdAt = source["createdAt"];
+	        this.asOf = source["asOf"];
+	        this.model = source["model"];
+	        this.modelRevision = source["modelRevision"];
+	        this.symbol = source["symbol"];
+	        this.assetName = source["assetName"];
+	        this.period = source["period"];
+	        this.contextLength = source["contextLength"];
+	        this.horizon = source["horizon"];
+	        this.sourceFile = source["sourceFile"];
+	        this.sourceHash = source["sourceHash"];
+	        this.history = this.convertValues(source["history"], Observation);
+	        this.points = this.convertValues(source["points"], Point);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ForecastSummary {
+	    id: string;
+	    createdAt: number;
+	    asOf: number;
+	    model: string;
+	    symbol: string;
+	    assetName: string;
+	    period: string;
+	    contextLength: number;
+	    horizon: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ForecastSummary(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.createdAt = source["createdAt"];
+	        this.asOf = source["asOf"];
+	        this.model = source["model"];
+	        this.symbol = source["symbol"];
+	        this.assetName = source["assetName"];
+	        this.period = source["period"];
+	        this.contextLength = source["contextLength"];
+	        this.horizon = source["horizon"];
+	    }
+	}
+	export class RuntimeStatus {
+	    ready: boolean;
+	    modelReady: boolean;
+	    runtimeReady: boolean;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RuntimeStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ready = source["ready"];
+	        this.modelReady = source["modelReady"];
+	        this.runtimeReady = source["runtimeReady"];
+	        this.error = source["error"];
+	    }
+	}
+	export class Selection {
+	    asset: string;
+	    period: string;
+	    contextLength: number;
+	    horizon: number;
+	    forecastId: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Selection(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.asset = source["asset"];
+	        this.period = source["period"];
+	        this.contextLength = source["contextLength"];
+	        this.horizon = source["horizon"];
+	        this.forecastId = source["forecastId"];
+	    }
+	}
+	export class ModelOption {
+	    id: string;
+	    name: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ModelOption(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	    }
+	}
+	export class Settings {
+	    model: string;
+	    modelDirectory: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Settings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.model = source["model"];
+	        this.modelDirectory = source["modelDirectory"];
+	    }
+	}
+	export class Info {
+	    settings: Settings;
+	    models: ModelOption[];
+	    defaultModelDirectory: string;
+	    forecastDirectory: string;
+	    selection: Selection;
+	    runtime: RuntimeStatus;
+	    active: boolean;
+	    event: Event;
+	    error?: string;
+	    forecasts: ForecastSummary[];
+
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.settings = this.convertValues(source["settings"], Settings);
+	        this.models = this.convertValues(source["models"], ModelOption);
+	        this.defaultModelDirectory = source["defaultModelDirectory"];
+	        this.forecastDirectory = source["forecastDirectory"];
+	        this.selection = this.convertValues(source["selection"], Selection);
+	        this.runtime = this.convertValues(source["runtime"], RuntimeStatus);
+	        this.active = source["active"];
+	        this.event = this.convertValues(source["event"], Event);
+	        this.error = source["error"];
+	        this.forecasts = this.convertValues(source["forecasts"], ForecastSummary);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
+
+
+
+
+}
+
 export namespace screener {
 
 	export class AnalysisProfitableMatch {
