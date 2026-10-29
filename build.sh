@@ -12,7 +12,7 @@ if [[ $# -gt 0 ]]; then
     printf '%s\n' \
       'Usage: ./build.sh' \
       'Builds the production Linux desktop app, archive and checksums at repo root.' \
-      'Requires Go, Python 3.12+ and GTK3/WebKitGTK 4.1 build dependencies.' \
+      'Requires Go, Python 3.12+, JDK 17+ and GTK3/WebKitGTK 4.1 build dependencies.' \
       'Node/npm are checked and downloaded into .tools/ if needed.' \
       'Checks npm for a newer downloader and validates it offline before updating source pins.' \
       'Set CRYPTODESK_UPDATE_SCREENER=0 to build the existing pin without a registry check.' \
@@ -65,6 +65,7 @@ with tempfile.TemporaryDirectory(prefix='cryptodesk-build-bindings-') as tempora
     sys.exit(result.returncode)
 PY
 
+python3 "$APP_ROOT/scripts/jforex_bundle.py" --copy-from "$APP_ROOT/release/$RELEASE_NAME/jforex-runtime" --output "$APP_ROOT/jforex-runtime"
 install -m 755 -- "$APP_ROOT/build/bin/cryptodesk" "$APP_ROOT/cryptodesk"
 install -m 644 -- "$APP_ROOT/release/$RELEASE_NAME.tar.gz" "$APP_ROOT/$RELEASE_NAME.tar.gz"
 (
@@ -76,4 +77,5 @@ printf '\n%s\n' \
   "Ready to run: $APP_ROOT/cryptodesk" \
   "Linux archive: $APP_ROOT/$RELEASE_NAME.tar.gz" \
   "Checksums: $APP_ROOT/cryptodesk-SHA256SUMS" \
-  'Runtime requirements: GTK3, WebKitGTK 4.1 and libsoup3; see the Ubuntu apt command in README.md.'
+  'Runtime requirements: GTK3, WebKitGTK 4.1 and libsoup3; JForex forex charts also require Java 17+.' \
+  'Keep the sibling jforex-runtime folder with the executable; see README.md for Ubuntu prerequisites.'

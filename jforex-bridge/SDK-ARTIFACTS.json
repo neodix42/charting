@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "sdkVersion": "3.6.51",
+  "apiVersion": "2.13.99",
+  "javaMinimum": 17,
+  "mainClass": "cryptodesk.jforex.Bridge",
+  "artifacts": [
+    {
+      "name": "7zip-18.05.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/7zip/7zip/18.05/7zip-18.05.jar",
+      "sha256": "7e9d9854099f9f227f79cdcb0a53da16716f1f4b6dfa7897b92075eb5499e5db",
+      "bytes": 70255
+    },
+    {
+      "name": "CleanDocking-2.1.15.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/docking/framework/CleanDocking/2.1.15/CleanDocking-2.1.15.jar",
+      "sha256": "95c90c52c03db2d0f309559c527691fc5b4b9042b7f20f2080a7a8fbd7a41052",
+      "bytes": 167285
+    },
+    {
+      "name": "DDS2-Charts-6.24.125.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/DDS2-Charts/6.24.125/DDS2-Charts-6.24.125.jar",
+      "sha256": "f332d6a1f0fe3caa6917a2b1ebb346f4bebd9e00815d3a27c99d88f0435bfafe",
+      "bytes": 2277943
+    },
+    {
+      "name": "DDS2-TextEditor-1.27.98.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/org/fife/DDS2-TextEditor/1.27.98/DDS2-TextEditor-1.27.98.jar",
+      "sha256": "717f6b67765704e938c1ea8066019b006a91bc53e485618d8114bb26525feb95",
+      "bytes": 1509984
+    },
+    {
+      "name": "DDS2-jClient-JForex-3.6.51.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/DDS2-jClient-JForex/3.6.51/DDS2-jClient-JForex-3.6.51.jar",
+      "sha256": "daf2d98cded0a8ff85276965f0c10eb01692acff7949a5898ab295708e2c26c2",
+      "bytes": 10115807
+    },
+    {
+      "name": "JForex-API-2.13.99.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/api/JForex-API/2.13.99/JForex-API-2.13.99.jar",
+      "sha256": "bad5923eb37b07aaf3f8f257eec1cfec57d645c1f61ea68ec2b7e179d3736ac2",
+      "bytes": 986533
+    },
+    {
+      "name": "Login-Form-3.31.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/Login-Form/3.31/Login-Form-3.31.jar",
+      "sha256": "0bb6f205c3cebb642e82b6a92de79a7f873c9875b40314191df9c49ec93abde1",
+      "bytes": 1956307
+    },
+    {
+      "name": "activation-1.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/javax/activation/activation/1.1/activation-1.1.jar",
+      "sha256": "2881c79c9d6ef01c58e62beea13e9d1ac8b8baa16f2fc198ad6e6776defdcdd3",
+      "bytes": 62983
+    },
+    {
+      "name": "asm-5.0.3.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/5.0.3/asm-5.0.3.jar",
+      "sha256": "71c4f78e437b8fdcd9cc0dfd2abea8c089eb677005a6a5cff320206cc52b46cc",
+      "bytes": 53231
+    },
+    {
+      "name": "auth-protocol-client-1.2.2.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/auth-protocol-client/1.2.2/auth-protocol-client-1.2.2.jar",
+      "sha256": "f66971e444fe87ff22626b09ddc190d26c514e400b08055f8afd2bb7311c05d3",
+      "bytes": 97887
+    },
+    {
+      "name": "commons-beanutils-1.9.3.jar",
+      "url": "https://repo.maven.apache.org/maven2/commons-beanutils/commons-beanutils/1.9.3/commons-beanutils-1.9.3.jar",
+      "sha256": "c058e39c7c64203d3a448f3adb588cb03d6378ed808485618f26e137f29dae73",
+      "bytes": 246174
+    },
+    {
+      "name": "commons-collections-3.2.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar",
+      "sha256": "eeeae917917144a68a741d4c0dff66aa5c5c5fd85593ff217bced3fc8ca783b8",
+      "bytes": 588337
+    },
+    {
+      "name": "commons-lang3-3.3.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar",
+      "sha256": "6b81d10754dadf184d386011486e6509c2cc0c3d33565ced4fb4402b9413d47d",
+      "bytes": 412739
+    },
+    {
+      "name": "commons-logging-1.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/commons-logging/commons-logging/1.2/commons-logging-1.2.jar",
+      "sha256": "daddea1ea0be0f56978ab3006b8ac92834afeefbd9b7e4e6316fca57df0fa636",
+      "bytes": 61829
+    },
+    {
+      "name": "dev-tools-1.0.27.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dev-tools/1.0.27/dev-tools-1.0.27.jar",
+      "sha256": "af4a0880d1d568dbab31971762dfdb3626ce40d3055db554ee5030d6820eba1e",
+      "bytes": 112619
+    },
+    {
+      "name": "ecj-3.20.0.1d.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/org/eclipse/jdt/ecj/3.20.0.1d/ecj-3.20.0.1d.jar",
+      "sha256": "4efae1b5942db305e444b1bae568420b9340aec51320d1c27fd64c24b703d0a8",
+      "bytes": 2907967
+    },
+    {
+      "name": "error_prone_annotations-2.41.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.41.0/error_prone_annotations-2.41.0.jar",
+      "sha256": "a56e782b5b50811ac204073a355a21d915a2107fce13ec711331ad036f660fcc",
+      "bytes": 20389
+    },
+    {
+      "name": "greed-common-318.4.128.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/greed-common/318.4.128/greed-common-318.4.128.jar",
+      "sha256": "33c20f5580f6ed22fe8b0cb20487c056c11e330f10b643ba2a7ca4ba7f5fbb81",
+      "bytes": 4598289
+    },
+    {
+      "name": "gson-2.13.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.13.2/gson-2.13.2.jar",
+      "sha256": "dd0ce1b55a3ed2080cb70f9c655850cda86c206862310009dcb5e5c95265a5e0",
+      "bytes": 289901
+    },
+    {
+      "name": "guava-19.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava/19.0/guava-19.0.jar",
+      "sha256": "58d4cc2e05ebb012bbac568b032f75623be1cb6fb096f3c60c72a86f7f057de4",
+      "bytes": 2308517
+    },
+    {
+      "name": "holiday-common-1.17.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/holiday/holiday-common/1.17/holiday-common-1.17.jar",
+      "sha256": "ed18356138234472d99a423d5a361b1a30904c1e1c17fde3037e665896b96568",
+      "bytes": 44455
+    },
+    {
+      "name": "jakarta-oro-2.0.8.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/apache-oro/jakarta-oro/2.0.8/jakarta-oro-2.0.8.jar",
+      "sha256": "8085938031afa45274c943c655054a816c05de3a44002b0748b05342a03013a5",
+      "bytes": 63109
+    },
+    {
+      "name": "jakarta-regexp-1.4.jar",
+      "url": "https://repo.maven.apache.org/maven2/jakarta-regexp/jakarta-regexp/1.4/jakarta-regexp-1.4.jar",
+      "sha256": "85ea3985d7fec552d6de6f02d8e18789c3fcd539081eb8c7c444eabf6cb3f7bc",
+      "bytes": 28576
+    },
+    {
+      "name": "javassist-3.18.1-GA.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/javassist/javassist/3.18.1-GA/javassist-3.18.1-GA.jar",
+      "sha256": "3fb71231afd098bb0f93f5eb97aa8291c8d0556379125e596f92ec8f944c6162",
+      "bytes": 714194
+    },
+    {
+      "name": "javax.inject-1.jar",
+      "url": "https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar",
+      "sha256": "91c77044a50c481636c32d916fd89c9118a72195390452c81065080f957de7ff",
+      "bytes": 2497
+    },
+    {
+      "name": "jna-3.5.0.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/sun/jna/jna/3.5.0/jna-3.5.0.jar",
+      "sha256": "961da7811f92dd6b200c5792241ae4208f54bd14e974f49d8eeab15bc4a908df",
+      "bytes": 694743
+    },
+    {
+      "name": "json-20131018.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/json/json/20131018/json-20131018.jar",
+      "sha256": "5ed8b6b08c25b8656222ede5608e48e1de9cc5f9679335ec3937100d3f241133",
+      "bytes": 65139
+    },
+    {
+      "name": "log4j-1.2.17.jar",
+      "url": "https://repo.maven.apache.org/maven2/log4j/log4j/1.2.17/log4j-1.2.17.jar",
+      "sha256": "1d31696445697720527091754369082a6651bd49781b6005deb94e56753406f9",
+      "bytes": 489884
+    },
+    {
+      "name": "lucene-core-3.4.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/lucene/lucene-core/3.4.0/lucene-core-3.4.0.jar",
+      "sha256": "9f2d9ff59d3089efd3800f269f0aa9849669c9d7876e8c56f3e84c9b334fe64d",
+      "bytes": 1398580
+    },
+    {
+      "name": "lucene-highlighter-3.4.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/lucene/lucene-highlighter/3.4.0/lucene-highlighter-3.4.0.jar",
+      "sha256": "5f6138b00d5647e2bcccb26e401e84a433927e62f84018bbde5d507bcec125fb",
+      "bytes": 83615
+    },
+    {
+      "name": "lucene-memory-3.4.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/lucene/lucene-memory/3.4.0/lucene-memory-3.4.0.jar",
+      "sha256": "2d239f7793a381e02d0e795cd99595294a0859a2984b1ba492601636d01805ab",
+      "bytes": 30214
+    },
+    {
+      "name": "lucene-queries-3.4.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/lucene/lucene-queries/3.4.0/lucene-queries-3.4.0.jar",
+      "sha256": "bb4ed2e49c07ec3cc93f28f91a8abcce355f36416f312332ebd6423aa7871799",
+      "bytes": 45979
+    },
+    {
+      "name": "mail-1.4.jar",
+      "url": "https://repo.maven.apache.org/maven2/javax/mail/mail/1.4/mail-1.4.jar",
+      "sha256": "96868f82264ebd9b7d41f04d78cbe87ab75d68a7bbf8edfb82416aabe9b54b6c",
+      "bytes": 388864
+    },
+    {
+      "name": "msg-1.1.98.4-JForex3.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/msg/1.1.98.4-JForex3/msg-1.1.98.4-JForex3.jar",
+      "sha256": "2fb370600c55e84da4f9a8bd0b3fc1c327426ff2d5ed387ab391586127df54f6",
+      "bytes": 3743643
+    },
+    {
+      "name": "netty-buffer-4.1.45.Final.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/netty/netty-buffer/4.1.45.Final/netty-buffer-4.1.45.Final.jar",
+      "sha256": "8437b43e03c272093066837567e1b89019ef291f06f5ace1051017981d98d59f",
+      "bytes": 278395
+    },
+    {
+      "name": "netty-codec-4.1.45.Final.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/netty/netty-codec/4.1.45.Final/netty-codec-4.1.45.Final.jar",
+      "sha256": "47e211ad8c4c2b809b6e04541d6c8e3893dea63918dabe93fa5cf63914ffc9cc",
+      "bytes": 318353
+    },
+    {
+      "name": "netty-common-4.1.45.Final.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/netty/netty-common/4.1.45.Final/netty-common-4.1.45.Final.jar",
+      "sha256": "6f3c61684cf8c0f09df7ebb5a19df29d5d9fc175ce68ae237993b91366ccc43e",
+      "bytes": 611552
+    },
+    {
+      "name": "netty-handler-4.1.45.Final.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/netty/netty-handler/4.1.45.Final/netty-handler-4.1.45.Final.jar",
+      "sha256": "2ad6785ba22fb522dba8128a0599b3f5ee47c210dddb8d8ec678f7765ac406f0",
+      "bytes": 449349
+    },
+    {
+      "name": "netty-resolver-4.1.45.Final.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/netty/netty-resolver/4.1.45.Final/netty-resolver-4.1.45.Final.jar",
+      "sha256": "1d762ecfa9da9241db339b611fad0529491bb0c3098c16e9c80d64f04d80323c",
+      "bytes": 32798
+    },
+    {
+      "name": "netty-transport-4.1.45.Final.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/netty/netty-transport/4.1.45.Final/netty-transport-4.1.45.Final.jar",
+      "sha256": "ca38fc85e9e18c4921d9ce92830445efad05d0fb3e8dd6ba3536e0843cdf723b",
+      "bytes": 472685
+    },
+    {
+      "name": "netty-transport-client-1.2.26.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds4/netty-transport-client/1.2.26/netty-transport-client-1.2.26.jar",
+      "sha256": "f058adc4dd100c4807215775a43590abf26cf274307e1f7ebc4bd1d0e27f4687",
+      "bytes": 187436
+    },
+    {
+      "name": "patterns-1.60.102.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/patterns/1.60.102/patterns-1.60.102.jar",
+      "sha256": "8e45e23fa8067e674c8cfae361579c32e4b2208de80914b18090f5f49b2192cd",
+      "bytes": 66174
+    },
+    {
+      "name": "slf4j-api-1.7.28.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.28/slf4j-api-1.7.28.jar",
+      "sha256": "fb6e4f67a2a4689e3e713584db17a5d1090c1ebe6eec30e9e0349a6ee118141e",
+      "bytes": 41117
+    },
+    {
+      "name": "slf4j-log4j12-1.7.28.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-log4j12/1.7.28/slf4j-log4j12-1.7.28.jar",
+      "sha256": "ad926e9a170d96519eab7553c94462d7849d55c4886c9b5d386782090e321fd6",
+      "bytes": 12212
+    },
+    {
+      "name": "srp6a-2.0.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/nimbusds/srp6a/2.0.2/srp6a-2.0.2.jar",
+      "sha256": "601395e01b61dd51d51400445834af0cfa8ea59b2203deb59a8ee9f1f2c2bd71",
+      "bytes": 36305
+    },
+    {
+      "name": "system-msg-1.0.32.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/system-msg/1.0.32/system-msg-1.0.32.jar",
+      "sha256": "9259a2eb1901f3d2263abb45ee3b39d3a151c33176bfea456789215f631508be",
+      "bytes": 245143
+    },
+    {
+      "name": "ta-lib-0.4.4dc.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/ta-lib/ta-lib/0.4.4dc/ta-lib-0.4.4dc.jar",
+      "sha256": "8f5c4226e9fc5a6162719855e922d34b8eaf011e991f8998e2c2607b193d7a5d",
+      "bytes": 263332
+    },
+    {
+      "name": "threeten-extra-1.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/threeten/threeten-extra/1.2/threeten-extra-1.2.jar",
+      "sha256": "85bb4c52f6f11e0e3a75d6d28f27fd45378e67e6c92f3df1d9a8c7a9c9d87482",
+      "bytes": 212317
+    },
+    {
+      "name": "transport-common-1.2.27.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds4/transport-common/1.2.27/transport-common-1.2.27.jar",
+      "sha256": "0cfba294ea860e3bb50dc8f54bf5fbd0254365f3d17036993289f80a587f6279",
+      "bytes": 252518
+    },
+    {
+      "name": "transport-core-1.1.25.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/transport-core/1.1.25/transport-core-1.1.25.jar",
+      "sha256": "6590aa21a52ed1817536b2106c933bfc6f21e46df3f02b172cab563f741b051e",
+      "bytes": 77012
+    },
+    {
+      "name": "ui-core-1.6.106.jar",
+      "url": "https://www.dukascopy.com/client/jforexlib/publicrepo/com/dukascopy/dds2/ui-core/1.6.106/ui-core-1.6.106.jar",
+      "sha256": "bb7c18f27df9b3c6d316d333cc6cd481d53d9260fff7e74f90ce7bf0032989d0",
+      "bytes": 2699912
+    }
+  ]
+}

@@ -6,7 +6,7 @@ if [[ $# -eq 1 && ( "$1" == --help || "$1" == -h ) ]]; then
   printf '%s\n' 'Usage: ./win-build.sh [--webview2-cab /path/to/pinned-runtime.cab]' \
     'Builds cryptodesk-X.Y.Z-windows-amd64.zip and cryptodesk-Windows-SHA256SUMS at repo root.' \
     'Version defaults to VERSION; CRYPTODESK_VERSION=X.Y.Z overrides it.' \
-    'Requires Go, Python 3.12+ and 7z (Ubuntu package: 7zip); bootstraps local Node/npm and Wails.' \
+    'Requires Go, Python 3.12+, JDK 17+ and 7z (Ubuntu package: 7zip); bootstraps local Node/npm and Wails.' \
     'Downloads and caches the pinned official Microsoft Fixed Version WebView2 runtime.' \
     'Uses the current Screener dependency pin; build.sh checks for newer downloader versions.' \
     'Packages US/UK English locale packs only; shared runtime resources and licenses remain.' \

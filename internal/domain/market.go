@@ -21,7 +21,7 @@ func (k FeedKey) String() string {
 	return strings.Join([]string{k.Exchange, k.Market, k.Instrument, k.Timeframe}, ":")
 }
 func (k FeedKey) Validate() error {
-	if k.Exchange != "binance" && k.Exchange != "bybit" && k.Exchange != "coinbase" {
+	if k.Exchange != "binance" && k.Exchange != "bybit" && k.Exchange != "coinbase" && k.Exchange != "dukascopy" {
 		return fmt.Errorf("unsupported exchange")
 	}
 	if !supportedMarket(k.Exchange, k.Market) {
@@ -39,7 +39,15 @@ func (k FeedKey) Validate() error {
 }
 
 func supportedMarket(exchange, market string) bool {
-	return market == "spot" || (market == "perpetual" && (exchange == "binance" || exchange == "bybit"))
+	switch exchange {
+	case "dukascopy":
+		return market == "forex"
+	case "binance", "bybit":
+		return market == "spot" || market == "perpetual"
+	case "coinbase":
+		return market == "spot"
+	}
+	return false
 }
 
 type Candle struct {
@@ -55,9 +63,9 @@ type Candle struct {
 }
 
 func (c Candle) Validate() error {
-	// Reject millisecond timestamps before the rendering boundary. These markets
-	// did not exist before 2009; limiting to year 3000 catches accidental unit errors.
-	if c.Time < 1230768000 || c.Time > 32503680000 {
+	// Forex history predates crypto. Unix seconds through year 3000 allow that
+	// history while still rejecting contemporary millisecond timestamps.
+	if c.Time < 0 || c.Time > 32503680000 {
 		return fmt.Errorf("candle timestamp must be UTC Unix seconds")
 	}
 	for _, v := range []float64{c.Open, c.High, c.Low, c.Close, c.Volume} {

@@ -49,6 +49,40 @@ if [[ -d "$SOURCE_DIR/screener-runtime" ]]; then
   if [[ ! -x "$SOURCE_DIR/screener-runtime/node" ]]; then echo 'The bundled Screener Node runtime is not executable' >&2; exit 1; fi
   SCREENER_RUNTIME=1
 fi
+JFOREX_RUNTIME=0
+if [[ -e "$SOURCE_DIR/jforex-runtime" || -L "$SOURCE_DIR/jforex-runtime" || -f "$SOURCE_DIR/version.json" ]]; then
+  JFOREX_RUNTIME="$(python3 - "$SOURCE_DIR" <<'PY'
+import hashlib, json, pathlib, sys, zipfile
+source = pathlib.Path(sys.argv[1])
+metadata = json.loads((source / 'version.json').read_text()) if (source / 'version.json').is_file() else {}
+directory = source / 'jforex-runtime'
+if not directory.exists() and not directory.is_symlink():
+    if 'jforex' in metadata:
+        raise SystemExit('The JForex bridge is missing; restore the complete release archive.')
+    print(0)
+    raise SystemExit(0)
+required = {'cryptodesk-jforex.jar', 'SDK-ARTIFACTS.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'JFOREX-PROVENANCE.json'}
+if directory.is_symlink() or not directory.is_dir() or {p.name for p in directory.iterdir()} != required or any(p.is_symlink() or not p.is_file() for p in directory.iterdir()):
+    raise SystemExit('The bundled JForex bridge inventory is incomplete or contains unexpected files.')
+manifest = json.loads((directory / 'JFOREX-PROVENANCE.json').read_text())
+records = manifest.get('files', {})
+if (set(records) != required - {'JFOREX-PROVENANCE.json'} or manifest.get('version') != 1
+        or manifest.get('sdkVersion') != '3.6.51' or manifest.get('apiVersion') != '2.13.99'
+        or manifest.get('javaMinimum') != 17 or manifest.get('mainClass') != 'cryptodesk.jforex.Bridge'):
+    raise SystemExit('The bundled JForex bridge provenance is invalid.')
+for name, record in records.items():
+    data = (directory / name).read_bytes()
+    if not data or record.get('bytes') != len(data) or record.get('sha256') != hashlib.sha256(data).hexdigest():
+        raise SystemExit('The bundled JForex bridge failed its checksum validation.')
+if 'jforex' in metadata and metadata['jforex'] != {key:value for key,value in manifest.items() if key != 'files'}:
+    raise SystemExit('The JForex bridge provenance differs from version.json.')
+with zipfile.ZipFile(directory / 'cryptodesk-jforex.jar') as jar:
+    if 'cryptodesk/jforex/Bridge.class' not in jar.namelist() or any(name.startswith(('com/dukascopy/', 'com/google/')) for name in jar.namelist()):
+        raise SystemExit('The JForex bridge JAR is invalid or contains vendor SDK classes.')
+print(1)
+PY
+)"
+fi
 printf 'Install app to %s\nLauncher to %s\nIcons to %s\nWorkspace configuration is preserved.\n' "$INSTALL_DIR" "$DESKTOP_DIR/cryptodesk.desktop" "$ICON_DIR"
 if [[ "$PORTABLE_RUNTIME" == 1 ]]; then echo 'The complete bundled runtime, licenses and sources will be copied with the launcher.'; fi
 if [[ -n "$DESKTOP_SHORTCUT_DIR" ]]; then printf 'Desktop shortcut to %s\n' "$DESKTOP_SHORTCUT_DIR/cryptodesk.desktop"; fi
@@ -58,6 +92,7 @@ STAGING="$(mktemp -d "$INSTALL_DIR/.install.XXXXXXXX")"
 INSTALL_COMMITTED=0
 NEW_RUNTIME_MOVED=0
 NEW_SCREENER_MOVED=0
+NEW_JFOREX_MOVED=0
 cleanup_install() {
   local install_status=$?
   if [[ "$INSTALL_COMMITTED" != 1 ]]; then
@@ -73,6 +108,12 @@ cleanup_install() {
     elif [[ "$NEW_SCREENER_MOVED" == 1 ]]; then
       rm -rf -- "$INSTALL_DIR/screener-runtime"
     fi
+    if [[ -e "$STAGING/previous-jforex" ]]; then
+      if [[ -e "$INSTALL_DIR/jforex-runtime" ]]; then rm -rf -- "$INSTALL_DIR/jforex-runtime"; fi
+      mv -- "$STAGING/previous-jforex" "$INSTALL_DIR/jforex-runtime"
+    elif [[ "$NEW_JFOREX_MOVED" == 1 ]]; then
+      rm -rf -- "$INSTALL_DIR/jforex-runtime"
+    fi
   fi
   rm -rf -- "$STAGING"
   return "$install_status"
@@ -86,6 +127,12 @@ if [[ "$SCREENER_RUNTIME" == 1 ]]; then
   if [[ -e "$INSTALL_DIR/screener-runtime" ]]; then mv -- "$INSTALL_DIR/screener-runtime" "$STAGING/previous-screener"; fi
   mv -- "$STAGING/screener-runtime" "$INSTALL_DIR/screener-runtime"
   NEW_SCREENER_MOVED=1
+fi
+if [[ "$JFOREX_RUNTIME" == 1 ]]; then
+  cp -a -- "$SOURCE_DIR/jforex-runtime" "$STAGING/jforex-runtime"
+  if [[ -e "$INSTALL_DIR/jforex-runtime" ]]; then mv -- "$INSTALL_DIR/jforex-runtime" "$STAGING/previous-jforex"; fi
+  mv -- "$STAGING/jforex-runtime" "$INSTALL_DIR/jforex-runtime"
+  NEW_JFOREX_MOVED=1
 fi
 if [[ "$PORTABLE_RUNTIME" == 1 ]]; then
   cp -a -- "$SOURCE_DIR/runtime" "$STAGING/runtime"

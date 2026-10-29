@@ -1,6 +1,6 @@
 # CryptoDesk
 
-CryptoDesk is an Ubuntu and Windows desktop chart workspace for spot and perpetual markets built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. It fetches public Binance, Bybit and Coinbase data directly. No API keys, account or development server are required to run the release.
+CryptoDesk is an Ubuntu and Windows desktop chart workspace for crypto spot/perpetual and forex markets built with Go, Wails v2, React/TypeScript, Lightweight Charts v5, and SQLite. Binance, Bybit and Coinbase use public feeds without API keys or accounts. The DucasCopy forex source uses your Dukascopy JForex Demo/Live credentials and the included Java bridge. Releases run without a development server.
 
 Open the symbol dropdown to browse both **Spot** and **Perpetual** instruments on Binance and Bybit. Each row shows its market type on the right; identical names such as BTCUSDT remain separate choices. The chart keeps the selected market on save/restart and uses its own historical/live feed and candle cache. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported, including XAGUSDT silver contracts. Dated futures and options are excluded. Coinbase currently supplies spot instruments. Search by symbol, base/quote asset or market label. If a provider category is restricted, available symbols remain usable alongside an explicit warning and Retry discovery.
 
@@ -25,6 +25,15 @@ sudo apt install -y \
 
 GTK3 provides the desktop window, WebKitGTK the embedded interface/JavaScript engine, and libsoup3 plus GLib networking the webview's HTTP/TLS support. NSS/NSPR, ALSA and X11 support libraries serve the private Screener Chromium. APT installs transitive dependencies automatically; the [Ubuntu package catalog](https://packages.ubuntu.com/noble/amd64/libwebkit2gtk-4.1-0) lists the WebKitGTK runtime dependencies. Keep the supplied `screener-runtime` folder beside the application: Node, dukascopy-node, trading-signals and Chromium are already included.
 
+For **DucasCopy forex charts**, also install **Java 17 or newer** and keep the supplied `jforex-runtime` folder beside the executable:
+
+```bash
+sudo apt install -y openjdk-17-jre-headless
+java -version
+```
+
+A JRE is sufficient to run forex charts; building the bridge needs a JDK. On Windows, install [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64) or another compatible Java runtime. CryptoDesk discovers `JAVA_HOME/bin/java` first, then `java` on `PATH`; restart the app after changing Java. The JForex desktop platform is not required. Crypto charts, Screener and Predictions do not require Java.
+
 Use a graphical desktop session with working graphics drivers. GitHub releases build on Ubuntu 24.04; locally built archives require a glibc version compatible with their build host. Workspace storage remains in the normal user profile unless `--data-dir` is supplied. The separate Linux archive with bundled GTK/WebKit has been retired.
 
 Optional user-local installation for the **Linux archive**:
@@ -36,7 +45,7 @@ Optional user-local installation for the **Linux archive**:
 
 This writes the app under `$XDG_DATA_HOME/cryptodesk-app` (normally `~/.local/share/cryptodesk-app`), registers its application launcher and installs the same diamond logo shown in the app's top-left corner. The launcher uses an absolute PNG icon path, with SVG and eight PNG sizes also registered in the user icon theme. The native window embeds a smaller copy that GTK accepts on X11; the matching `cryptodesk` desktop identity provides Wayland taskbar association. Windows builds carry the same logo in their executable resources.
 
-If your configured desktop folder exists, installation also creates an executable `cryptodesk.desktop` shortcut there, preserving any differing existing shortcut. It sets that file's trusted metadata when supported; your desktop may still require **Allow Launching**. Per-user icon/application metadata is refreshed when the desktop tools are available. No system settings or workspace data are changed. The installer copies the complete private Screener runtime; the original extraction folder can then be removed.
+If your configured desktop folder exists, installation also creates an executable `cryptodesk.desktop` shortcut there, preserving any differing existing shortcut. It sets that file's trusted metadata when supported; your desktop may still require **Allow Launching**. Per-user icon/application metadata is refreshed when the desktop tools are available. No system settings or workspace data are changed. The installer copies the complete private Screener runtime and the five-file JForex bridge, validating its inventory before installation and restoring the previous bridge if installation fails. The original extraction folder can then be removed.
 
 Run the installer again after rebuilding or downloading an updated archive, then close and reopen CryptoDesk. If an existing pinned taskbar entry retains an old icon, unpin it and pin the newly installed **CryptoDesk** application entry. Installation does not start the app. Source-checkout equivalent: `scripts/install-user.sh --dry-run` after building.
 
@@ -54,7 +63,7 @@ The independent [Tests workflow](.github/workflows/tests.yml) runs on `main` pus
 
 Pinned versions: Go module/CLI Wails 2.17.0; React 19.3.1; Lightweight Charts 5.2.1; SQLite Go driver modernc.org/sqlite 1.60.1. This checkout was built with Go 1.26.8, Node 24.19.0 and npm 11.17.0. Frontend and Go lockfiles are included.
 
-Install Go, Python 3.12+, a C compiler and pkg-config. Build/dev/test scripts check that both Node and npm run. If either is missing or incompatible, they download the official Node 24.19.0 bundle (including npm), verify its pinned SHA-256, and reuse it under `.tools/` on later runs. The selected `bin` directory is exported to Wails and its child processes. No shell-profile edits, global npm installation or IDE runtime paths are needed. Initial download requires access to `nodejs.org`; alternatively provide Node 24 LTS with npm on your terminal's PATH.
+Install Go, Python 3.12+, **JDK 17+** with `java` and `javac`, a C compiler and pkg-config. On Ubuntu, `sudo apt install openjdk-17-jdk-headless` supplies the Java build tools. Build/dev/test scripts check that both Node and npm run. If either is missing or incompatible, they download the official Node 24.19.0 bundle (including npm), verify its pinned SHA-256, and reuse it under `.tools/` on later runs. The selected `bin` directory is exported to Wails and its child processes. No shell-profile edits, global npm installation or IDE runtime paths are needed. Initial download requires access to `nodejs.org`; alternatively provide Node 24 LTS with npm on your terminal's PATH.
 
 Linux native builds also require GTK3 and WebKitGTK 4.1 development packages; the standard Ubuntu package names are `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`. Installing OS packages is a separate user/admin action.
 
@@ -69,15 +78,19 @@ scripts/test.sh              # deterministic Go race/vet + frontend checks/build
 cd frontend && npm run test:e2e
 ```
 
-`./build.sh` works from any current directory and publishes `cryptodesk`, `cryptodesk-X.Y.Z-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
+`./build.sh` works from any current directory and publishes `cryptodesk`, its sibling `jforex-runtime` folder, `cryptodesk-X.Y.Z-linux-amd64.tar.gz`, and `cryptodesk-SHA256SUMS` at the repository root. Launch `./cryptodesk`, or copy the complete archive to a compatible Linux desktop, extract it and launch the included executable. Verify root outputs with `sha256sum -c cryptodesk-SHA256SUMS`.
+
+Both Linux and Windows builds compile our JForex bridge with Java 17 bytecode, using checksum-pinned SDK **3.6.51 / API 2.13.99** artifacts from Dukascopy's official Maven repository and Maven Central. The approximately **43 MB** SDK build cache lives under `.tools/jforex-sdk/cache`; vendor SDK JARs are excluded from release archives. Each package contains only `cryptodesk-jforex.jar`, `SDK-ARTIFACTS.json`, `JFOREX-PROVENANCE.json`, `LICENSE` and `THIRD_PARTY_NOTICES.md` inside `jforex-runtime`. Package validation checks all five files, their hashes and matching `version.json` provenance.
+
+For source-checkout development before a full build, run `python3 scripts/jforex_bundle.py --output jforex-runtime`. `python3 scripts/jforex_bundle.py --test` verifies the bridge and actual SDK bootstrap without account credentials; initial SDK downloads still need network access. `CRYPTODESK_JFOREX_RUNTIME` can explicitly select another complete bridge folder. This is independent of the Screener runtime override.
 
 Binding generation runs without opening a workspace database, so building while CryptoDesk is open does not conflict with its workspace lock.
 
 `./build.sh` checks for a newer stable `dukascopy-node` release before compilation and adopts it only after staged compatibility checks and offline runtime tests pass. Set `CRYPTODESK_UPDATE_SCREENER=0` to keep the current exact pin; release CI does this for consistent Linux/Windows packages. See [Updating the Screener downloader](README.md#updating-the-screener-downloader) for update behavior, bundled-version checks and installation instructions.
 
-For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-X.Y.Z-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The ZIP includes Microsoft Fixed Version WebView2 with English (`en-US` and `en-GB`) locale packs; other locale PAKs are omitted. The complete source runtime is verified against its pinned version, SHA-256 and inventory before reducing only the staged package. Shared resources and all licenses are retained. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Fresh machines download the pinned Windows-only Go WebView2 module before preparing the English-language overlay; a prefilled Go module cache is not required, and normal Go checksum/source verification remains enabled. Initial runtime download is about 300 MB; the complete verified runtime remains cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
+For Windows, run `./win-build.sh` on Ubuntu with Go, Python 3.12+, **JDK 17+** and `7z` (Ubuntu package `7zip`). It produces `cryptodesk-X.Y.Z-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` in the root. The ZIP includes Microsoft Fixed Version WebView2 with English (`en-US` and `en-GB`) locale packs; other locale PAKs are omitted. The complete source runtime is verified against its pinned version, SHA-256 and inventory before reducing only the staged package. Shared resources and all licenses are retained. Build sources are copied to a temporary directory, preserving existing generated bindings, uncommitted files and Linux outputs. The script uses project-local Node/npm/Wails and does not install system packages. Fresh machines download the pinned Windows-only Go WebView2 module before preparing the English-language overlay; a prefilled Go module cache is not required, and normal Go checksum/source verification remains enabled. Initial runtime download is about 300 MB; the complete verified runtime remains cached under `.tools/webview2`. Use `./win-build.sh --webview2-cab /path/to/pinned.cab` for a local copy of the exact pinned runtime.
 
-On Windows, extract the **whole ZIP** to a local writable folder and launch `cryptodesk.exe`. Keep `WebView2` and `portable.marker` beside it; the workspace and browser profile live in its `data` directory. This needs no separate WebView2 installation. Windows 10 startup applies Microsoft's required read/execute grants to the bundled runtime directory; Windows 11 needs no grants. Fixed runtime updates require a new reviewed runtime pin and rebuild. The executable is unsigned, and cross-compilation on Ubuntu does not replace Windows runtime testing. Full details: [Windows portable build and usage](docs/WINDOWS_PORTABLE.md).
+On Windows, extract the **whole ZIP** to a local writable folder and launch `cryptodesk.exe`. Keep `WebView2`, `screener-runtime`, `jforex-runtime` and `portable.marker` beside it; the workspace and browser profile live in its `data` directory. This needs no separate WebView2 installation; forex charts additionally need the separately installed Java runtime. Windows 10 startup applies Microsoft's required read/execute grants to the bundled runtime directory; Windows 11 needs no grants. Fixed runtime updates require a new reviewed runtime pin and rebuild. The executable is unsigned, and cross-compilation on Ubuntu does not replace Windows runtime testing. Full details: [Windows portable build and usage](docs/WINDOWS_PORTABLE.md).
 
 The underlying `scripts/build-linux.sh` also retains `build/bin/cryptodesk` and the distribution under `release/`, including checksums, licenses and a version manifest. Build scripts never use sudo or a system package installation. The CLI is installed into project-local `.tools/` if absent. Normal builds contain local assets and no fixture bridge.
 
@@ -100,7 +113,7 @@ Each chart has its own exchange, searchable native instrument, horizontal period
 
 Centered in the top header alongside the CryptoDesk logo, shared period buttons and an **Indicators** dropdown apply to every existing chart in the current tab, including charts hidden by maximization. Grid, Add chart and Duplicate controls sit to their right, immediately before the save indicator. Its width stays fixed while changes are pending, saving, saved or awaiting retry, keeping neighboring controls in place. Narrow windows use compact action icons with tooltips. Tab names remain in the tab row. A period click updates all those charts immediately and returns them to live view. The shared period is highlighted only when every chart agrees; individual chart controls can still override it. For an indicator, configure its parameters once and press **OK** to add an independent instance to every chart in the tab. Existing indicators are retained, other tabs stay unchanged, and all changes are saved. If any chart already has 12 indicators, the shared dropdown is disabled until an indicator is removed from that chart.
 
-Weekly candles start Monday at 00:00 UTC. Binance and Bybit provide native weekly candles. Coinbase weekly history is derived from actual daily candles, with live updates from its public trades; incomplete weekly coverage remains provisional.
+Weekly candles start Monday at 00:00 UTC. Binance, Bybit and DucasCopy provide native weekly candles. Coinbase weekly history is derived from actual daily candles, with live updates from its public trades; incomplete weekly coverage remains provisional.
 
 ### Drawing tools
 
@@ -137,11 +150,41 @@ Live status and public-data details stay in the chart’s bottom-left footer, in
 
 Provider failures remain visible in their chart. Retry or reselect without losing configuration. Prices are never synthesized as a fallback. Coinbase live intervals derive from deduplicated trades, rather than relabelling its five-minute candle channel. An initial/reconnected partial bucket has provisional volume: the last REST snapshot or explicitly observed-only trades, never REST plus all buffered trade volume. Public Coinbase aliased USDC products are labelled/rejected; choose the actual USD product explicitly.
 
+## DucasCopy forex charts
+
+### Connect JForex
+
+1. Install **Java 17+** and retain the release's `jforex-runtime` folder beside the executable.
+2. Open **Settings → Ducas Copy**. Choose **Demo** or **Live**, enter **JForex Username** and the masked **JForex Password**, then click **Save credentials** or **Test connection**. Test saves the current draft before checking connectivity. Opening Settings alone never logs in.
+3. On the first connection, the app downloads the pinned JForex SDK and dependencies (51 files, approximately **43 MB**) into the private profile. Downloaded files are checked against their exact sizes and SHA-256 before loading. Completed files are reused after interruption. **Cancel test** stops a pending Test or PIN challenge; it preserves saved credentials and existing chart streams. Connection setup can take several minutes on a slow network.
+4. Select **DucasCopy** in a chart's source dropdown. Open its instrument list to choose a **Forex** pair, such as EUR/USD, GBP/USD or USD/JPY. Search ignores case and supports symbols, base/quote currencies and the displayed pair name.
+
+The list comes from the logged-in account's available instruments, filtered to fiat currency pairs. The pinned SDK recognizes **70** such pairs; your Demo/Live account can expose a smaller set. Crypto, metal and other CFD instruments are not included in this chart source. Instrument availability and the optional Live PIN flow follow the SDK's [IClient interface](https://www.dukascopy.com/client/javadoc3/com/dukascopy/api/system/IClient.html).
+
+For a Live account requiring security verification, click **Load PIN challenge**, enter the displayed code in **JForex PIN**, then click **Test connection**. The code is transient: it is cleared after use, cancellation, an error or a credential change and is never saved. An account with an appropriately registered IP can test without a PIN. A new app session may require a fresh challenge. CryptoDesk uses the official SDK authentication flow; account permission or network errors remain visible.
+
+### Prices, history and storage
+
+All seven chart periods are supported: **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Historical candles and live updates consistently use **Bid** prices. Native weekly candles start Monday at 00:00 UTC. Market closures remain gaps; no weekend or holiday bars are invented. **Quote** freshness, connection errors, reconnection and market-closed status appear in the chart footer. Volume is the SDK's native **quote volume in millions**, not centralized exchange trade volume.
+
+The JForex bridge runs only for requested forex discovery/history/quotes. Inactive chart tabs release their subscriptions. These authenticated charts use their own SDK cache, scoped by environment and a hash of the username; they do not write to or reuse the optional public-crypto SQLite candle cache. They also do not modify Screener CSVs or change dukascopy-node's WAF/rate-limit handling.
+
+| Profile location | Contents |
+|---|---|
+| `dukascopy-jforex.json` | Saved username, Demo/Live environment and password |
+| `jforex-runtime/3.6.51/lib` | Verified SDK dependencies downloaded on first use |
+| `jforex-cache/<environment>/<account-hash>` | SDK historical-data cache |
+| `jforex-private` | Private Java preferences and SDK runtime files |
+
+`<profile>` is normally `~/.local/share/cryptodesk` on Linux, the Windows portable `data` folder, or the directory selected with `--data-dir`. Credentials persist separately from workspace JSON/export/import/reset and diagnostics. The settings file uses **0600 permissions on POSIX systems** and stores the password **without application-level encryption**; the saved password is never returned to the webview. Leave Password blank to retain it for the same username/environment, or check **Remove saved password** and save. A new username or environment requires its password.
+
+Before changing an existing identity, close its active forex charts or select another source; this prevents mixing account-specific history. First-time setup can recover charts selected before credentials were entered. Pending saves/tests finish before Settings closes or the app shuts down normally; use **Cancel test** to stop a lengthy check. Test does not place orders, and CryptoDesk has no trade-execution integration. Automated SDK/bridge and fixture checks do not establish successful Demo/Live account connectivity; no real-account login has yet been verified. See [STATUS.md](STATUS.md).
+
 ## Settings
 
 The app starts with a light window and loading screen. New workspaces default to Light; existing workspaces restore their saved theme.
 
-Settings has six tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (local chart-candle cache), **Screener** (downloaded CSV folder), **Telegram Bot** (local token for future alerts), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
+Settings has eight tab pages: **Appearance** (theme, global font size, timezone and chart spacing), **Storage** (public crypto chart-candle cache), **Screener** (CSV folder and worker count), **Predictions** (local model and folder), **Ducas Copy** (JForex credentials and connection test), **Telegram Bot** (alert token and recipient), **Export** (workspace export/import/reset), and **Debug** (resource/backend diagnostics). Use Left/Right arrows or Home/End to navigate the settings tabs with the keyboard.
 
 **Appearance → Font size** scales text across the app, including chart period controls, chart and application status bars, Screener controls and chart canvas labels. Choose **10–24 px**, default **15 px**. It takes effect immediately and persists in workspace autosaves and JSON exports; older workspaces use the default.
 
@@ -152,6 +195,8 @@ For `@username`, Test finds the recipient among up to 100 pending private-chat u
 The token, recipient and verified chat identity are stored in `<profile>/telegram-bot.json`, separately from workspace JSON, backups, import/export/reset and diagnostics. Saved files use owner-only permissions on POSIX systems; the value is stored locally without application-level encryption. Pending saves finish before settings close or normal app shutdown. A failed save preserves the previous token and reports a generic error without displaying secret values. If a profile is kept inside the repository, the configuration and temporary token files are ignored by Git.
 
 ## Local candle storage
+
+This optional SQLite cache serves public crypto chart feeds. DucasCopy uses its separate, account/environment-scoped SDK cache described above.
 
 **Store candle data locally** in **Settings → Storage** is **off by default**. Check it, edit the **Storage folder** path or use **Choose folder…**, then click **Apply**. Checkbox and folder edits take effect together only when Apply succeeds. Clearing the path and applying selects the default folder. Failed configuration changes remain visible and preserve the previously applied setting; Apply can retry the same configuration after a storage error.
 
@@ -298,4 +343,4 @@ For a portable backup, export JSON. To copy the database manually, close the app
 
 Memory caches, history request sizes, queues and rendered instances are bounded. The optional disk candle cache is persistent and can grow; it has no automatic deletion. Active series retain at most 10,000 bars in a moving window: older-history loads evict newer bars while preserving the selected historical range, and Return to live reloads the latest window. Full manual desktop, high-DPI and target-release coverage is recorded separately in STATUS.md; automated browser tests do not establish those checks. Exact window position on Wayland is best effort; normal size and maximized state are saved.
 
-Charts by [TradingView](https://www.tradingview.com/), using Apache-2.0 Lightweight Charts. Its creator attribution remains visible. [Third-party notices](docs/THIRD_PARTY_NOTICES.md) and copied licenses ship with the archive. There is no trade execution, wallet, exchange credential storage, hosted TradingView client, paid feature gate, telemetry or automatic updater.
+Charts by [TradingView](https://www.tradingview.com/), using Apache-2.0 Lightweight Charts. Its creator attribution remains visible. [Third-party notices](docs/THIRD_PARTY_NOTICES.md) and copied licenses ship with the archive. JForex credentials are used for authenticated market data. There is no trade execution, wallet, hosted TradingView client, paid feature gate, telemetry or automatic updater.

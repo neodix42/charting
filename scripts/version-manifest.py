@@ -2,6 +2,7 @@
 import datetime, json, pathlib, platform, subprocess, sys
 from app_version import app_version
 from build_metadata import captured_source, source_provenance
+from jforex_bundle import validate_directory
 root = pathlib.Path(__file__).resolve().parent.parent
 if sys.argv[1:] == ['--capture-source']:
     print(json.dumps(source_provenance(root)))
@@ -17,6 +18,7 @@ manifest = {
     'wails': 'v2.17.0', 'webkitBuildTag': 'webkit2_41',
     'frontend': json.loads((root / 'frontend/package.json').read_text())['dependencies'],
     'goModules': run('go', 'list', '-m', 'all').splitlines(),
+    'jforex': {key:value for key,value in validate_directory(pathlib.Path(sys.argv[1]).parent / 'jforex-runtime').items() if key != 'files'},
     **captured_source(root),
 }
 pathlib.Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + '\n')

@@ -1,12 +1,22 @@
 # CryptoDesk portable Windows x64
 
-Extract the **complete ZIP** to a writable local folder on Windows 10/11 x64, then double-click `cryptodesk.exe`. Keep `portable.marker` and the entire `WebView2` and `screener-runtime` directories beside the executable. No app installation, administrator rights or separately installed WebView2 or Node runtime are needed. Internet access is still needed for public exchange and Dukascopy data.
+Extract the **complete ZIP** to a writable local folder on Windows 10/11 x64, then double-click `cryptodesk.exe`. Keep `portable.marker` and the entire `WebView2`, `screener-runtime` and `jforex-runtime` directories beside the executable. No app installation, administrator rights or separately installed WebView2 or Node runtime are needed. Internet access is still needed for market data. JForex forex charts additionally require a separately installed Java runtime.
 
 The Screener downloader is preinstalled in `screener-runtime`: dukascopy-node 1.51.1, private Node.js 24.19.0, Playwright 1.64.1 and matching Chrome for Testing 156.0.8078.4 (Chromium revision 1248). It runs directly from the ZIP contents without `npx`, npm installation, a globally installed browser or first-launch runtime downloads. Settings controls the download directory. Keep that directory when updating; replacing an application package does not remove downloaded CSV files.
 
 **Screener → Enrichment** also includes preinstalled trading-signals 8.3.0, csv-parse 7.0.3, the indicator catalog and their MIT licenses. Local enrichment needs no network or npm installation. It preserves original backups in the data folder and retains calculated columns across restart; see APP_README.md. Packaging on Ubuntu verifies the complete Windows runtime inventory but does not execute Windows Node or the native GUI.
 
 `screener-runtime/SCREENER-PROVENANCE.json` records the official runtime download URLs, pinned SHA-256 values, npm lockfile hash and full file inventory. The package retains Node's license in `NODE-LICENSE`, all npm LICENSE/NOTICE/third-party notices, and Chromium's `ABOUT` and embedded `chrome://credits`. Its runtimes do not update themselves; rebuild with reviewed pins for security updates. Release validation rejects incomplete or changed Screener files before publication. Cross-platform packaging checks do not establish successful downloads on an actual Windows host.
+
+## JForex forex charts
+
+Install **Java 17 or newer**, for example [Eclipse Temurin 17 Windows x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64). A JRE is sufficient; a JDK also works. Set `JAVA_HOME` to its installation folder or make `java.exe` available on `PATH`, then restart CryptoDesk. Neither Java nor the JForex desktop platform is included or installed by CryptoDesk.
+
+Open **Settings → Ducas Copy**, enter your **JForex Username** and **JForex Password**, select **Demo** or **Live**, and click **Test connection**. The first connection downloads about **43 MB** of pinned SDK **3.6.51 / API 2.13.99** dependencies into `data/jforex-runtime/3.6.51/lib`, verifying exact sizes and SHA-256 values. Use **Cancel test** to interrupt a lengthy check. Select **DucasCopy** in a chart's source selector to browse the connected account's available forex pairs and display historical/live Bid candles. Live accounts can use the optional **Load PIN challenge** flow; its code is never saved.
+
+The packaged `jforex-runtime` contains exactly five files: our `cryptodesk-jforex.jar`, `SDK-ARTIFACTS.json`, `JFOREX-PROVENANCE.json`, `LICENSE` and `THIRD_PARTY_NOTICES.md`. Vendor SDK JARs are not redistributed inside the ZIP; first use downloads them directly from the pinned official Maven sources. The package's version manifest and checksums verify the bridge inventory.
+
+Keep the portable `data` folder when updating. It contains `dukascopy-jforex.json` credentials and the account/environment-scoped SDK cache, separately from public-crypto SQLite candles and Screener CSVs. Credentials are excluded from workspace exports and stored without application-level encryption. See the full [JForex setup and storage guide](../APP_README.md#ducascopy-forex-charts). Native Windows and real-account login verification remain pending.
 
 The first launch creates exactly one tab and one chart. The portable workspace database and browser profile are created under `data` beside the executable, independently of the current working directory. Later launches restore that workspace. Move the complete directory while the app is closed to move the workspace. For a separate workspace, use `cryptodesk.exe --data-dir "D:\CryptoDesk profile"`; JSON export/import is also available in Settings. Keep the data directory when replacing the application with a newer build.
 
@@ -18,11 +28,13 @@ The runtime version, official source URL and full-source SHA-256 are recorded in
 
 ## Build on Ubuntu
 
-Run `./win-build.sh` from the checkout, or invoke its absolute path from another directory. Requires Go, Python 3.12+ and `7z` (Ubuntu package `7zip`). Node/npm and the pinned Wails CLI are cached locally using the existing toolchain bootstrap. The script does not install system packages or require MinGW or a Windows installation. Initial dependency/runtime downloads require network access.
+Run `./win-build.sh` from the checkout, or invoke its absolute path from another directory. Requires Go, Python 3.12+, **JDK 17+** (`javac`) and `7z` (Ubuntu package `7zip`). Node/npm and the pinned Wails CLI are cached locally using the existing toolchain bootstrap. The script does not install system packages or require MinGW or a Windows installation. Initial dependency/runtime downloads require network access.
 
 The runtime is downloaded from Microsoft's version-specific URL and checked against the checked-in SHA-256. Later builds reuse the verified `.tools/webview2` cache. To supply the exact pinned CAB locally, run `./win-build.sh --webview2-cab /path/to/Microsoft.WebView2.FixedVersionRuntime.VERSION.x64.cab`; a different version or checksum is rejected.
 
 The build also downloads checksum-verified Windows Node and Chromium archives into `.tools/screener-downloads`. Screener npm dependencies are installed from their lockfile in a project-local cache with lifecycle scripts disabled, then packaged with the target Windows binaries. Neither Node nor Chromium for Windows is executed by the Ubuntu cross-build.
+
+The JForex bridge compiles to Java 17 bytecode on the build host. Its pinned SDK dependencies remain in `.tools/jforex-sdk/cache`; only our bridge and its manifests/notices enter the ZIP. `python3 scripts/jforex_bundle.py --test` checks the Java bridge and actual SDK bootstrap without credentials; it is separate from Windows GUI or authenticated provider testing.
 
 Builds use a temporary copy of the current working sources, including uncommitted edits. Generated Wails files and Linux outputs in the checkout are preserved. Successful builds publish `cryptodesk-X.Y.Z-windows-amd64.zip` and `cryptodesk-Windows-SHA256SUMS` at the repository root. The version comes from `VERSION`, or the validated `CRYPTODESK_VERSION=X.Y.Z` override used by release CI; the same value is embedded in the executable product/file version and package manifest. Verify with `sha256sum -c cryptodesk-Windows-SHA256SUMS` before copying the ZIP. The [main README](https://github.com/neodix42/charting#download) links to the latest published portable package.
 

@@ -88,21 +88,24 @@ type instrumentCache struct {
 }
 type historyRange struct{ from, to int64 }
 type Service struct {
-	mu           sync.Mutex
-	ctx          context.Context
-	cancel       context.CancelFunc
-	opts         Options
-	feeds        map[domain.FeedKey]*feed
-	leases       map[string]*lease
-	adapters     map[string]exchange.Adapter
-	instruments  map[string]instrumentCache
-	semaphores   map[string]chan struct{}
-	requests     int64
-	resyncs      int64
-	closed       bool
-	restoreSlots chan struct{}
-	historySlots chan struct{}
-	wg           sync.WaitGroup
+	mu             sync.Mutex
+	ctx            context.Context
+	cancel         context.CancelFunc
+	opts           Options
+	feeds          map[domain.FeedKey]*feed
+	leases         map[string]*lease
+	adapters       map[string]exchange.Adapter
+	instruments    map[string]instrumentCache
+	providerEpochs map[string]uint64
+	catalogEpochs  map[string]uint64
+	forexPages     []forexHistoryPage
+	semaphores     map[string]chan struct{}
+	requests       int64
+	resyncs        int64
+	closed         bool
+	restoreSlots   chan struct{}
+	historySlots   chan struct{}
+	wg             sync.WaitGroup
 }
 
 func New(opts Options) *Service {
@@ -122,7 +125,7 @@ func New(opts Options) *Service {
 		opts.MaxCandles = 250000
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{ctx: ctx, cancel: cancel, opts: opts, feeds: make(map[domain.FeedKey]*feed), leases: make(map[string]*lease), adapters: make(map[string]exchange.Adapter), instruments: make(map[string]instrumentCache), restoreSlots: make(chan struct{}, 18), historySlots: make(chan struct{}, 18), semaphores: map[string]chan struct{}{"binance": make(chan struct{}, 2), "bybit": make(chan struct{}, 2), "coinbase": make(chan struct{}, 2)}}
+	return &Service{ctx: ctx, cancel: cancel, opts: opts, feeds: make(map[domain.FeedKey]*feed), leases: make(map[string]*lease), adapters: make(map[string]exchange.Adapter), instruments: make(map[string]instrumentCache), providerEpochs: make(map[string]uint64), catalogEpochs: make(map[string]uint64), restoreSlots: make(chan struct{}, 18), historySlots: make(chan struct{}, 18), semaphores: map[string]chan struct{}{"binance": make(chan struct{}, 2), "bybit": make(chan struct{}, 2), "coinbase": make(chan struct{}, 2), "dukascopy": make(chan struct{}, 2)}}
 }
 func (s *Service) adapterLocked(provider string) (exchange.Adapter, error) {
 	if a := s.adapters[provider]; a != nil {
@@ -357,6 +360,8 @@ func (s *Service) update(ctx context.Context, f *feed, bars []domain.Candle, h d
 }
 func (s *Service) Instruments(ctx context.Context, provider string) ([]domain.Instrument, error) {
 	s.mu.Lock()
+	epoch := s.providerEpochs[provider]
+	catalogEpoch := s.catalogEpochs[provider]
 	cached := s.instruments[provider]
 	if len(cached.items) > 0 && s.opts.Now().Sub(cached.at) < time.Hour {
 		items := append([]domain.Instrument(nil), cached.items...)
@@ -368,7 +373,11 @@ func (s *Service) Instruments(ctx context.Context, provider string) ([]domain.In
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	timeout := 20 * time.Second
+	if provider == "dukascopy" {
+		timeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	items, err := a.Instruments(ctx)
 	if err != nil {
@@ -382,6 +391,10 @@ func (s *Service) Instruments(ctx context.Context, provider string) ([]domain.In
 		}
 	}
 	s.mu.Lock()
+	if s.closed || s.providerEpochs[provider] != epoch || s.catalogEpochs[provider] != catalogEpoch {
+		s.mu.Unlock()
+		return nil, errors.New("Provider configuration changed; retry instrument discovery")
+	}
 	s.instruments[provider] = instrumentCache{append([]domain.Instrument(nil), items...), s.opts.Now()}
 	s.mu.Unlock()
 	return items, nil
@@ -427,6 +440,7 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	s.mu.Lock()
 	a, err := s.adapterLocked(key.Exchange)
 	sem := s.semaphores[key.Exchange]
+	providerEpoch := s.providerEpochs[key.Exchange]
 	var revision int64
 	if f := s.feeds[key]; f != nil {
 		revision = f.revision
@@ -434,6 +448,9 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	s.mu.Unlock()
 	if err != nil {
 		return History{}, err
+	}
+	if cached, ok := s.forexPage(key, from, to, limit); ok {
+		return s.acceptHistoryEpoch(id, key, from, to, revision, cached, false, &providerEpoch)
 	}
 	// Only a complete contiguous page of closed, past buckets can bypass REST.
 	// Gaps, delistings and current buckets still go to the provider; a sparse disk
@@ -450,7 +467,11 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 			return s.acceptHistory(id, key, from, to, revision, cached, false), nil
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	timeout := 25 * time.Second
+	if key.Exchange == "dukascopy" {
+		timeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	select {
 	case sem <- struct{}{}:
@@ -465,7 +486,15 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	if err != nil {
 		return History{}, err
 	}
-	return s.acceptHistory(id, key, from, to, revision, bars, true), nil
+	var epoch *uint64
+	if key.Exchange == "dukascopy" {
+		epoch = &providerEpoch
+	}
+	result, err := s.acceptHistoryEpoch(id, key, from, to, revision, bars, true, epoch)
+	if err == nil {
+		s.rememberForexPage(key, from, to, limit, result.Bars, providerEpoch)
+	}
+	return result, err
 }
 
 func completeCachedPage(key domain.FeedKey, from, to int64, limit int, bars []domain.Candle) bool {
@@ -495,6 +524,11 @@ func completeCachedPage(key domain.FeedKey, from, to int64, limit int, bars []do
 }
 
 func (s *Service) acceptHistory(id string, key domain.FeedKey, from, to, revision int64, bars []domain.Candle, persist bool) History {
+	result, _ := s.acceptHistoryEpoch(id, key, from, to, revision, bars, persist, nil)
+	return result
+}
+
+func (s *Service) acceptHistoryEpoch(id string, key domain.FeedKey, from, to, revision int64, bars []domain.Candle, persist bool, epoch *uint64) (History, error) {
 	result := map[int64]domain.Candle{}
 	for _, c := range bars {
 		if valid(c) && c.Time >= from && c.Time < to {
@@ -503,6 +537,9 @@ func (s *Service) acceptHistory(id string, key domain.FeedKey, from, to, revisio
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if epoch != nil && (s.closed || s.providerEpochs[key.Exchange] != *epoch) {
+		return History{}, errors.New("JForex account configuration changed; retry historical data")
+	}
 	if f := s.feeds[key]; f != nil {
 		updates := []domain.Candle{}
 		for t, c := range result {
@@ -529,7 +566,7 @@ func (s *Service) acceptHistory(id string, key domain.FeedKey, from, to, revisio
 	// Sparse pages do not prove the listing boundary. A nonempty earlier page
 	// permits another bounded request; an empty page/progress check terminates it.
 	more := len(ordered) > 0
-	return History{RequestID: id, FeedKey: key, Bars: ordered, MoreHistory: more}
+	return History{RequestID: id, FeedKey: key, Bars: ordered, MoreHistory: more}, nil
 }
 
 // StoreCurrentCandles seeds a newly enabled/different cache with the genuine

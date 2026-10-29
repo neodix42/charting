@@ -11,6 +11,7 @@ require_native
 require_node
 require_wails
 python3 "$APP_ROOT/scripts/app_icons.py" --check
+python3 "$APP_ROOT/scripts/jforex_bundle.py" --output "$APP_ROOT/.tools/jforex-runtime"
 "$APP_ROOT/.tools/wails" build -tags webkit2_41 -trimpath "$@"
 python3 "$APP_ROOT/scripts/app_version.py" --verify-frontend > /dev/null
 RELEASE_NAME="cryptodesk-$CRYPTODESK_VERSION-linux-amd64"
@@ -25,6 +26,7 @@ cp "$APP_ROOT/LICENSE" "$APP_ROOT/STATUS.md" "$ARTIFACT_DIR/"
 cp -R "$APP_ROOT/docs/." "$ARTIFACT_DIR/docs/"
 python3 "$APP_ROOT/scripts/screener_bundle.py" --root "$APP_ROOT" --target linux-amd64 --destination "$APP_ROOT/.tools/screener-runtime-linux-amd64"
 python3 "$APP_ROOT/scripts/screener_bundle.py" --target linux-amd64 --copy-from "$APP_ROOT/.tools/screener-runtime-linux-amd64" --destination "$ARTIFACT_DIR/screener-runtime"
+python3 "$APP_ROOT/scripts/jforex_bundle.py" --copy-from "$APP_ROOT/.tools/jforex-runtime" --output "$ARTIFACT_DIR/jforex-runtime"
 python3 "$APP_ROOT/scripts/version-manifest.py" "$ARTIFACT_DIR/version.json"
 cd "$APP_ROOT/release"
 tar -czf "$RELEASE_NAME.tar.gz" "$RELEASE_NAME"

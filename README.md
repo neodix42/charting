@@ -2,9 +2,9 @@
 
 <img src="frontend/src/assets/cryptodesk.svg" width="64" height="64" alt="CryptoDesk diamond logo">
 
-**Live market charts and a visual historical Screener for Ubuntu and Windows.** Follow public spot and perpetual markets, download historical datasets, calculate indicators, and find the bars where your conditions matched—all from one desktop workspace.
+**Live market charts and a visual historical Screener for Ubuntu and Windows.** Follow crypto spot/perpetual markets and JForex forex quotes, download historical datasets, calculate indicators, and find the bars where your conditions matched—all from one desktop workspace.
 
-[Download](#download) · [Charting features](#charting-features) · [Screener](#screener) · [Visual filters](#analysis-build-smart-filters-visually) · [Predictions](#predictions) · [Build from source](#build-from-source) · [Full user guide](APP_README.md)
+[Download](#download) · [Charting features](#charting-features) · [Forex](#ducascopy-forex-charts) · [Screener](#screener) · [Visual filters](#analysis-build-smart-filters-visually) · [Predictions](#predictions) · [Build from source](#build-from-source) · [Full user guide](APP_README.md)
 
 ![CryptoDesk light-theme workspace with two BTCUSDT charts, moving averages, volume and MACD](docs/screenshots/chart-workspace.png)
 
@@ -12,6 +12,7 @@
 
 - **A workspace that remembers your layout.** Up to 20 chart tabs and 9 charts per tab, with independent instruments, periods, indicators and drawings.
 - **Public market data without an account.** Binance and Bybit spot/perpetual markets, plus Coinbase spot. No API keys required.
+- **Authenticated forex charts.** Dukascopy JForex historical Bid candles and realtime quotes through the included bridge, using your Demo or Live credentials.
 - **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download multiple symbols in parallel with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
 - **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, inspect matches on a chart, and optionally simulate SL/TP outcomes.
@@ -28,6 +29,8 @@
 [All releases](https://github.com/neodix42/charting/releases) · [Latest SHA-256 checksums](https://github.com/neodix42/charting/releases/latest/download/SHA256SUMS)
 
 **Extract the complete archive.** Ubuntu and Windows packages include the private Node runtime, Dukascopy downloader, indicator library and browser support used by Screener. Keep `screener-runtime` alongside the application; no global Node/npm or runtime `npx` installation is needed. See [updating the Screener downloader](#updating-the-screener-downloader) to check, restore or upgrade its pinned dependency.
+
+Keep the included **`jforex-runtime`** folder beside the executable for forex charts. JForex additionally needs **Java 17 or newer** installed separately. Its pinned vendor SDK downloads into the private app profile on the first connection; it is separate from the preinstalled Screener downloader.
 
 The Windows ZIP includes a pinned WebView2 runtime. Keep `WebView2` and `portable.marker` beside the executable in a writable local folder; application data stays in its portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md) and [installation instructions](APP_README.md#run-the-built-release).
 
@@ -48,22 +51,38 @@ sudo apt install -y \
 
 These are runtime packages; Go, a compiler and the `-dev` packages are needed only when building from source. Run CryptoDesk from a graphical desktop session with working graphics drivers. GitHub releases build on Ubuntu 24.04 x64; older systems require separate verification, and local builds inherit their build host's glibc requirement. The Linux archive includes optional `install-user.sh` for application-menu and desktop shortcuts. Linux releases use the system GTK/WebKit libraries; the separate bundled GTK/WebKit archive is retired.
 
+For **JForex forex charts**, also install a Java runtime:
+
+```bash
+sudo apt install -y openjdk-17-jre-headless
+```
+
 ## Charting features
 
 First launch opens **one tab with one chart**. New tabs also start with one chart; larger grids add empty slots for you to fill. Later launches restore your actual saved workspace.
 
-- **Independent charts:** choose exchange, spot/perpetual instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets.
+- **Independent charts:** choose source, instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets; DucasCopy supplies the connected JForex account's available forex pairs.
 - **Indicators and drawings:** SMA, EMA, Ichimoku Cloud and MACD, with editable parameters, colors and multiple instances. Adjust moving-average widths and resize MACD panes. Add arrows, horizontal levels and trend lines; select, move or remove drawings.
 - **Flexible layouts:** drag tabs/charts, resize grid tracks, maximize a chart, rename tabs and duplicate layouts. Shared period and indicator controls apply to the current tab's charts.
 - **Display controls:** Dark, Light, Matrix (black/lime), Cyberpunk and Red Sands themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Theme** updates the interface, opened dropdown menus and chart colors immediately and remembers your choice. **Font size** scales interface text and chart labels from **10–24 px** (default **15**).
 - **Automatic saving:** SQLite persistence, JSON workspace export/import and recovery snapshots. Optional local candle storage reuses genuine downloaded chart history across restarts.
 - **Efficient live feeds:** only the active chart tab renders and subscribes. Opening Screener or Predictions saves chart views and releases live chart subscriptions; returning restores the selected tab. Connection and provisional-data states remain visible.
 
-Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. CryptoDesk reads public market data and does not place trades or connect to exchange accounts.
+Useful shortcuts: **Ctrl+T** adds a tab, **Ctrl+Shift+N** adds a chart, **Ctrl+Tab / Ctrl+Shift+Tab** switches tabs, and **Ctrl+W** confirms closing the active tab. CryptoDesk displays market data and does not place trades.
 
-Settings are grouped into **Appearance**, **Storage**, **Screener**, **Predictions**, **Telegram Bot**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Predictions selects the local model and its storage folder; Telegram Bot stores a masked API token and recipient, with a test notification; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light is the default from the native window and initial loading screen onward, and uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
+Settings are grouped into **Appearance**, **Storage**, **Screener**, **Predictions**, **Ducas Copy**, **Telegram Bot**, **Export** and **Debug** tabs. Appearance controls theme, text size, timezone and chart spacing; Storage controls the local chart-candle cache; Screener sets the CSV folder; Predictions selects the local model and its storage folder; Ducas Copy stores JForex credentials and tests the connection; Telegram Bot stores a masked API token and recipient, with a test notification; Export contains workspace import/export/reset; Debug contains resource and backend diagnostics. Light is the default from the native window and initial loading screen onward, and uses a blue accent; switching themes repaints action buttons, progress bars, candles and volume immediately.
 
 In **Settings → Telegram Bot**, enter your masked **Telegram Bot API Token** and **Recipient** (`@username` or a private chat ID). For `@username`, the app displays the actual bot name and asks the recipient to open it and press **Start**. Click **Test** to save the settings and send one test notification. Token, recipient and verified chat ID persist locally outside workspace exports and diagnostics. Save sends no messages. Start automatic monitoring explicitly in **Screener → Live Alerts**.
+
+## DucasCopy forex charts
+
+1. Install **Java 17+**; Windows users can use [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64), with Java on `PATH` or `JAVA_HOME` set to its installation folder.
+2. Open **Settings → Ducas Copy**, select **Demo** or **Live**, enter **JForex Username** and **JForex Password**, then click **Test connection**. First setup downloads about **43 MB** of checksum-pinned SDK dependencies; **Cancel test** stops a pending connection check. Live accounts can use the optional displayed PIN challenge.
+3. Select **DucasCopy** in a chart's source dropdown, then choose a **Forex** pair. The list is discovered from the authenticated account, rather than a promised universal instrument list.
+
+Charts use **Bid** history and live quotes, with all seven chart periods and UTC candle boundaries. Forex weekends/holidays remain gaps; the status shows quote freshness and market closures. Volume is the SDK's quote volume in millions, rather than centralized exchange trade volume.
+
+Credentials stay in the local profile outside workspace exports; the password is masked and stored without application-level encryption. JForex charts use an account/environment-scoped SDK cache. Screener CSV downloads continue to use dukascopy-node independently. See the [JForex setup, storage and PIN guide](APP_README.md#ducascopy-forex-charts). Real-account connectivity and native Windows execution remain unverified; [STATUS.md](STATUS.md) records validation.
 
 ## Screener
 
@@ -76,7 +95,7 @@ The fixed **Screener** tab sits beside **Predictions**, to the right of the char
 | **Analysis** | Build visual conditions and optionally simulate trades | Matching assets, occurrence counts, TP hit rates and match charts |
 | **Live Alerts** | Monitor saved conditions on newly closed d1/h1 candles | Telegram notifications with asset, condition, UTC time and indicative Entry/SL/TP |
 
-Chart feeds come from Binance, Bybit and Coinbase. Screener histories come from **Dukascopy** and use its instrument names and available history. Once downloaded, enrichment and analysis run locally against those files.
+Chart feeds come from Binance, Bybit, Coinbase and the authenticated DucasCopy JForex bridge. Screener histories use **dukascopy-node** independently and retain its instrument names, available history and provider-access restrictions. Once downloaded, enrichment and analysis run locally against those files.
 
 ### Downloader: choose symbols and collect history
 
@@ -262,7 +281,7 @@ These are model estimates, not guaranteed coverage or validated trading signals.
 
 ## Build from source
 
-CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQLite**. Requires Go, Python 3.12+, and a C compiler/pkg-config for Linux. Linux builds need the GTK3 and WebKitGTK 4.1 development packages; Windows packaging on Ubuntu needs `7z`. Scripts use pinned project-local Wails and bootstrap a verified local Node/npm bundle if a usable toolchain is absent. They do not install OS packages or change your shell configuration.
+CryptoDesk uses **Go + Wails v2 + React/TypeScript + Lightweight Charts v5 + SQLite**. Builds require Go, Python 3.12+, **JDK 17+** (`javac`), and a C compiler/pkg-config for Linux. Linux builds need the GTK3 and WebKitGTK 4.1 development packages; Windows packaging on Ubuntu needs `7z`. Both packages compile the included Java bridge and retain its manifest; pinned SDK files stay in a private build cache and are excluded from release archives. Scripts use pinned project-local Wails and bootstrap a verified local Node/npm bundle if a usable toolchain is absent. They do not install OS packages or change your shell configuration.
 
 ```bash
 ./build.sh                 # Linux executable, standard archive and checksums in the root
@@ -328,7 +347,7 @@ Updating a dependency does not establish that Dukascopy has cleared an HTTP 403;
 
 The [release workflow](.github/workflows/release.yml) runs on pushes to `main`. It builds the standard Linux archive and Windows ZIP and publishes them after checking archive contents, architecture, version, source provenance and checksums. It does **not run test suites**. It increments the highest release tag's patch version, starting at `v0.1.0` when no release exists. Builds do not create source-version bump commits.
 
-The separate [Tests workflow](.github/workflows/tests.yml) runs on pushes to `main`, pull requests and manual dispatch. It runs the Go, runtime, packaging, frontend and browser suites, plus an offline smoke check of the packaged Screener runtime. Browser and runtime diagnostics are retained as workflow artifacts. Tests and releases run independently: a failing or delayed test run does not block publication.
+The separate [Tests workflow](.github/workflows/tests.yml) runs on pushes to `main`, pull requests and manual dispatch. It runs the Go, runtime, packaging, frontend and browser suites, plus offline checks of the packaged Screener runtime and JForex SDK bridge/bootstrap. Browser and runtime diagnostics are retained as workflow artifacts. Tests and releases run independently: a failing or delayed test run does not block publication.
 
 Release jobs are serialized; reruns recognize published commits, and stale workflow revisions are prevented from publishing. Packages, checksums and `release.json` use versioned filenames. Actual local verification and remaining platform checks are documented in [STATUS.md](STATUS.md).
 

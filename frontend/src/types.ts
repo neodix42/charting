@@ -3,8 +3,8 @@ import type {ScreenerLiveAlertsBackend} from './workspace/screenerLiveAlerts';
 import type {PredictionsBackend} from './workspace/predictions';
 import type {ThemeName} from './workspace/themes';
 
-export type Exchange = 'binance'|'bybit'|'coinbase';
-export type Market = 'spot'|'perpetual';
+export type Exchange = 'binance'|'bybit'|'coinbase'|'dukascopy';
+export type Market = 'spot'|'perpetual'|'forex';
 export type Interval = '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'1w';
 export const intervals: Interval[] = ['1m','5m','15m','1h','4h','1d','1w'];
 export const intervalSeconds: Record<Interval,number> = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400,'1w':604800};
@@ -33,6 +33,8 @@ export interface CandleStorageInfo {enabled:boolean;directory:string;sizeBytes:n
 export interface TelegramBotSettings {apiToken:string;recipient:string}
 export interface TelegramBotIdentity {id:number;username:string}
 export interface TelegramTestResult {sent:boolean;code?:string;botUsername?:string;messageId?:number}
+export interface DucascopySettings {username:string;password:string;environment:'demo'|'live';clearPassword?:boolean}
+export interface DucascopyInfo {username:string;environment:'demo'|'live';passwordConfigured:boolean;runtimeAvailable:boolean;runtimeDirectory:string;javaPath:string;connected:boolean;instrumentCount:number;error?:string}
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
 export interface ScreenerDownloadRequest {symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
@@ -58,6 +60,7 @@ export interface Backend extends ScreenerAnalysisBackend,ScreenerLiveAlertsBacke
  GetHistory(requestId:string,key:FeedKey,fromSec:number,toSec:number,maxBars:number):Promise<HistoryResult>;
  GetCandleStorage():Promise<CandleStorageInfo>;ConfigureCandleStorage(enabled:boolean,directory:string):Promise<CandleStorageInfo>;ChooseCandleStorageDirectory():Promise<string>;
  GetTelegramBotSettings():Promise<TelegramBotSettings>;ConfigureTelegramBot(token:string):Promise<TelegramBotSettings>;ConfigureTelegramBotSettings(token:string,recipient:string):Promise<TelegramBotSettings>;GetTelegramBotIdentity(token:string):Promise<TelegramBotIdentity>;TestTelegramBot():Promise<TelegramTestResult>;
+ GetDucascopy():Promise<DucascopyInfo>;ConfigureDucascopy(settings:DucascopySettings):Promise<DucascopyInfo>;TestDucascopyConnection():Promise<DucascopyInfo>;GetDucascopyLoginChallenge():Promise<{imageDataUrl:string}>;TestDucascopyConnectionWithPIN(pin:string):Promise<DucascopyInfo>;CancelDucascopyConnectionTest():Promise<DucascopyInfo>;
  GetScreenerCatalog():Promise<ScreenerCatalog>;GetScreener():Promise<ScreenerInfo>;ConfigureScreenerDirectory(directory:string):Promise<ScreenerInfo>;ChooseScreenerDirectory():Promise<string>;
  ConfigureScreenerConcurrency(concurrency:number):Promise<ScreenerInfo>;
  StartScreenerDownload(request:ScreenerDownloadRequest):Promise<ScreenerInfo>;CancelScreenerDownload():Promise<ScreenerInfo>;

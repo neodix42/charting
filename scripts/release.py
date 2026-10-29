@@ -23,6 +23,7 @@ import zipfile
 
 from app_version import app_version, parse_version
 from screener_bundle import MANIFEST as SCREENER_MANIFEST, validate_inventory as validate_screener
+from jforex_bundle import MANIFEST as JFOREX_MANIFEST, validate_inventory as validate_jforex
 
 TARGETS = {"linux-amd64": ".tar.gz", "windows-amd64": ".zip"}
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -259,6 +260,19 @@ def stage(root, target, version, directory):
     shutil.copyfile(source, directory / versioned)
 
 
+def validate_jforex_archive(metadata, files, read):
+    """Old releases stay verifiable; new bridge provenance requires all five files."""
+    provenance = metadata.get("jforex")
+    if "jforex" not in metadata and not files:
+        return
+    if not isinstance(provenance, dict) or JFOREX_MANIFEST not in files:
+        raise ValueError("The release is missing JForex bridge provenance or files")
+    manifest = json.loads(read(JFOREX_MANIFEST))
+    validate_jforex(manifest, files, read)
+    if provenance != {key: value for key, value in manifest.items() if key != "files"}:
+        raise ValueError("JForex bridge provenance differs from version.json")
+
+
 def archive_manifest(path, target, version):
     if target not in TARGETS:
         raise ValueError("Unknown release target")
@@ -298,12 +312,21 @@ def archive_manifest(path, target, version):
             validate_screener(screener_manifest, "linux-amd64",
                               {name: (entry.size, bool(entry.mode & 0o111)) for name, entry in screener_files.items()}, read_screener)
             with archive.extractfile(regular("version.json")) as stream:
-                return json.load(stream)
+                metadata = json.load(stream)
+            jforex_files = {entry.name.removeprefix(prefix + "jforex-runtime/"): entry for entry in archive.getmembers()
+                            if entry.name.startswith(prefix + "jforex-runtime/") and entry.isfile()}
+            def read_jforex(name):
+                with archive.extractfile(jforex_files[name]) as stream:
+                    return stream.read()
+            validate_jforex_archive(metadata, jforex_files, read_jforex)
+            return metadata
     with zipfile.ZipFile(path) as archive:
         if archive.testzip():
             raise ValueError("Windows ZIP integrity failure")
         if any(not name.startswith(prefix) or ".." in Path(name).parts for name in archive.namelist()):
             raise ValueError("Unsafe Windows archive paths")
+        if len(archive.namelist()) != len(set(archive.namelist())):
+            raise ValueError("Duplicate Windows archive paths")
         for required in ("cryptodesk.exe", "portable.marker", "WebView2/msedgewebview2.exe", "WebView2/Locales/en-US.pak"):
             if not archive.getinfo(prefix + required).file_size:
                 raise ValueError(f"Missing Windows portable file {required}")
@@ -323,7 +346,14 @@ def archive_manifest(path, target, version):
         except KeyError as error:
             raise ValueError("Windows package is missing the preinstalled Screener runtime") from error
         validate_screener(screener_manifest, "windows-amd64", screener_files, lambda name: archive.read(screener_prefix + name))
-        return json.loads(archive.read(prefix + "version.json"))
+        metadata = json.loads(archive.read(prefix + "version.json"))
+        jforex_prefix = prefix + "jforex-runtime/"
+        jforex_files = {entry.filename.removeprefix(jforex_prefix): entry for entry in archive.infolist()
+                        if entry.filename.startswith(jforex_prefix) and not entry.is_dir()}
+        if any((entry.external_attr >> 16) & 0o170000 == 0o120000 for entry in jforex_files.values()):
+            raise ValueError("JForex bridge release files must not be symlinks")
+        validate_jforex_archive(metadata, jforex_files, lambda name: archive.read(jforex_prefix + name))
+        return metadata
 
 
 def bundle(directory, version, commit):

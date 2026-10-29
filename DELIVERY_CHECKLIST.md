@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## JForex forex chart bridge — 2026-10-29, `predictions` branch
+
+- [x] Optional DucasCopy source and Forex identity, account-based fiat pair discovery, native Bid history/live bridge and all seven UTC chart intervals.
+- [x] Settings → Ducas Copy supports Demo/Live credentials, Test connection, transient Live PIN challenges, cancellation and first-configuration recovery without mixing account caches.
+- [x] Private settings, shared process/subscription lifecycle, quote-health preservation and owner-exit cleanup have offline protocol/race/facade coverage; the actual SDK initializes without credentials.
+- [x] Linux/Windows packaging and user installation include and validate our bridge plus exact SDK dependency manifest. Java 17+ prerequisites and first-use SDK installation are documented.
+- [ ] New full archives and hosted branch CI are pending final verification; see STATUS.md.
+- [ ] Authenticated JForex login/live ticks, native desktop interaction and Windows GUI execution remain unverified; no JForex credentials were supplied.
+
 ## Local Predictions — 2026-10-29, `predictions` branch
 
 - [x] Independent Predictions page/settings default to Toto-2.0-313m, with downloaded asset/period, 512/1024 closed-bar context and future horizon default 20.
@@ -53,7 +62,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Reconnect/gap/ratelimit/overflow/stalegeneration/cancellation/terminalretry regression tests.
 - [x] Resource bounds and actual switching measurements retained with sampling limitations.
 - [ ] Real desktop suspend/resume/forced disconnect and combined200switch/high-rate scenario remain unrun.
-- [x] No trading/account keys/private endpoints/telemetry/paid gates.
+- [x] Read-only market integration; no order execution, wallet, telemetry or paid gates. Optional JForex credentials remain outside portable workspaces.
 
 ## Build and report
 

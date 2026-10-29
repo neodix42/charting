@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RELEASE = (ROOT / ".github/workflows/release.yml").read_text()
 TESTS = (ROOT / ".github/workflows/tests.yml").read_text()
 PINNED_ACTIONS = {
+    "actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
     "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
     "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
@@ -117,6 +118,15 @@ class WorkflowPolicyTests(unittest.TestCase):
                 checkouts = sum(action.startswith("actions/checkout@") for action in actions)
                 self.assertEqual(workflow.count("persist-credentials: false"), checkouts)
                 self.assertIn("go-version: '1.26.8'", workflow)
+
+    def test_jforex_builds_use_jdk17_and_tests_check_real_sdk_bootstrap_separately_from_release(self):
+        for workflow in (section(RELEASE, "build", 2), TESTS):
+            self.assertIn("actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961", workflow)
+            self.assertIn("distribution: temurin", workflow)
+            self.assertIn("java-version: '17'", workflow)
+            self.assertIn("overwrite-settings: false", workflow)
+        self.assertIn("python3 scripts/jforex_bundle.py --test", step(TESTS, "Verify JForex bridge and SDK bootstrap offline"))
+        self.assertNotIn("jforex_bundle.py --test", RELEASE)
 
 
 if __name__ == "__main__":

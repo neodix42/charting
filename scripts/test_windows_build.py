@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 import windows_webview_language
+from jforex_test_fixture import write_bridge
 
 spec = importlib.util.spec_from_file_location("windows_build", Path(__file__).with_name("windows_build.py"))
 build = importlib.util.module_from_spec(spec)
@@ -76,8 +77,12 @@ class WindowsPackagingTests(unittest.TestCase):
                 destination.mkdir()
                 (destination / "worker.cjs").write_text("pinned downloader worker")
                 return {"dukascopyVersion": "1.51.0", "files": {}}
+            def jforex(destination, cache):
+                self.assertEqual(cache, root / ".tools/jforex-sdk/cache")
+                return write_bridge(destination)
             with patch.dict(os.environ, environment, clear=True), \
                  patch.object(build, "assemble_screener", side_effect=screener), \
+                 patch.object(build, "assemble_jforex", side_effect=jforex), \
                  patch.object(build.shutil, "which", return_value="/fixture/tool"), \
                  patch.object(build, "source_provenance", return_value={"gitRevision": "a" * 40, "workingTreeModified": False}), \
                  patch.object(build.subprocess, "run", side_effect=run), \
@@ -98,6 +103,9 @@ class WindowsPackagingTests(unittest.TestCase):
                 self.assertFalse(manifest["workingTreeModified"])
                 self.assertEqual(result.read("cryptodesk-2.3.4-windows-amd64/STATUS.md"), b"status")
                 self.assertEqual(result.read("cryptodesk-2.3.4-windows-amd64/screener-runtime/worker.cjs"), b"pinned downloader worker")
+                self.assertEqual(manifest["jforex"]["javaMinimum"], 17)
+                self.assertEqual(len([name for name in result.namelist() if "/jforex-runtime/" in name]), 5)
+                self.assertIn("cryptodesk-2.3.4-windows-amd64/jforex-runtime/cryptodesk-jforex.jar", result.namelist())
             self.assertEqual(json.loads((root / "wails.json").read_text())["info"]["productVersion"], "0.1.0")
             self.assertIn(archive.name, (root / "cryptodesk-Windows-SHA256SUMS").read_text())
 

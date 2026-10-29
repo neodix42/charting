@@ -40,7 +40,7 @@ func validateDrawing(d Drawing) error {
 	default:
 		return fmt.Errorf("unsupported drawing type %q", d.Type)
 	}
-	if !member(d.Exchange, "binance", "bybit", "coinbase") || !supportedMarket(d.Exchange, d.Market) {
+	if !member(d.Exchange, "binance", "bybit", "coinbase", "dukascopy") || !supportedMarket(d.Exchange, d.Market) {
 		return fmt.Errorf("unsupported drawing exchange or market")
 	}
 	if !text(d.Instrument, 128) || strings.Contains(d.Instrument, "://") {

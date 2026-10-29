@@ -6,6 +6,10 @@ export function AttachChart(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AttachChart'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CancelDucascopyConnectionTest() {
+  return window['go']['main']['App']['CancelDucascopyConnectionTest']();
+}
+
 export function CancelPrediction() {
   return window['go']['main']['App']['CancelPrediction']();
 }
@@ -44,6 +48,10 @@ export function ChooseScreenerDirectory() {
 
 export function ConfigureCandleStorage(arg1, arg2) {
   return window['go']['main']['App']['ConfigureCandleStorage'](arg1, arg2);
+}
+
+export function ConfigureDucascopy(arg1) {
+  return window['go']['main']['App']['ConfigureDucascopy'](arg1);
 }
 
 export function ConfigurePredictions(arg1) {
@@ -100,6 +108,14 @@ export function GetCandleStorage() {
 
 export function GetDiagnostics() {
   return window['go']['main']['App']['GetDiagnostics']();
+}
+
+export function GetDucascopy() {
+  return window['go']['main']['App']['GetDucascopy']();
+}
+
+export function GetDucascopyLoginChallenge() {
+  return window['go']['main']['App']['GetDucascopyLoginChallenge']();
 }
 
 export function GetFeedSnapshot(arg1, arg2) {
@@ -260,6 +276,14 @@ export function StartScreenerEnrichment(arg1) {
 
 export function StartScreenerRefresh() {
   return window['go']['main']['App']['StartScreenerRefresh']();
+}
+
+export function TestDucascopyConnection() {
+  return window['go']['main']['App']['TestDucascopyConnection']();
+}
+
+export function TestDucascopyConnectionWithPIN(arg1) {
+  return window['go']['main']['App']['TestDucascopyConnectionWithPIN'](arg1);
 }
 
 export function TestTelegramBot() {

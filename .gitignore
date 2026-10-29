@@ -57,3 +57,6 @@ __pycache__/
 telegram-bot.json
 .telegram-bot-*
 screener-live-alerts.json
+/jforex-runtime/
+dukascopy-jforex.json
+.dukascopy-jforex-*

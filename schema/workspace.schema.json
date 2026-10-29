@@ -321,13 +321,15 @@
           "enum": [
             "binance",
             "bybit",
-            "coinbase"
+            "coinbase",
+            "dukascopy"
           ]
         },
         "market": {
           "enum": [
             "spot",
-            "perpetual"
+            "perpetual",
+            "forex"
           ]
         },
         "instrument": {
@@ -412,6 +414,50 @@
             "properties": {
               "market": {
                 "const": "spot"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exchange": {
+                "const": "dukascopy"
+              }
+            },
+            "required": [
+              "exchange"
+            ]
+          },
+          "then": {
+            "properties": {
+              "market": {
+                "const": "forex"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exchange": {
+                "enum": [
+                  "binance",
+                  "bybit"
+                ]
+              }
+            },
+            "required": [
+              "exchange"
+            ]
+          },
+          "then": {
+            "properties": {
+              "market": {
+                "enum": [
+                  "spot",
+                  "perpetual"
+                ]
               }
             }
           }
@@ -500,13 +546,15 @@
           "enum": [
             "binance",
             "bybit",
-            "coinbase"
+            "coinbase",
+            "dukascopy"
           ]
         },
         "market": {
           "enum": [
             "spot",
-            "perpetual"
+            "perpetual",
+            "forex"
           ]
         },
         "instrument": {
@@ -580,6 +628,50 @@
             "properties": {
               "market": {
                 "const": "spot"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exchange": {
+                "const": "dukascopy"
+              }
+            },
+            "required": [
+              "exchange"
+            ]
+          },
+          "then": {
+            "properties": {
+              "market": {
+                "const": "forex"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exchange": {
+                "enum": [
+                  "binance",
+                  "bybit"
+                ]
+              }
+            },
+            "required": [
+              "exchange"
+            ]
+          },
+          "then": {
+            "properties": {
+              "market": {
+                "enum": [
+                  "spot",
+                  "perpetual"
+                ]
               }
             }
           }

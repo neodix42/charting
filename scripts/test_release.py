@@ -48,12 +48,17 @@ def published(tag="v0.1.0", commit=COMMIT, draft=False, legacy=False, bundled=Fa
                        for index, name in enumerate(names, 10)]}
 
 
-def release_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
+def release_inputs(directory, version="0.1.0", commit=COMMIT, modified=False, with_jforex=False):
     """Small structurally real archives, without WebView2 or external toolchains."""
     for target, suffix in release.TARGETS.items():
         prefix = f"cryptodesk-{version}-{target}/"
         manifest = {"app": "CryptoDesk", "version": version, "target": "linux/amd64" if target.startswith("linux-") else "windows/amd64",
                     "gitRevision": commit, "workingTreeModified": modified}
+        jforex_files = {}
+        if with_jforex:
+            from jforex_test_fixture import bridge_files
+            jforex_files, provenance = bridge_files()
+            manifest["jforex"] = {key:value for key,value in provenance.items() if key != "files"}
         versioned = directory / f"cryptodesk-{version}-{target}{suffix}"
         if target.startswith("linux-"):
             binary = bytearray(64)
@@ -62,6 +67,7 @@ def release_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
             entries = [("cryptodesk", bytes(binary), 0o755)]
             entries.append(("version.json", json.dumps(manifest).encode(), 0o644))
             entries.extend(screener_entries("linux-amd64"))
+            entries.extend(("jforex-runtime/" + name, data, 0o644) for name, data in jforex_files.items())
             with tarfile.open(versioned, "w:gz") as archive:
                 for name, content, mode in entries:
                     entry = tarfile.TarInfo(prefix + name)
@@ -82,6 +88,8 @@ def release_inputs(directory, version="0.1.0", commit=COMMIT, modified=False):
                 archive.writestr(prefix + "version.json", json.dumps(manifest))
                 for name, content, _ in screener_entries("windows-amd64"):
                     archive.writestr(prefix + name, content)
+                for name, content in jforex_files.items():
+                    archive.writestr(prefix + "jforex-runtime/" + name, content)
 
 
 def rewrite_tar(path, mutate):

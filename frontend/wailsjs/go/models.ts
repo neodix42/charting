@@ -450,6 +450,69 @@ export namespace domain {
 
 }
 
+export namespace jforex {
+
+	export class Info {
+	    username: string;
+	    environment: string;
+	    passwordConfigured: boolean;
+	    runtimeAvailable: boolean;
+	    runtimeDirectory: string;
+	    javaPath: string;
+	    connected: boolean;
+	    instrumentCount: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.username = source["username"];
+	        this.environment = source["environment"];
+	        this.passwordConfigured = source["passwordConfigured"];
+	        this.runtimeAvailable = source["runtimeAvailable"];
+	        this.runtimeDirectory = source["runtimeDirectory"];
+	        this.javaPath = source["javaPath"];
+	        this.connected = source["connected"];
+	        this.instrumentCount = source["instrumentCount"];
+	        this.error = source["error"];
+	    }
+	}
+	export class LoginChallenge {
+	    imageDataUrl: string;
+
+	    static createFrom(source: any = {}) {
+	        return new LoginChallenge(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.imageDataUrl = source["imageDataUrl"];
+	    }
+	}
+	export class Settings {
+	    username: string;
+	    password: string;
+	    environment: string;
+	    clearPassword: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Settings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.username = source["username"];
+	        this.password = source["password"];
+	        this.environment = source["environment"];
+	        this.clearPassword = source["clearPassword"];
+	    }
+	}
+
+}
+
 export namespace market {
 	
 	export class History {

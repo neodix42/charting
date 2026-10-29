@@ -13,6 +13,8 @@ import (
 
 	"cryptodesk/internal/candlestorage"
 	"cryptodesk/internal/domain"
+	"cryptodesk/internal/exchange"
+	"cryptodesk/internal/jforex"
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/predictions"
 	"cryptodesk/internal/screener"
@@ -31,6 +33,8 @@ type App struct {
 	candles         *candlestorage.Manager
 	screener        *screener.Manager
 	predictions     *predictions.Manager
+	jforex          *jforex.Manager
+	jforexMu        sync.Mutex
 	telegram        *telegram.Store
 	liveAlerts      *screener.LiveAlerts
 	liveAlertsError string
@@ -50,6 +54,7 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	a := &App{store: store, revision: loaded.Revision, window: loaded.Workspace.Window}
 	a.screener = screener.New(store.Directory())
 	a.predictions = predictions.New(store.Directory(), a.predictionDatasets, predictions.NewRuntime(store.Directory()))
+	a.jforex = jforex.New(store.Directory())
 	a.telegram = telegram.NewStore(store.Directory())
 	alerts, err := screener.NewLiveAlerts(a.screener, a.sendScreenerLiveAlert)
 	a.liveAlerts = alerts
@@ -67,7 +72,12 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 			runtime.EventsEmit(ctx, "candle-storage-error", message)
 		}
 	})
-	a.market = market.New(market.Options{Cache: a.candles, Emit: func(e market.Event) {
+	a.market = market.New(market.Options{Cache: chartCandleCache{a.candles}, Factory: func(provider string) (exchange.Adapter, error) {
+		if provider == "dukascopy" {
+			return a.jforex, nil
+		}
+		return exchange.New(provider)
+	}, Emit: func(e market.Event) {
 		a.mu.Lock()
 		ctx := a.ctx
 		a.mu.Unlock()
@@ -243,6 +253,10 @@ func (a *App) ListInstruments(provider string) ([]domain.Instrument, error) {
 	return a.market.Instruments(a.ctx, provider)
 }
 func (a *App) AttachChart(chartID string, generation int64, key domain.FeedKey, fromSec, toSec int64) (market.Snapshot, error) {
+	if key.Exchange == "dukascopy" {
+		a.jforexMu.Lock()
+		defer a.jforexMu.Unlock()
+	}
 	return a.market.Attach(chartID, generation, key, fromSec, toSec)
 }
 func (a *App) DetachChart(leaseID string) { a.market.Detach(leaseID) }
@@ -256,7 +270,7 @@ func (a *App) GetDiagnostics() map[string]any {
 	a.mu.Lock()
 	revision := a.revision
 	a.mu.Unlock()
-	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "mode": "public live data", "version": applicationVersion}
+	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "mode": "read-only market data", "version": applicationVersion}
 }
 func (a *App) ExportWorkspace() (string, error) {
 	data, err := a.store.Export()
@@ -448,6 +462,9 @@ func (a *App) shutdown(ctx context.Context) {
 		a.predictions.Close()
 	}
 	a.market.Close()
+	if a.jforex != nil {
+		a.jforex.Close()
+	}
 	if a.screener != nil {
 		a.screener.Close()
 	}
