@@ -26,6 +26,25 @@ async function writeAll(handle, text, position) {
   return position+offset;
 }
 
+// dukascopy-node 1.51.1 validates empty JSON datasets, then its same-timeframe
+// aggregator dereferences input[0] for d1/h1. Only a structurally valid empty
+// source can be omitted. Malformed JSON, timestamps and columns still reach
+// the real decoder and fail; an absent source never creates a candle.
+function isEmptyDataSource({url, buffer}) {
+  const columns = /\/v1\/candles\/(day|hour|minute)\//.test(url)
+    ? ['opens', 'highs', 'lows', 'closes', 'volumes']
+    : /\/v1\/ticks\//.test(url)
+      ? ['asks', 'bids', 'askVolumes', 'bidVolumes']
+      : undefined;
+  if (!columns) return false;
+  let data;
+  try { data = JSON.parse(buffer.toString('utf8')); }
+  catch { return false; }
+  return !!data && Number.isFinite(data.timestamp) &&
+    Array.isArray(data.times) && data.times.length === 0 &&
+    columns.every(column => Array.isArray(data[column]) && data[column].length === 0);
+}
+
 // Match getHistoricalRates using only dukascopy-node's public exports. Fetch
 // one source at a time so years of ticks never accumulate in memory. Each
 // source file contains whole UTC aggregation buckets (hour/day/month/year).
@@ -128,7 +147,7 @@ async function download(request, options = {}) {
     for (let offset = checkpoint?.nextIndex ?? 0; offset < urls.length; offset += sourceBatchSize) {
       const buffers = await fetcher.fetch(urls.slice(offset, offset + sourceBatchSize));
       const data = api.processData({ ...input, requestedTimeframe: input.timeframe,
-        bufferObjects: buffers.filter(item => item.buffer.length > 0) })
+        bufferObjects: buffers.filter(item => item.buffer.length > 0 && !isEmptyDataSource(item)) })
         .filter(row => row[0] >= +startDate && row[0] < +endDate);
       for (const row of data) {
         if (!Number.isFinite(row[0]) || row[0] < previous ||

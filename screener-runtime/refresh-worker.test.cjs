@@ -167,6 +167,48 @@ test('market closures with no new provider rows preserve history and still repla
   assert.deepEqual((await read(request.output)).map(value=>value.sma_2),['','15']);
 });
 
+test('valid empty daily and hourly provider JSON preserves enriched history and verifies the checked closure',async t=>{
+  for(const timeframe of ['d1','h1'])await t.test(timeframe,async t=>{
+    const duration=timeframe==='d1'?day:3600000;
+    const original=`${header.join(',')},sma_2\n${row(start,10).join(',')},\n${row(start+duration,20).join(',')},15\n`;
+    const request={...await fixture(t,original),timeframe},events=[];
+    let fetches=0;
+    const result=await refresh(request,{now:start+3*duration,pauseMs:0,emit:event=>events.push(event),api:transport(async url=>{
+      fetches++;assert.match(url,timeframe==='d1'?/\/candles\/day\//:/\/candles\/hour\//);
+      return Buffer.from(JSON.stringify({timestamp:start,shift:duration,multiplier:1,open:10,high:11,low:9,close:10,
+        times:[],opens:[],highs:[],lows:[],closes:[],volumes:[]}));
+    })});
+    assert.equal(fetches,1,'the real downloader must receive the valid empty wire response');
+    assert.equal(result.rows,2);assert.equal(result.addedRows,0);assert.equal(result.updatedRows,0);
+    assert.equal(await fs.readFile(request.input,'utf8'),original);
+    assert.equal(await fs.readFile(request.output,'utf8'),original);
+    assert.deepEqual(result.recipes,[{indicator:'sma',parameters:{period:2},source:'close'}]);
+    assert.deepEqual(result.coverage,[{from:start,to:start+3*duration}]);
+    assert.equal(result.checkedThrough,start+3*duration);
+    assert.equal(result.lastTimestamp,start+duration,'an empty interval cannot invent its missing candle');
+    assert.equal(events.at(-1).type,'done');
+  });
+});
+
+test('refresh keeps valid older bars when the newest yearly response contains valid empty candle arrays',async t=>{
+  const previous=Date.UTC(2023,11,30),next=previous+day;
+  const original=`${header.join(',')},sma_2\n${row(previous,10).join(',')},\n`;
+  const request={...await fixture(t,original),from:'2023-12-30'},seen=[];
+  const result=await refresh(request,{now:start+2*day,pauseMs:0,emit:()=>{},api:transport(async url=>{
+    seen.push(url);
+    const empty=url.endsWith('/2024');
+    return Buffer.from(JSON.stringify({timestamp:empty?start:next,shift:day,multiplier:1,open:20,high:21,low:19,close:20,
+      times:empty?[]:[0],opens:empty?[]:[0],highs:empty?[]:[0],lows:empty?[]:[0],closes:empty?[]:[0],volumes:empty?[]:[10]}));
+  })});
+  assert.equal(seen.length,2);assert.ok(seen[0].endsWith('/2023'));assert.ok(seen[1].endsWith('/2024'));
+  const actual=await read(request.output);
+  assert.deepEqual(actual.map(value=>Number(value.timestamp)),[previous,next]);
+  assert.deepEqual(actual.map(value=>value.sma_2),['','15']);
+  assert.equal(result.addedRows,1);assert.equal(result.rows,2);
+  assert.equal(result.lastTimestamp,next);assert.equal(result.checkedThrough,start+2*day);
+  assert.equal(await fs.readFile(request.input,'utf8'),original);
+});
+
 test('unknown derived columns, invalid recipes and transport errors leave the source unchanged',async t=>{
   for(const mode of ['unknown','network','bad-recipe']){
     const original=mode==='unknown'?`${header.join(',')},unknown_indicator\n${row(start,10).join(',')},42\n`:csv([row(start,10)]);

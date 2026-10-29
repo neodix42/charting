@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-10-29
 
+## Empty Dukascopy daily/hourly source responses — 2026-10-29
+
+Reproduced `Cannot read properties of undefined (reading '0')` in the pinned dukascopy-node 1.51.1 aggregator: a valid empty d1/h1 source is normalized to an empty array, then the same-timeframe aggregator reads its first row before checking the length. The application adapter now omits only structurally valid empty sources before aggregation, checking the finite timestamp and every matching source column. Other responses still use the pinned decoder, with malformed JSON, timestamps and mismatched/missing columns rejected. The dependency installation and price calculations are unchanged.
+
+Mixed histories continue past empty sources; completed empty source checkpoints survive interruptions and avoid duplicate requests. Entirely empty new histories retain the explicit no-rows error. Incremental downloads and Refresh preserve saved bars, indicator recipes and checked coverage when the newly queried interval is empty; no candles are invented. Both guides explain this behavior.
+
+Verification: all **82 runtime tests** pass, including d1/h1 all-empty requests, mixed responses, checkpoint/restart reuse, malformed-empty rejection and actual download-path refresh/extension tests. Forced fresh Go race/protocol checks covering refresh, incremental downloads, parallel transport and provider refusals pass. `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh` rebuilt the Linux executable/archive; SHA-256 checks, source-to-bundled-worker comparison and the packaged offline runtime smoke pass. Logs are in ignored `.tools/verification/screener-concurrency/empty-source-*`. Tests use substituted transport responses and isolated profiles; live provider access and native desktop behavior are unverified for this fix.
+
 ## Configurable parallel Screener workers — 2026-10-29
 
 Settings → Screener now provides **Worker threads**, an explicitly applied machine-local setting from **1–20**, default **5**. Downloader, local Enrichment and manual Refresh use this shared limit, captured when each batch starts. Each worker has private scratch/output files; the existing shared publication journal preserves canonical histories and backups. Job order, per-file progress, cancellation and completed results are retained. Active work blocks a worker-setting change, and pending settings writes participate in the normal close handshake.

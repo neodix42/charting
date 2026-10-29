@@ -68,6 +68,93 @@ test('empty ranges fail explicitly and do not confirm successful output', async 
   assert.equal((await fs.promises.stat(request.output)).size, 0);
 });
 
+function emptyCandlePayload(timestamp = Date.UTC(2024, 0, 1)) {
+  // The upstream normalizer permits an empty dataset without base prices,
+  // multiplier or shift. Its source arrays must still all be present/empty.
+  return {timestamp, times: [], opens: [], highs: [], lows: [], closes: [], volumes: []};
+}
+
+function sourceTimestamp(url) {
+  const parsed = new URL(url);
+  if (parsed.searchParams.has('from')) return Number(parsed.searchParams.get('from'));
+  const match = parsed.pathname.match(/\/BID\/(\d{4})(?:\/(\d{2}))?/);
+  assert.ok(match, `unrecognized test source: ${url}`);
+  return Date.UTC(Number(match[1]), Number(match[2] ?? 1)-1, 1);
+}
+
+function nonemptyCandlePayload(url, timeframe) {
+  return Buffer.from(JSON.stringify({timestamp: sourceTimestamp(url), shift: timeframe === 'd1' ? 86400000 : 3600000,
+    multiplier: 1, open: 10, high: 12, low: 9, close: 11,
+    times: [0], opens: [0], highs: [0], lows: [0], closes: [0], volumes: [2]}));
+}
+
+test('valid empty daily and hourly JSON sources avoid the upstream empty-aggregation crash', async t => {
+  for (const timeframe of ['d1', 'h1']) {
+    const request = {...await fixture(t), timeframe, from: '2024-01-01', to: '2024-01-02', resume: true};
+    let fetched = 0;
+    const events = [];
+    await assert.rejects(download(request, {api: withTransport(async url => {
+      fetched++;
+      return Buffer.from(JSON.stringify(emptyCandlePayload(sourceTimestamp(url))));
+    }), pauseMs: 0, emit: event => events.push(event)}), /Dukascopy returned no rows/);
+    assert.ok(fetched > 0);
+    assert.equal(events.some(event => event.type === 'done'), false);
+    assert.equal((await fs.promises.stat(request.output)).size, 0);
+    const checkpoint = JSON.parse(await fs.promises.readFile(path.join(path.dirname(request.output), 'checkpoint.json'), 'utf8'));
+    assert.equal(checkpoint.nextIndex, checkpoint.totalSources);
+    assert.equal(checkpoint.rows, 0);
+    // A completed empty range remains empty, and its sources aren't fetched twice.
+    await assert.rejects(download(request, {api: withTransport(async () => assert.fail('empty source fetched twice')), emit() {}}), /Dukascopy returned no rows/);
+  }
+});
+
+test('mixed empty daily/hourly sources checkpoint, resume and preserve exact nonempty rows', async t => {
+  for (const timeframe of ['d1', 'h1']) {
+    const request = {...await fixture(t), timeframe, from: '2023-01-01', to: timeframe === 'd1' ? '2025-01-01' : '2023-03-01', resume: true};
+    const fetched = [];
+    await assert.rejects(download(request, {api: withTransport(async url => {
+      fetched.push(url);
+      if (fetched.length === 1) return Buffer.from(JSON.stringify(emptyCandlePayload(sourceTimestamp(url))));
+      throw new Error('Explicit interruption after committed empty source');
+    }), pauseMs: 0, emit() {}}), /Explicit interruption/);
+    assert.equal(fetched.length, 2);
+    const checkpoint = JSON.parse(await fs.promises.readFile(path.join(path.dirname(request.output), 'checkpoint.json'), 'utf8'));
+    assert.equal(checkpoint.nextIndex, 1);
+    assert.equal(checkpoint.rows, 0);
+    assert.equal(checkpoint.bytes, 0);
+    const remaining = [];
+    assert.equal(await download(request, {api: withTransport(async url => {
+      remaining.push(url);
+      return nonemptyCandlePayload(url, timeframe);
+    }), pauseMs: 0, emit() {}}), 1);
+    assert.deepEqual(remaining, fetched.slice(1));
+    const csv = await fs.promises.readFile(request.output, 'utf8');
+    assert.deepEqual(csv.trim().split('\n'), ['timestamp,open,high,low,close,volume', `${sourceTimestamp(remaining[0])},10,12,9,11,2`]);
+    assert.equal(await download(request, {api: withTransport(async () => assert.fail('completed sources fetched twice')), emit() {}}), 1);
+    assert.equal(await fs.promises.readFile(request.output, 'utf8'), csv);
+  }
+});
+
+test('empty-source guard keeps malformed JSON and invalid empty columns visible to the real decoder', async t => {
+  for (const timeframe of ['d1', 'h1']) {
+    for (const malformed of [
+      {...emptyCandlePayload(), opens: undefined},
+      {...emptyCandlePayload(), opens: [1]},
+      {...emptyCandlePayload(), timestamp: null},
+      {...emptyCandlePayload(), times: undefined},
+      {}, 'not-json',
+    ]) {
+      const request = {...await fixture(t), timeframe, from: '2024-01-01', to: '2024-01-02', resume: true};
+      const payload = typeof malformed === 'string' ? malformed : JSON.stringify(malformed);
+      const events = [];
+      await assert.rejects(download(request, {api: withTransport(async () => Buffer.from(payload)), pauseMs: 0, emit: event => events.push(event)}), /Invalid data response|Unexpected token/);
+      assert.equal(events.some(event => event.type === 'done'), false);
+      assert.equal((await fs.promises.stat(request.output)).size, 0);
+      await assert.rejects(fs.promises.stat(path.join(path.dirname(request.output), 'checkpoint.json')), {code: 'ENOENT'});
+    }
+  }
+});
+
 test('network failure propagates, never emits done, closes the output handle', async t => {
   const request = await fixture(t);
   const events = [];

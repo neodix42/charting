@@ -61,6 +61,12 @@ tick sources, daily minute sources, monthly hourly sources, and yearly daily
 sources. Download progress counts actual completed source requests. CSV headers
 are written once, rows stay chronological, and an all-empty range fails visibly.
 
+The adapter skips structurally valid empty JSON sources before aggregation,
+avoiding dukascopy-node 1.51.1's empty daily/hourly aggregation crash. Timestamp
+and all source columns must describe a consistent empty dataset; malformed
+responses still reach the upstream decoder and fail. Empty source checkpoints
+remain resumable, and incremental downloads/refresh preserve saved histories.
+
 Go downloads and refreshes multiple files in parallel, using **Settings →
 Screener → Worker threads**: **5** by default, configurable from **1–20**.
 Each refresh worker completes its download and indicator recalculation before

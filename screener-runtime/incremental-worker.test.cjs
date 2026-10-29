@@ -171,6 +171,34 @@ test('a saved query ledger skips pre-listing dates and market closures with no r
  assert.equal(events.at(-1).noChange,true);
 });
 
+test('valid empty daily and hourly suffixes preserve recipes and record coverage without inventing rows',async t=>{
+ for(const timeframe of ['d1','h1'])await t.test(timeframe,async t=>{
+  const duration=timeframe==='d1'?day:3600000;
+  const bars=[0,1].map(index=>[start+index*duration,(index+1)*10,(index+1)*10+1,(index+1)*10-1,(index+1)*10,1]);
+  const original=`${headers.join(',')},sma_2\n${bars[0].join(',')},\n${bars[1].join(',')},15\n`;
+  const request=await fixture(t,[original],{timeframe,to:timeframe==='d1'?'2024-01-04':'2024-01-02'});
+  const plan=JSON.parse(await fs.readFile(request.planFile));plan.asOf=start+3*duration;
+  await fs.writeFile(request.planFile,JSON.stringify(plan));
+  const events=[];let fetches=0;
+  const transport={...api,BufferFetcher:class extends api.BufferFetcher{constructor(options){super({...options,fetcherFn:async url=>{
+   fetches++;assert.match(url,timeframe==='d1'?/\/candles\/day\//:/\/candles\/hour\//);
+   return Buffer.from(JSON.stringify({timestamp:start,shift:duration,multiplier:1,open:10,high:11,low:9,close:10,
+    times:[],opens:[],highs:[],lows:[],closes:[],volumes:[]}));
+  }});}}};
+  await extendDownload(request,{api:transport,pauseMs:0,emit:event=>events.push(event)});
+  const result=events.at(-1);
+  assert.equal(fetches,1,'the real downloader must receive the empty suffix JSON');
+  assert.equal(result.type,'done');assert.equal(result.noChange,true);assert.equal(result.rows,2);
+  assert.deepEqual(result.coverage,[{from:start,to:start+3*duration}]);
+  assert.equal(result.checkedThrough,start+3*duration);assert.equal(result.lastTimestamp,start+duration);
+  assert.deepEqual(result.recipes,[{indicator:'sma',parameters:{period:2},source:'close'}]);
+  assert.equal(await fs.readFile(plan.inputs[0].input,'utf8'),original);
+  assert.equal(await fs.readFile(request.output,'utf8'),original);
+  await extendDownload(request,{api:transport,pauseMs:0,emit:()=>{}});
+  assert.equal(fetches,1,'a completed empty range checkpoint must not be requested again');
+ });
+});
+
 test('real per-source checkpoints resume a missing suffix without refetching completed source batches',async t=>{
  const request=await fixture(t,[csv([candle(0)])],{timeframe:'m1',from:'2024-01-01',to:'2024-01-04'});
  const plan=JSON.parse(await fs.readFile(request.planFile));plan.inputs[0].metadata={checksum:(await scan(plan.inputs[0].input,'m1')).checksum,coverage:[{from:start,to:start+day}]};

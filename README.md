@@ -98,6 +98,8 @@ An HTTP **403** is an access refusal, and does not establish that a rate limit w
 
 **To** remains exclusive. Selecting tomorrow UTC downloads the latest available data through the time the batch starts, including a current partial candle. Partial candles may be fetched again until closed. Downloaded ranges and their checkpoints survive restart, including separate earlier/later ranges. Older overlapping or separate files for the same symbol/timeframe are merged into one history; the superseded CSVs are removed from the main folder after safe publication, with exact originals retained in hidden backups. Dukascopy source files can span larger time buckets, but only missing requested rows are merged.
 
+Valid empty source intervals are skipped without creating candles. Later intervals continue downloading; an entirely empty new history reports no data. Updates and refresh retain the saved history and indicators when no newer candles are available.
+
 The Downloads panel shows **10 jobs per page**, with totals for **completed** and **failed** downloads. Its status filter includes **Failed** and **Completed**; **All statuses** includes completed jobs alongside queued, running and other jobs. Filtering happens before pagination.
 
 The pinned [dukascopy-node](https://github.com/Leo4815162342/dukascopy-node) integration supports **1,499 instruments across 39 categories** and ten timeframes: **tick, s1, m1, m5, m15, m30, h1, h4, d1 and mn1**. Choose `d1` for daily indicator research or an intraday interval for hour-based conditions.
