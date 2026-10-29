@@ -8,7 +8,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Real model preparation and inference pass on isolated synthetic inputs; source CSV is unchanged and timestamped forecasts restore identically after restart.
 - [x] Private pinned runtime/model downloads, cancellation, closed-data validation, independent settings and immutable snapshot persistence have automated coverage.
 - [x] All 191 frontend unit tests, 12 Predictions browser cases and 33 related regressions pass, including failure paths and close handling; native build/checksums pass.
-- [ ] Hosted branch CI verification is pending; see STATUS.md.
+- [x] Hosted branch Tests run 40833324464 passes, including all 225 browser cases and the packaged offline runtime smoke; see STATUS.md.
 - [ ] Native desktop interaction, Windows execution and financial forecast quality/calibration remain unverified.
 
 ## Configurable Screener workers — 2026-10-29
