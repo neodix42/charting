@@ -29,12 +29,13 @@ public final class BridgeResponsivenessTest {
         final AtomicReference<IStrategy> strategy = new AtomicReference<>();
         final AtomicBoolean connected = new AtomicBoolean();
         final AtomicBoolean acknowledge = new AtomicBoolean(true);
+        final AtomicInteger blockingCacheReads = new AtomicInteger();
         final Bridge bridge;
         Fixture(long timeout) throws Exception {
             IHistory history = fake(IHistory.class, (method, args) -> switch (method) {
                 case "getBarStart" -> Math.floorDiv((Long) args[1], ((Period) args[0]).getInterval()) * ((Period) args[0]).getInterval();
-                case "getBar" -> { long step = ((Period) args[1]).getInterval(); yield bar(System.currentTimeMillis() / step * step, 1.1, 1.13, 1.09, 1.12); }
-                case "getLastTick" -> tick(System.currentTimeMillis(), 1.12);
+                case "getBar" -> { blockingCacheReads.incrementAndGet(); long step = ((Period) args[1]).getInterval(); yield bar(System.currentTimeMillis() / step * step, 1.1, 1.13, 1.09, 1.12); }
+                case "getLastTick" -> { blockingCacheReads.incrementAndGet(); yield tick(System.currentTimeMillis(), 1.12); }
                 case "getBars" -> throw new AssertionError("synchronous history must not block bridge commands");
                 case "readBars" -> { check(subscribed.contains((Instrument) args[0]), "history waits for actual subscription acknowledgement"); loads.add(new Load(args)); yield null; }
                 default -> null;
@@ -94,6 +95,7 @@ public final class BridgeResponsivenessTest {
                 check(ack.get(1, TimeUnit.SECONDS).getAsJsonObject("result").get("subscribed").getAsBoolean(), "subscribe acknowledged independently of history for " + period);
             }
             f.strategy.get().onTick(Instrument.EURUSD, tick(System.currentTimeMillis(), 1.12));
+            check(f.blockingCacheReads.get() == 0, "live callbacks must not perform potentially blocking SDK cache reads");
             check(f.events.stream().filter(event -> event.has("bars")).count() == Bridge.INTERVALS.size(), "actual cached quotes render on all periods before history completes");
             for (String period : Bridge.INTERVALS) f.unsubscribe(period);
             check(f.subscribed.contains(Instrument.EURUSD), "pending histories retain their shared instrument after chart detach");
@@ -124,6 +126,25 @@ public final class BridgeResponsivenessTest {
             f.strategy.get().onTick(Instrument.EURUSD, tick(System.currentTimeMillis(), 1.12));
             check(f.events.get(f.events.size()-1).getAsJsonObject("health").get("state").getAsString().equals("error"), "live ticks do not hide a history failure");
             f.unsubscribe("seed"); check(f.subscribed.isEmpty(), "timed-out seed detaches cleanly");
+        }
+        try (Fixture f = new Fixture(5_000)) {
+            good(f.bridge, f.subscription("cold-cache", "1h")); Load load = f.load();
+            long start = (Long) load.args[5], previous = start - Period.ONE_HOUR.getInterval();
+            f.strategy.get().onTick(Instrument.EURUSD, tick(start + 1_000, 1.20));
+            f.strategy.get().onBar(Instrument.EURUSD, Period.ONE_HOUR, null, bar(previous, 1.0, 1.2, 0.9, 1.15));
+            long closedRevision = f.events.get(f.events.size()-1).getAsJsonArray("bars").get(0).getAsJsonObject().get("sourceRevision").getAsLong();
+            ((LoadingDataListener) load.args[7]).newBar(Instrument.EURUSD, Period.ONE_HOUR, OfferSide.BID, previous, 1.0, 1.1, 0.9, 1.2, 2.0);
+            load.complete(true);
+            await(() -> f.events.stream().anyMatch(event -> event.has("bars") && event.getAsJsonArray("bars").size() == 2), "history seed preserves a quote received during its load");
+            JsonArray seeded = f.events.stream().filter(event -> event.has("bars") && event.getAsJsonArray("bars").size() == 2).reduce((a,b) -> b).orElseThrow().getAsJsonArray("bars");
+            JsonObject active = seeded.get(1).getAsJsonObject();
+            check(active.get("open").getAsDouble() == 1.1 && active.get("close").getAsDouble() == 1.20 && active.get("high").getAsDouble() == 1.20 && active.get("low").getAsDouble() == 1.09 && active.get("volume").getAsDouble() == 2.5, "seed merges actual opening context and known SDK volume without rewinding live quotes");
+            check(active.get("quality").getAsString().equals("provisional"), "tick-based updates disclose incomplete current-bar volume");
+            check(seeded.get(0).getAsJsonObject().get("sourceRevision").getAsLong() < closedRevision, "late history cannot supersede a newer authoritative closed bar");
+            check(f.blockingCacheReads.get() == 0, "neither a seed nor a live callback loads synchronous candle/tick caches");
+            f.strategy.get().onBar(Instrument.EURUSD, Period.ONE_HOUR, null, bar(start, 1.1, 1.21, 1.09, 1.20));
+            int before = f.events.size(); f.strategy.get().onTick(Instrument.EURUSD, tick(start + 2_000, 1.19));
+            check(f.events.size() == before, "a delayed tick cannot reopen an SDK-closed candle");
         }
         try (Fixture f = new Fixture(5_000)) {
             good(f.bridge, f.subscription("cancel", "1h")); Load load = f.load(); f.unsubscribe("cancel");

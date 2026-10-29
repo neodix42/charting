@@ -46,43 +46,36 @@ public final class Bridge implements AutoCloseable {
         public void onStart(IContext value) { context = value; strategyReady.countDown(); }
         public void onTick(Instrument instrument, ITick tick) {
             if (closing || context == null) return;
-            Map<Period, IBar> current = new HashMap<>();
             for (Subscription sub : subscriptions.values()) {
                 if (!sub.instrument.equals(instrument)) continue;
                 try {
-                    IBar sdkBar = current.get(sub.period);
-                    if (sdkBar == null) {
-                        sdkBar = context.getHistory().getBar(instrument, sub.period, OfferSide.BID, 0);
-                        if (sdkBar != null) current.put(sub.period, sdkBar);
-                    }
+                    // getBar(..., 0) can wait for the SDK's cold HTTP cache.
+                    // Quote callbacks only use pure UTC bucketing and real ticks.
                     long start = context.getHistory().getBarStart(sub.period, tick.getTime());
                     synchronized (sub) {
-                        if (start < sub.lastTime || tick.getTime() < sub.lastTickTime) continue;
-                        sub.lastTickTime = tick.getTime();
-                        JsonObject bar;
-                        if (sdkBar != null && sdkBar.getTime() == start) {
-                            bar = candle(sdkBar, false);
-                        } else {
-                            // A just-opened bar may not yet be visible in the SDK cache.
-                            // Mark it provisional and leave unavailable volume at zero;
-                            // the next SDK update/onBar replaces it authoritatively.
-                            bar = tickCandle(sub, tick, start);
-                        }
-                        sub.lastTime = start;
-                        sub.last = bar;
+                        if (start < sub.lastTime || tick.getTime() < sub.lastTickTime
+                                || sub.last != null && start == sub.lastTime && sub.last.get("closed").getAsBoolean()) continue;
+                        JsonObject bar = tickCandle(sub, tick, start);
+                        sub.lastTickTime = tick.getTime(); sub.lastTime = start; sub.last = bar;
                         emitBars(sub, List.of(bar));
                         if (sub.seedError != null) health(sub.id, "error", sub.seedError, tick.getTime());
                         else if (sub.loading) health(sub.id, "reconciling", "Receiving JForex Bid ticks; loading historical candles", tick.getTime());
                         else health(sub.id, "live", "Receiving JForex Bid ticks", tick.getTime());
                     }
-                } catch (Exception ignored) { health(sub.id, "reconciling", "Waiting for JForex candle cache", 0); }
+                } catch (Exception ignored) { health(sub.id, "error", "JForex returned an invalid quote", 0); }
             }
         }
         public void onBar(Instrument instrument, Period period, IBar ask, IBar bid) {
             if (closing || bid == null) return;
             for (Subscription sub : subscriptions.values()) {
                 if (sub.instrument.equals(instrument) && sub.period.equals(period)) {
-                    try { emitBars(sub, List.of(candle(bid, true))); }
+                    try {
+                        synchronized (sub) {
+                            JsonObject bar = candle(bid, true);
+                            if (bid.getTime() >= sub.lastTime) { sub.lastTime = bid.getTime(); sub.last = bar; }
+                            emitBars(sub, List.of(bar));
+                        }
+                    }
                     catch (Exception ignored) { health(sub.id, "error", "JForex returned an invalid candle", 0); }
                 }
             }
@@ -351,23 +344,33 @@ public final class Bridge implements AutoCloseable {
     }
     private void seed(Subscription sub, long generation) throws Exception {
         IHistory history = context.getHistory();
+        long seedRevision = nextRevision();
+        long end = history.getBarStart(sub.period, System.currentTimeMillis());
+        List<IBar> source = readBars(history, sub.instrument, sub.period, 500, end);
         long current = history.getBarStart(sub.period, System.currentTimeMillis());
-        List<IBar> source = readBars(history, sub.instrument, sub.period, 500, current);
         TreeMap<Long, JsonObject> bars = new TreeMap<>();
-        for (IBar bar : source) if (!inactiveFlat(sub.instrument, bar, current)) bars.put(bar.getTime(), candle(bar, bar.getTime() < current));
-        try {
-            ITick lastTick = history.getLastTick(sub.instrument);
-            if (lastTick != null && lastTick.getTime() > 0) sub.lastTickTime = Math.max(sub.lastTickTime, lastTick.getTime());
-        } catch (JFException ignored) { /* Quote time stays unknown until an actual SDK tick arrives. */ }
-        IBar active = history.getBar(sub.instrument, sub.period, OfferSide.BID, 0);
-        if (active != null && !inactiveFlat(sub.instrument, active, current)) bars.put(active.getTime(), candle(active, active.getTime() < current));
+        for (IBar bar : source) if (!inactiveFlat(sub.instrument, bar, current)) {
+            JsonObject value = candle(bar, bar.getTime() < current);
+            // A late seed cannot supersede newer SDK ticks or closed-bar events.
+            value.addProperty("sourceRevision", seedRevision); bars.put(bar.getTime(), value);
+        }
         synchronized (sub) {
             if (subscriptions.get(sub.id) != sub || closing || sub.seedGeneration.get() != generation || Thread.currentThread().isInterrupted()) return;
             sub.loading = false; sub.seedError = null;
             if (!bars.isEmpty()) {
-                if (sub.last != null && sub.lastTime >= bars.lastKey()
-                        && sub.last.get("sourceRevision").getAsLong() > bars.lastEntry().getValue().get("sourceRevision").getAsLong())
-                    bars.put(sub.lastTime, sub.last);
+                if (sub.last != null && sub.lastTime >= bars.lastKey() && sub.last.get("sourceRevision").getAsLong() > seedRevision) {
+                    JsonObject previous = bars.get(sub.lastTime);
+                    if (previous != null && !previous.get("closed").getAsBoolean() && !sub.last.get("closed").getAsBoolean()) {
+                        // Recover the real opening context/known SDK volume while
+                        // retaining quotes received during the asynchronous load.
+                        JsonObject merged = previous.deepCopy();
+                        merged.addProperty("high", Math.max(previous.get("high").getAsDouble(), sub.last.get("high").getAsDouble()));
+                        merged.addProperty("low", Math.min(previous.get("low").getAsDouble(), sub.last.get("low").getAsDouble()));
+                        merged.addProperty("close", sub.last.get("close").getAsDouble());
+                        merged.addProperty("quality", "provisional"); merged.addProperty("sourceRevision", nextRevision());
+                        bars.put(sub.lastTime, merged);
+                    } else if (previous == null || sub.last.get("closed").getAsBoolean()) bars.put(sub.lastTime, sub.last);
+                }
                 sub.lastTime = bars.lastKey(); sub.last = bars.lastEntry().getValue();
                 emitBars(sub, new ArrayList<>(bars.values()));
             }
@@ -474,9 +477,10 @@ public final class Bridge implements AutoCloseable {
         JsonObject out = new JsonObject(); out.addProperty("time", bar.getTime() / 1000);
         out.addProperty("open", o); out.addProperty("high", h); out.addProperty("low", l); out.addProperty("close", c); out.addProperty("volume", v);
         out.addProperty("closed", closed); out.addProperty("quality", closed ? "authoritative" : "provisional");
-        out.addProperty("sourceRevision", revision.updateAndGet(previous -> Math.max(previous + 1, System.currentTimeMillis())));
+        out.addProperty("sourceRevision", nextRevision());
         return out;
     }
+    private long nextRevision() { return revision.updateAndGet(previous -> Math.max(previous + 1, System.currentTimeMillis())); }
     private JsonObject tickCandle(Subscription sub, ITick tick, long start) {
         double bid = tick.getBid();
         if (!Double.isFinite(bid) || bid <= 0) throw new Failure("internal", "Invalid JForex quote");
@@ -487,7 +491,7 @@ public final class Bridge implements AutoCloseable {
             out = new JsonObject(); out.addProperty("time", start / 1000); out.addProperty("open", bid); out.addProperty("high", bid); out.addProperty("low", bid); out.addProperty("close", bid); out.addProperty("volume", 0);
         }
         out.addProperty("closed", false); out.addProperty("quality", "provisional");
-        out.addProperty("sourceRevision", revision.updateAndGet(previous -> Math.max(previous + 1, System.currentTimeMillis()))); return out;
+        out.addProperty("sourceRevision", nextRevision()); return out;
     }
     private void emitBars(Subscription sub, List<JsonObject> bars) {
         if (subscriptions.get(sub.id) != sub || closing) return;

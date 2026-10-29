@@ -119,7 +119,7 @@ public final class BridgeTest {
             JsonObject liveBars = events.stream().filter(event -> event.has("bars")).reduce((first, second) -> second).orElseThrow();
             check(liveBars.getAsJsonArray("bars").size() == 3, "initial subscription publishes real SDK candles");
             JsonObject seededHealth = events.get(events.size() - 1).getAsJsonObject("health");
-            check(seededHealth.get("lastTradeAt").getAsLong() == (now + 500) / 1000, "seed quote time comes from real SDK last tick");
+            check(!seededHealth.has("lastTradeAt"), "history must not invent a last quote or fetch a blocking tick cache");
             strategy.get().onTick(Instrument.EURUSD, tick(now + 1000, 1.14));
             JsonObject current = events.stream().filter(event -> event.has("bars")).reduce((first, second) -> second).orElseThrow().getAsJsonArray("bars").get(0).getAsJsonObject();
             check(!current.get("closed").getAsBoolean() && current.get("open").getAsDouble() == 1.10 && current.get("volume").getAsDouble() == 2.5, "tick uses SDK current OHLCV, preserving opening price and volume");

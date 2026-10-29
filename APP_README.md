@@ -165,6 +165,8 @@ For a Live account requiring security verification, click **Load PIN challenge**
 
 ### Prices, history and storage
 
+Historical loads run independently of connection controls and live quotes, with a 45-second deadline and cancellation. Live candles update from genuine Bid ticks without waiting for the SDK's historical cache. Until SDK candle data reconciles them, these updates are **provisional**: opening context and the last known SDK volume are retained where available; unavailable volume is zero. Native closed-bar updates supply the authoritative OHLCV. A late history seed preserves newer quotes and closed-bar corrections. Quote freshness comes from observed ticks rather than a blocking last-tick history lookup.
+
 All seven chart periods are supported: **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Historical candles and live updates consistently use **Bid** prices. Native weekly candles start Monday at 00:00 UTC. Market closures remain gaps; no weekend or holiday bars are invented. **Quote** freshness, connection errors, reconnection and market-closed status appear in the chart footer. Volume is the SDK's native **quote volume in millions**, not centralized exchange trade volume.
 
 The JForex bridge runs only for requested forex discovery/history/quotes. Inactive chart tabs release their subscriptions. These authenticated charts use their own SDK cache, scoped by environment and a hash of the username; they do not write to or reuse the optional public-crypto SQLite candle cache. They also do not modify Screener CSVs or change dukascopy-node's WAF/rate-limit handling.
