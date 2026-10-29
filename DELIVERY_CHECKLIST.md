@@ -7,7 +7,8 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Saved forecasts offer right-click/keyboard Remove, persistent successor selection, last-chart clearing and newest-100 inventory backfill.
 - [x] Removal preserves source CSVs/models/unrelated snapshots, validates private paths and handles selection/write/unlink failures, restart and stale UI requests.
 - [x] Independent/facade/native race tests, native vet, frontend checks, 198 unit tests and 18 Predictions browser cases pass; final menu focus regression also passes.
-- [ ] Combined hosted CI and final Linux/Windows archive checks are pending; see STATUS.md.
+- [x] Linux/Windows archives, complete inventories, source provenance and checksums pass at clean implementation commit 3d4bdf1.
+- [x] Hosted Tests run 40875128658 passes all 249 browser cases, frontend/Python/Go/native checks, Java 17 bootstrap and the packaged runtime smoke; see STATUS.md.
 - [ ] Native desktop interaction and Windows execution remain unverified.
 
 ## Enrichment periods and Short simulations — 2026-10-29
@@ -15,7 +16,8 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Catalog-based Enrichment Period scopes the entire batch before consolidation and leaves other periods unchanged; counts span all pages and recipes remain reusable by Refresh.
 - [x] Analysis Long/Short simulation retains legacy Long defaults and saved selections; Short enforces TP below Entry below SL, with correct risk targets, exits and chart prices.
 - [x] Production race/facade/native-tagged checks, oracle/worker replay tests, 198 frontend unit tests and 63 distinct focused browser cases pass.
-- [ ] Final archive checks and full hosted CI are pending; see STATUS.md.
+- [x] Both release archive targets, complete inventories and checksums pass, including the combined forecast-removal implementation.
+- [x] Combined hosted Tests run 40875128658 passes the full suite, including all 249 browser cases; see STATUS.md.
 - [ ] Native desktop interaction and Windows GUI execution remain unverified.
 
 ## JForex forex chart bridge — 2026-10-29, `predictions` branch
