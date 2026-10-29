@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Enrichment periods and Short simulations — 2026-10-29
+
+- [x] Catalog-based Enrichment Period scopes the entire batch before consolidation and leaves other periods unchanged; counts span all pages and recipes remain reusable by Refresh.
+- [x] Analysis Long/Short simulation retains legacy Long defaults and saved selections; Short enforces TP below Entry below SL, with correct risk targets, exits and chart prices.
+- [x] Production race/facade/native-tagged checks, oracle/worker replay tests, 198 frontend unit tests and 63 distinct focused browser cases pass.
+- [ ] Final archive checks and full hosted CI are pending; see STATUS.md.
+- [ ] Native desktop interaction and Windows GUI execution remain unverified.
+
 ## JForex forex chart bridge — 2026-10-29, `predictions` branch
 
 - [x] Optional DucasCopy source and Forex identity, account-based fiat pair discovery, native Bid history/live bridge and all seven UTC chart intervals.

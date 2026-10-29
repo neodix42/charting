@@ -62,9 +62,24 @@ type EnrichmentRequest struct {
 	Indicator  string             `json:"indicator"`
 	Parameters map[string]float64 `json:"parameters"`
 	Source     string             `json:"source"`
+	// Period limits the batch inventory, never the stored indicator recipe.
+	// Empty and "all" retain the existing all-files behavior.
+	Period string `json:"period,omitempty"`
 }
 
 func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentRequest, error) {
+	if request.Period != "" && request.Period != "all" {
+		known := false
+		for _, period := range loadCatalog().Timeframes {
+			if period == request.Period {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return request, fmt.Errorf("unsupported enrichment period %q", request.Period)
+		}
+	}
 	indicator, known := indicatorDefinitions()[request.Indicator]
 	if !known {
 		return request, errors.New("choose a supported enrichment indicator or time field")

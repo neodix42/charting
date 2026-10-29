@@ -368,21 +368,20 @@ func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index i
 			return alert, err
 		}
 		value := stop.values[stopIndex]
-		if analysisFinite(value) && value < alert.EntryPrice {
+		if config.validStopLoss(alert.EntryPrice, value) {
 			alert.StopLoss = &value
 		}
 	}
 	if config.TakeProfitMultiple > 0 {
 		if alert.StopLoss != nil {
-			risk := alert.EntryPrice - *alert.StopLoss
-			value := alert.EntryPrice + float64(config.TakeProfitMultiple)*risk
-			if risk > 0 && analysisFinite(value) {
+			value := config.riskMultipleTarget(alert.EntryPrice, *alert.StopLoss)
+			if config.validTakeProfit(alert.EntryPrice, value) {
 				alert.TakeProfit = &value
 			}
 		}
 	} else if profitIndex, ok := s.fieldIndex(config.TakeProfit); ok {
 		value := row.values[profitIndex]
-		if analysisFinite(value) && value > alert.EntryPrice {
+		if config.validTakeProfit(alert.EntryPrice, value) {
 			alert.TakeProfit = &value
 		}
 	}

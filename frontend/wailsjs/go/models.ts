@@ -1135,6 +1135,7 @@ export namespace screener {
 	    }
 	}
 	export class AnalysisTradeSimulation {
+	    direction?: string;
 	    stopLoss: string;
 	    stopLossBarsAgo?: number;
 	    takeProfit: string;
@@ -1147,6 +1148,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.direction = source["direction"];
 	        this.stopLoss = source["stopLoss"];
 	        this.stopLossBarsAgo = source["stopLossBarsAgo"];
 	        this.takeProfit = source["takeProfit"];
@@ -1508,6 +1510,7 @@ export namespace screener {
 	    indicator: string;
 	    parameters: Record<string, number>;
 	    source: string;
+	    period?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new EnrichmentRequest(source);
@@ -1518,6 +1521,7 @@ export namespace screener {
 	        this.indicator = source["indicator"];
 	        this.parameters = source["parameters"];
 	        this.source = source["source"];
+	        this.period = source["period"];
 	    }
 	}
 	export class FilePage {
@@ -1526,6 +1530,7 @@ export namespace screener {
 	    total: number;
 	    offset: number;
 	    limit: number;
+	    periodCounts?: Record<string, number>;
 
 	    static createFrom(source: any = {}) {
 	        return new FilePage(source);
@@ -1538,6 +1543,7 @@ export namespace screener {
 	        this.total = source["total"];
 	        this.offset = source["offset"];
 	        this.limit = source["limit"];
+	        this.periodCounts = source["periodCounts"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

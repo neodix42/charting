@@ -157,6 +157,7 @@ func TestAnalysisSimulationUnsupportedFilesKeepMatchingRows(t *testing.T) {
 func TestAnalysisSimulationRequestValidationAndPersistence(t *testing.T) {
 	m := analysisTestManager(t)
 	request := simulationRequest(3)
+	request.TradeSimulation.Direction = "short"
 	request.TradeSimulation.StopLossBarsAgo = 1
 	request.TradeSimulation.TakeProfitMultiple = 3
 	request.TradeSimulation.TakeProfit = ""
@@ -170,6 +171,7 @@ func TestAnalysisSimulationRequestValidationAndPersistence(t *testing.T) {
 	}
 	want := copyAnalysisRequest(request)
 	request.TradeSimulation.Duration = 9000
+	request.TradeSimulation.Direction = "long"
 	request.TradeSimulation.StopLoss = "changed"
 	request.TradeSimulation.StopLossBarsAgo = 9999
 	request.TradeSimulation.TakeProfitMultiple = 2
@@ -253,26 +255,40 @@ func simulationOracle(bars []simulationTestBar, config AnalysisTradeSimulation) 
 			continue
 		}
 		if config.TakeProfitMultiple > 0 {
-			profit = bars[entry].open + float64(config.TakeProfitMultiple)*(bars[entry].open-stop)
+			if config.Direction == "short" {
+				profit = bars[entry].open - float64(config.TakeProfitMultiple)*(stop-bars[entry].open)
+			} else {
+				profit = bars[entry].open + float64(config.TakeProfitMultiple)*(bars[entry].open-stop)
+			}
 		}
-		if !analysisFinite(profit) || !(stop < bars[entry].open && bars[entry].open < profit) {
+		valid := stop < bars[entry].open && bars[entry].open < profit
+		if config.Direction == "short" {
+			valid = profit < bars[entry].open && bars[entry].open < stop
+		}
+		if !analysisFinite(profit) || !valid {
 			result.InvalidLevels++
 			continue
 		}
 		resolved := false
 		for next := entry; next < min(len(bars), entry+config.Duration); next++ {
 			row := bars[next]
+			stopOpen, profitOpen := row.open <= stop, row.open >= profit
+			stopExtreme, profitExtreme := row.low <= stop, row.high >= profit
+			if config.Direction == "short" {
+				stopOpen, profitOpen = row.open >= stop, row.open <= profit
+				stopExtreme, profitExtreme = row.high >= stop, row.low <= profit
+			}
 			switch {
-			case row.open <= stop:
+			case stopOpen:
 				result.StopLossHits++
 				resolved = true
-			case row.open >= profit:
+			case profitOpen:
 				result.TakeProfitHits++
 				resolved = true
-			case row.low <= stop:
+			case stopExtreme:
 				result.StopLossHits++
 				resolved = true
-			case row.high >= profit:
+			case profitExtreme:
 				result.TakeProfitHits++
 				resolved = true
 			}
@@ -307,6 +323,7 @@ func TestAnalysisSimulationSweepAgreesWithIndependentOverlappingTradeOracle(t *t
 	for run := 0; run < 200; run++ {
 		duration := 1 + random.Intn(20)
 		config := *simulationRequest(duration).TradeSimulation
+		config.Direction = []string{"", "long", "short"}[run%3]
 		config.StopLossBarsAgo = random.Intn(6)
 		config.TakeProfitMultiple = random.Intn(4)
 		bars := make([]simulationTestBar, 50+random.Intn(100))
@@ -314,6 +331,9 @@ func TestAnalysisSimulationSweepAgreesWithIndependentOverlappingTradeOracle(t *t
 			open := 90 + float64(random.Intn(21))
 			bar := simulationBar(open, open+float64(random.Intn(15)), open-float64(random.Intn(15)), open)
 			bar.stop, bar.profit = open-float64(1+random.Intn(15)), open+float64(1+random.Intn(15))
+			if config.Direction == "short" {
+				bar.stop, bar.profit = bar.profit, bar.stop
+			}
 			if random.Intn(3) != 0 {
 				bar.signal = 1
 			}
@@ -376,15 +396,26 @@ func TestAnalysisSimulationMemoryBoundAndInvalidRowOnlyAffectsOpenTrades(t *test
 }
 
 func TestAnalysisSimulationThresholdComparisonsDoNotRequirePositivePrices(t *testing.T) {
-	for _, price := range []float64{0, -50} {
-		simulation := newAnalysisTradeSimulator(simulationTestSeries(), simulationRequest(1).TradeSimulation)
-		matched := simulationBar(price, price+2, price-2, price)
-		matched.stop, matched.profit = price-10, price+10
-		simulation.match(simulationTestRow(matched))
-		simulation.advance(1, simulationTestRow(simulationBar(price, price+10, price-2, price)))
-		simulation.finish()
-		if got := simulation.snapshot(1); got.TakeProfitHits != 1 || got.ProfitablePercent != 100 {
-			t.Fatalf("price %g incorrectly unavailable: %+v", price, got)
+	for _, direction := range []string{"", "long", "short"} {
+		for _, price := range []float64{0, -50} {
+			config := simulationRequest(1).TradeSimulation
+			config.Direction = direction
+			simulation := newAnalysisTradeSimulator(simulationTestSeries(), config)
+			matched := simulationBar(price, price+2, price-2, price)
+			matched.stop, matched.profit = price-10, price+10
+			entry := simulationBar(price, price+10, price-2, price)
+			if direction == "short" {
+				matched.stop, matched.profit = matched.profit, matched.stop
+				entry = simulationBar(price, price+2, price-10, price)
+			}
+			simulation.match(simulationTestRow(matched))
+			if err := simulation.advance(1, simulationTestRow(entry)); err != nil {
+				t.Fatal(err)
+			}
+			simulation.finish()
+			if got := simulation.snapshot(1); got.TakeProfitHits != 1 || got.ProfitablePercent != 100 {
+				t.Fatalf("direction %q price %g incorrectly unavailable: %+v", direction, price, got)
+			}
 		}
 	}
 }

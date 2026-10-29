@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type EnrichmentJob struct {
@@ -145,6 +146,20 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if len(names) == 0 {
 		return m.enrichmentInfoLocked(nil), errors.New("there are no downloaded CSV files to enrich")
 	}
+	// Select before grouping or consolidation: unselected periods and custom
+	// filenames must never become jobs or be rewritten by this batch.
+	if request.Period != "" && request.Period != "all" {
+		selected := make([]string, 0, len(names))
+		for _, name := range names {
+			if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil && match[2] == request.Period {
+				selected = append(selected, name)
+			}
+		}
+		names = selected
+		if len(names) == 0 {
+			return m.enrichmentInfoLocked(nil), fmt.Errorf("there are no downloaded %s CSV files to enrich", request.Period)
+		}
+	}
 	groups := groupHistories(m.directory, names)
 	jobs := make([]EnrichmentJob, len(groups))
 	for i, group := range groups {
@@ -232,6 +247,9 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 }
 
 func (m *Manager) enrichFile(ctx context.Context, index int, directory string, job EnrichmentJob, request EnrichmentRequest) error {
+	// Selection belongs to the batch, not to an applied per-file recipe. Keep
+	// replay during Refresh identical whether enrichment selected all or one period.
+	request.Period = ""
 	source := filepath.Join(directory, job.Name)
 	original, err := os.Lstat(source)
 	if err != nil || !original.Mode().IsRegular() {

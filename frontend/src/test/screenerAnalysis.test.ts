@@ -1,7 +1,7 @@
 import {describe,expect,it,vi} from 'vitest';
 import {analysisMatchMarkers,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
-import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
+import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
  it('serializes saves, snapshots edits and coalesces pending changes into the latest draft',async()=>{
@@ -85,6 +85,27 @@ describe('Analysis field selection and validation',()=>{
 
 
 describe('Simulation offsets and risk targets',()=>{
+ it('retains legacy Long, accepts Short and rejects unsupported trade directions',()=>{
+  const request=initialAnalysisView(),simulation={stopLoss:'high',takeProfit:'low',duration:20};
+  for(const direction of [undefined,'','long','short'] as const)expect(analysisInputError({...request,tradeSimulation:{...simulation,direction}})).toBe('');
+  for(const direction of ['Short','both','buy'])expect(analysisInputError({...request,tradeSimulation:{...simulation,direction:direction as never}})).toContain('Choose Long or Short');
+ });
+ it('adapts conventional levels by direction while preserving custom indicators, offsets and risk targets',()=>{
+  const simulation={stopLoss:'low',stopLossBarsAgo:2,takeProfit:'high',duration:5},fields=['low','high','ema_200'];
+  const short=changeSimulationDirection(simulation,'short',fields);
+  expect(short).toEqual({...simulation,direction:'short',stopLoss:'high',takeProfit:'low'});
+  expect(changeSimulationDirection(short,'long',fields)).toEqual({...simulation,direction:'long'});
+  expect(simulation).toEqual({stopLoss:'low',stopLossBarsAgo:2,takeProfit:'high',duration:5});
+  const custom={...simulation,stopLoss:'ema_200',takeProfit:'bb_lower_20_2'};
+  expect(changeSimulationDirection(custom,'short',fields)).toEqual({...custom,direction:'short'});
+  const multiple={...simulation,takeProfit:'',takeProfitMultiple:3};
+  expect(changeSimulationDirection(multiple,'short',fields)).toEqual({...multiple,direction:'short',stopLoss:'high'});
+ });
+ it('offers Short OHLC defaults only for fields actually in the downloaded files',()=>{
+  const simulation={stopLoss:'',takeProfit:'',duration:20};
+  expect(changeSimulationDirection(simulation,'short',['high','low'])).toEqual({...simulation,direction:'short',stopLoss:'high',takeProfit:'low'});
+  expect(changeSimulationDirection(simulation,'short',['bidprice'])).toEqual({...simulation,direction:'short'});
+ });
  it('accepts old field targets and validates bars ago and each supported risk multiple',()=>{
   const request=initialAnalysisView(),simulation={stopLoss:'low',takeProfit:'high',duration:20};
   for(const stopLossBarsAgo of [0,1,10000])expect(analysisInputError({...request,tradeSimulation:{...simulation,stopLossBarsAgo}})).toBe('');

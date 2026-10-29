@@ -11,12 +11,13 @@ export function screenerEnrichmentBridge(directory:()=>string){
  const saveFiles=()=>sessionStorage.setItem(fileKey,JSON.stringify(files));
  const api:Pick<Backend,'GetScreenerIndicators'|'GetScreenerFiles'|'GetScreenerEnrichment'|'StartScreenerEnrichment'|'CancelScreenerEnrichment'|'GetScreenerRefresh'|'StartScreenerRefresh'|'CancelScreenerRefresh'>={
   async GetScreenerIndicators(){return structuredClone(catalog as ScreenerIndicators);},
-  async GetScreenerFiles(offset,limit){reads++;if(fileError)throw Error(fileError);return{directory:directory(),total:files.length,offset,limit,files:structuredClone(files.slice(offset,offset+limit))};},
+  async GetScreenerFiles(offset,limit){reads++;if(fileError)throw Error(fileError);return{directory:directory(),total:files.length,offset,limit,periodCounts:files.reduce<Record<string,number>>((counts,file)=>{if(file.timeframe)counts[file.timeframe]=(counts[file.timeframe]??0)+1;return counts;},{}),files:structuredClone(files.slice(offset,offset+limit))};},
   async GetScreenerEnrichment(ids){return structuredClone({...info,directory:directory(),jobs:info.jobs.filter(job=>ids.includes(job.fileId))});},
   async StartScreenerEnrichment(value){
    if(startError)throw Error(startError);
    request=structuredClone(value);
-   info={...info,active:true,indicator:value.indicator,total:files.length,completed:0,failed:0,cancelled:0,jobs:files.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,message:'Queued in explicit test mode',columns:[]}))};
+   const selected=files.filter(file=>!value.period||value.period==='all'||file.timeframe===value.period);
+   info={...info,active:true,indicator:value.indicator,total:selected.length,completed:0,failed:0,cancelled:0,jobs:selected.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,message:'Queued in explicit test mode',columns:[]}))};
    return structuredClone({...info,jobs:[]});
   },
   async CancelScreenerEnrichment(){

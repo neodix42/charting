@@ -154,67 +154,87 @@ func TestScreenerAnalysisFacadeFiltersCategoriesBeforePaging(t *testing.T) {
 }
 
 func TestScreenerTradeSimulationFacadePersistsAndReportsTargetHitRate(t *testing.T) {
-	profile := t.TempDir()
-	manager := screener.New(profile)
-	t.Cleanup(manager.Close)
-	app := &App{screener: manager}
-	if err := os.MkdirAll(manager.Info().Directory, 0700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(manager.Info().Directory, "btcusd-m1-2024-01-01-2024-01-02.csv")
-	if err := os.WriteFile(path, []byte("timestamp,open,high,low,close,stop,profit\n1704067200000,100,105,95,100,90,110\n1704067260000,100,115,95,105,95,110\n1704067320000,100,135,95,105,97,110\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	request, err := app.GetScreenerAnalysisView()
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.TradeSimulation = &screener.AnalysisTradeSimulation{StopLoss: "stop", StopLossBarsAgo: 1, TakeProfitMultiple: 3, Duration: 10}
-	if _, err = app.SaveScreenerAnalysisView(request); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = app.SaveScreenerAnalysisCondition("Simulated trades", request); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = app.StartScreenerAnalysis(request); err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		info, err := app.GetScreenerAnalysis(0, 10)
-		if err != nil {
-			t.Fatal(err)
+	for _, direction := range []string{"", "long", "short"} {
+		name := direction
+		if name == "" {
+			name = "legacy"
 		}
-		if !info.Active {
-			if len(info.Results) != 1 || info.TotalMatches != 3 || !reflect.DeepEqual(info.TradeSimulation, request.TradeSimulation) {
-				t.Fatalf("facade lost simulation configuration: %+v", info)
+		t.Run(name, func(t *testing.T) {
+			profile := t.TempDir()
+			manager := screener.New(profile)
+			t.Cleanup(manager.Close)
+			app := &App{screener: manager}
+			if err := os.MkdirAll(manager.Info().Directory, 0700); err != nil {
+				t.Fatal(err)
 			}
-			summary := info.Results[0].Simulation
-			if summary == nil || summary.TakeProfitHits != 1 || summary.InsufficientData != 1 || summary.InvalidLevels != 1 || summary.ProfitablePercent != 100.0/3 {
-				t.Fatalf("facade lost simulation summary: %+v", summary)
+			path := filepath.Join(manager.Info().Directory, "btcusd-m1-2024-01-01-2024-01-02.csv")
+			text := "timestamp,open,high,low,close,stop,profit\n1704067200000,100,105,95,100,90,110\n1704067260000,100,115,95,105,95,110\n1704067320000,100,135,95,105,97,110\n"
+			if direction == "short" {
+				text = "timestamp,open,high,low,close,stop,profit\n1704067200000,100,105,95,100,110,90\n1704067260000,100,105,85,95,105,90\n1704067320000,100,105,65,95,103,90\n"
 			}
-			chart, err := app.GetScreenerAnalysisChart(info.Results[0].ID, 0, 0, 2)
-			if err != nil || len(chart.ProfitableMatches) != 1 || chart.ProfitableMatches[0].Index != 1 || chart.ProfitableMatches[0].Time != 1704067260000 {
-				t.Fatalf("facade lost winning signal markers: %+v %v", chart, err)
+			if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+				t.Fatal(err)
 			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("analysis did not finish")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	manager.Close()
-	reopened := screener.New(profile)
-	t.Cleanup(reopened.Close)
-	app.screener = reopened
-	view, err := app.GetScreenerAnalysisView()
-	if err != nil || !reflect.DeepEqual(view.TradeSimulation, request.TradeSimulation) {
-		t.Fatalf("facade draft restart: %+v %v", view, err)
-	}
-	saved, err := app.GetScreenerSavedConditions()
-	if err != nil || len(saved) != 1 || !reflect.DeepEqual(saved[0].Request.TradeSimulation, request.TradeSimulation) {
-		t.Fatalf("facade saved restart: %+v %v", saved, err)
+			request, err := app.GetScreenerAnalysisView()
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.TradeSimulation = &screener.AnalysisTradeSimulation{Direction: direction, StopLoss: "stop", StopLossBarsAgo: 1, TakeProfitMultiple: 3, Duration: 10}
+			if _, err = app.SaveScreenerAnalysisView(request); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = app.SaveScreenerAnalysisCondition("Simulated trades", request); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = app.StartScreenerAnalysis(request); err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(10 * time.Second)
+			for {
+				info, err := app.GetScreenerAnalysis(0, 10)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !info.Active {
+					if len(info.Results) != 1 || info.TotalMatches != 3 || !reflect.DeepEqual(info.TradeSimulation, request.TradeSimulation) {
+						t.Fatalf("facade lost simulation configuration: %+v", info)
+					}
+					summary := info.Results[0].Simulation
+					if summary == nil || summary.TakeProfitHits != 1 || summary.InsufficientData != 1 || summary.InvalidLevels != 1 || summary.ProfitablePercent != 100.0/3 {
+						t.Fatalf("facade lost simulation summary: %+v", summary)
+					}
+					chart, err := app.GetScreenerAnalysisChart(info.Results[0].ID, 0, 0, 2)
+					if err != nil || len(chart.ProfitableMatches) != 1 || chart.ProfitableMatches[0].Index != 1 || chart.ProfitableMatches[0].Time != 1704067260000 {
+						t.Fatalf("facade lost winning signal markers: %+v %v", chart, err)
+					}
+					tradeChart, err := app.GetScreenerAnalysisChart(info.Results[0].ID, 1, 0, 1)
+					stop, target := float64(90), float64(130)
+					if direction == "short" {
+						stop, target = 110, 70
+					}
+					if err != nil || tradeChart.Trade == nil || tradeChart.Trade.Entry != 100 || tradeChart.Trade.StopLoss != stop || tradeChart.Trade.TakeProfit != target {
+						t.Fatalf("facade lost direction-specific Entry/SL/TP: %+v %v", tradeChart.Trade, err)
+					}
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("analysis did not finish")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			manager.Close()
+			reopened := screener.New(profile)
+			t.Cleanup(reopened.Close)
+			app.screener = reopened
+			view, err := app.GetScreenerAnalysisView()
+			if err != nil || !reflect.DeepEqual(view.TradeSimulation, request.TradeSimulation) {
+				t.Fatalf("facade draft restart: %+v %v", view, err)
+			}
+			saved, err := app.GetScreenerSavedConditions()
+			if err != nil || len(saved) != 1 || !reflect.DeepEqual(saved[0].Request.TradeSimulation, request.TradeSimulation) {
+				t.Fatalf("facade saved restart: %+v %v", saved, err)
+			}
+		})
 	}
 }
 

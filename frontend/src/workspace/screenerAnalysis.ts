@@ -1,7 +1,8 @@
 export type AnalysisOperator='above'|'below'|'equal'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
 export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:number;timeframe?:string;offset?:number;aggregate?:'value'|'highest'|'lowest'|'';window?:number}
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
-export interface AnalysisTradeSimulation {stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
+export type AnalysisTradeDirection='long'|'short';
+export interface AnalysisTradeSimulation {direction?:AnalysisTradeDirection|'';stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
 export type AnalysisPeriod='all'|'d1'|'h1';
 export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null}
@@ -32,6 +33,14 @@ export const numberOperand=(value=0):AnalysisOperand=>({kind:'number',value});
 export const fieldOperand=(field='close'):AnalysisOperand=>({kind:'field',field,timeframe:'same',offset:0,aggregate:'value',window:1});
 export const newAnalysisCondition=(id:string=crypto.randomUUID()):AnalysisCondition=>({id,operator:'above',left:fieldOperand(),right:numberOperand(),upper:numberOperand(100),distance:fieldOperand('atr_14'),multiplier:0.2,bars:3,comparison:'above'});
 export const initialAnalysisView=():AnalysisRequest=>({conditions:[newAnalysisCondition('condition-1')]});
+/** Keep custom levels; adapt the conventional OHLC choices when changing sides. */
+export function changeSimulationDirection(value:AnalysisTradeSimulation,direction:AnalysisTradeDirection,fields:readonly string[]):AnalysisTradeSimulation{
+ const previous=value.direction||'long',stopLoss=direction==='short'?'high':'low',takeProfit=direction==='short'?'low':'high';
+ return {...value,direction,
+  stopLoss:(!value.stopLoss||value.stopLoss===(previous==='short'?'high':'low'))&&fields.includes(stopLoss)?stopLoss:value.stopLoss,
+  takeProfit:!value.takeProfitMultiple&&(!value.takeProfit||value.takeProfit===(previous==='short'?'low':'high'))&&fields.includes(takeProfit)?takeProfit:value.takeProfit,
+ };
+}
 export const analysisOperators:Array<{id:AnalysisOperator;label:string}>=[
  {id:'above',label:'Is above'},{id:'below',label:'Is below'},{id:'equal',label:'Is equal'},
  {id:'crossesAbove',label:'Crosses above'},{id:'crossesBelow',label:'Crosses below'},
@@ -60,6 +69,7 @@ export function analysisInputError(view:AnalysisRequest){
  if(!view.conditions.length)return'Add at least one condition before scanning.';
  if(view.conditions.length>32)return'Use at most 32 conditions.';
  if(view.tradeSimulation){
+  if(view.tradeSimulation.direction&&!['long','short'].includes(view.tradeSimulation.direction))return'Choose Long or Short as the trade type.';
   const {stopLoss,takeProfit,stopLossBarsAgo=0,takeProfitMultiple=0}=view.tradeSimulation;
   if(![0,1,2,3].includes(takeProfitMultiple))return'Take profit must use a field, 1xSL, 2xSL or 3xSL.';
   if(!stopLoss.trim()||!takeProfitMultiple&&!takeProfit.trim())return'Choose a Stop Loss field and a Take profit field or SL multiple to simulate trades.';

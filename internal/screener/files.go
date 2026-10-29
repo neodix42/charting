@@ -33,11 +33,12 @@ type DataFile struct {
 }
 
 type FilePage struct {
-	Directory string     `json:"directory"`
-	Files     []DataFile `json:"files"`
-	Total     int        `json:"total"`
-	Offset    int        `json:"offset"`
-	Limit     int        `json:"limit"`
+	Directory    string         `json:"directory"`
+	Files        []DataFile     `json:"files"`
+	Total        int            `json:"total"`
+	Offset       int            `json:"offset"`
+	Limit        int            `json:"limit"`
+	PeriodCounts map[string]int `json:"periodCounts,omitempty"`
 }
 
 var downloadFilename = regexp.MustCompile(`^([a-z0-9]+)-(tick|s1|m1|m5|m15|m30|h1|h4|d1|mn1)-(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.csv$`)
@@ -162,12 +163,19 @@ func (m *Manager) Files(offset, limit int) (FilePage, error) {
 	m.mu.Lock()
 	directory := m.directory
 	m.mu.Unlock()
-	page := FilePage{Directory: directory, Files: []DataFile{}, Offset: offset, Limit: limit}
+	page := FilePage{Directory: directory, Files: []DataFile{}, Offset: offset, Limit: limit, PeriodCounts: map[string]int{}}
 	names, err := csvNames(directory)
 	if err != nil {
 		return page, err
 	}
 	page.Total = len(names)
+	// Batch scope includes every list page. Count only recognized download
+	// periods without reading the contents of off-page histories.
+	for _, name := range names {
+		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+			page.PeriodCounts[match[2]]++
+		}
+	}
 	start := min(offset, len(names))
 	for _, name := range names[start : start+min(limit, len(names)-start)] {
 		page.Files = append(page.Files, describeFile(directory, name))

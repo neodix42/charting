@@ -195,6 +195,44 @@ test('empty folders show a clear download prompt and never enable enrichment',as
  await expect(panel(page).locator('tbody tr')).toHaveCount(0);
 });
 
+test('Period scopes enrichment across all pages while retaining the full file list and job progress',async({page})=>{
+ await openTestApp(page);
+ const files=Array.from({length:27},(_,index)=>{const timeframe=index%3===0?'m1':index%3===1?'m5':'h1';return{...file(index),timeframe,name:file(index).name.replace('-d1-',`-${timeframe}-`)};});
+ files.push({...file(27),timeframe:undefined,name:'custom.csv'});
+ await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ const period=page.getByLabel('Enrichment period',{exact:true}),scope=page.getByLabel('Enrichment file scope',{exact:true});
+ await expect(period).toHaveValue('all');await expect(period.locator('option')).toHaveText(['All periods','tick','s1','m1','m5','m15','m30','h1','h4','d1','mn1']);
+ await expect(scope).toHaveText('28 of 28 files selected · All periods');
+ await period.selectOption('m5');await expect(scope).toHaveText('9 of 28 files selected · m5');
+ await expect(panel(page).locator('tbody tr')).toHaveCount(20);await expect(panel(page)).toContainText('1–20 of 28 files');
+ await expect(panel(page)).toContainText('Applies only to m5 files in this folder.');
+ await expect(panel(page)).toContainText('The file list and Refresh include all periods.');
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page)).toContainText('21–28 of 28 files');
+ await page.getByRole('button',{name:'Enrich 9 files',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toEqual({indicator:'sma',parameters:{period:200},source:'auto',period:'m5'});
+ const info=await page.evaluate(()=>(window as any).__testEnrichment()) as ScreenerEnrichmentInfo;
+ expect(info.total).toBe(9);expect(info.jobs.map(job=>job.fileId)).toEqual(files.filter(file=>file.timeframe==='m5').map(file=>file.id));
+ await expect(period).toBeDisabled();
+ const current=info.jobs.at(-1)!;
+ await progress(page,{currentFile:current.name,currentProgress:64,jobs:info.jobs.map(job=>({...job,status:job===current?'running':'queued',progress:job.id===current.id?64:0,message:'Scoped batch'}))});
+ await expect(panel(page).locator(`tr[data-file="${current.name}"]`).getByRole('progressbar')).toHaveAttribute('value','64');
+ await expect(panel(page).getByRole('region',{name:'Enrichment progress',exact:true})).toContainText('0 / 9 complete');
+ await page.getByRole('button',{name:'Cancel enrichment',exact:true}).click();await expect(period).toBeEnabled();
+ await period.selectOption('all');await expect(page.getByRole('button',{name:'Enrich 28 files',exact:true})).toBeEnabled();
+});
+
+test('Period with no files disables enrichment and keeps global refresh available',async({page})=>{
+ await open(page,1);
+ await page.getByLabel('Enrichment period',{exact:true}).selectOption('m1');
+ await expect(page.getByLabel('Enrichment file scope',{exact:true})).toHaveText('0 of 1 files selected · m1');
+ await expect(page.getByRole('button',{name:'Enrich 0 files',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+ await expect(panel(page).locator('tbody tr')).toHaveCount(1);
+ await page.getByLabel('Enrichment period',{exact:true}).selectOption('all');
+ await expect(page.getByRole('button',{name:'Enrich 1 file',exact:true})).toBeEnabled();
+});
+
 test('fast consecutive batches refresh headers when their completed file counts match',async({page})=>{
  await open(page,1);
  for(const [indicator,column] of [['sma','sma_200'],['tenkan','tenkan_9']]){

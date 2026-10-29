@@ -3,12 +3,41 @@ package screener
 import (
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestFilePeriodCountsCoverEveryPageAndOnlyPublishedRecognizedHistories(t *testing.T) {
+	m := New(t.TempDir())
+	defer m.Close()
+	if err := os.MkdirAll(m.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 25; i++ {
+		writeDataFile(t, m, fmt.Sprintf("btcusd-m1-2024-01-01-2024-02-01-%d.csv", i), candleCSV)
+	}
+	for _, name := range []string{"ETHUSD-H1-2024-01-01-2024-02-01.CSV", "ethusd-d1-2024-01-01-2024-02-01.csv", "custom.csv", ".eurusd-d1-2024-01-01-2024-02-01.csv"} {
+		writeDataFile(t, m, name, candleCSV)
+	}
+	if err := os.Mkdir(filepath.Join(m.directory, "eurusd-d1-2024-01-01-2024-02-01.csv"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(m.directory, "custom.csv"), filepath.Join(m.directory, "audusd-d1-2024-01-01-2024-02-01.csv")); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"m1": 25, "h1": 1, "d1": 1}
+	for _, offset := range []int{0, 20, 100} {
+		page, err := m.Files(offset, 20)
+		if err != nil || page.Total != 28 || !reflect.DeepEqual(page.PeriodCounts, want) {
+			t.Fatalf("page %d lost off-page period counts: %+v %v", offset, page, err)
+		}
+		page.PeriodCounts["m1"] = 0
+	}
+}
 
 func TestFilePeriodsReadActualCSVEndpointsWithoutRefreshMetadata(t *testing.T) {
 	for _, test := range []struct {

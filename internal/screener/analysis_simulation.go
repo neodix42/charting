@@ -8,10 +8,12 @@ import (
 	"strings"
 )
 
-// Every match independently opens a long trade at the next closed bar's open.
+// Every match independently opens a trade at the next closed bar's open.
 // SL can sample an earlier bar. TP is either a matched-bar field or a multiple
 // of the entry-to-SL distance; a zero multiple preserves saved field targets.
+// An empty direction preserves the long trades in older saved configurations.
 type AnalysisTradeSimulation struct {
+	Direction          string `json:"direction,omitempty"`
 	StopLoss           string `json:"stopLoss"`
 	StopLossBarsAgo    int    `json:"stopLossBarsAgo,omitempty"`
 	TakeProfit         string `json:"takeProfit"`
@@ -44,6 +46,9 @@ func validateAnalysisTradeSimulation(config *AnalysisTradeSimulation, draft bool
 	if config == nil {
 		return nil
 	}
+	if config.Direction != "" && config.Direction != "long" && config.Direction != "short" {
+		return errors.New("trade simulation direction must be long or short")
+	}
 	if config.Duration < 1 || config.Duration > 10000 {
 		return errors.New("trade simulation duration must be between 1 and 10000 bars")
 	}
@@ -61,6 +66,41 @@ func validateAnalysisTradeSimulation(config *AnalysisTradeSimulation, draft bool
 	return nil
 }
 
+func (config AnalysisTradeSimulation) validStopLoss(entry, stop float64) bool {
+	if !analysisFinite(stop) {
+		return false
+	}
+	if config.Direction == "short" {
+		return stop > entry
+	}
+	return stop < entry
+}
+
+func (config AnalysisTradeSimulation) validTakeProfit(entry, profit float64) bool {
+	if !analysisFinite(profit) {
+		return false
+	}
+	if config.Direction == "short" {
+		return profit < entry
+	}
+	return profit > entry
+}
+
+func (config AnalysisTradeSimulation) riskMultipleTarget(entry, stop float64) float64 {
+	risk := entry - stop
+	if config.Direction == "short" {
+		risk = stop - entry
+	}
+	if !analysisFinite(risk) || risk <= 0 {
+		return math.NaN()
+	}
+	distance := float64(config.TakeProfitMultiple) * risk
+	if config.Direction == "short" {
+		return entry - distance
+	}
+	return entry + distance
+}
+
 type analysisSimulatedTrade struct {
 	id, occurrence       int64
 	stopLoss, takeProfit float64
@@ -71,16 +111,23 @@ type analysisSimulatedTrade struct {
 // ring; lazy heap entries are compacted periodically to keep memory O(duration)
 // and total work O(rows log duration), even when every bar matches.
 type analysisTradeHeap struct {
-	trades []*analysisSimulatedTrade
-	stop   bool
+	trades    []*analysisSimulatedTrade
+	stop      bool
+	ascending bool
 }
 
 func (h analysisTradeHeap) Len() int { return len(h.trades) }
-func (h analysisTradeHeap) Less(i, j int) bool {
+func (h analysisTradeHeap) level(trade *analysisSimulatedTrade) float64 {
 	if h.stop {
-		return h.trades[i].stopLoss > h.trades[j].stopLoss
+		return trade.stopLoss
 	}
-	return h.trades[i].takeProfit < h.trades[j].takeProfit
+	return trade.takeProfit
+}
+func (h analysisTradeHeap) Less(i, j int) bool {
+	if h.ascending {
+		return h.level(h.trades[i]) < h.level(h.trades[j])
+	}
+	return h.level(h.trades[i]) > h.level(h.trades[j])
 }
 func (h analysisTradeHeap) Swap(i, j int) { h.trades[i], h.trades[j] = h.trades[j], h.trades[i] }
 func (h *analysisTradeHeap) Push(value any) {
@@ -120,7 +167,11 @@ func newAnalysisTradeSimulator(series *analysisSeries, config *AnalysisTradeSimu
 	if config == nil {
 		return nil
 	}
-	s := &analysisTradeSimulator{config: *config, active: map[int64]*analysisSimulatedTrade{}, stops: analysisTradeHeap{stop: true}}
+	short := config.Direction == "short"
+	s := &analysisTradeSimulator{
+		config: *config, active: map[int64]*analysisSimulatedTrade{},
+		stops: analysisTradeHeap{stop: true, ascending: short}, profits: analysisTradeHeap{ascending: !short},
+	}
 	if series.metadata.Timeframe == "tick" {
 		s.unsupported = true
 		s.summary.Reason = "Trade simulation requires OHLC bars; tick data has no next-bar open."
@@ -205,7 +256,8 @@ func (s *analysisTradeSimulator) hit(h *analysisTradeHeap, price float64) error 
 			heap.Pop(h)
 			continue
 		}
-		if (h.stop && trade.stopLoss < price) || (!h.stop && trade.takeProfit > price) {
+		level := h.level(trade)
+		if (h.ascending && level > price) || (!h.ascending && level < price) {
 			break
 		}
 		heap.Pop(h)
@@ -271,13 +323,9 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 	if trade := s.pending; trade != nil {
 		s.pending = nil
 		if s.config.TakeProfitMultiple != 0 {
-			risk := open - trade.stopLoss
-			trade.takeProfit = open + float64(s.config.TakeProfitMultiple)*risk
-			if !analysisFinite(risk) || risk <= 0 {
-				trade.takeProfit = math.NaN()
-			}
+			trade.takeProfit = s.config.riskMultipleTarget(open, trade.stopLoss)
 		}
-		if !analysisFinite(trade.takeProfit) || !(trade.stopLoss < open && open < trade.takeProfit) {
+		if !s.config.validStopLoss(open, trade.stopLoss) || !s.config.validTakeProfit(open, trade.takeProfit) {
 			s.summary.InvalidLevels++
 		} else {
 			if s.onEntry != nil {
@@ -295,10 +343,14 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 	// The open is observed before either intrabar extreme. An overnight gap
 	// through TP wins even when the same candle later also touches SL. Without
 	// that ordering evidence, a candle touching both levels is a stop loss.
+	stopPrice, profitPrice := low, high
+	if s.config.Direction == "short" {
+		stopPrice, profitPrice = high, low
+	}
 	for _, price := range []struct {
 		heap  *analysisTradeHeap
 		value float64
-	}{{&s.stops, open}, {&s.profits, open}, {&s.stops, low}, {&s.profits, high}} {
+	}{{&s.stops, open}, {&s.profits, open}, {&s.stops, stopPrice}, {&s.profits, profitPrice}} {
 		if err := s.hit(price.heap, price.value); err != nil {
 			return err
 		}

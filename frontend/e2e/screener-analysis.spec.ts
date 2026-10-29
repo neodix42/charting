@@ -755,6 +755,49 @@ test('profitable chart matches render green dots across themes and navigation wi
 });
 
 
+test('Short simulation defaults and risk targets persist in drafts and saved conditions and remain attached to results',async({page})=>{
+ await open(page,[file(0)]);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
+ const direction=control(page,'Trade type'),stop=control(page,'Stop Loss field'),profit=control(page,'Take profit field'),apply=page.getByRole('button',{name:'Apply conditions',exact:true});
+ await expect(direction).toHaveValue('long');await expect(direction.locator('option')).toHaveText(['Long','Short']);
+ await direction.selectOption('short');await expect(stop).toHaveValue('high');await expect(profit).toHaveValue('field:low');
+ await expect(page.locator('.analysis-trade-simulation')).toContainText('Stop Loss must be above entry and Take profit below entry');
+ await expect(page.locator('.analysis-trade-simulation')).toContainText('entry − 1, 2 or 3 × (Stop Loss − entry)');
+ await control(page,'Stop Loss bars ago').fill('2');await profit.selectOption('risk:3');await control(page,'Trade duration in bars').fill('7');
+ const expected={direction:'short',stopLoss:'high',stopLossBarsAgo:2,takeProfit:'',takeProfitMultiple:3,duration:7};
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toEqual(expected);
+ await saveCondition(page,'Short setup');
+ expect((await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0])).request.tradeSimulation).toEqual(expected);
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(direction).toHaveValue('short');await expect(stop).toHaveValue('high');await expect(profit).toHaveValue('risk:3');await expect(control(page,'Stop Loss bars ago')).toHaveValue('2');
+ await direction.selectOption('long');await expect(stop).toHaveValue('low');await expect(profit).toHaveValue('risk:3');
+ await page.getByRole('button',{name:'Load condition Short setup',exact:true}).click();await expect(direction).toHaveValue('short');
+ await apply.click();expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual(expected);await expect(direction).toBeDisabled();
+ await complete(page,[result(0)]);await expect(direction).toBeEnabled();
+ await expect(page.locator('.analysis-simulation-summary')).toContainText('Simulated short trades · SL: high (2 bars ago) · TP: 3xSL · 7 bars');
+ await direction.selectOption('long');await expect(page.locator('.analysis-simulation-summary')).toContainText('Simulated short trades');
+});
+
+test('changing trade type adapts conventional OHLC choices and retains custom indicator levels',async({page})=>{
+ await open(page,[{...file(0),fields:[...fields,'sma_200']}]);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
+ const direction=control(page,'Trade type'),stop=control(page,'Stop Loss field'),profit=control(page,'Take profit field');
+ await stop.selectOption('low');await profit.selectOption('field:high');
+ await direction.selectOption('short');await expect(stop).toHaveValue('high');await expect(profit).toHaveValue('field:low');
+ await direction.selectOption('long');await expect(stop).toHaveValue('low');await expect(profit).toHaveValue('field:high');
+ await stop.selectOption('ema_200');await profit.selectOption('field:sma_200');
+ await direction.selectOption('short');await expect(stop).toHaveValue('ema_200');await expect(profit).toHaveValue('field:sma_200');
+ await direction.selectOption('long');await expect(stop).toHaveValue('ema_200');await expect(profit).toHaveValue('field:sma_200');
+});
+
+test('legacy saved simulations without direction remain Long until explicitly changed',async({page})=>{
+ await open(page,[file(0)]);
+ await page.evaluate(()=>{const request=(window as any).__testAnalysisView();request.tradeSimulation={stopLoss:'low',takeProfit:'high',duration:5};(window as any).__testSetAnalysisView(request);});
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect(control(page,'Trade type')).toHaveValue('long');await expect(control(page,'Stop Loss field')).toHaveValue('low');await expect(control(page,'Take profit field')).toHaveValue('field:high');
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual({stopLoss:'low',takeProfit:'high',duration:5});
+ await complete(page,[result(0)]);await expect(page.locator('.analysis-simulation-summary')).toContainText('Simulated long trades');
+});
+
 test('Take profit field names cannot collide with SL multiple choices',async({page})=>{
  await open(page,[{...file(0),fields:[...fields,'risk:1','field:risk:1']}]);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
  const profit=control(page,'Take profit field');await control(page,'Stop Loss field').selectOption('low');

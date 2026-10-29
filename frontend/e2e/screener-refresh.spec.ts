@@ -120,8 +120,8 @@ test('reloading the file list performs no download or indicator calculation',asy
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toBeNull();
 });
 
-test('sequential refresh keeps whole-batch progress across completed, active and queued files',async({page})=>{
- await open(page,25);await expect(panel(page).locator('.enrichment-refresh-help')).toContainText('one asset at a time');await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+test('refresh keeps whole-batch progress across completed, active and queued files',async({page})=>{
+ await open(page,25);await expect(panel(page).locator('.enrichment-refresh-help')).toContainText('Each Refresh worker downloads missing and new data');await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
  await page.evaluate(()=>{
   const info=(window as any).__testRefresh() as ScreenerRefreshInfo;
   (window as any).__testSetRefresh({...info,completed:10,progress:42,currentFile:info.jobs[10].name,currentProgress:50,jobs:info.jobs.map((job,index)=>({...job,status:index<10?'completed':index===10?'running':'queued',progress:index<10?100:index===10?50:0}))});
