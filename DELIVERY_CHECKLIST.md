@@ -8,7 +8,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Settings → Ducas Copy supports Demo/Live credentials, Test connection, transient Live PIN challenges, cancellation and first-configuration recovery without mixing account caches.
 - [x] Private settings, shared process/subscription lifecycle, quote-health preservation and owner-exit cleanup have offline protocol/race/facade coverage; the actual SDK initializes without credentials.
 - [x] Linux/Windows packaging and user installation include and validate our bridge plus exact SDK dependency manifest. Java 17+ prerequisites and first-use SDK installation are documented.
-- [ ] New full archives and hosted branch CI are pending final verification; see STATUS.md.
+- [x] Local Linux/Windows archives, checksums/inventories and actual isolated Linux installation pass. Hosted Tests run 40866094626 passes all 238 browser cases, Java 17 bootstrap and the full deterministic/runtime suite; see STATUS.md.
 - [ ] Authenticated JForex login/live ticks, native desktop interaction and Windows GUI execution remain unverified; no JForex credentials were supplied.
 
 ## Local Predictions — 2026-10-29, `predictions` branch
