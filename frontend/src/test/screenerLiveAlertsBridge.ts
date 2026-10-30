@@ -24,8 +24,9 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
   async GetScreenerLiveAlerts(){reads++;const response=snapshot();if(statusDelay)await new Promise(resolve=>setTimeout(resolve,statusDelay));if(errors.read)throw Error(errors.read);return response;},
   async ConfigureScreenerLiveAlerts(value){
    writes.push(structuredClone(value));if(gate)await gate;if(errors.save)throw Error(errors.save);
-   if(value.enabled&&(!value.conditionIds.length||!value.periods.length||!value.symbols.length))throw Error('Select conditions, periods and downloaded assets.');
-   info={...info,config:structuredClone(value),running:false,status:value.enabled?'Waiting for next closed bar':'Disabled',nextRun:value.enabled?Date.now()+3600000:0};
+   if(value.enabled&&(!value.conditionPeriods.length||value.conditionPeriods.some(condition=>!['d1','h1'].includes(condition.period))||!value.symbols.length))throw Error('Select conditions, periods and downloaded assets.');
+   const interval=value.conditionPeriods.some(condition=>condition.period==='h1')?3600000:86400000;
+   info={...info,config:structuredClone(value),error:'',running:false,status:value.enabled?'Waiting for next closed bar':'Disabled',nextRun:value.enabled?(Math.floor(Date.now()/interval)+1)*interval:0};
    sessionStorage.setItem(key,JSON.stringify(info.config));return snapshot();
   },
   async CheckScreenerLiveAlerts(){checks++;if(errors.check)throw Error(errors.check);if(!info.config.enabled)throw Error('Start Live Alerts before checking.');info={...info,running:true,status:'Checking selected assets',currentAsset:info.config.symbols[0]??'',progress:0};return snapshot();},

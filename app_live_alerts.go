@@ -13,7 +13,7 @@ import (
 
 func (a *App) GetScreenerLiveAlerts() screener.LiveAlertsInfo {
 	if a.liveAlerts == nil {
-		return screener.LiveAlertsInfo{Config: screener.LiveAlertsConfig{Periods: []string{"d1"}, ConditionIDs: []string{}, Symbols: []string{}}, Assets: []screener.LiveAlertAsset{}, Recent: []screener.LiveAlertOutcome{}, Error: a.liveAlertsError, Status: "Live Alerts settings are unavailable"}
+		return screener.LiveAlertsInfo{Config: screener.LiveAlertsConfig{ConditionPeriods: []screener.LiveAlertConditionPeriod{}, Symbols: []string{}}, Assets: []screener.LiveAlertAsset{}, Recent: []screener.LiveAlertOutcome{}, Error: a.liveAlertsError, Status: "Live Alerts settings are unavailable"}
 	}
 	info := a.liveAlerts.Info()
 	if a.liveAlertsError != "" {

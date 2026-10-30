@@ -186,10 +186,10 @@ func TestLiveAlertsPartialRefreshEvaluatesSuccessfulAssetsAndKeepsFailedAssetsUn
 	if !errors.Is(err, refreshFailure) || len(alerts) != 1 || alerts[0].Symbol != "eurusd" {
 		t.Fatalf("partial refresh dropped a current signal or hid its failure: %v %+v", err, alerts)
 	}
-	if len(l.state.Watermarks) != 1 || l.state.Watermarks[config.ConditionIDs[0]+"/eurusd/h1"] != 1704070800000 {
+	if len(l.state.Watermarks) != 1 || l.state.Watermarks[config.ConditionPeriods[0].ConditionID+"/eurusd/h1"] != 1704070800000 {
 		t.Fatalf("failed asset was claimed or successful asset unclaimed: %+v", l.state.Watermarks)
 	}
-	if _, exists := l.state.Watermarks[config.ConditionIDs[0]+"/btcusd/h1"]; exists {
+	if _, exists := l.state.Watermarks[config.ConditionPeriods[0].ConditionID+"/btcusd/h1"]; exists {
 		t.Fatal("stale failed asset cannot be claimed from its previous CSV")
 	}
 }
@@ -203,7 +203,7 @@ func TestLiveAlertsPartialRefreshNeverUsesFailedCompanionAsStaleFallback(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConditionIDs = []string{saved.ID}
+	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: saved.ID, Period: "h1"}}
 	writeDataFile(t, m, "eurusd-d1-2023-12-31-2024-01-03.csv", "timestamp,close\n1703980800000,1\n")
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func TestLiveAlertsPrunesOnlyDeletedConditionHistoryAndPersistsBeforeNewChecks(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	currentKey := config.ConditionIDs[0] + "/eurusd/h1"
+	currentKey := config.ConditionPeriods[0].ConditionID + "/eurusd/h1"
 	inactiveKey := retained.ID + "/eurusd/h1"
 	deletedKey := deleted.ID + "/eurusd/h1"
 	l.state.Watermarks = map[string]int64{currentKey: 1, inactiveKey: 2, deletedKey: 3}
@@ -255,7 +255,7 @@ func TestLiveAlertsPrunesOnlyDeletedConditionHistoryAndPersistsBeforeNewChecks(t
 		t.Fatalf("pruned history was not durable: %+v", restarted.state.Watermarks)
 	}
 	// Selecting the formerly inactive condition retains its previous checkpoint.
-	config.ConditionIDs = []string{retained.ID}
+	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: retained.ID, Period: "h1"}}
 	if _, err = restarted.Configure(config); err != nil || restarted.state.Watermarks[inactiveKey] != 2 || restarted.state.Watermarks[currentKey] != 1 {
 		t.Fatalf("reselecting a saved condition discarded duplicate prevention: %+v %v", restarted.state.Watermarks, err)
 	}

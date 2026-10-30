@@ -1,4 +1,12 @@
-# Implementation status — updated 2026-10-29
+# Implementation status — updated 2026-10-30
+
+## Live Alerts condition periods and exact close scheduling — 2026-10-30
+
+**Saved conditions** now displays a two-column **Saved condition / Period** table. Each selected condition has one Daily (D1) or Hourly (H1) assignment and evaluates only that period. Automatic monitoring waits until the next exact UTC hour or midnight on enable/restart, without an immediate initial check or the previous fixed 30-second allowance. Hourly cycles exclude daily conditions; midnight includes both. Explicit **Check now** remains immediate and checks the latest actual closed candle.
+
+Scheduled cycles require the newly closed signal candle rather than sending an older bar as new. Publication delays retry every 30 seconds for up to five minutes with the same cutoff; exhaustion remains visible. Busy retries retain manual/scheduled semantics and do not lose midnight daily checks. Companion histories, sequential refresh, indicator replay, provider pacing/cooldowns, durable claims and shutdown cancellation remain intact. Version 1 settings with one shared period migrate directly; ambiguous dual-period settings restore stopped with empty assignments for review. Claims and history remain intact, and restore alone preserves the original file. Missing assigned-period histories and invalid saved states remain explicit errors.
+
+Verification so far: `go test -race -tags webkit2_41 ./...`, `go test -race -tags bindings .`, `go test -race -tags 'production webkit2_41' .` and `go vet -tags webkit2_41 ./...` pass using the existing project-local native SDK. Wails module generation, frontend typecheck/lint/production build, all **198 frontend unit tests**, **7 focused Live Alerts browser cases**, **147 Python tests**, **82 Screener runtime tests** and the pinned catalog check pass. Production scheduler tests cover mid-hour enable/restart, exact-boundary execution, mixed assignments, daily isolation, stale-bar claims, bounded publication retry, manual busy retry, midnight crossing, migration/validation and missing files. The complete browser suite and hosted CI are still pending. Native desktop interaction, real candle-close provider timing, actual Telegram delivery and Windows execution remain unverified; all alerts used isolated test profiles and substituted transports. Evidence is under ignored `.tools/verification/live-alert-periods-*`. Next step: finish the full browser run, push the reviewed changes and verify hosted Tests/release checks.
 
 ## Installed JForex paths and workspace preservation — 2026-10-29
 

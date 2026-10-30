@@ -13,9 +13,14 @@ import (
 )
 
 func (l *LiveAlerts) check(ctx context.Context, config LiveAlertsConfig, asOf int64) error {
-	if err := l.validateSelection(config); err != nil {
+	return l.checkCycle(ctx, config, asOf, false)
+}
+
+func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, asOf int64, scheduled bool) error {
+	if err := validateLiveAlertsConfig(config); err != nil {
 		return err
 	}
+	config = canonicalLiveAlertsConfig(config)
 	conditions, err := l.selectedConditions(config)
 	if err != nil {
 		return err
@@ -109,7 +114,7 @@ func (l *LiveAlerts) check(ctx context.Context, config LiveAlertsConfig, asOf in
 		}
 		s.cache = a.cache
 		a.series[id] = s
-		if containsLiveValue(config.Periods, s.metadata.Timeframe) {
+		if containsLiveValue(liveAlertsPeriods(config), s.metadata.Timeframe) {
 			targets = append(targets, s)
 		}
 	}
@@ -125,13 +130,30 @@ func (l *LiveAlerts) check(ctx context.Context, config LiveAlertsConfig, asOf in
 			return e
 		}
 		if closed == 0 {
+			if scheduled {
+				failures = append(failures, fmt.Errorf("%s %s: %w", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar))
+			}
 			continue
 		}
 		latest, e := s.row(closed - 1)
 		if e != nil {
 			return e
 		}
+		if scheduled {
+			interval := time.Hour
+			if s.metadata.Timeframe == "d1" {
+				interval = 24 * time.Hour
+			}
+			expected := time.UnixMilli(asOf).UTC().Truncate(interval).Add(-interval).UnixMilli()
+			if latest.timestamp != expected {
+				failures = append(failures, fmt.Errorf("%s %s: %w; waiting for the bar closing at %s", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar, time.UnixMilli(expected).Add(interval).UTC().Format(time.RFC3339)))
+				continue
+			}
+		}
 		for _, saved := range conditions {
+			if liveAlertsConditionPeriod(config, saved.ID) != s.metadata.Timeframe {
+				continue
+			}
 			if err = ctx.Err(); err != nil {
 				return err
 			}
@@ -193,7 +215,7 @@ func (l *LiveAlerts) check(ctx context.Context, config LiveAlertsConfig, asOf in
 
 func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []SavedAnalysisCondition) ([]historyGroup, error) {
 	periods := map[string]bool{}
-	for _, period := range config.Periods {
+	for _, period := range liveAlertsPeriods(config) {
 		periods[period] = true
 	}
 	// An explicit companion timeframe belongs to the same signal snapshot. Its
@@ -216,6 +238,19 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
 		if match != nil && containsLiveValue(config.Symbols, match[1]) && periods[match[2]] {
 			wanted = append(wanted, name)
+		}
+	}
+	for _, period := range liveAlertsPeriods(config) {
+		found := false
+		for _, name := range wanted {
+			match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+			if match[2] == period {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("no downloaded %s history remains for its selected saved condition; download and enrich a selected asset", strings.ToUpper(period))
 		}
 	}
 	return groupHistories(directory, wanted), nil

@@ -45,7 +45,7 @@ func liveAlertsFixture(t *testing.T) (*Manager, *LiveAlerts, LiveAlertsConfig, s
 		}
 		return out, ctx.Err()
 	}
-	config := LiveAlertsConfig{Enabled: true, ConditionIDs: []string{condition.ID}, Periods: []string{"h1"}, Symbols: []string{"eurusd"}}
+	config := LiveAlertsConfig{Enabled: true, ConditionPeriods: []LiveAlertConditionPeriod{{ConditionID: condition.ID, Period: "h1"}}, Symbols: []string{"eurusd"}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestLiveAlertsLatestClosedAndDurableDedup(t *testing.T) {
 	if info.Sent != 2 || len(info.Recent) != 2 || info.Recent[0].Status != "sent" || info.Assets[0].Symbol != "eurusd" {
 		t.Fatalf("wrong persisted info: %+v", info)
 	}
-	if info.Config.ConditionIDs[0] != config.ConditionIDs[0] || info.Config.Periods[0] != "h1" {
+	if info.Config.ConditionPeriods[0].ConditionID != config.ConditionPeriods[0].ConditionID || info.Config.ConditionPeriods[0].Period != "h1" {
 		t.Fatal("selection did not survive restart")
 	}
 	if st, err := os.Stat(path); err != nil || st.Size() == 0 {
@@ -99,7 +99,7 @@ func TestLiveAlertsOnlyNewestMatchNoHistoricalReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConditionIDs = []string{saved.ID}
+	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: saved.ID, Period: "h1"}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			config.ConditionIDs = append(config.ConditionIDs, second.ID)
+			config.ConditionPeriods = append(config.ConditionPeriods, LiveAlertConditionPeriod{ConditionID: second.ID, Period: "h1"})
 			config.Symbols = []string{"btcusd", "eurusd"}
 			if _, err = l.Configure(config); err != nil {
 				t.Fatal(err)
@@ -239,7 +239,7 @@ func TestLiveAlertsFailedNonMatchFlushRetriesWithoutChangingBar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConditionIDs = []string{saved.ID}
+	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: saved.ID, Period: "h1"}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -294,6 +294,9 @@ func TestLiveAlertsClosedLifecycleAndSerializedMutations(t *testing.T) {
 		return nil, ctx.Err()
 	}
 	l.Start(context.Background())
+	if _, err := l.CheckNow(); err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case <-started:
 	case <-time.After(2 * time.Second):
@@ -329,16 +332,16 @@ func TestLiveAlertsClosedLifecycleAndSerializedMutations(t *testing.T) {
 	}
 }
 
-func TestLiveAlertsScheduleUTCAndProviderDelay(t *testing.T) {
+func TestLiveAlertsScheduleUTCAtClose(t *testing.T) {
 	zone := time.FixedZone("Dubai", 4*3600)
 	for _, tc := range []struct {
 		now     time.Time
 		periods []string
 		want    string
 	}{
-		{time.Date(2026, 10, 28, 4, 0, 0, 0, zone), []string{"d1"}, "2026-10-28T00:00:30Z"},
-		{time.Date(2026, 10, 28, 4, 0, 30, 0, zone), []string{"d1"}, "2026-10-29T00:00:30Z"},
-		{time.Date(2026, 10, 28, 9, 59, 59, 0, zone), []string{"h1", "d1"}, "2026-10-28T06:00:30Z"},
+		{time.Date(2026, 10, 28, 4, 0, 0, 0, zone), []string{"d1"}, "2026-10-29T00:00:00Z"},
+		{time.Date(2026, 10, 28, 4, 0, 30, 0, zone), []string{"d1"}, "2026-10-29T00:00:00Z"},
+		{time.Date(2026, 10, 28, 9, 59, 59, 0, zone), []string{"h1", "d1"}, "2026-10-28T06:00:00Z"},
 	} {
 		if got := nextLiveAlertCheck(tc.now, tc.periods).Format(time.RFC3339); got != tc.want {
 			t.Errorf("next check %s != %s", got, tc.want)
@@ -349,7 +352,7 @@ func TestLiveAlertsScheduleUTCAndProviderDelay(t *testing.T) {
 func TestLiveAlertsDefaultsDraftSelectionAndCopiedInfo(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
 	config.Enabled = false
-	config.Periods = []string{"d1", "h1"}
+	config.ConditionPeriods[0].Period = "h1"
 	if _, err := l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -361,9 +364,16 @@ func TestLiveAlertsDefaultsDraftSelectionAndCopiedInfo(t *testing.T) {
 	}
 	info := l.Info()
 	info.Config.Symbols[0] = "btcusd"
+	info.Config.ConditionPeriods[0].Period = "d1"
+	if l.Info().Config.ConditionPeriods[0].Period != "h1" {
+		t.Fatal("Info returned mutable condition period assignments")
+	}
 	info.Assets[0].Periods[0] = "bad"
 	if l.Info().Config.Symbols[0] != "eurusd" || !reflect.DeepEqual(l.Info().Assets[0].Periods, []string{"h1"}) {
 		t.Fatal("Info returned mutable manager configuration")
+	}
+	if _, err := l.CheckNow(); err != nil {
+		t.Fatal("manual check was not accepted", err)
 	}
 	if _, err := l.CheckNow(); err == nil {
 		t.Fatal("queued check allowed duplicate trigger")
@@ -374,7 +384,7 @@ func TestLiveAlertsDefaultsDraftSelectionAndCopiedInfo(t *testing.T) {
 	}
 	defer fresh.manager.Close()
 	defer fresh.Close()
-	if fresh.Info().Config.Enabled || len(fresh.Info().Config.ConditionIDs) != 0 || len(fresh.Info().Config.Symbols) != 0 {
+	if fresh.Info().Config.Enabled || len(fresh.Info().Config.ConditionPeriods) != 0 || len(fresh.Info().Config.Symbols) != 0 {
 		t.Fatal("new profile enabled alerts by default")
 	}
 	_ = m
@@ -396,7 +406,7 @@ func TestLiveAlertsRestartInterruptedClaimShowsUncertain(t *testing.T) {
 		t.Fatal("restart did not preserve claim/config")
 	}
 	encoded, err := json.Marshal(copy.Info())
-	if err != nil || !strings.Contains(string(encoded), "conditionIds") {
+	if err != nil || !strings.Contains(string(encoded), "conditionPeriods") {
 		t.Fatal("public JSON contract", err)
 	}
 }
@@ -418,7 +428,7 @@ func TestLiveAlertsProductionRefreshConsolidatesAndEnrichesBeforeLatestCheck(t *
 		t.Fatal(err)
 	}
 	defer l.Close()
-	config := LiveAlertsConfig{Enabled: true, Symbols: []string{"eurusd"}, Periods: []string{"d1"}, ConditionIDs: []string{condition.ID}}
+	config := LiveAlertsConfig{Enabled: true, Symbols: []string{"eurusd"}, ConditionPeriods: []LiveAlertConditionPeriod{{ConditionID: condition.ID, Period: "d1"}}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}

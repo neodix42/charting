@@ -1,4 +1,5 @@
-export interface LiveAlertsConfig {enabled:boolean;conditionIds:string[];periods:string[];symbols:string[]}
+export interface LiveAlertConditionPeriod {conditionId:string;period:string}
+export interface LiveAlertsConfig {enabled:boolean;conditionPeriods:LiveAlertConditionPeriod[];symbols:string[]}
 export interface LiveAlertAsset {symbol:string;name:string;category:string;periods:string[]}
 export interface LiveAlertOutcome {assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message:string}
 export interface LiveAlertsInfo {config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
@@ -7,7 +8,7 @@ export interface ScreenerLiveAlertsBackend {
  ConfigureScreenerLiveAlerts(config:LiveAlertsConfig):Promise<LiveAlertsInfo>;
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
 }
-export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,conditionIds:[],periods:['d1'],symbols:[]});
+export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,conditionPeriods:[],symbols:[]});
 
 /** Only disabled drafts autosave; starting delivery is an explicit action. */
 export class LiveAlertsConfigWriter {

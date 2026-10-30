@@ -25,7 +25,7 @@ async function open(page:Page){
 async function choose(page:Page){
  await page.getByRole('checkbox',{name:'Alert condition Trend entry',exact:true}).check();
  await page.getByRole('checkbox',{name:'Alert condition Momentum entry',exact:true}).check();
- await page.getByRole('checkbox',{name:'Live alerts Hourly (H1)',exact:true}).check();
+ await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('h1');
  await page.getByRole('button',{name:'Select all assets',exact:true}).click();
  await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
 }
@@ -33,15 +33,21 @@ async function choose(page:Page){
 test('Live Alerts selects saved conditions and downloaded daily/hourly assets, starts explicitly and displays outcomes',async({page})=>{
  await open(page);
  await expect(page.getByRole('checkbox',{name:/Alert asset ETHUSD/})).toHaveCount(0);
+ const table=page.getByRole('table',{name:'Saved conditions and periods',exact:true});await expect(table.getByRole('columnheader')).toHaveText(['Saved condition','Period']);
+ await expect(page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
  await choose(page);
+ await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('');
+ await expect(page.getByRole('checkbox',{name:'Alert condition Momentum entry',exact:true})).toBeChecked();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('h1');
  await page.getByRole('button',{name:'Save config',exact:true}).click();await expect(page.getByRole('status')).toContainText('Alert configuration saved.');
  const config=await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config);
- expect(config.enabled).toBe(false);expect(config.conditionIds).toHaveLength(2);expect(config.periods).toEqual(['d1','h1']);expect(config.symbols).toEqual(['btcusd','eurusd']);
+ expect(config.enabled).toBe(false);expect(config.conditionPeriods).toHaveLength(2);expect(config.conditionPeriods.map((condition:any)=>condition.period)).toEqual(['d1','h1']);expect(config.symbols).toEqual(['btcusd','eurusd']);
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites().every((config:any)=>!config.enabled))).toBe(true);
  await page.getByRole('button',{name:'Start alerts',exact:true}).click();
  await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toBeEnabled();
  await expect(page.getByRole('checkbox',{name:'Alert condition Trend entry',exact:true})).toBeDisabled();
+ await expect(page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true})).toBeDisabled();await expect(page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'Check now',exact:true}).click();
  await expect(page.getByRole('progressbar',{name:'Live alerts progress',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsChecks())).toBe(1);
@@ -64,7 +70,7 @@ test('Live Alerts persists choices, stops polling hidden panels and searches dow
  await reloadTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),fixtures);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'Alert condition Trend entry',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Alert condition Momentum entry',exact:true})).toBeChecked();
- await expect(page.getByRole('checkbox',{name:'Live alerts Hourly (H1)',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:/Alert asset BTCUSD/})).toBeChecked();await expect(page.getByRole('checkbox',{name:/Alert asset EURUSD/})).toBeChecked();
+ await expect(page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true})).toHaveValue('d1');await expect(page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true})).toHaveValue('h1');await expect(page.getByRole('checkbox',{name:/Alert asset BTCUSD/})).toBeChecked();await expect(page.getByRole('checkbox',{name:/Alert asset EURUSD/})).toBeChecked();
  await page.getByRole('button',{name:'Deselect all assets',exact:true}).click();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
 });
 
@@ -74,7 +80,7 @@ test('normal close waits for queued live alert choices without starting Telegram
  expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
  await page.evaluate(()=>(window as any).__testReleaseLiveAlertsSaves());
  await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'live-alerts-settings',discard:false});
- const config=await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config);expect(config.enabled).toBe(false);expect(config.conditionIds).toHaveLength(2);expect(config.symbols).toEqual(['btcusd','eurusd']);
+ const config=await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config);expect(config.enabled).toBe(false);expect(config.conditionPeriods).toHaveLength(2);expect(config.symbols).toEqual(['btcusd','eurusd']);
 });
 
 test('failed settings saves remain visible and retry before enabling Live Alerts',async({page})=>{
@@ -100,11 +106,39 @@ test('a stale status response cannot undo starting alerts and saved conditions r
 
 test('deleted conditions and unavailable selected periods remain visible and cannot start alerts',async({page})=>{
  await open(page);await choose(page);await page.getByRole('button',{name:'Save config',exact:true}).click();await expect(page.getByRole('status')).toContainText('Alert configuration saved.');
- await page.getByRole('checkbox',{name:'Live alerts Hourly (H1)',exact:true}).uncheck();
+ await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('d1');
  await expect(page.getByText('Select assets with a downloaded file in the chosen periods.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
  await page.getByRole('checkbox',{name:/Alert asset EURUSD/}).uncheck();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
  await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  const removed=await page.evaluate(async()=>{const api=window.go!.main!.App!,saved=await api.GetScreenerSavedConditions();await api.DeleteScreenerAnalysisCondition(saved[0].id);return saved[0].id;});
  await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await expect(page.getByText('Remove saved conditions that are no longer available.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
  await page.getByRole('checkbox',{name:`Remove unavailable condition ${removed}`,exact:true}).click();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+});
+
+
+test('migrated conditions require an explicit period before Live Alerts can restart',async({page})=>{
+ await open(page);await choose(page);await page.getByRole('button',{name:'Save config',exact:true}).click();await expect(page.getByRole('status')).toContainText('Alert configuration saved.');
+ await page.evaluate(()=>{const info=(window as any).__testLiveAlertsInfo();info.config.conditionPeriods=info.config.conditionPeriods.map((condition:any)=>({...condition,period:''}));(window as any).__testSetLiveAlertsInfo({config:info.config,error:'Saved Live Alerts used both periods. Choose one period for each saved condition before starting alerts.'});});
+ await expect(page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true})).toHaveValue('');
+ await expect(page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true})).toHaveValue('');
+ await expect(page.getByText('Choose Daily or Hourly for each saved condition.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true}).selectOption('d1');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('h1');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+});
+
+
+test('each assigned period requires a selected downloaded asset before alerts can start',async({page})=>{
+ await open(page);await choose(page);
+ await page.getByRole('checkbox',{name:/Alert asset BTCUSD/}).uncheck();
+ await expect(page.getByText('Select at least one downloaded asset for every assigned period.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true}).selectOption('h1');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await page.getByRole('combobox',{name:'Alert period for Trend entry',exact:true}).selectOption('d1');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await page.getByRole('checkbox',{name:/Alert asset BTCUSD/}).check();
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
 });
