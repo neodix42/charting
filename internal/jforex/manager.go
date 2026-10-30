@@ -22,32 +22,35 @@ import (
 var _ exchange.Adapter = (*Manager)(nil)
 
 type Manager struct {
-	mu              sync.Mutex
-	ctx             context.Context
-	cancel          context.CancelFunc
-	path            string
-	cacheDirectory  string
-	config          configuration
-	loadError       error
-	runtime         bridgeRuntime
-	factory         commandFactory
-	prepare         func(context.Context) error
-	process         *bridgeProcess
-	authenticated   bool
-	online          bool
-	instrumentCount int
-	lastError       string
-	closed          bool
-	operations      int
-	gate            chan struct{}
-	idle            *time.Timer
-	holdUntil       time.Time
-	pinSession      bool
-	wg              sync.WaitGroup
-	processes       sync.WaitGroup
-	next            atomic.Uint64
-	testCancel      context.CancelFunc
-	testGeneration  uint64
+	mu                 sync.Mutex
+	ctx                context.Context
+	cancel             context.CancelFunc
+	path               string
+	cacheDirectory     string
+	chartCache         *chartHistoryCache
+	chartCacheError    string
+	chartWriteFailures uint64
+	config             configuration
+	loadError          error
+	runtime            bridgeRuntime
+	factory            commandFactory
+	prepare            func(context.Context) error
+	process            *bridgeProcess
+	authenticated      bool
+	online             bool
+	instrumentCount    int
+	lastError          string
+	closed             bool
+	operations         int
+	gate               chan struct{}
+	idle               *time.Timer
+	holdUntil          time.Time
+	pinSession         bool
+	wg                 sync.WaitGroup
+	processes          sync.WaitGroup
+	next               atomic.Uint64
+	testCancel         context.CancelFunc
+	testGeneration     uint64
 }
 
 // New reads only machine-local configuration and discovers files. Login is
@@ -83,6 +86,8 @@ func (m *Manager) infoLocked() Info {
 		info.Error = m.loadError.Error()
 	} else if m.runtime.err != nil {
 		info.Error = m.runtime.err.Error()
+	} else if m.chartCacheError != "" {
+		info.Error = m.chartCacheError
 	}
 	return info
 }
@@ -124,6 +129,8 @@ func (m *Manager) Configure(request Settings) (Info, error) {
 		m.process = nil
 	}
 	m.config = config
+	m.closeChartCacheLocked()
+	m.chartCacheError = ""
 	m.authenticated = false
 	m.online = false
 	m.instrumentCount = 0
@@ -479,32 +486,102 @@ func (m *Manager) History(ctx context.Context, key domain.FeedKey, from, to int6
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	p, release, err := m.begin(ctx, true, "")
+	stop := context.AfterFunc(m.ctx, cancel)
+	defer stop()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Reserve the configured account even when the entire request is local. A
+	// provider response is committed before releasing this operation, preventing
+	// an account switch from redirecting its rows into another private cache.
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil, errors.New("The Dukascopy service is closed")
+	}
+	if m.loadError != nil {
+		err := m.loadError
+		m.mu.Unlock()
+		return nil, err
+	}
+	if m.idle != nil {
+		m.idle.Stop()
+		m.idle = nil
+	}
+	m.operations++
+	m.wg.Add(1)
+	cache, err := m.chartCacheLocked()
+	m.mu.Unlock()
+	defer func() { m.mu.Lock(); m.operations--; m.scheduleIdleLocked(); m.mu.Unlock(); m.wg.Done() }()
 	if err != nil {
-		return nil, err
+		return nil, m.chartCacheFailure(err)
 	}
-	defer release()
-	rpc, cancelRPC := context.WithTimeout(ctx, 60*time.Second)
-	defer cancelRPC()
-	var bars []domain.Candle
-	if err = p.call(rpc, map[string]any{"op": "history", "feedKey": key, "from": from, "to": to, "limit": limit}, &bars); err != nil {
-		m.recordError(err)
-		return nil, err
+	var p *bridgeProcess
+	fetch := func(ctx context.Context, start, end int64, count int) ([]domain.Candle, error) {
+		if p == nil {
+			var err error
+			p, err = m.ensure(ctx, true, "", false)
+			if err != nil {
+				m.recordError(err)
+				return nil, err
+			}
+		}
+		rpc, finish := context.WithTimeout(ctx, 60*time.Second)
+		defer finish()
+		var bars []domain.Candle
+		if err := p.call(rpc, map[string]any{"op": "history", "feedKey": key, "from": start, "to": end, "limit": count}, &bars); err != nil {
+			m.recordError(err)
+			return nil, err
+		}
+		bars, err := normalizeBars(key, bars)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]domain.Candle, 0, min(count, len(bars)))
+		for _, bar := range bars {
+			if bar.Time >= start && bar.Time < end {
+				result = append(result, bar)
+			}
+		}
+		if len(result) > count {
+			result = result[len(result)-count:]
+		}
+		return result, nil
 	}
-	bars, err = normalizeBars(key, bars)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]domain.Candle, 0, min(limit, len(bars)))
-	for _, bar := range bars {
-		if bar.Time >= from && bar.Time < to {
-			result = append(result, bar)
+	if cache == nil {
+		// First-time credential setup can finish while an unconfigured request waits
+		// at the shared connection gate, preserving the existing recovery behavior.
+		p, err = m.ensure(ctx, true, "", false)
+		if err != nil {
+			m.recordError(err)
+			return nil, err
+		}
+		m.mu.Lock()
+		cache, err = m.chartCacheLocked()
+		m.mu.Unlock()
+		if err != nil {
+			return nil, m.chartCacheFailure(err)
 		}
 	}
-	if len(result) > limit {
-		result = result[len(result)-limit:]
+	if cache == nil {
+		return nil, errors.New("Configure Dukascopy credentials before requesting forex history")
 	}
-	return result, nil
+	cache.mu.Lock()
+	beforeWrite := cache.writes
+	cache.mu.Unlock()
+	bars, err := cache.history(ctx, key, from, to, limit, fetch)
+	var local *chartStorageError
+	if errors.As(err, &local) {
+		m.chartCacheResult(cache, err, false)
+	} else if err == nil {
+		cache.mu.Lock()
+		wrote := cache.writes > beforeWrite
+		cache.mu.Unlock()
+		if wrote {
+			m.chartCacheResult(cache, nil, true)
+		}
+	}
+	return bars, err
 }
 
 func (m *Manager) Stream(ctx context.Context, key domain.FeedKey, emit func([]domain.Candle, domain.Health)) error {
@@ -526,7 +603,13 @@ func (m *Manager) Stream(ctx context.Context, key domain.FeedKey, emit func([]do
 		Subscribed bool `json:"subscribed"`
 	}
 	rpc, cancelRPC := context.WithTimeout(setup, 60*time.Second)
-	err = p.call(rpc, map[string]any{"op": "subscribe", "subscriptionId": id, "feedKey": key}, &subscribed)
+	request := map[string]any{"op": "subscribe", "subscriptionId": id, "feedKey": key}
+	// Native updates alone do not prove that an interrupted catch-up filled
+	// its interior gap. Resume only from successful, durably recorded coverage.
+	if anchor, cacheErr := m.HistoryAnchor(key); cacheErr == nil && anchor > 0 {
+		request["historyFrom"] = anchor
+	}
+	err = p.call(rpc, request, &subscribed)
 	cancelRPC()
 	cancel()
 	if err != nil {
@@ -577,8 +660,30 @@ func (m *Manager) Stream(ctx context.Context, key domain.FeedKey, emit func([]do
 					m.online = false
 				}
 			}
+			writeFailures := m.chartWriteFailures
 			m.mu.Unlock()
 			emit(bars, health)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			m.mu.Lock()
+			cacheError := m.chartCacheError
+			if m.chartWriteFailures != writeFailures && cacheError == "" {
+				cacheError = "Dukascopy local history: a candle write failed; the catch-up checkpoint was preserved. Retry the chart to reconcile missing data."
+				m.chartCacheError = cacheError
+			}
+			m.mu.Unlock()
+			if message.CoverageTo > 0 && cacheError == "" {
+				// emit synchronously persists only accepted, closed bars before
+				// advancing the successful-query watermark.
+				_ = m.RecordHistoryCoverage(key, message.CoverageFrom, message.CoverageTo, bars...)
+			}
+			m.mu.Lock()
+			cacheError = m.chartCacheError
+			m.mu.Unlock()
+			if cacheError != "" {
+				emit(nil, domain.Health{State: "error", Reason: cacheError, LastMessageAt: health.LastMessageAt, LastTradeAt: health.LastTradeAt})
+			}
 		}
 	}
 }
@@ -617,4 +722,7 @@ func (m *Manager) Close() {
 	m.mu.Unlock()
 	m.wg.Wait()
 	m.processes.Wait()
+	m.mu.Lock()
+	m.closeChartCacheLocked()
+	m.mu.Unlock()
 }

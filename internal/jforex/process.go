@@ -30,6 +30,8 @@ type bridgeMessage struct {
 	SubscriptionID string          `json:"subscriptionId"`
 	Bars           []domain.Candle `json:"bars"`
 	Health         domain.Health   `json:"health"`
+	CoverageFrom   int64           `json:"coverageFrom"`
+	CoverageTo     int64           `json:"coverageTo"`
 }
 
 type bridgeProcess struct {

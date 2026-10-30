@@ -72,7 +72,7 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 			runtime.EventsEmit(ctx, "candle-storage-error", message)
 		}
 	})
-	a.market = market.New(market.Options{Cache: chartCandleCache{a.candles}, Factory: func(provider string) (exchange.Adapter, error) {
+	a.market = market.New(market.Options{Cache: chartCandleCache{manager: a.candles, forex: a.jforex}, Factory: func(provider string) (exchange.Adapter, error) {
 		if provider == "dukascopy" {
 			return a.jforex, nil
 		}

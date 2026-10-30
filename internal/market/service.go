@@ -171,7 +171,11 @@ func (s *Service) Attach(chart string, generation int64, key domain.FeedKey, fro
 				f.bars[c.Time] = c
 			}
 			if len(f.bars) > 0 {
-				f.health = domain.Health{State: "cached", Reason: "Locally stored candles; refreshing public market data"}
+				reason := "Locally stored candles; refreshing public market data"
+				if key.Exchange == "dukascopy" {
+					reason = "Locally stored Dukascopy Bid candles; reconnecting to the configured account"
+				}
+				f.health = domain.Health{State: "cached", Reason: reason}
 			}
 		}
 		s.feeds[key] = f
@@ -333,7 +337,7 @@ func (s *Service) update(ctx context.Context, f *feed, bars []domain.Candle, h d
 			continue
 		}
 		old, ok := f.bars[c.Time]
-		if ok && c.SourceRevision > 0 && old.SourceRevision > c.SourceRevision && c.Quality != "authoritative" {
+		if ok && c.SourceRevision > 0 && old.SourceRevision > c.SourceRevision && (c.Quality != "authoritative" || f.key.Exchange == "dukascopy") {
 			continue
 		}
 		if ok && old.Closed && !c.Closed && c.Quality != "authoritative" {
@@ -455,7 +459,7 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	// Only a complete contiguous page of closed, past buckets can bypass REST.
 	// Gaps, delistings and current buckets still go to the provider; a sparse disk
 	// page must never be mistaken for a complete market history.
-	if s.opts.Cache != nil && to <= exchange.BucketStart(s.opts.Now().Unix(), exchange.TimeframeSeconds(key.Timeframe)) {
+	if s.opts.Cache != nil && key.Exchange != "dukascopy" && to <= exchange.BucketStart(s.opts.Now().Unix(), exchange.TimeframeSeconds(key.Timeframe)) {
 		cached, cacheErr := s.opts.Cache.Range(key, from, to-1, limit)
 		if err := ctx.Err(); err != nil {
 			return History{}, err
@@ -559,7 +563,10 @@ func (s *Service) acceptHistoryEpoch(id string, key domain.FeedKey, from, to, re
 		}
 	}
 	ordered := sorted(result)
-	if persist && s.opts.Cache != nil {
+	// Authenticated history is saved by its adapter before releasing the
+	// account reservation. Re-selecting a namespace here could race a credential
+	// change after the response has returned.
+	if persist && s.opts.Cache != nil && key.Exchange != "dukascopy" {
 		s.opts.Cache.Put(key, ordered)
 	}
 	// A page must advance to an earlier timestamp before another pagination request.
@@ -578,7 +585,11 @@ func (s *Service) StoreCurrentCandles() {
 		return
 	}
 	for key, f := range s.feeds {
-		s.opts.Cache.Put(key, sorted(f.bars))
+		// This action belongs to the optional public cache. Forex already has
+		// private durable writes while its account operation is reserved.
+		if key.Exchange != "dukascopy" {
+			s.opts.Cache.Put(key, sorted(f.bars))
+		}
 	}
 }
 func valid(c domain.Candle) bool {

@@ -21,6 +21,7 @@ public final class Bridge implements AutoCloseable {
         "1d", Period.DAILY, "1w", Period.WEEKLY);
     static final List<String> INTERVALS = List.of("1m", "5m", "15m", "1h", "4h", "1d", "1w");
     static final int MAX_LINE = 65536;
+    static final int SEED_RANGE_BARS = 1000;
     private final Supplier<IClient> factory;
     private final Consumer<JsonObject> output;
     private final Map<String, Subscription> subscriptions = new ConcurrentHashMap<>();
@@ -35,6 +36,7 @@ public final class Bridge implements AutoCloseable {
     private final Map<Instrument, Integer> historyUsers = new HashMap<>();
     private final Set<Instrument> requestedInstruments = new HashSet<>();
     private final long historyTimeoutMillis;
+    private final LongSupplier nowMillis;
     private volatile IClient client;
     private volatile IContext context;
     private volatile boolean closing;
@@ -73,7 +75,17 @@ public final class Bridge implements AutoCloseable {
                         synchronized (sub) {
                             JsonObject bar = candle(bid, true);
                             if (bid.getTime() >= sub.lastTime) { sub.lastTime = bid.getTime(); sub.last = bar; }
-                            emitBars(sub, List.of(bar));
+                            long coverageFrom = 0, coverageTo = 0;
+                            if (!sub.loading && sub.seedError == null && sub.historyFrom > 0 && bid.getTime() >= sub.historyFrom
+                                    && context != null && bid.getTime() + period.getInterval() <= context.getHistory().getBarStart(period, nowMillis.getAsLong())) {
+                                // A healthy uninterrupted native stream extends
+                                // the proven seed frontier, including closures.
+                                // During catch-up/failure a later bar proves no
+                                // coverage of the still-missing interior data.
+                                coverageFrom = sub.historyFrom; coverageTo = bid.getTime() + period.getInterval();
+                                sub.historyFrom = bid.getTime();
+                            }
+                            emitBars(sub, List.of(bar), coverageFrom, coverageTo);
                         }
                     }
                     catch (Exception ignored) { health(sub.id, "error", "JForex returned an invalid candle", 0); }
@@ -89,8 +101,11 @@ public final class Bridge implements AutoCloseable {
         this(factory, output, 45_000);
     }
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis) {
+        this(factory, output, historyTimeoutMillis, System::currentTimeMillis);
+    }
+    Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis) {
         this.factory = factory; this.output = output;
-        this.historyTimeoutMillis = historyTimeoutMillis;
+        this.historyTimeoutMillis = historyTimeoutMillis; this.nowMillis = nowMillis;
         deadlines.setRemoveOnCancelPolicy(true);
         reconnect.scheduleWithFixedDelay(this::heartbeat, 15, 15, TimeUnit.SECONDS);
     }
@@ -100,7 +115,7 @@ public final class Bridge implements AutoCloseable {
             try {
                 if (sub.seedError != null) health(sub.id, "error", sub.seedError, 0);
                 else if (sub.loading) health(sub.id, "reconciling", "Loading JForex Bid candles; live quotes remain subscribed", 0);
-                else if (context.getDataService().isOfflineTime(System.currentTimeMillis(), sub.instrument))
+                else if (context.getDataService().isOfflineTime(nowMillis.getAsLong(), sub.instrument))
                     health(sub.id, "marketClosed", "JForex reports this forex market is closed", 0);
                 else health(sub.id, "live", "Connected to JForex Bid feed", 0);
             } catch (Exception ignored) { health(sub.id, "live", "Connected to JForex Bid feed", 0); }
@@ -196,6 +211,7 @@ public final class Bridge implements AutoCloseable {
             }
             public void onDisconnect() {
                 if (closing) return;
+                for (Subscription sub : subscriptions.values()) sub.loading = true;
                 allHealth("offline", "JForex connection interrupted");
                 if (reconnecting.compareAndSet(false, true)) reconnect.schedule(Bridge.this::tryReconnect, 5, TimeUnit.SECONDS);
             }
@@ -292,11 +308,11 @@ public final class Bridge implements AutoCloseable {
         try {
             ensureInstrument(feed.instrument);
             IHistory history = context.getHistory();
-            long until = to > 0 ? to * 1000 - 1 : System.currentTimeMillis();
+            long until = to > 0 ? to * 1000 - 1 : nowMillis.getAsLong();
             long end = history.getBarStart(feed.period, until);
             // Count-based loading crosses weekends without synthesizing candles.
             List<IBar> source = readBars(history, feed.instrument, feed.period, limit, end);
-            long current = history.getBarStart(feed.period, System.currentTimeMillis());
+            long current = history.getBarStart(feed.period, nowMillis.getAsLong());
             TreeMap<Long, JsonObject> result = new TreeMap<>();
             for (IBar bar : source) {
                 if (inactiveFlat(feed.instrument, bar, current)) continue;
@@ -317,7 +333,11 @@ public final class Bridge implements AutoCloseable {
         String id = text(request, "subscriptionId", 128);
         Feed feed = feed(request.getAsJsonObject("feedKey"));
         if (subscriptions.size() >= 64 && !subscriptions.containsKey(id)) throw new Failure("restricted", "Too many JForex subscriptions");
+        long historyFrom = optionalLong(request, "historyFrom");
+        if (historyFrom < 0 || historyFrom > nowMillis.getAsLong() / 1000)
+            throw new Failure("internal", "Invalid JForex cached history anchor");
         Subscription sub = new Subscription(id, feed.instrument, feed.period);
+        sub.historyFrom = historyFrom * 1000;
         if (subscriptions.putIfAbsent(id, sub) != null) throw new Failure("internal", "Duplicate JForex subscription");
         try {
             ensureInstrument(feed.instrument);
@@ -345,9 +365,30 @@ public final class Bridge implements AutoCloseable {
     private void seed(Subscription sub, long generation) throws Exception {
         IHistory history = context.getHistory();
         long seedRevision = nextRevision();
-        long end = history.getBarStart(sub.period, System.currentTimeMillis());
-        List<IBar> source = readBars(history, sub.instrument, sub.period, 500, end);
-        long current = history.getBarStart(sub.period, System.currentTimeMillis());
+        long end = history.getBarStart(sub.period, nowMillis.getAsLong());
+        long from = sub.historyFrom;
+        if (from == 0) {
+            publishSeed(sub, generation, seedRevision, readBars(history, sub.instrument, sub.period, 500, end), 0, end, true);
+            return;
+        }
+        // Account-scoped local candles already supply the old history. Fetch
+        // only the overlap and missing suffix, bounded per SDK request/event.
+        // Empty successful chunks are valid forex market closures.
+        from = history.getBarStart(sub.period, from);
+        while (from <= end) {
+            if (closing || Thread.currentThread().isInterrupted() || sub.seedGeneration.get() != generation) throw new InterruptedException();
+            long chunkEnd = Math.min(end, from + (SEED_RANGE_BARS - 1L) * sub.period.getInterval());
+            List<IBar> source = readRangeBars(history, sub.instrument, sub.period, from, chunkEnd);
+            if (!publishSeed(sub, generation, seedRevision, source, from, chunkEnd, chunkEnd == end)) return;
+            from = chunkEnd + sub.period.getInterval();
+        }
+    }
+
+    private boolean publishSeed(Subscription sub, long generation, long seedRevision, List<IBar> source, long requestedFrom, long checkedThrough, boolean finished) throws Exception {
+        long current = context.getHistory().getBarStart(sub.period, nowMillis.getAsLong());
+        long coverageFrom = requestedFrom;
+        if (coverageFrom == 0 && !source.isEmpty()) coverageFrom = source.get(0).getTime();
+        long coverageTo = Math.min(checkedThrough + sub.period.getInterval(), current);
         TreeMap<Long, JsonObject> bars = new TreeMap<>();
         for (IBar bar : source) if (!inactiveFlat(sub.instrument, bar, current)) {
             JsonObject value = candle(bar, bar.getTime() < current);
@@ -355,10 +396,12 @@ public final class Bridge implements AutoCloseable {
             value.addProperty("sourceRevision", seedRevision); bars.put(bar.getTime(), value);
         }
         synchronized (sub) {
-            if (subscriptions.get(sub.id) != sub || closing || sub.seedGeneration.get() != generation || Thread.currentThread().isInterrupted()) return;
-            sub.loading = false; sub.seedError = null;
+            if (subscriptions.get(sub.id) != sub || closing || sub.seedGeneration.get() != generation || Thread.currentThread().isInterrupted()) return false;
+            if (finished) { sub.loading = false; sub.seedError = null; }
+            sub.historyFrom = Math.max(sub.historyFrom, Math.min(checkedThrough, current - sub.period.getInterval()));
             if (!bars.isEmpty()) {
-                if (sub.last != null && sub.lastTime >= bars.lastKey() && sub.last.get("sourceRevision").getAsLong() > seedRevision) {
+                if (sub.last != null && sub.lastTime >= bars.lastKey()
+                        && (sub.lastTime > bars.lastKey() || sub.last.get("sourceRevision").getAsLong() > seedRevision)) {
                     JsonObject previous = bars.get(sub.lastTime);
                     if (previous != null && !previous.get("closed").getAsBoolean() && !sub.last.get("closed").getAsBoolean()) {
                         // Recover the real opening context/known SDK volume while
@@ -372,15 +415,27 @@ public final class Bridge implements AutoCloseable {
                     } else if (previous == null || sub.last.get("closed").getAsBoolean()) bars.put(sub.lastTime, sub.last);
                 }
                 sub.lastTime = bars.lastKey(); sub.last = bars.lastEntry().getValue();
-                emitBars(sub, new ArrayList<>(bars.values()));
             }
-            if (context.getDataService().isOfflineTime(System.currentTimeMillis(), sub.instrument))
-                health(sub.id, "marketClosed", "JForex reports this forex market is closed", 0);
-            else health(sub.id, "live", "Connected to JForex Bid feed; waiting for market updates", 0);
+            // Coverage describes the completed SDK query, never a later live
+            // candle merged above. Empty weekend chunks still prove coverage.
+            if (!bars.isEmpty() || coverageFrom > 0 && coverageFrom < coverageTo)
+                emitBars(sub, new ArrayList<>(bars.values()), coverageFrom, coverageTo);
+            if (finished) {
+                if (context.getDataService().isOfflineTime(nowMillis.getAsLong(), sub.instrument))
+                    health(sub.id, "marketClosed", "JForex reports this forex market is closed", 0);
+                else health(sub.id, "live", "Connected to JForex Bid feed; waiting for market updates", 0);
+            }
+            return true;
         }
     }
 
     private List<IBar> readBars(IHistory history, Instrument instrument, Period period, int limit, long end) throws Exception {
+        return loadBars(history, instrument, period, limit, 0, end, false);
+    }
+    private List<IBar> readRangeBars(IHistory history, Instrument instrument, Period period, long from, long end) throws Exception {
+        return loadBars(history, instrument, period, SEED_RANGE_BARS, from, end, true);
+    }
+    private List<IBar> loadBars(IHistory history, Instrument instrument, Period period, int limit, long from, long end, boolean range) throws Exception {
         CompletableFuture<List<IBar>> result = new CompletableFuture<>();
         ConcurrentNavigableMap<Long, IBar> bars = new ConcurrentSkipListMap<>();
         AtomicBoolean canceled = new AtomicBoolean();
@@ -388,7 +443,7 @@ public final class Bridge implements AutoCloseable {
             public void newTick(Instrument ignored, long time, double ask, double bid, double askVolume, double bidVolume) { }
             public void newBar(Instrument item, Period interval, OfferSide side, long time, double open, double close, double low, double high, double volume) {
                 if (canceled.get() || result.isDone()) return;
-                if (!instrument.equals(item) || !period.equals(interval) || side != OfferSide.BID) {
+                if (!instrument.equals(item) || !period.equals(interval) || side != OfferSide.BID || range && (time < from || time > end)) {
                     result.completeExceptionally(new Failure("internal", "JForex returned invalid historical data")); return;
                 }
                 bars.put(time, new LoadedBar(time, open, high, low, close, volume));
@@ -413,7 +468,8 @@ public final class Bridge implements AutoCloseable {
                 Thread.sleep(10);
             }
             if (activeContext == null || closing) throw new InterruptedException();
-            history.readBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, limit, end, 0, listener, progress);
+            if (range) history.readBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, from, end, listener, progress);
+            else history.readBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, limit, end, 0, listener, progress);
             return result.get(historyTimeoutMillis, TimeUnit.MILLISECONDS);
         } catch (TimeoutException error) {
             throw new Failure("timeout", "JForex historical data loading timed out. Retry the chart to reload history.");
@@ -431,7 +487,7 @@ public final class Bridge implements AutoCloseable {
         // Preserve actual partial-day bars (including Sunday opening sessions).
         if (bar.getTime() != current || bar.getVolume() != 0 || bar.getHigh() != bar.getLow()
                 || bar.getOpen() != bar.getClose()) return false;
-        return context.getDataService().isOfflineTime(System.currentTimeMillis(), instrument);
+        return context.getDataService().isOfflineTime(nowMillis.getAsLong(), instrument);
     }
 
     private Object unsubscribe(String id) {
@@ -480,7 +536,7 @@ public final class Bridge implements AutoCloseable {
         out.addProperty("sourceRevision", nextRevision());
         return out;
     }
-    private long nextRevision() { return revision.updateAndGet(previous -> Math.max(previous + 1, System.currentTimeMillis())); }
+    private long nextRevision() { return revision.updateAndGet(previous -> Math.max(previous + 1, nowMillis.getAsLong())); }
     private JsonObject tickCandle(Subscription sub, ITick tick, long start) {
         double bid = tick.getBid();
         if (!Double.isFinite(bid) || bid <= 0) throw new Failure("internal", "Invalid JForex quote");
@@ -493,16 +549,21 @@ public final class Bridge implements AutoCloseable {
         out.addProperty("closed", false); out.addProperty("quality", "provisional");
         out.addProperty("sourceRevision", nextRevision()); return out;
     }
-    private void emitBars(Subscription sub, List<JsonObject> bars) {
+    private void emitBars(Subscription sub, List<JsonObject> bars) { emitBars(sub, bars, 0, 0); }
+    private void emitBars(Subscription sub, List<JsonObject> bars, long coverageFrom, long coverageTo) {
         if (subscriptions.get(sub.id) != sub || closing) return;
-        JsonObject out = new JsonObject(); out.addProperty("event", "bars"); out.addProperty("subscriptionId", sub.id); out.add("bars", JSON.toJsonTree(bars)); output.accept(out);
+        JsonObject out = new JsonObject(); out.addProperty("event", "bars"); out.addProperty("subscriptionId", sub.id); out.add("bars", JSON.toJsonTree(bars));
+        if (coverageFrom > 0 && coverageFrom < coverageTo) {
+            out.addProperty("coverageFrom", coverageFrom / 1000); out.addProperty("coverageTo", coverageTo / 1000);
+        }
+        output.accept(out);
     }
     private void allHealth(String state, String reason) { for (String id : subscriptions.keySet()) health(id, state, reason, 0); }
     private void health(String id, String state, String reason, long tradeTime) {
         Subscription sub = subscriptions.get(id);
         if (sub == null || closing) return;
         JsonObject out = new JsonObject(); out.addProperty("event", "health"); out.addProperty("subscriptionId", id);
-        JsonObject health = new JsonObject(); health.addProperty("state", state); health.addProperty("reason", reason); health.addProperty("lastMessageAt", System.currentTimeMillis() / 1000);
+        JsonObject health = new JsonObject(); health.addProperty("state", state); health.addProperty("reason", reason); health.addProperty("lastMessageAt", nowMillis.getAsLong() / 1000);
         long lastTrade = Math.max(tradeTime, sub.lastTickTime);
         if (lastTrade > 0) health.addProperty("lastTradeAt", lastTrade / 1000);
         out.add("health", health); output.accept(out);
@@ -545,7 +606,7 @@ public final class Bridge implements AutoCloseable {
     }
     static final class Subscription {
         final String id; final Instrument instrument; final Period period; long lastTime; volatile long lastTickTime; JsonObject last;
-        final AtomicLong seedGeneration = new AtomicLong(); volatile DataJob seed; volatile boolean loading; volatile String seedError;
+        final AtomicLong seedGeneration = new AtomicLong(); volatile DataJob seed; volatile boolean loading; volatile String seedError; volatile long historyFrom;
         Subscription(String id, Instrument instrument, Period period) { this.id = id; this.instrument = instrument; this.period = period; }
     }
     static final class Failure extends RuntimeException {

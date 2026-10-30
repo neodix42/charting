@@ -69,19 +69,29 @@ func (a *App) GetDucascopyLoginChallenge() (jforex.LoginChallenge, error) {
 func (a *App) CancelDucascopyConnectionTest() jforex.Info { return a.jforex.CancelConnectionTest() }
 
 // Public-provider candles keep their existing SQLite cache. JForex uses its
-// private SDK cache, scoped to the configured server/account, so demo/live
-// sessions cannot reuse one another's chart snapshots after credential changes.
-type chartCandleCache struct{ manager *candlestorage.Manager }
+// private chart and SDK caches, scoped to the configured server/account, so
+// demo/live sessions cannot reuse one another's chart snapshots.
+type chartCandleCache struct {
+	manager *candlestorage.Manager
+	forex   *jforex.Manager
+}
 
 func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
 	if key.Exchange == "dukascopy" {
+		if cache.forex != nil {
+			return cache.forex.CachedCandles(key, from, to, limit)
+		}
 		return []domain.Candle{}, nil
 	}
 	return cache.manager.Range(key, from, to, limit)
 }
 
 func (cache chartCandleCache) Put(key domain.FeedKey, bars []domain.Candle) {
-	if key.Exchange != "dukascopy" {
-		cache.manager.Put(key, bars)
+	if key.Exchange == "dukascopy" {
+		if cache.forex != nil {
+			cache.forex.StoreCandles(key, bars)
+		}
+		return
 	}
+	cache.manager.Put(key, bars)
 }

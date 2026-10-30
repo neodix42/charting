@@ -154,7 +154,7 @@ func TestChartCandleCacheExcludesAuthenticatedForexButKeepsPublicCandles(t *test
 	if _, err = manager.Configure(true, info.Directory); err != nil {
 		t.Fatal(err)
 	}
-	cache := chartCandleCache{manager}
+	cache := chartCandleCache{manager: manager}
 	forex := domain.FeedKey{Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"}
 	public := domain.FeedKey{Exchange: "binance", Market: "spot", Instrument: "BTCUSDT", Timeframe: "1h"}
 	bars := []domain.Candle{{Time: 1700002800, Open: 1, High: 2, Low: 1, Close: 2, Volume: 3, Closed: true, Quality: "authoritative"}}

@@ -504,6 +504,11 @@ func TestBridgeHelperProcess(t *testing.T) {
 		return map[string]any{"time": at, "open": 1.1, "high": 1.3, "low": 1.0, "close": 1.1 + float64(revision)/100, "volume": 2.0, "closed": true, "quality": "authoritative", "sourceRevision": revision}
 	}
 	event := func(id string) {
+		if scenario == "stream-cache" {
+			_ = encoder.Encode(map[string]any{"event": "bars", "subscriptionId": id, "bars": []any{bar(streamCacheStart+2*3600, 2)}, "coverageFrom": streamCacheStart + 3600, "coverageTo": streamCacheStart + 3*3600})
+			_ = encoder.Encode(map[string]any{"event": "health", "subscriptionId": id, "health": map[string]any{"state": "live", "reason": "explicit cache fixture"}})
+			return
+		}
 		if scenario == "separate-health" {
 			_ = encoder.Encode(map[string]any{"event": "health", "subscriptionId": id, "health": map[string]any{"state": "offline", "reason": "fixture connection interruption", "lastMessageAt": 1792375200, "lastTradeAt": 1792375100}})
 			_ = encoder.Encode(map[string]any{"event": "bars", "subscriptionId": id, "bars": []any{bar(1792375200, 2)}})
@@ -560,6 +565,16 @@ func TestBridgeHelperProcess(t *testing.T) {
 		case "subscribe":
 			var sub string
 			_ = json.Unmarshal(request["subscriptionId"], &sub)
+			if scenario == "stream-cache" {
+				var anchor int64
+				_ = json.Unmarshal(request["historyFrom"], &anchor)
+				trace, err := os.OpenFile(os.Getenv("CRYPTODESK_JFOREX_CACHE_TRACE"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+				if err != nil {
+					os.Exit(3)
+				}
+				_, _ = fmt.Fprintln(trace, anchor)
+				_ = trace.Close()
+			}
 			subs[sub] = true
 			respond(id, map[string]any{"subscribed": true})
 			event(sub)
