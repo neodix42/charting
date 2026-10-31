@@ -293,3 +293,7 @@ export function TestDucascopyConnectionWithPIN(arg1) {
 export function TestTelegramBot() {
   return window['go']['main']['App']['TestTelegramBot']();
 }
+
+export function UpdateScreenerAnalysisCondition(arg1, arg2) {
+  return window['go']['main']['App']['UpdateScreenerAnalysisCondition'](arg1, arg2);
+}

@@ -52,7 +52,7 @@ test('Profitable percentage sorts all pages numerically and preserves category a
 });
 
 async function saveCondition(page:Page,name:string){
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill(name);
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();await control(page,'Condition name').fill(name);
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});
  await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
 }
@@ -85,7 +85,7 @@ test('Is equal saves, reloads and submits calendar and temporal comparisons',asy
  await control(page,'Condition 3 operator').selectOption('remainedFor');await control(page,'Condition 3 comparison').selectOption('equal');
  await control(page,'Condition 3 right type').selectOption('field');await control(page,'Condition 3 right field').selectOption('close');
  await control(page,'Condition 3 right bars ago').fill('1');
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();
  await control(page,'Condition name').fill('Monday equality');
  await page.getByRole('dialog',{name:'Save condition',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Save condition',exact:true})).toHaveCount(0);
@@ -224,7 +224,7 @@ test('closing an in-flight chart ignores its stale response and tick timestamps 
  await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
 });
 
-test('Safe Condition stores every row, loads from the right sidebar without applying, and survives reload',async({page})=>{
+test('Save as new stores every row, loads from the right sidebar without applying, and survives reload',async({page})=>{
  await open(page);
  await control(page,'Condition 1 left field').selectOption('ema_200');
  await control(page,'Condition 1 left timeframe').selectOption('h4');await control(page,'Condition 1 left bars ago').fill('2');
@@ -232,7 +232,7 @@ test('Safe Condition stores every row, loads from the right sidebar without appl
  await control(page,'Condition 1 operator').selectOption('remainedFor');await control(page,'Condition 1 comparison').selectOption('between');
  await control(page,'Condition 1 right constant').fill('30');await control(page,'Condition 1 upper constant').fill('70');await control(page,'Condition 1 bar window').fill('5');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();await control(page,'Condition 2 left field').selectOption('macd_histogram_12_26_9');await control(page,'Condition 2 operator').selectOption('crossesAbove');
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});await expect(dialog).toBeVisible();
  await expect(control(page,'Condition name')).toBeFocused();await control(page,'Condition name').fill('  Momentum setup  ');
  await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
@@ -263,17 +263,17 @@ test('Safe Condition stores every row, loads from the right sidebar without appl
 
 test('saved-condition names and failures preserve previous entries and the current draft',async({page})=>{
  await open(page);const sidebar=page.getByRole('complementary',{name:'Saved conditions',exact:true});
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});
  await control(page,'Condition name').fill('   ');await expect(dialog.getByRole('button',{name:'Save condition',exact:true})).toBeDisabled();
  await control(page,'Condition name').fill('First');await dialog.getByRole('button',{name:'Save condition',exact:true}).click();
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill('first');await dialog.getByRole('button',{name:'Save condition',exact:true}).click();
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();await control(page,'Condition name').fill('first');await dialog.getByRole('button',{name:'Save condition',exact:true}).click();
  await expect(dialog.getByRole('alert')).toContainText('already exists');expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions().length)).toBe(1);
  await page.evaluate(()=>(window as any).__testAnalysisErrors({savedWrite:'Cannot save named condition: disk full'}));
  await control(page,'Condition name').fill('Second');await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('disk full');
  await page.evaluate(()=>(window as any).__testAnalysisErrors({}));await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
  await expect(sidebar.getByRole('button',{name:'Load condition First',exact:true})).toBeVisible();await expect(sidebar.getByRole('button',{name:'Load condition Second',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill('Cancelled');await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
- await expect(page.getByRole('button',{name:'Safe Condition',exact:true})).toBeFocused();expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions().length)).toBe(2);
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();await control(page,'Condition name').fill('Cancelled');await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Save as new',exact:true})).toBeFocused();expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions().length)).toBe(2);
  expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
 });
 
@@ -282,13 +282,13 @@ test('saved-condition list errors can retry while ordinary Analysis remains avai
  await page.evaluate(files=>{(window as any).__testSetEnrichmentFiles(files);(window as any).__testAnalysisErrors({savedList:'Saved conditions use an unsupported version; original state preserved'});},[file(0)]);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  const sidebar=page.getByRole('complementary',{name:'Saved conditions',exact:true});
- await expect(sidebar.getByRole('alert')).toContainText('original state preserved');await expect(page.getByRole('button',{name:'Safe Condition',exact:true})).toBeDisabled();
+ await expect(sidebar.getByRole('alert')).toContainText('original state preserved');await expect(page.getByRole('button',{name:'Save as new',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
  await page.evaluate(()=>(window as any).__testAnalysisErrors({}));await sidebar.getByRole('button',{name:'Retry saved conditions',exact:true}).click();
- await expect(page.getByRole('button',{name:'Safe Condition',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Save as new',exact:true})).toBeEnabled();
  const geometry=await sidebar.evaluate(element=>({left:element.getBoundingClientRect().left,right:element.getBoundingClientRect().right,mainRight:document.querySelector('.analysis-builder')!.getBoundingClientRect().right,width:innerWidth}));
  expect(geometry.left).toBeGreaterThan(geometry.mainRight);expect(geometry.right).toBeLessThanOrEqual(geometry.width);
- await page.getByRole('button',{name:'Apply conditions',exact:true}).click();await expect(sidebar.getByRole('button',{name:'Safe Condition',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();await expect(sidebar.getByRole('button',{name:'Save as new',exact:true})).toBeDisabled();
 });
 
 test('normal close waits for an in-flight named condition save',async({page})=>{
@@ -297,7 +297,7 @@ test('normal close waits for an in-flight named condition save',async({page})=>{
   const api=window.go!.main!.App!,original=api.SaveScreenerAnalysisCondition;
   api.SaveScreenerAnalysisCondition=(name,request)=>new Promise(resolve=>{(window as any).__releaseNamedSave=async()=>resolve(await original(name,request));});
  });
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill('Pending close');
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();await control(page,'Condition name').fill('Pending close');
  await page.getByRole('dialog',{name:'Save condition',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseNamedSave)).toBe('function');
  await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'named-condition-save'}));
@@ -316,7 +316,7 @@ test('a delayed saved list cannot erase a newly saved condition',async({page})=>
  });
  await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSavedList)).toBe('function');
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await control(page,'Condition name').fill('Keep this');
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();await control(page,'Condition name').fill('Keep this');
  await page.getByRole('dialog',{name:'Save condition',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
  await expect(page.getByRole('button',{name:'Load condition Keep this',exact:true})).toBeVisible();
  await page.evaluate(()=>(window as any).__releaseSavedList());await page.waitForTimeout(100);
@@ -541,7 +541,7 @@ test('scan categories default to all, survive row edits and reload, and are incl
  await control(page,'Condition 1 right constant').fill('12');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().categories)).toEqual(['Forex']);
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();
  await control(page,'Condition name').fill('Forex only');
  await page.getByRole('dialog',{name:'Save condition',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]?.request.categories)).toEqual(['Forex']);
@@ -623,7 +623,7 @@ test('asset headings use full catalog descriptions instead of aggregate-match bo
 
 test('Simulate trade validates fields and duration, saves only valid duration edits, and can be removed',async({page})=>{
  await open(page);
- const add=page.getByRole('button',{name:'Simulate trade',exact:true}),apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Safe Condition',exact:true});
+ const add=page.getByRole('button',{name:'Simulate trade',exact:true}),apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Save as new',exact:true});
  const positions=await page.locator('.analysis-add-actions button').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().top));expect(Math.abs(positions[0]-positions[1])).toBeLessThan(2);
  await add.click();await expect(add).toBeDisabled();await expect(add).toHaveAttribute('aria-expanded','true');
  await expect(control(page,'Stop Loss field')).toHaveValue('');await expect(control(page,'Take profit field')).toHaveValue('');await expect(control(page,'Trade duration in bars')).toHaveValue('20');
@@ -705,7 +705,7 @@ test('normal close flushes the latest complete simulation while an invalid durat
 
 test('SL Bars ago and risk targets validate, persist with named conditions and keep applied summaries stable',async({page})=>{
  await open(page);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
- const apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Safe Condition',exact:true}),offset=control(page,'Stop Loss bars ago'),profit=control(page,'Take profit field');
+ const apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Save as new',exact:true}),offset=control(page,'Stop Loss bars ago'),profit=control(page,'Take profit field');
  await expect(offset).toHaveValue('0');await expect(profit.locator('optgroup[label="Stop Loss distance"] option')).toHaveText(['1xSL','2xSL','3xSL']);
  await control(page,'Stop Loss field').selectOption('low');await profit.selectOption('risk:1');await expect(apply).toBeEnabled();
  for(const invalid of ['', '-1','0.5','10001']){

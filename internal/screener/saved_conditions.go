@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -85,7 +86,46 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 func (m *Manager) SavedAnalysisConditions() ([]SavedAnalysisCondition, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.readSavedConditions()
+	conditions, err := m.readSavedConditions()
+	if err != nil || m.closed {
+		return conditions, err
+	}
+	// Older versions omitted evidence when any unrelated file failed. Recover
+	// missing snapshots from a compatible finished scan or saved peer, without
+	// starting analysis or replacing an existing recorded scope during a read.
+	changed := false
+	for i := range conditions {
+		if conditions[i].Analysis != nil {
+			continue
+		}
+		conditions[i].Analysis, err = compatibleAnalysisProfitability(conditions[i].Request, conditions, m.analysis)
+		if err != nil {
+			return nil, fmt.Errorf("recover saved condition analysis: %w", err)
+		}
+		changed = changed || conditions[i].Analysis != nil
+	}
+	if changed {
+		if err = m.writeSavedConditions(conditions); err != nil {
+			return nil, fmt.Errorf("recover saved condition analysis: %w", err)
+		}
+	}
+	return conditions, nil
+}
+
+func (m *Manager) writeSavedConditions(conditions []SavedAnalysisCondition) error {
+	saved := savedAnalysisConditions{Version: 1, Conditions: conditions}
+	encoded, err := json.Marshal(saved)
+	if err != nil {
+		return err
+	}
+	if len(encoded)+1 > savedConditionsBytes {
+		return errors.New("saved conditions exceed 128 MiB; existing conditions preserved")
+	}
+	if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+		return err
+	}
+	m.notifySavedConditionsChangedLocked()
+	return nil
 }
 
 func (m *Manager) SaveAnalysisCondition(name string, request AnalysisRequest) (SavedAnalysisCondition, error) {
@@ -118,24 +158,58 @@ func (m *Manager) SaveAnalysisCondition(name string, request AnalysisRequest) (S
 		return SavedAnalysisCondition{}, err
 	}
 	condition := SavedAnalysisCondition{ID: hex.EncodeToString(id[:]), Name: name, Request: copyAnalysisRequest(request)}
-	if a := m.analysis; a != nil && sameAnalysisProfitabilityRequest(a.request, request) {
-		condition.Analysis, err = completedAnalysisProfitability(a)
-		if err != nil {
-			return SavedAnalysisCondition{}, fmt.Errorf("record saved condition profitability: %w", err)
-		}
-	}
-	saved := savedAnalysisConditions{Version: 1, Conditions: append(conditions, condition)}
-	encoded, err := json.Marshal(saved)
+	condition.Analysis, err = compatibleAnalysisProfitability(request, conditions, m.analysis)
 	if err != nil {
-		return SavedAnalysisCondition{}, err
+		return SavedAnalysisCondition{}, fmt.Errorf("record saved condition profitability: %w", err)
 	}
-	if len(encoded)+1 > savedConditionsBytes {
-		return SavedAnalysisCondition{}, errors.New("saved conditions exceed 128 MiB; existing conditions preserved")
-	}
-	if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+	if err = m.writeSavedConditions(append(conditions, condition)); err != nil {
 		return SavedAnalysisCondition{}, fmt.Errorf("save named condition: %w", err)
 	}
 	return condition, nil
+}
+
+// UpdateAnalysisCondition replaces a named condition's request in place. Its
+// identity, name and position are stable; incompatible historical evidence is
+// discarded unless a compatible completed scan or saved peer can replace it.
+func (m *Manager) UpdateAnalysisCondition(id string, request AnalysisRequest) (SavedAnalysisCondition, error) {
+	if len(id) != 32 {
+		return SavedAnalysisCondition{}, errors.New("invalid saved condition ID")
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return SavedAnalysisCondition{}, errors.New("invalid saved condition ID")
+	}
+	if err := validateAnalysisRequest(request, false); err != nil {
+		return SavedAnalysisCondition{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return SavedAnalysisCondition{}, errors.New("screener is closed")
+	}
+	conditions, err := m.readSavedConditions()
+	if err != nil {
+		return SavedAnalysisCondition{}, err
+	}
+	for i, condition := range conditions {
+		if condition.ID != id {
+			continue
+		}
+		analysis, err := compatibleAnalysisProfitability(request, conditions, m.analysis)
+		if err != nil {
+			return SavedAnalysisCondition{}, fmt.Errorf("record updated condition analysis: %w", err)
+		}
+		condition.Request = copyAnalysisRequest(request)
+		condition.Analysis = analysis
+		if reflect.DeepEqual(conditions[i], condition) {
+			return condition, nil
+		}
+		conditions[i] = condition
+		if err = m.writeSavedConditions(conditions); err != nil {
+			return SavedAnalysisCondition{}, fmt.Errorf("update named condition: %w", err)
+		}
+		return condition, nil
+	}
+	return SavedAnalysisCondition{}, errors.New("saved condition was not found")
 }
 
 func (m *Manager) DeleteAnalysisCondition(id string) error {
@@ -158,8 +232,7 @@ func (m *Manager) DeleteAnalysisCondition(id string) error {
 		if condition.ID != id {
 			continue
 		}
-		saved := savedAnalysisConditions{Version: 1, Conditions: append(conditions[:i], conditions[i+1:]...)}
-		if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+		if err = m.writeSavedConditions(append(conditions[:i], conditions[i+1:]...)); err != nil {
 			return fmt.Errorf("delete named condition: %w", err)
 		}
 		return nil
@@ -203,15 +276,7 @@ func (m *Manager) RenameAnalysisCondition(id, name string) (SavedAnalysisConditi
 		}
 		condition.Name = name
 		conditions[i] = condition
-		saved := savedAnalysisConditions{Version: 1, Conditions: conditions}
-		encoded, err := json.Marshal(saved)
-		if err != nil {
-			return SavedAnalysisCondition{}, err
-		}
-		if len(encoded)+1 > savedConditionsBytes {
-			return SavedAnalysisCondition{}, errors.New("saved conditions exceed 128 MiB; existing conditions preserved")
-		}
-		if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+		if err = m.writeSavedConditions(conditions); err != nil {
 			return SavedAnalysisCondition{}, fmt.Errorf("rename named condition: %w", err)
 		}
 		return condition, nil

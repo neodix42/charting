@@ -46,8 +46,8 @@ func TestLiveProfitabilityUsesExactBoundaryPeriodAndStableBestFile(t *testing.T)
 	}
 	condition.Request.ProfitabilityFilter = 0
 	condition.Analysis = nil
-	if result, allowed = SavedConditionProfitabilityFor(condition, "eurusd", "h1"); !allowed || result != nil {
-		t.Fatal("legacy zero filter must not invent evidence or exclude downloaded assets")
+	if result, allowed = SavedConditionProfitabilityFor(condition, "eurusd", "h1"); allowed || result != nil {
+		t.Fatal("zero filter without matching evidence must remain excluded")
 	}
 	for _, threshold := range []int{5, 85, 100} {
 		row := liveProfitRow("eurusd", "h1", "huge.csv", math.MaxInt64, math.MaxInt64)
@@ -95,7 +95,7 @@ func TestLiveAlertsProfitabilityUnionDoesNotWidenEachConditionOrRefreshUnrelated
 		liveProfitRow("eurusd", "h1", names["eurusd/h1"], 10, 11),
 		liveProfitRow("gbpusd", "h1", names["gbpusd/h1"], 2, 10),
 	}}
-	second, err := m.SaveAnalysisCondition("GBP qualifier", conditions[0].Request)
+	second, err := saveLiveCondition(t, m, "GBP qualifier", conditions[0].Request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,8 +107,7 @@ func TestLiveAlertsProfitabilityUnionDoesNotWidenEachConditionOrRefreshUnrelated
 	if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), savedAnalysisConditions{Version: 1, Conditions: []SavedAnalysisCondition{first, second}}); err != nil {
 		t.Fatal(err)
 	}
-	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: first.ID, Period: "h1"}, {ConditionID: second.ID, Period: "h1"}}
-	config.Symbols = []string{"eurusd", "gbpusd"}
+	config.ConditionIDs = []string{first.ID, second.ID}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -164,18 +163,19 @@ func TestLiveAlertsProfitabilityUnionDoesNotWidenEachConditionOrRefreshUnrelated
 	if _, err = restored.Configure(config); err != nil {
 		t.Fatal("saved condition evidence did not survive restart", err)
 	}
-	// Choosing a period with only nonmatching/missing historical evidence is blocked.
+	// Obsolete public choices cannot alter the inherited condition/asset scope.
 	wrong := copyLiveAlertsConfig(config)
-	wrong.ConditionPeriods[0].Period = "d1"
-	if _, err = restored.Configure(wrong); err == nil {
-		t.Fatal("condition borrowed H1 profitability for D1 alerts")
+	wrong.Symbols = []string{"audusd"}
+	wrong.Periods = []string{"d1"}
+	if _, err = restored.Configure(wrong); err != nil {
+		t.Fatal("obsolete selections changed inherited eligibility", err)
 	}
-	// Files that exist but meet no selected condition cannot be forced into a scan.
-	wrong = copyLiveAlertsConfig(config)
-	wrong.Symbols = append(wrong.Symbols, "audusd")
-	if _, err = restored.Configure(wrong); err == nil {
-		t.Fatal("manually added unqualified symbol enabled alerts")
+	for _, scope := range restored.Info().ConditionScopes {
+		if len(scope.Targets) != 1 || scope.Targets[0].Period != "h1" || scope.Targets[0].Symbol == "audusd" {
+			t.Fatal("obsolete selectors widened inherited targets", scope)
+		}
 	}
+
 }
 
 func TestLiveAlertsFilteredConditionWithoutEvidenceDoesNotContactRefreshOrSend(t *testing.T) {
@@ -185,6 +185,7 @@ func TestLiveAlertsFilteredConditionWithoutEvidenceDoesNotContactRefreshOrSend(t
 		t.Fatal(err)
 	}
 	saved[0].Request.ProfitabilityFilter = 85
+	saved[0].Analysis = nil
 	if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), savedAnalysisConditions{Version: 1, Conditions: saved}); err != nil {
 		t.Fatal(err)
 	}

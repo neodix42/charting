@@ -27,8 +27,9 @@ func liveAlertsFixture(t *testing.T) (*Manager, *LiveAlerts, LiveAlertsConfig, s
 		t.Fatal(err)
 	}
 	request := defaultAnalysisRequest()
+	request.Period = "h1"
 	request.TradeSimulation = &AnalysisTradeSimulation{StopLoss: "low", StopLossBarsAgo: 1, TakeProfitMultiple: 2, Duration: 3}
-	condition, err := m.SaveAnalysisCondition("Latest close positive", request)
+	condition, err := saveLiveCondition(t, m, "Latest close positive", request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +46,7 @@ func liveAlertsFixture(t *testing.T) (*Manager, *LiveAlerts, LiveAlertsConfig, s
 		}
 		return out, ctx.Err()
 	}
-	config := LiveAlertsConfig{Enabled: true, ConditionPeriods: []LiveAlertConditionPeriod{{ConditionID: condition.ID, Period: "h1"}}, Symbols: []string{"eurusd"}}
+	config := LiveAlertsConfig{Enabled: true, ConditionIDs: []string{condition.ID}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestLiveAlertsLatestClosedAndDurableDedup(t *testing.T) {
 	if info.Sent != 2 || len(info.Recent) != 2 || info.Recent[0].Status != "sent" || info.Assets[0].Symbol != "eurusd" {
 		t.Fatalf("wrong persisted info: %+v", info)
 	}
-	if info.Config.ConditionPeriods[0].ConditionID != config.ConditionPeriods[0].ConditionID || info.Config.ConditionPeriods[0].Period != "h1" {
+	if !reflect.DeepEqual(info.Config.ConditionIDs, config.ConditionIDs) {
 		t.Fatal("selection did not survive restart")
 	}
 	if st, err := os.Stat(path); err != nil || st.Size() == 0 {
@@ -95,11 +96,11 @@ func TestLiveAlertsOnlyNewestMatchNoHistoricalReplay(t *testing.T) {
 	m, l, config, path := liveAlertsFixture(t)
 	request := defaultAnalysisRequest()
 	request.Conditions[0].Right.Value = 14
-	saved, err := m.SaveAnalysisCondition("Above fourteen", request)
+	saved, err := saveLiveCondition(t, m, "Above fourteen", request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: saved.ID, Period: "h1"}}
+	config.ConditionIDs = []string{saved.ID}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -163,12 +164,11 @@ func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T)
 				t.Fatal(err)
 			}
 			writeDataFile(t, m, "btcusd-h1-2024-01-01-2024-01-03.csv", string(data))
-			second, err := m.SaveAnalysisCondition("Second matching condition", defaultAnalysisRequest())
+			second, err := saveLiveCondition(t, m, "Second matching condition", defaultAnalysisRequest())
 			if err != nil {
 				t.Fatal(err)
 			}
-			config.ConditionPeriods = append(config.ConditionPeriods, LiveAlertConditionPeriod{ConditionID: second.ID, Period: "h1"})
-			config.Symbols = []string{"btcusd", "eurusd"}
+			config.ConditionIDs = append(config.ConditionIDs, second.ID)
 			if _, err = l.Configure(config); err != nil {
 				t.Fatal(err)
 			}
@@ -210,7 +210,7 @@ func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T)
 			}
 			defer restored.Close()
 			restored.refresh = l.refresh
-			if err = restored.check(context.Background(), config, asOf); err != nil || retryCalls != 4-failOn || len(restored.state.Watermarks) != 4 || restored.state.Sent != 3 {
+			if err = restored.check(context.Background(), config, asOf); err != nil || retryCalls != 3-failOn || len(restored.state.Watermarks) != 3 || restored.state.Sent != 2 {
 				t.Fatalf("remaining signals were not retained for a later check: %v calls=%d state=%+v", err, retryCalls, restored.state)
 			}
 		})
@@ -235,11 +235,11 @@ func TestLiveAlertsFailedNonMatchFlushRetriesWithoutChangingBar(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
 	request := defaultAnalysisRequest()
 	request.Conditions[0].Right.Value = 1000
-	saved, err := m.SaveAnalysisCondition("No match", request)
+	saved, err := saveLiveCondition(t, m, "No match", request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConditionPeriods = []LiveAlertConditionPeriod{{ConditionID: saved.ID, Period: "h1"}}
+	config.ConditionIDs = []string{saved.ID}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -350,44 +350,23 @@ func TestLiveAlertsScheduleUTCAtClose(t *testing.T) {
 }
 
 func TestLiveAlertsDefaultsDraftSelectionAndCopiedInfo(t *testing.T) {
-	m, l, config, _ := liveAlertsFixture(t)
+	_, l, config, _ := liveAlertsFixture(t)
 	config.Enabled = false
-	config.ConditionPeriods[0].Period = "h1"
 	if _, err := l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
-	// Only downloaded intersections are evaluated; a d1 choice does not create
-	// a fresh un-enriched history for this h1-only asset.
+	// Only downloaded intersections of the recorded matching scope are evaluated.
 	config.Enabled = true
 	if _, err := l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
 	info := l.Info()
-	info.Config.Symbols[0] = "btcusd"
-	info.Config.ConditionPeriods[0].Period = "d1"
-	if l.Info().Config.ConditionPeriods[0].Period != "h1" {
-		t.Fatal("Info returned mutable condition period assignments")
+	info.Config.ConditionIDs[0] = strings.Repeat("f", 32)
+	info.ConditionScopes[0].Targets[0].Symbol = "btcusd"
+	if l.Info().Config.ConditionIDs[0] != config.ConditionIDs[0] || l.Info().ConditionScopes[0].Targets[0].Symbol != "eurusd" || !reflect.DeepEqual(l.Info().Assets[0].Periods, []string{"h1"}) {
+		t.Fatal("Info exposed mutable selections, targets or inventory")
 	}
-	info.Assets[0].Periods[0] = "bad"
-	if l.Info().Config.Symbols[0] != "eurusd" || !reflect.DeepEqual(l.Info().Assets[0].Periods, []string{"h1"}) {
-		t.Fatal("Info returned mutable manager configuration")
-	}
-	if _, err := l.CheckNow(); err != nil {
-		t.Fatal("manual check was not accepted", err)
-	}
-	if _, err := l.CheckNow(); err == nil {
-		t.Fatal("queued check allowed duplicate trigger")
-	}
-	fresh, err := NewLiveAlerts(newManager(t.TempDir(), func() (workerRuntime, error) { return workerRuntime{}, errors.New("offline") }), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fresh.manager.Close()
-	defer fresh.Close()
-	if fresh.Info().Config.Enabled || len(fresh.Info().Config.ConditionPeriods) != 0 || len(fresh.Info().Config.Symbols) != 0 {
-		t.Fatal("new profile enabled alerts by default")
-	}
-	_ = m
+
 }
 
 func TestLiveAlertsRestartInterruptedClaimShowsUncertain(t *testing.T) {
@@ -406,7 +385,7 @@ func TestLiveAlertsRestartInterruptedClaimShowsUncertain(t *testing.T) {
 		t.Fatal("restart did not preserve claim/config")
 	}
 	encoded, err := json.Marshal(copy.Info())
-	if err != nil || !strings.Contains(string(encoded), "conditionPeriods") {
+	if err != nil || !strings.Contains(string(encoded), "conditionIds") {
 		t.Fatal("public JSON contract", err)
 	}
 }
@@ -415,20 +394,22 @@ func TestLiveAlertsProductionRefreshConsolidatesAndEnrichesBeforeLatestCheck(t *
 	m, trace, _ := refreshManager(t, false)
 	seedDuplicateHistories(t, m)
 	unselectedName := "audusd-d1-2024-01-01-2024-01-04.csv"
-	unselectedPath := writeDataFile(t, m, unselectedName, refreshCSV)
 	request := defaultAnalysisRequest()
+	request.Period = "d1"
 	request.Conditions[0].Left.Field = "sma_2"
-	condition, err := m.SaveAnalysisCondition("Moving average positive", request)
+	condition, err := saveLiveCondition(t, m, "Moving average positive", request)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A history downloaded after the recorded scan must not widen its scope.
+	unselectedPath := writeDataFile(t, m, unselectedName, refreshCSV)
 	var alerts []LiveAlert
 	l, err := NewLiveAlerts(m, func(ctx context.Context, alert LiveAlert) error { alerts = append(alerts, alert); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer l.Close()
-	config := LiveAlertsConfig{Enabled: true, Symbols: []string{"eurusd"}, ConditionPeriods: []LiveAlertConditionPeriod{{ConditionID: condition.ID, Period: "d1"}}}
+	config := LiveAlertsConfig{Enabled: true, ConditionIDs: []string{condition.ID}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}

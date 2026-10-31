@@ -18,7 +18,8 @@ it('uses recorded counts and the assigned period with inclusive minimum threshol
  expect(savedConditionAllowsAsset(value,'ethusd','d1')).toBe(true);
  expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(false);
  value.request.profitabilityFilter=0;
- expect(savedConditionAllowsAsset(value,'unknown','h1')).toBe(true);
+ expect(savedConditionAllowsAsset(value,'unknown','h1')).toBe(false);
+ expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(true);
  expect(profitabilityLabel(savedConditionProfitability(value,'btcusd','h1')!)).toBe('Profitability: 90.91%, 10 / 11 hit TP');
 });
 it('requires evidence for filtered rules and deterministically picks the best saved file',()=>{
@@ -26,6 +27,10 @@ it('requires evidence for filtered rules and deterministically picks the best sa
  expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(false);
  value.analysis={analyzedAt:1,assets:[{symbol:'btcusd',timeframe:'h1',fileName:'z.csv',matches:10,takeProfitHits:9,profitablePercent:90},{symbol:'btcusd',timeframe:'h1',fileName:'A.csv',matches:20,takeProfitHits:18,profitablePercent:90}]};
  expect(savedConditionProfitability(value,'btcusd','h1')!.fileName).toBe('A.csv');
+});
+it('keeps matching evidence without simulation eligible only for an unrestricted recorded scope',()=>{
+ const value=condition();value.analysis={analyzedAt:1,failedFiles:1,assets:[{symbol:'btcusd',timeframe:'h1',fileName:'matches.csv',matches:10,takeProfitHits:0,profitablePercent:0,profitabilityUnavailable:true}]};
+ expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(false);value.request.profitabilityFilter=0;expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(true);expect(savedConditionProfitability(value,'btcusd','h1')).toBeUndefined();delete value.analysis;expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(false);
 });
 it('compares working drafts with normalized Go JSON without false modified markers',()=>{
  const draft=initialAnalysisView();draft.profitabilityFilter=0;

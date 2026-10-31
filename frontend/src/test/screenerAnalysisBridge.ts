@@ -9,8 +9,11 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
  let view:AnalysisRequest=JSON.parse(sessionStorage.getItem(viewKey)||'null')??initialAnalysisView();
  const savedKey='cryptodesk-explicit-test-saved-conditions';
  let savedConditions:SavedAnalysisCondition[]=JSON.parse(sessionStorage.getItem(savedKey)||'[]');
- let catalogOverride:Partial<AnalysisCatalog>={},request:AnalysisRequest|null=null,reads=0,chartDelay=0;
- let errors:Partial<Record<'catalog'|'view'|'save'|'start'|'status'|'chart'|'savedList'|'savedWrite'|'savedRename'|'savedDelete',string>>={};
+ let catalogOverride:Partial<AnalysisCatalog>={},request:AnalysisRequest|null=null,reads=0,savedReads=0,savedRevision=0,analyzedAt=0,chartDelay=0;
+ const savedIdentity=()=>JSON.stringify(savedConditions.map(condition=>({...condition,request:analysisRequestIdentity(condition.request)})));
+ let savedState=savedIdentity();
+ const persistSaved=()=>{const next=savedIdentity();if(next!==savedState){savedState=next;savedRevision++;}sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));};
+ let errors:Partial<Record<'catalog'|'view'|'save'|'start'|'status'|'chart'|'savedList'|'savedWrite'|'savedUpdate'|'savedRename'|'savedDelete',string>>={};
  const saves:AnalysisRequest[]=[],chartRequests:Array<{resultID:string;occurrence:number;before:number;after:number}>=[];
  let info:AnalysisInfo={active:false,phase:'idle',total:0,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],offset:0,limit:50,totalResults:0};
  let charts:Record<string,AnalysisChart>={},saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined;
@@ -19,16 +22,17 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
  const catalog=():AnalysisCatalog=>({directory:directory(),files:files(),fields:[...new Set(['price','close',...files().flatMap(file=>file.fields.map(field=>field.toLowerCase()))])].filter(field=>field!=='timestamp'),timeframes:[...new Set(files().map(file=>file.timeframe).filter(Boolean))],categories:[...new Set([...instrumentCatalog().groups.map(group=>group.name),...files().map(file=>file.category)])],...structuredClone(catalogOverride)});
  const signalKey=(value:AnalysisRequest)=>analysisRequestIdentity(value,false);
  const evidence=(value:AnalysisRequest):SavedConditionAnalysis|undefined=>{
-  if(!request||signalKey(request)!==signalKey(value)||info.phase!=='completed'||info.active||info.failed||info.error||info.results.some(result=>result.status!=='completed'||result.error))return;
+  if(!request||signalKey(request)!==signalKey(value)||info.phase!=='completed'||info.active||info.error||info.results.some(result=>!['completed','failed'].includes(result.status))||info.results.length>0&&info.results.every(result=>result.status==='failed'||!!result.error))return;
   const best=new Map<string,SavedConditionAnalysis['assets'][number]>();
   for(const result of info.results){
-   if(result.matches<=0||!result.simulation||result.simulation.unavailable===result.matches||!result.timeframe||result.timeframe==='tick')continue;
-   const row={symbol:result.symbol,timeframe:result.timeframe,fileName:result.name,matches:result.matches,takeProfitHits:result.simulation.takeProfitHits,profitablePercent:100*result.simulation.takeProfitHits/result.matches},key=`${row.symbol}\0${row.timeframe}`,previous=best.get(key);
-   if(!previous||row.profitablePercent>previous.profitablePercent||row.profitablePercent===previous.profitablePercent&&row.fileName<previous.fileName)best.set(key,row);
+   if(result.status!=='completed'||result.error||result.matches<=0||!result.timeframe||result.timeframe==='tick')continue;
+   const unavailable=!result.simulation||result.simulation.unavailable===result.matches;
+   const row={symbol:result.symbol,timeframe:result.timeframe,fileName:result.name,matches:result.matches,takeProfitHits:unavailable?0:result.simulation!.takeProfitHits,profitablePercent:unavailable?0:100*result.simulation!.takeProfitHits/result.matches,...(unavailable?{profitabilityUnavailable:true}:{})},key=`${row.symbol}\0${row.timeframe}`,previous=best.get(key);
+   if(!previous||previous.profitabilityUnavailable&&!row.profitabilityUnavailable||!!row.profitabilityUnavailable===!!previous.profitabilityUnavailable&&(row.profitablePercent>previous.profitablePercent||row.profitablePercent===previous.profitablePercent&&row.fileName<previous.fileName))best.set(key,row);
   }
-  return{analyzedAt:Date.now(),assets:[...best.values()].sort((left,right)=>left.symbol===right.symbol?left.timeframe<right.timeframe?-1:left.timeframe>right.timeframe?1:0:left.symbol<right.symbol?-1:1)};
+  return{analyzedAt,...(info.failed?{failedFiles:info.failed}:{}),assets:[...best.values()].sort((left,right)=>left.symbol===right.symbol?left.timeframe<right.timeframe?-1:left.timeframe>right.timeframe?1:0:left.symbol<right.symbol?-1:1)};
  };
- const rememberEvidence=()=>{if(!request||info.active||info.phase!=='completed'||info.failed)return;savedConditions=savedConditions.map(condition=>{const analysis=evidence(condition.request);return analysis?{...condition,analysis}:condition;});sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));};
+ const rememberEvidence=()=>{if(!request||info.active||info.phase!=='completed')return;savedConditions=savedConditions.map(condition=>{const analysis=evidence(condition.request);return analysis?{...condition,analysis}:condition;});persistSaved();};
  const page=(offset:number,limit:number,filter?:AnalysisResultFilter):AnalysisInfo=>{
   const groups=new Map<string,{matches:number;files:number}>();
   info.results.forEach(result=>{const key=result.symbol||result.name,current=groups.get(key)??{matches:0,files:0};current.matches+=result.matches;if(result.matches)current.files++;groups.set(key,current);});
@@ -51,18 +55,24 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
   async GetScreenerAnalysisCatalog(){if(errors.catalog)throw Error(errors.catalog);return catalog();},
   async GetScreenerAnalysisView(){if(errors.view)throw Error(errors.view);return structuredClone(view);},
   async SaveScreenerAnalysisView(value){saves.push(structuredClone(value));if(saveGate)await saveGate;if(errors.save)throw Error(errors.save);view=structuredClone(value);sessionStorage.setItem(viewKey,JSON.stringify(view));return structuredClone(view);},
-  async GetScreenerSavedConditions(){if(errors.savedList)throw Error(errors.savedList);return structuredClone(savedConditions);},
+  async GetScreenerSavedConditions(){savedReads++;if(errors.savedList)throw Error(errors.savedList);return structuredClone(savedConditions);},
   async SaveScreenerAnalysisCondition(name,value){
    if(errors.savedWrite)throw Error(errors.savedWrite);
    name=name.trim();if(!name)throw Error('Enter a condition name.');
    if(savedConditions.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw Error('A condition with this name already exists; choose another name.');
    const saved={id:crypto.randomUUID().replaceAll('-',''),name,request:structuredClone(value),analysis:evidence(value)};
-   savedConditions.push(saved);sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));return structuredClone(saved);
+   savedConditions.push(saved);persistSaved();return structuredClone(saved);
+  },
+  async UpdateScreenerAnalysisCondition(id,value){
+   if(errors.savedUpdate)throw Error(errors.savedUpdate);
+   const index=savedConditions.findIndex(item=>item.id===id);if(index<0)throw Error('Saved condition not found.');
+   const previous=savedConditions[index],analysis=evidence(value)??(signalKey(previous.request)===signalKey(value)?previous.analysis:undefined),saved={...previous,request:structuredClone(value),analysis};
+   savedConditions[index]=saved;persistSaved();return structuredClone(saved);
   },
   async DeleteScreenerAnalysisCondition(id){
    if(errors.savedDelete)throw Error(errors.savedDelete);
    if(!savedConditions.some(item=>item.id===id))throw Error('Saved condition not found.');
-   savedConditions=savedConditions.filter(item=>item.id!==id);sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));
+   savedConditions=savedConditions.filter(item=>item.id!==id);persistSaved();
   },
   async RenameScreenerAnalysisCondition(id,name){
    if(errors.savedRename)throw Error(errors.savedRename);
@@ -70,9 +80,9 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
    const index=savedConditions.findIndex(item=>item.id===id);if(index<0)throw Error('Saved condition not found.');
    if(savedConditions.some(item=>item.id!==id&&item.name.toLowerCase()===name.toLowerCase()))throw Error('A condition with this name already exists; choose another name.');
    const renamed={...savedConditions[index],name};savedConditions[index]=renamed;
-   sessionStorage.setItem(savedKey,JSON.stringify(savedConditions));return structuredClone(renamed);
+   persistSaved();return structuredClone(renamed);
   },
-  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);info={...info,tradeSimulation:structuredClone(value.tradeSimulation??null),active:true,phase:'indexing',total:files().filter(file=>(value.categories==null||value.categories.includes(file.category))&&(!value.period||value.period==='all'||file.timeframe===value.period)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
+  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);analyzedAt=Date.now();info={...info,tradeSimulation:structuredClone(value.tradeSimulation??null),active:true,error:'',phase:'indexing',total:files().filter(file=>(value.categories==null||value.categories.includes(file.category))&&(!value.period||value.period==='all'||file.timeframe===value.period)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
   async GetScreenerAnalysis(offset,limit){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit);},
   async GetScreenerAnalysisFiltered(offset,limit,filter){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit,filter);},
   async CancelScreenerAnalysis(){info={...info,active:false,phase:'cancelled',currentFile:''};return page(0,50);},
@@ -87,7 +97,7 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
   __testSetAnalysisInfo:(value:Partial<AnalysisInfo>)=>{info={...info,...structuredClone(value)};rememberEvidence();},
   __testAnalysisInfo:()=>structuredClone(info),__testAnalysisRequest:()=>structuredClone(request),__testAnalysisReads:()=>reads,
   __testAnalysisView:()=>structuredClone(view),__testAnalysisSaves:()=>structuredClone(saves),
-  __testSavedAnalysisConditions:()=>structuredClone(savedConditions),
+  __testSavedAnalysisConditions:()=>structuredClone(savedConditions),__testSavedAnalysisConditionsRevision:()=>savedRevision,__testSavedAnalysisConditionsReads:()=>savedReads,
   __testSetAnalysisView:(value:AnalysisRequest)=>{view=structuredClone(value);sessionStorage.setItem(viewKey,JSON.stringify(view));},
   __testAnalysisErrors:(value:typeof errors)=>{errors=structuredClone(value);},
   __testSetAnalysisCharts:(value:Record<string,AnalysisChart>)=>{charts=structuredClone(value);},

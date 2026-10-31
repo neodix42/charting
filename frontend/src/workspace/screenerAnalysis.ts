@@ -7,8 +7,8 @@ export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:nu
 export type AnalysisPeriod='all'|'d1'|'h1';
 export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|'';profitabilityFilter?:number}
-export interface SavedConditionProfitability {symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
-export interface SavedConditionAnalysis {analyzedAt:number;assets:SavedConditionProfitability[]}
+export interface SavedConditionProfitability {profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
+export interface SavedConditionAnalysis {analyzedAt:number;failedFiles?:number;assets:SavedConditionProfitability[]}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest;analysis?:SavedConditionAnalysis|null}
 export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
 export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
@@ -22,6 +22,7 @@ export interface ScreenerAnalysisBackend {
  SaveScreenerAnalysisView(request:AnalysisRequest):Promise<AnalysisRequest>;
  GetScreenerSavedConditions():Promise<SavedAnalysisCondition[]>;
  SaveScreenerAnalysisCondition(name:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
+ UpdateScreenerAnalysisCondition(id:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
  RenameScreenerAnalysisCondition(id:string,name:string):Promise<SavedAnalysisCondition>;
  DeleteScreenerAnalysisCondition(id:string):Promise<void>;
  StartScreenerAnalysis(request:AnalysisRequest):Promise<AnalysisInfo>;
@@ -105,10 +106,10 @@ export class AnalysisViewWriter {
 /** The saved backtest is evidence for this condition and base period only. */
 export function savedConditionProfitability(condition:SavedAnalysisCondition,symbol:string,period:string):SavedConditionProfitability|undefined{
  const threshold=condition.request.profitabilityFilter??0;
- return condition.analysis?.assets.filter(row=>row.symbol===symbol&&row.timeframe===period&&row.matches>0&&row.takeProfitHits>=0&&row.takeProfitHits<=row.matches&&Number.isFinite(row.profitablePercent)&&(threshold===0||100*row.takeProfitHits/row.matches>=threshold)).sort((a,b)=>b.takeProfitHits/b.matches-a.takeProfitHits/a.matches||(a.fileName<b.fileName?-1:a.fileName>b.fileName?1:0))[0];
+ return condition.analysis?.assets.filter(row=>row.symbol===symbol&&row.timeframe===period&&row.matches>0&&!row.profitabilityUnavailable&&row.takeProfitHits>=0&&row.takeProfitHits<=row.matches&&Number.isFinite(row.profitablePercent)&&(threshold===0||100*row.takeProfitHits/row.matches>=threshold)).sort((a,b)=>b.takeProfitHits/b.matches-a.takeProfitHits/a.matches||(a.fileName<b.fileName?-1:a.fileName>b.fileName?1:0))[0];
 }
 export function savedConditionAllowsAsset(condition:SavedAnalysisCondition,symbol:string,period:string):boolean{
- return (condition.request.profitabilityFilter??0)===0||!!savedConditionProfitability(condition,symbol,period);
+ return (condition.request.profitabilityFilter??0)===0?!!condition.analysis?.assets.some(row=>row.symbol===symbol&&row.timeframe===period&&row.matches>0):!!savedConditionProfitability(condition,symbol,period);
 }
 export function profitabilityLabel(value:SavedConditionProfitability):string{return`Profitability: ${value.profitablePercent.toFixed(2)}%, ${value.takeProfitHits} / ${value.matches} hit TP`;}
 

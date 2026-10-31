@@ -14,7 +14,7 @@ async function complete(page:Page,results:AnalysisResult[]){
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
 }
 async function saveCondition(page:Page,name:string){
- await page.getByRole('button',{name:'Safe Condition',exact:true}).click();await page.getByLabel('Condition name',{exact:true}).fill(name);
+ await page.getByRole('button',{name:'Save as new',exact:true}).click();await page.getByLabel('Condition name',{exact:true}).fill(name);
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
 }
 
@@ -39,8 +39,8 @@ test('fresh profitability defaults to 85 and filters the sorted full result set 
  const saved=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]);
  expect(saved.request.profitabilityFilter).toBe(85);expect(saved.analysis.assets).toHaveLength(1);expect(saved.analysis.assets[0]).toMatchObject({symbol:'btcusd',timeframe:'h1',profitablePercent:100,fileName:results[12].name});
  await expect(page.getByRole('button',{name:'Load condition Profitable entries',exact:true})).toHaveAttribute('aria-pressed','true');
- await filter.selectOption('90');await expect(page.locator('.analysis-loaded-condition')).toContainText('Modified draft');
- await page.getByRole('button',{name:'Load condition Profitable entries',exact:true}).click();await expect(filter).toHaveValue('85');await expect(page.locator('.analysis-loaded-condition')).not.toContainText('Modified draft');
+ await filter.selectOption('90');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).toContainText('Modified draft');
+ await page.getByRole('button',{name:'Load condition Profitable entries',exact:true}).click();await expect(filter).toHaveValue('85');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).not.toContainText('Modified draft');
  await reloadTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(filter).toHaveValue('85');await expect(page.getByRole('button',{name:'Load condition Profitable entries',exact:true})).toHaveAttribute('aria-pressed','true');
 });
@@ -58,16 +58,16 @@ test('saved selection survives normalized Go fields and rename, while ambiguous 
  });
  await saveCondition(page,'Normalized shape');
  const saved=page.getByRole('button',{name:'Load condition Normalized shape',exact:true});
- await expect(saved).toHaveAttribute('aria-pressed','true');await expect(page.locator('.analysis-loaded-condition')).not.toContainText('Modified draft');
- await page.getByLabel('Condition 1 right constant',{exact:true}).fill('1');await expect(page.locator('.analysis-loaded-condition')).toContainText('Modified draft');
- await saved.click();await expect(page.locator('.analysis-loaded-condition')).not.toContainText('Modified draft');
+ await expect(saved).toHaveAttribute('aria-pressed','true');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).not.toContainText('Modified draft');
+ await page.getByLabel('Condition 1 right constant',{exact:true}).fill('1');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).toContainText('Modified draft');
+ await saved.click();await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).not.toContainText('Modified draft');
  await saved.click({button:'right'});await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
  await page.getByLabel('Condition name',{exact:true}).fill('Renamed selection');await page.getByRole('dialog',{name:'Rename condition',exact:true}).getByRole('button',{name:'Rename',exact:true}).click();
- await expect(page.getByRole('button',{name:'Load condition Renamed selection',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.locator('.analysis-loaded-condition')).toHaveText('Loaded condition: Renamed selection');
+ await expect(page.getByRole('button',{name:'Load condition Renamed selection',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).toContainText('Renamed selection');
  await saveCondition(page,'Identical second rule');
  await reloadTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(page.getByRole('button',{name:'Load condition Renamed selection',exact:true})).toHaveAttribute('aria-pressed','false');await expect(page.getByRole('button',{name:'Load condition Identical second rule',exact:true})).toHaveAttribute('aria-pressed','false');
- await page.getByRole('button',{name:'Load condition Renamed selection',exact:true}).click();await expect(page.locator('.analysis-loaded-condition')).toHaveText('Loaded condition: Renamed selection');
+ await page.getByRole('button',{name:'Load condition Renamed selection',exact:true}).click();await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).toContainText('Renamed selection');
 });
 
 test('saved highlight waits for the restored Analysis draft instead of selecting the loading placeholder',async({page})=>{
@@ -86,32 +86,36 @@ test('saved highlight waits for the restored Analysis draft instead of selecting
  await expect(page.getByLabel('Condition 1 right constant',{exact:true})).toHaveValue('2');await expect(restored).toHaveAttribute('aria-pressed','true');await expect(initial).toHaveAttribute('aria-pressed','false');
 });
 
-test('Live Alerts displays only assigned-period assets with recorded profitability and keeps scopes separate',async({page})=>{
+test('Live Alerts inherits recorded periods and profitability without editable asset controls',async({page})=>{
  await openTestApp(page);
  const files=[file(0,'btcusd','h1'),file(1,'btcusd','d1'),file(2,'eurusd','h1'),file(3,'ethusd','d1'),file(4,'ethusd','h1')];
  const results=[result(0,10,11,'btcusd','h1'),result(1,16,20,'btcusd','d1'),result(2,17,20,'eurusd','h1'),result(3,20,20,'ethusd','d1')];
  await page.evaluate(async({files,results})=>{
   (window as any).__testSetEnrichmentFiles(files);
-  const api=window.go!.main!.App!,view={...await api.GetScreenerAnalysisView(),tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:20}};
+  const api=window.go!.main!.App!,view={...await api.GetScreenerAnalysisView(),period:'all',tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:20}};
   await api.StartScreenerAnalysis(view);(window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results});
   await api.SaveScreenerAnalysisCondition('Recorded 85',view);
-  await api.SaveScreenerAnalysisCondition('Unfiltered hourly',{...view,profitabilityFilter:0});
   await api.SaveScreenerAnalysisCondition('Needs analysis',{...view,conditions:view.conditions.map(row=>({...row,right:{kind:'number',value:2}}))});
  },{files,results});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
- const assets=page.getByRole('region',{name:'Downloaded assets for alerts',exact:true});
  await page.getByRole('checkbox',{name:'Alert condition Recorded 85',exact:true}).check();
- await expect(assets.getByRole('checkbox',{name:/Alert asset ETHUSD/})).toBeVisible();await expect(assets.getByRole('checkbox',{name:/Alert asset BTCUSD/})).toHaveCount(0);await expect(assets.getByRole('checkbox',{name:/Alert asset EURUSD/})).toHaveCount(0);
- await expect(assets).toContainText('D1 downloaded');await expect(assets).not.toContainText('H1 downloaded');
- await page.getByRole('button',{name:'Select all assets',exact:true}).click();
- await page.getByRole('combobox',{name:'Alert period for Recorded 85',exact:true}).selectOption('h1');
- await expect(assets.getByRole('checkbox',{name:/Alert asset ETHUSD/})).toHaveCount(0);await expect(assets.getByRole('checkbox',{name:/Alert asset BTCUSD/})).not.toBeChecked();await expect(assets.getByRole('checkbox',{name:/Alert asset EURUSD/})).toBeVisible();
- await expect(assets).toContainText('Recorded 85 · H1 · Profitability: 90.91%, 10 / 11 hit TP');await expect(assets).toContainText('Profitability: 85.00%, 17 / 20 hit TP');
- await page.getByRole('button',{name:'Select all assets',exact:true}).click();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
- await page.getByRole('checkbox',{name:'Alert condition Unfiltered hourly',exact:true}).check();await page.getByRole('combobox',{name:'Alert period for Unfiltered hourly',exact:true}).selectOption('h1');
- await expect(assets.getByRole('checkbox',{name:/Alert asset ETHUSD/})).toBeVisible();await expect(assets.getByRole('checkbox',{name:/Alert asset ETHUSD/})).not.toBeChecked();
- await page.getByRole('checkbox',{name:'Alert condition Recorded 85',exact:true}).uncheck();await page.getByRole('checkbox',{name:'Alert condition Unfiltered hourly',exact:true}).uncheck();await page.getByRole('checkbox',{name:'Alert condition Needs analysis',exact:true}).check();
- await expect(assets.getByRole('checkbox',{name:/Alert asset/})).toHaveCount(0);await expect(page.getByText('Run Analysis for “Needs analysis” to record profitable assets before starting alerts.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ const assets=page.getByRole('region',{name:'Monitored assets for Recorded 85',exact:true});
+ await expect(assets).toContainText('All analyzed periods');await expect(assets.locator('li')).toHaveCount(3);
+ await expect(assets).toContainText('BTCUSD');await expect(assets).toContainText('EURUSD');await expect(assets).toContainText('ETHUSD');await expect(assets).not.toContainText('80.00%');
+ await expect(assets).toContainText('Profitability: 90.91%, 10 / 11 hit TP');await expect(assets).toContainText('Profitability: 85.00%, 17 / 20 hit TP');await expect(assets.getByRole('checkbox')).toHaveCount(0);
+ await expect(page.getByRole('combobox',{name:/Alert period/})).toHaveCount(0);await expect(page.getByRole('button',{name:'Select all assets',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await page.getByRole('checkbox',{name:'Alert condition Needs analysis',exact:true}).check();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await expect(page.getByRole('region',{name:'Monitored assets for Needs analysis',exact:true})).toContainText('no recorded Analysis matching assets');
  await page.evaluate(()=>(window as any).__testSetLiveAlertsInfo({recent:[{assetName:'Bitcoin vs US Dollar',symbol:'btcusd',timeframe:'h1',time:Date.UTC(2026,9,28,11),conditionName:'Recorded 85',status:'sent',profitability:{symbol:'btcusd',timeframe:'h1',fileName:'recorded.csv',matches:11,takeProfitHits:10,profitablePercent:1000/11}}]}));
  await expect(page.getByRole('region',{name:'Live alert status',exact:true})).toContainText('Profitability: 90.91%, 10 / 11 hit TP');
+});
+
+test('partial completed Analysis retains valid monitored matches and distinguishes file errors in result counts',async({page})=>{
+ const files=[file(0,'btcusd','d1'),file(1,'ethusd','d1'),file(2,'eurusd','d1')];await openAnalysis(page,files);
+ await page.getByLabel('Analysis period of data',{exact:true}).selectOption('d1');await page.getByLabel('Analysis profitability filter',{exact:true}).selectOption('80');await page.getByRole('button',{name:'Simulate trade',exact:true}).click();await page.getByLabel('Stop Loss field',{exact:true}).selectOption('low');await page.getByLabel('Take profit field',{exact:true}).selectOption('field:high');await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ const results=[result(0,16,20,'btcusd','d1'),result(1,15,20,'ethusd','d1'),{...result(2,0,0,'eurusd','d1'),status:'failed',error:'Malformed historical CSV',simulation:null}];
+ await page.evaluate(results=>(window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:1,completed:3,total:3,progress:100,totalMatches:40,matchedFiles:2,results}),results);
+ await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();await expect(page.getByRole('region',{name:'Analysis results',exact:true})).toContainText('2 result rows shown (matching files and file errors)');await saveCondition(page,'Partial Analysis');
+ const saved=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]);expect(saved.analysis.failedFiles).toBe(1);expect(saved.analysis.assets).toHaveLength(2);
+ await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await page.getByRole('checkbox',{name:'Alert condition Partial Analysis',exact:true}).check();const monitored=page.getByRole('region',{name:'Monitored assets for Partial Analysis',exact:true});await expect(monitored.locator('li')).toHaveCount(1);await expect(monitored).toContainText('BTCUSD');await expect(monitored).toContainText('1 failed files');await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
 });

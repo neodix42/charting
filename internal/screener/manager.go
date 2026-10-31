@@ -92,6 +92,9 @@ type Manager struct {
 	analysis                *analysisState
 	liveActive              bool
 	liveCancel              context.CancelFunc
+	// Saved rule/evidence writes wake the single active Live Alerts scheduler.
+	savedConditionsChanged  chan struct{}
+	savedConditionsRevision uint64
 }
 
 func New(profile string) *Manager {
@@ -102,7 +105,7 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 	if err == nil {
 		profile = absolute
 	}
-	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: DefaultConcurrency}
+	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: DefaultConcurrency, savedConditionsChanged: make(chan struct{}, 1)}
 	if err := m.loadPreferences(); err != nil {
 		m.settingsError = "Load screener settings (original state preserved): " + err.Error()
 	}
@@ -134,6 +137,16 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 		m.mu.Unlock()
 	}
 	return m
+}
+
+// Called with m.mu held, after a successful atomic saved-condition write.
+// Coalescing updates avoids blocking rule persistence on a provider request.
+func (m *Manager) notifySavedConditionsChangedLocked() {
+	m.savedConditionsRevision++
+	select {
+	case m.savedConditionsChanged <- struct{}{}:
+	default:
+	}
 }
 
 func (m *Manager) infoLocked() Info {

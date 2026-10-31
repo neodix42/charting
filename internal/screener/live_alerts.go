@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -21,12 +22,29 @@ type LiveAlertConditionPeriod struct {
 }
 
 type LiveAlertsConfig struct {
-	Enabled          bool                       `json:"enabled"`
-	ConditionPeriods []LiveAlertConditionPeriod `json:"conditionPeriods"`
-	Symbols          []string                   `json:"symbols"`
-	// Version 1 compatibility, omitted from canonical state and public responses.
-	ConditionIDs []string `json:"conditionIds,omitempty"`
-	Periods      []string `json:"periods,omitempty"`
+	Enabled      bool     `json:"enabled"`
+	ConditionIDs []string `json:"conditionIds"`
+	// Deprecated v1/v2 fields are accepted only to restore saved selections.
+	ConditionPeriods []LiveAlertConditionPeriod `json:"conditionPeriods,omitempty"`
+	Symbols          []string                   `json:"symbols,omitempty"`
+	Periods          []string                   `json:"periods,omitempty"`
+	// Effective periods are derived from the saved rules, never from public input.
+	scope []LiveAlertConditionPeriod
+}
+
+type LiveAlertTarget struct {
+	Symbol        string                       `json:"symbol"`
+	Name          string                       `json:"name"`
+	Category      string                       `json:"category"`
+	Period        string                       `json:"period"`
+	Profitability *SavedConditionProfitability `json:"profitability,omitempty"`
+}
+
+type LiveAlertConditionScope struct {
+	ConditionID string            `json:"conditionId"`
+	Period      string            `json:"period"`
+	Targets     []LiveAlertTarget `json:"targets"`
+	Error       string            `json:"error"`
 }
 
 type LiveAlertAsset struct {
@@ -64,17 +82,19 @@ type LiveAlertOutcome struct {
 }
 
 type LiveAlertsInfo struct {
-	Config       LiveAlertsConfig   `json:"config"`
-	Running      bool               `json:"running"`
-	LastRun      int64              `json:"lastRun"`
-	NextRun      int64              `json:"nextRun"`
-	Sent         int64              `json:"sent"`
-	Error        string             `json:"error"`
-	Status       string             `json:"status"`
-	Progress     float64            `json:"progress"`
-	CurrentAsset string             `json:"currentAsset"`
-	Assets       []LiveAlertAsset   `json:"assets"`
-	Recent       []LiveAlertOutcome `json:"recent"`
+	SavedConditionsRevision uint64                    `json:"savedConditionsRevision"`
+	Config                  LiveAlertsConfig          `json:"config"`
+	ConditionScopes         []LiveAlertConditionScope `json:"conditionScopes"`
+	Running                 bool                      `json:"running"`
+	LastRun                 int64                     `json:"lastRun"`
+	NextRun                 int64                     `json:"nextRun"`
+	Sent                    int64                     `json:"sent"`
+	Error                   string                    `json:"error"`
+	Status                  string                    `json:"status"`
+	Progress                float64                   `json:"progress"`
+	CurrentAsset            string                    `json:"currentAsset"`
+	Assets                  []LiveAlertAsset          `json:"assets"`
+	Recent                  []LiveAlertOutcome        `json:"recent"`
 }
 
 type liveAlertsState struct {
@@ -109,6 +129,8 @@ type LiveAlerts struct {
 	retryConfig                     *LiveAlertsConfig
 	retryAsOf                       int64
 	retryManual                     bool
+	configRevision                  uint64
+	scheduleScope                   []LiveAlertConditionPeriod
 	now                             func() time.Time
 	status, errorText, currentAsset string
 	progress                        float64
@@ -121,7 +143,7 @@ type LiveAlerts struct {
 }
 
 func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error) (*LiveAlerts, error) {
-	l := &LiveAlerts{manager: manager, path: filepath.Join(manager.profile, "screener-live-alerts.json"), send: send, wake: make(chan struct{}, 1), status: "Disabled", now: time.Now, state: liveAlertsState{Version: 2, Config: LiveAlertsConfig{Symbols: []string{}, ConditionPeriods: []LiveAlertConditionPeriod{}}, Watermarks: map[string]int64{}, Recent: []LiveAlertOutcome{}}}
+	l := &LiveAlerts{manager: manager, path: filepath.Join(manager.profile, "screener-live-alerts.json"), send: send, wake: make(chan struct{}, 1), status: "Disabled", now: time.Now, state: liveAlertsState{Version: 3, Config: LiveAlertsConfig{ConditionIDs: []string{}}, Watermarks: map[string]int64{}, Recent: []LiveAlertOutcome{}}}
 	st, err := os.Lstat(l.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return l, nil
@@ -139,13 +161,13 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 		l.blocked, l.errorText, l.status = true, "Restore Live Alerts: "+cleanMessage(err.Error())+"; original state preserved", "Saved state could not be loaded"
 		return l, errors.New(l.errorText)
 	}
-	legacyAmbiguous := l.state.Version == 1 && len(l.state.Config.Periods) > 1 && len(l.state.Config.ConditionIDs) > 0
+	legacyEnabled := l.state.Version < 3 && l.state.Config.Enabled
 	l.state.Config = canonicalLiveAlertsConfig(l.state.Config)
-	l.state.Version = 2
-	if legacyAmbiguous {
+	l.state.Version = 3
+	if legacyEnabled {
 		l.state.Config.Enabled = false
-		l.errorText = "Choose one period for each saved condition and start alerts again; the previous configuration selected multiple periods."
-		l.status = "Review saved condition periods"
+		l.errorText = "Live Alerts now inherits each saved condition's analyzed assets and periods. Review the inherited scope and start alerts again. Previous delivery history is preserved."
+		l.status = "Review inherited saved condition scope"
 	}
 	// A claim committed before interruption may have reached Telegram. Keeping
 	// its watermark and showing uncertainty avoids duplicate notifications.
@@ -164,54 +186,48 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 }
 
 func copyLiveAlertsConfig(config LiveAlertsConfig) LiveAlertsConfig {
-	config.ConditionPeriods = append([]LiveAlertConditionPeriod{}, config.ConditionPeriods...)
-	config.ConditionIDs = append([]string(nil), config.ConditionIDs...)
+	config.ConditionIDs = append([]string{}, config.ConditionIDs...)
+	config.ConditionPeriods = append([]LiveAlertConditionPeriod(nil), config.ConditionPeriods...)
 	config.Periods = append([]string(nil), config.Periods...)
-	config.Symbols = append([]string{}, config.Symbols...)
+	config.Symbols = append([]string(nil), config.Symbols...)
+	if config.scope != nil {
+		config.scope = append([]LiveAlertConditionPeriod{}, config.scope...)
+	}
 	return config
 }
 
-// Legacy selections with multiple periods require an explicit period choice.
-// Empty periods are valid disabled drafts, never valid enabled alert rules.
+// Migration retains condition identities; obsolete choices never determine scope.
 func canonicalLiveAlertsConfig(config LiveAlertsConfig) LiveAlertsConfig {
 	config = copyLiveAlertsConfig(config)
-	if config.ConditionPeriods == nil || (len(config.ConditionPeriods) == 0 && len(config.ConditionIDs) > 0) {
-		config.ConditionPeriods = []LiveAlertConditionPeriod{}
-		period := ""
-		if len(config.Periods) == 1 {
-			period = config.Periods[0]
-		}
-		for _, id := range config.ConditionIDs {
-			config.ConditionPeriods = append(config.ConditionPeriods, LiveAlertConditionPeriod{ConditionID: id, Period: period})
+	if len(config.ConditionIDs) == 0 {
+		for _, rule := range config.ConditionPeriods {
+			config.ConditionIDs = append(config.ConditionIDs, rule.ConditionID)
 		}
 	}
-	config.ConditionIDs, config.Periods = nil, nil
+	config.ConditionPeriods, config.Symbols, config.Periods = nil, nil, nil
 	return config
 }
 
 func liveAlertsPeriods(config LiveAlertsConfig) []string {
 	periods := []string{}
-	if len(config.ConditionIDs) > 0 || len(config.Periods) > 0 {
-		config = canonicalLiveAlertsConfig(config)
-	}
-	for _, rule := range config.ConditionPeriods {
-		if rule.Period != "" && !containsLiveValue(periods, rule.Period) {
+	for _, rule := range config.scope {
+		if !containsLiveValue(periods, rule.Period) {
 			periods = append(periods, rule.Period)
 		}
 	}
 	return periods
 }
 
-func liveAlertsConditionPeriod(config LiveAlertsConfig, id string) string {
-	if len(config.ConditionIDs) > 0 || len(config.Periods) > 0 {
-		config = canonicalLiveAlertsConfig(config)
+func liveAlertsScopeAllows(config LiveAlertsConfig, id, period string) bool {
+	if config.scope == nil {
+		return true
 	}
-	for _, rule := range config.ConditionPeriods {
-		if rule.ConditionID == id {
-			return rule.Period
+	for _, rule := range config.scope {
+		if rule.ConditionID == id && rule.Period == period {
+			return true
 		}
 	}
-	return ""
+	return false
 }
 
 func validateLiveAlertsConfig(config LiveAlertsConfig) error {
@@ -219,42 +235,43 @@ func validateLiveAlertsConfig(config LiveAlertsConfig) error {
 		return errors.New("too many selected Live Alerts conditions, symbols or periods")
 	}
 	if len(config.ConditionPeriods) > 0 && (len(config.ConditionIDs) > 0 || len(config.Periods) > 0) {
-		return errors.New("use one period per saved condition instead of shared periods")
-	}
-	seenLegacy := map[string]bool{}
-	for _, period := range config.Periods {
-		if (period != "d1" && period != "h1") || seenLegacy[period] {
-			return errors.New("Live Alerts periods must be distinct d1 or h1 values")
-		}
-		seenLegacy[period] = true
-	}
-	config = canonicalLiveAlertsConfig(config)
-	if config.Enabled && (len(config.ConditionPeriods) == 0 || len(config.Symbols) == 0) {
-		return errors.New("select at least one saved condition, its period and a downloaded asset before enabling Live Alerts")
+		return errors.New("mixed legacy Live Alerts selections")
 	}
 	seen := map[string]bool{}
-	for _, rule := range config.ConditionPeriods {
-		id := rule.ConditionID
-		if len(id) != 32 || strings.IndexFunc(id, func(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }) >= 0 || seen[id] {
-			return errors.New("invalid or duplicate saved Live Alerts condition ID")
+	for _, period := range config.Periods {
+		if (period != "d1" && period != "h1") || seen[period] {
+			return errors.New("invalid legacy Live Alerts periods")
 		}
-		seen[id] = true
-		if rule.Period != "d1" && rule.Period != "h1" && (config.Enabled || rule.Period != "") {
-			return errors.New("choose Daily (D1) or Hourly (H1) for each saved Live Alerts condition")
+		seen[period] = true
+	}
+	for _, rule := range config.ConditionPeriods {
+		if rule.Period != "d1" && rule.Period != "h1" && rule.Period != "" {
+			return errors.New("invalid legacy Live Alerts condition period")
 		}
 	}
 	seen = map[string]bool{}
 	for _, symbol := range config.Symbols {
 		if _, ok := catalogAssets[symbol]; !ok || seen[symbol] {
-			return errors.New("Live Alerts requires distinct supported downloaded assets")
+			return errors.New("invalid legacy Live Alerts assets")
 		}
 		seen[symbol] = true
+	}
+	config = canonicalLiveAlertsConfig(config)
+	if config.Enabled && len(config.ConditionIDs) == 0 {
+		return errors.New("select at least one saved condition before enabling Live Alerts")
+	}
+	seen = map[string]bool{}
+	for _, id := range config.ConditionIDs {
+		if len(id) != 32 || strings.IndexFunc(id, func(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }) >= 0 || seen[id] {
+			return errors.New("invalid or duplicate saved Live Alerts condition ID")
+		}
+		seen[id] = true
 	}
 	return nil
 }
 
 func validateLiveAlertsState(state liveAlertsState) error {
-	if (state.Version != 1 && state.Version != 2) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*len(catalogAssets)*2 {
+	if (state.Version != 1 && state.Version != 2 && state.Version != 3) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*len(catalogAssets)*2 {
 		return errors.New("invalid Live Alerts state version or count")
 	}
 	validationConfig := state.Config
@@ -264,8 +281,11 @@ func validateLiveAlertsState(state liveAlertsState) error {
 	if state.Version == 2 && (len(state.Config.ConditionIDs) > 0 || len(state.Config.Periods) > 0) {
 		return errors.New("version 2 Live Alerts require one period per saved condition")
 	}
-	if state.Version == 1 && len(validationConfig.Periods) > 1 {
-		validationConfig.Enabled = false
+	if state.Version == 2 && state.Config.Enabled && (len(state.Config.ConditionPeriods) == 0 || len(state.Config.Symbols) == 0) {
+		return errors.New("invalid enabled legacy Live Alerts selection")
+	}
+	if state.Version == 3 && (len(state.Config.ConditionPeriods) > 0 || len(state.Config.Symbols) > 0 || len(state.Config.Periods) > 0) {
+		return errors.New("version 3 Live Alerts inherit assets and periods from saved conditions")
 	}
 	if err := validateLiveAlertsConfig(validationConfig); err != nil {
 		return err
@@ -337,13 +357,24 @@ func containsLiveValue(values []string, target string) bool {
 
 func (l *LiveAlerts) Info() LiveAlertsInfo {
 	l.mu.Lock()
-	info := LiveAlertsInfo{Config: copyLiveAlertsConfig(l.state.Config), Running: l.running, LastRun: l.lastRun, NextRun: l.nextRun, Sent: l.state.Sent, Error: l.errorText, Status: l.status, Progress: l.progress, CurrentAsset: l.currentAsset, Recent: append([]LiveAlertOutcome{}, l.state.Recent...), Assets: []LiveAlertAsset{}}
+	info := LiveAlertsInfo{Config: copyLiveAlertsConfig(l.state.Config), Running: l.running, LastRun: l.lastRun, NextRun: l.nextRun, Sent: l.state.Sent, Error: l.errorText, Status: l.status, Progress: l.progress, CurrentAsset: l.currentAsset, Recent: append([]LiveAlertOutcome{}, l.state.Recent...), Assets: []LiveAlertAsset{}, ConditionScopes: []LiveAlertConditionScope{}}
 	for i := range info.Recent {
 		info.Recent[i].Profitability = copyLiveProfitability(info.Recent[i].Profitability)
 	}
 	l.mu.Unlock()
 	assets, err := l.assets()
 	info.Assets = assets
+	l.manager.mu.Lock()
+	saved, savedErr := l.manager.readSavedConditions()
+	info.SavedConditionsRevision = l.manager.savedConditionsRevision
+	l.manager.mu.Unlock()
+	if savedErr == nil {
+		for _, condition := range saved {
+			info.ConditionScopes = append(info.ConditionScopes, liveConditionScope(condition, assets))
+		}
+	} else if info.Error == "" {
+		info.Error = cleanMessage(savedErr.Error())
+	}
 	if err != nil && info.Error == "" {
 		info.Error = cleanMessage(err.Error())
 	}
@@ -358,9 +389,8 @@ func (l *LiveAlerts) selectedConditions(config LiveAlertsConfig) ([]SavedAnalysi
 		return nil, err
 	}
 	config = canonicalLiveAlertsConfig(config)
-	conditions := make([]SavedAnalysisCondition, 0, len(config.ConditionPeriods))
-	for _, rule := range config.ConditionPeriods {
-		id := rule.ConditionID
+	conditions := make([]SavedAnalysisCondition, 0, len(config.ConditionIDs))
+	for _, id := range config.ConditionIDs {
 		found := false
 		for _, condition := range saved {
 			if id == condition.ID {
@@ -418,6 +448,14 @@ func (l *LiveAlerts) pruneDeletedConditionWatermarks(saved []SavedAnalysisCondit
 	return nil
 }
 
+func (l *LiveAlerts) resolveConfig(config LiveAlertsConfig) (LiveAlertsConfig, error) {
+	conditions, err := l.selectedConditions(config)
+	if err != nil {
+		return config, err
+	}
+	return resolvedLiveAlertsConfig(config, conditions), nil
+}
+
 func (l *LiveAlerts) validateSelection(config LiveAlertsConfig) error {
 	conditions, err := l.selectedConditions(config)
 	if err != nil {
@@ -428,31 +466,9 @@ func (l *LiveAlerts) validateSelection(config LiveAlertsConfig) error {
 		return err
 	}
 	for _, saved := range conditions {
-		period := liveAlertsConditionPeriod(config, saved.ID)
-		found := false
-		for _, asset := range assets {
-			_, allowed := SavedConditionProfitabilityFor(saved, asset.Symbol, period)
-			if containsLiveValue(config.Symbols, asset.Symbol) && containsLiveValue(asset.Periods, period) && allowed {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return missingLiveConditionTargets(saved, strings.ToUpper(period))
-		}
-	}
-	for _, symbol := range config.Symbols {
-		found := false
-		for _, asset := range assets {
-			if asset.Symbol != symbol {
-				continue
-			}
-			for _, period := range liveAlertsPeriods(config) {
-				found = found || containsLiveValue(asset.Periods, period) && liveAlertBaseAllowed(config, conditions, symbol, period)
-			}
-		}
-		if !found {
-			return fmt.Errorf("%s has no downloaded history eligible for any selected condition's period and profitability filter; update the Live Alerts selection", strings.ToUpper(symbol))
+		scope := liveConditionScope(saved, assets)
+		if scope.Error != "" {
+			return errors.New(scope.Error)
 		}
 	}
 	return nil
@@ -468,6 +484,10 @@ func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) 
 			return l.Info(), err
 		}
 	}
+	resolved, resolveErr := l.resolveConfig(config)
+	if config.Enabled && resolveErr != nil {
+		return l.Info(), resolveErr
+	}
 	l.mu.Lock()
 	if l.closed || l.blocked || (l.running && config.Enabled) {
 		l.mu.Unlock()
@@ -481,10 +501,12 @@ func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) 
 		return l.Info(), fmt.Errorf("save Live Alerts configuration: %w", err)
 	}
 	l.watermarksDirty = false
+	l.configRevision++
 	l.errorText = ""
 	if config.Enabled {
+		l.scheduleScope = append([]LiveAlertConditionPeriod{}, resolved.scope...)
 		l.requested, l.status = false, "Waiting for next closed bar"
-		l.nextRun = nextLiveAlertCheck(l.now(), liveAlertsPeriods(config)).UnixMilli()
+		l.nextRun = nextLiveAlertCheck(l.now(), liveAlertsPeriods(resolved)).UnixMilli()
 		l.nextBoundary = l.nextRun
 		l.retryConfig = nil
 	} else {
@@ -508,6 +530,10 @@ func (l *LiveAlerts) signal() {
 
 func (l *LiveAlerts) Start(parent context.Context) {
 	l.mu.Lock()
+	config, revision := copyLiveAlertsConfig(l.state.Config), l.configRevision
+	l.mu.Unlock()
+	resolved, err := l.resolveConfig(config)
+	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.started || l.closed || l.blocked {
 		return
@@ -515,9 +541,14 @@ func (l *LiveAlerts) Start(parent context.Context) {
 	ctx, cancel := context.WithCancel(parent)
 	l.cancel, l.started = cancel, true
 	if l.state.Config.Enabled {
-		l.nextRun = nextLiveAlertCheck(l.now(), liveAlertsPeriods(l.state.Config)).UnixMilli()
-		l.nextBoundary = l.nextRun
-		l.status = "Waiting for next closed bar"
+		if revision == l.configRevision && err == nil {
+			l.scheduleScope = append([]LiveAlertConditionPeriod{}, resolved.scope...)
+			l.nextRun = nextLiveAlertCheck(l.now(), liveAlertsPeriods(resolved)).UnixMilli()
+			l.nextBoundary = l.nextRun
+			l.status = "Waiting for next closed bar"
+		} else if err != nil {
+			l.errorText, l.status = cleanMessage(err.Error()), "Saved condition scope unavailable"
+		}
 	}
 	l.wg.Add(1)
 	go l.loop(ctx)
@@ -547,15 +578,19 @@ func nextLiveAlertCheck(now time.Time, periods []string) time.Time {
 // Select periods whose UTC close falls between the scheduled wakeup and now.
 // This includes midnight after a long previous check or a suspended process.
 func dueLiveAlertsConfig(config LiveAlertsConfig, scheduled, now time.Time) LiveAlertsConfig {
-	config = canonicalLiveAlertsConfig(config)
+	config = copyLiveAlertsConfig(config)
+	config.ConditionIDs = []string{}
 	selected := []LiveAlertConditionPeriod{}
-	for _, rule := range config.ConditionPeriods {
+	for _, rule := range config.scope {
 		due := nextLiveAlertCheck(scheduled.Add(-time.Millisecond), []string{rule.Period})
 		if !due.After(now) {
 			selected = append(selected, rule)
+			if !containsLiveValue(config.ConditionIDs, rule.ConditionID) {
+				config.ConditionIDs = append(config.ConditionIDs, rule.ConditionID)
+			}
 		}
 	}
-	config.ConditionPeriods = selected
+	config.scope = selected
 	return config
 }
 
@@ -565,11 +600,30 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		l.mu.Lock()
+		current, revision := copyLiveAlertsConfig(l.state.Config), l.configRevision
+		l.mu.Unlock()
+		resolved, resolveErr := l.resolveConfig(current)
 		now := l.now()
 		l.mu.Lock()
+		if revision != l.configRevision {
+			l.mu.Unlock()
+			continue
+		}
+		if resolveErr != nil && current.Enabled {
+			l.errorText = cleanMessage(resolveErr.Error())
+		}
+		if current.Enabled && resolveErr == nil && !reflect.DeepEqual(l.scheduleScope, resolved.scope) {
+			// A saved rule's own period can change while waiting, including D1
+			// to H1. Its new scope begins at its next natural UTC bar close.
+			l.scheduleScope = append([]LiveAlertConditionPeriod{}, resolved.scope...)
+			l.nextBoundary = nextLiveAlertCheck(now, liveAlertsPeriods(resolved)).UnixMilli()
+			l.nextRun, l.retryConfig = l.nextBoundary, nil
+			l.status = "Waiting for next closed bar"
+		}
 		enabled := l.state.Config.Enabled
 		run := enabled && (l.requested || (l.nextRun > 0 && now.UnixMilli() >= l.nextRun))
-		config := copyLiveAlertsConfig(l.state.Config)
+		config := copyLiveAlertsConfig(resolved)
 		if run {
 			manual := l.requested
 			asOf := now.UnixMilli()
@@ -577,10 +631,13 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				config = copyLiveAlertsConfig(*l.retryConfig)
 				asOf, manual = l.retryAsOf, l.retryManual
 				if l.nextBoundary <= now.UnixMilli() {
-					due := dueLiveAlertsConfig(l.state.Config, time.UnixMilli(l.nextBoundary), now)
-					for _, rule := range due.ConditionPeriods {
-						if liveAlertsConditionPeriod(config, rule.ConditionID) == "" {
-							config.ConditionPeriods = append(config.ConditionPeriods, rule)
+					due := dueLiveAlertsConfig(resolved, time.UnixMilli(l.nextBoundary), now)
+					for _, rule := range due.scope {
+						if !liveAlertsScopeAllows(config, rule.ConditionID, rule.Period) {
+							config.scope = append(config.scope, rule)
+						}
+						if !containsLiveValue(config.ConditionIDs, rule.ConditionID) {
+							config.ConditionIDs = append(config.ConditionIDs, rule.ConditionID)
 						}
 					}
 					asOf = now.UnixMilli()
@@ -592,7 +649,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			l.progress, l.errorText, l.status = 0, "", "Refreshing selected data and indicators"
 			// Retain the next original boundary even if this cycle takes a long time.
 			if l.nextBoundary <= now.UnixMilli() {
-				l.nextBoundary = nextLiveAlertCheck(now, liveAlertsPeriods(l.state.Config)).UnixMilli()
+				l.nextBoundary = nextLiveAlertCheck(now, liveAlertsPeriods(resolved)).UnixMilli()
 			}
 			l.nextRun = l.nextBoundary
 			l.retryConfig = nil
@@ -628,6 +685,8 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			timer.Stop()
 			return
 		case <-l.wake:
+			timer.Stop()
+		case <-l.manager.savedConditionsChanged:
 			timer.Stop()
 		case <-timer.C:
 		}

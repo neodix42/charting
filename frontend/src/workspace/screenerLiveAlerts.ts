@@ -1,15 +1,17 @@
 import type {SavedConditionProfitability} from './screenerAnalysis';
 export interface LiveAlertConditionPeriod {conditionId:string;period:string}
-export interface LiveAlertsConfig {enabled:boolean;conditionPeriods:LiveAlertConditionPeriod[];symbols:string[]}
+export interface LiveAlertsConfig {enabled:boolean;conditionIds:string[]}
 export interface LiveAlertAsset {symbol:string;name:string;category:string;periods:string[]}
 export interface LiveAlertOutcome {assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message:string;profitability?:SavedConditionProfitability|null}
-export interface LiveAlertsInfo {config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
+export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
+export interface LiveAlertConditionScope {conditionId:string;period:string;targets:LiveAlertTarget[];error:string}
+export interface LiveAlertsInfo {savedConditionsRevision:number;conditionScopes:LiveAlertConditionScope[];config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
 export interface ScreenerLiveAlertsBackend {
  GetScreenerLiveAlerts():Promise<LiveAlertsInfo>;
  ConfigureScreenerLiveAlerts(config:LiveAlertsConfig):Promise<LiveAlertsInfo>;
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
 }
-export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,conditionPeriods:[],symbols:[]});
+export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,conditionIds:[]});
 
 /** Only disabled drafts autosave; starting delivery is an explicit action. */
 export class LiveAlertsConfigWriter {

@@ -16,7 +16,7 @@ func TestLiveAlertsPublicationRetryKeepsOriginalCutoffAndExpires(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			start := time.Date(2024, 1, 2, 12, 30, 0, 0, time.UTC)
 			m, l, config, clock := scheduledAlertsFixture(t, start)
-			config.ConditionPeriods = config.ConditionPeriods[:1]
+			config.ConditionIDs = config.ConditionIDs[:1]
 			if _, err := l.Configure(config); err != nil {
 				t.Fatal(err)
 			}
@@ -83,7 +83,7 @@ func TestLiveAlertsPublicationRetryKeepsOriginalCutoffAndExpires(t *testing.T) {
 func TestLiveAlertsBusyManualRetryRetainsLatestActualClosedSemantics(t *testing.T) {
 	start := time.Date(2024, 1, 2, 12, 30, 0, 0, time.UTC)
 	m, l, config, clock := scheduledAlertsFixture(t, start)
-	config.ConditionPeriods = config.ConditionPeriods[:1]
+	config.ConditionIDs = config.ConditionIDs[:1]
 	if _, err := l.Configure(config); err != nil {
 		t.Fatal(err)
 	}

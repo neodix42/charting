@@ -81,4 +81,43 @@ func TestAnalysisProfitabilitySurvivesFacadeSaveScanRestartAndAlertFormatting(t 
 	if !strings.Contains(message, "Profitability: 100.00%, 1 / 1 hit TP") {
 		t.Fatal("alert lost recorded historical statistics", message)
 	}
+
+	request.ProfitabilityFilter = 100
+	updated, err := app.UpdateScreenerAnalysisCondition(named.ID, request)
+	if err != nil || updated.ID != named.ID || updated.Name != named.Name || updated.Analysis == nil {
+		t.Fatalf("update lost saved identity or compatible results: %+v %v", updated, err)
+	}
+	copyRule, err := app.SaveScreenerAnalysisCondition("Copy after restart", request)
+	if err != nil || copyRule.ID == named.ID || copyRule.Analysis == nil {
+		t.Fatalf("Save as new lost recorded assets after restart: %+v %v", copyRule, err)
+	}
+	alerts, err := screener.NewLiveAlerts(restarted, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer alerts.Close()
+	app.liveAlerts = alerts
+	info, err := app.ConfigureScreenerLiveAlerts(screener.LiveAlertsConfig{ConditionIDs: []string{named.ID, copyRule.ID}})
+	if err != nil || len(info.ConditionScopes) != 2 {
+		t.Fatalf("condition-only configuration did not inherit scope: %+v %v", info, err)
+	}
+	for _, scope := range info.ConditionScopes {
+		if scope.Error != "" || scope.Period != "h1" || len(scope.Targets) != 1 || scope.Targets[0].Symbol != "eurusd" || scope.Targets[0].Period != "h1" || scope.Targets[0].Profitability == nil {
+			t.Fatalf("incorrect inherited assets/period/profitability: %+v", scope)
+		}
+	}
+	request.Period = "d1"
+	changed, err := app.UpdateScreenerAnalysisCondition(named.ID, request)
+	if err != nil || changed.Analysis != nil || changed.ID != named.ID {
+		t.Fatalf("changed rules kept unrelated historical assets: %+v %v", changed, err)
+	}
+	info = app.GetScreenerLiveAlerts()
+	for _, scope := range info.ConditionScopes {
+		if scope.ConditionID == named.ID && (scope.Error == "" || len(scope.Targets) != 0) {
+			t.Fatalf("live preview retained old scope after update: %+v", scope)
+		}
+		if scope.ConditionID == copyRule.ID && len(scope.Targets) != 1 {
+			t.Fatalf("updating original changed saved copy: %+v", scope)
+		}
+	}
 }

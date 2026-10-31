@@ -2,7 +2,7 @@ import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import type {Backend} from '../types';
 import {errorText} from '../types';
 import type {SavedAnalysisCondition} from '../workspace/screenerAnalysis';
-import {analysisDate,profitabilityLabel,savedConditionAllowsAsset,savedConditionProfitability} from '../workspace/screenerAnalysis';
+import {analysisDate,profitabilityLabel} from '../workspace/screenerAnalysis';
 import type {LiveAlertsConfig,LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
 import {initialLiveAlertsConfig,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 import './ScreenerLiveAlerts.css';
@@ -11,7 +11,7 @@ export interface ScreenerLiveAlertsHandle {flush():Promise<void>}
 const outcomeLabels={sent:'Sent',failed:'Failed',claimed:'Delivery pending',uncertain:'Delivery uncertain — it may have arrived; no automatic retry'};
 export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend;visible:boolean}>(function ScreenerLiveAlerts({api,visible},ref){
  const [info,setInfo]=useState<LiveAlertsInfo|null>(null),[config,setConfig]=useState(initialLiveAlertsConfig),[conditions,setConditions]=useState<SavedAnalysisCondition[]>([]);
- const [ready,setReady]=useState(false),[query,setQuery]=useState(''),[readError,setReadError]=useState(''),[writeError,setWriteError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0),[notice,setNotice]=useState('');
+ const [ready,setReady]=useState(false),[readError,setReadError]=useState(''),[writeError,setWriteError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0),[notice,setNotice]=useState('');
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),initialized=useRef(false),draft=useRef(config),action=useRef<Promise<void>|null>(null),writer=useRef<LiveAlertsConfigWriter|null>(null);
  if(!writer.current)writer.current=new LiveAlertsConfigWriter(async value=>{
   const session=lifetime.current;epoch.current++;
@@ -23,14 +23,14 @@ export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend
  useEffect(()=>{alive.current=true;lifetime.current++;return()=>{alive.current=false;lifetime.current++;};},[]);
  useEffect(()=>{
   if(!visible)return;
-  let active=true,needConditions=true,timer:ReturnType<typeof setTimeout>|undefined;
+  let active=true,needConditions=true,savedRevision:number|undefined,timer:ReturnType<typeof setTimeout>|undefined;
   const read=async()=>{
    const version=epoch.current;
    try{
     if(!action.current&&!writer.current!.busy){
-     const [next,saved]=await Promise.all([api.GetScreenerLiveAlerts(),needConditions?api.GetScreenerSavedConditions():Promise.resolve(null)]);
+     const next=await api.GetScreenerLiveAlerts(),saved=needConditions||next.savedConditionsRevision!==savedRevision?await api.GetScreenerSavedConditions():null;
      if(active&&version===epoch.current){
-      setInfo(next);setReadError('');if(saved){setConditions(saved);needConditions=false;}
+      setInfo(next);setReadError('');if(saved){setConditions(saved);needConditions=false;savedRevision=next.savedConditionsRevision;}
       draft.current=structuredClone(next.config);setConfig(draft.current);
       if(!initialized.current){initialized.current=true;setReady(true);}
      }
@@ -58,49 +58,36 @@ export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend
   action.current=pending;void pending.catch(()=>{});
  };
  const enabled=info?.config.enabled??false,locked=!ready||busy||enabled||!!info?.running;
- const selectedConditions=new Map(config.conditionPeriods.map(condition=>[condition.conditionId,condition.period])),selectedSymbols=new Set(config.symbols),assets=info?.assets??[];
- const selectedRules=config.conditionPeriods.map(rule=>({...rule,condition:conditions.find(condition=>condition.id===rule.conditionId)}));
- const eligible=assets.map(asset=>({...asset,periods:asset.periods.filter(period=>selectedRules.some(rule=>rule.period===period&&rule.condition&&savedConditionAllowsAsset(rule.condition,asset.symbol,period)))})).filter(asset=>asset.periods.length>0);
- const assetEvidence=(symbol:string,periods:string[])=>selectedRules.flatMap(rule=>{const row=periods.includes(rule.period)&&rule.condition&&savedConditionProfitability(rule.condition,symbol,rule.period);return row?[`${rule.condition!.name} · ${rule.period.toUpperCase()} · ${profitabilityLabel(row)}`]:[];});
- const eligibleSymbols=new Set(eligible.map(asset=>asset.symbol)),search=query.trim().toLowerCase();
- const groups=[...new Set(eligible.map(asset=>asset.category))].sort().map(category=>({category,assets:eligible.filter(asset=>asset.category===category&&(!search||`${asset.symbol} ${asset.name} ${asset.category}`.toLowerCase().includes(search)))})).filter(group=>group.assets.length);
- const missingConditions=config.conditionPeriods.filter(selected=>!conditions.some(condition=>condition.id===selected.conditionId)),missingAssets=config.symbols.filter(symbol=>!eligible.some(asset=>asset.symbol===symbol));
- const uncoveredPeriod=selectedRules.some(rule=>!rule.condition||!eligible.some(asset=>selectedSymbols.has(asset.symbol)&&asset.periods.includes(rule.period)&&savedConditionAllowsAsset(rule.condition!,asset.symbol,rule.period)));
- const unrecorded=selectedRules.find(rule=>rule.condition&&(rule.condition.request.profitabilityFilter??0)>0&&!rule.condition.analysis);
- const invalid=!config.conditionPeriods.length?'Select at least one saved condition.':missingConditions.length?'Remove saved conditions that are no longer available.':config.conditionPeriods.some(condition=>!['d1','h1'].includes(condition.period))?'Choose Daily or Hourly for each saved condition.':unrecorded?`Run Analysis for “${unrecorded.condition!.name}” to record profitable assets before starting alerts.`:!config.symbols.length?'Select at least one downloaded asset.':config.symbols.some(symbol=>!eligibleSymbols.has(symbol))?'Select assets with a downloaded file in the chosen periods.':uncoveredPeriod?'Select at least one downloaded asset for every assigned period.':'';
- const toggleSymbol=(symbol:string,checked:boolean)=>{const next=new Set(draft.current.symbols);if(checked)next.add(symbol);else next.delete(symbol);change({symbols:[...next]});};
- const setConditionPeriod=(conditionId:string,period?:string)=>{
-  const selected=draft.current.conditionPeriods;
-  const next=period===undefined?selected.filter(condition=>condition.conditionId!==conditionId):selected.some(condition=>condition.conditionId===conditionId)?selected.map(condition=>condition.conditionId===conditionId?{conditionId,period}:condition):[...selected,{conditionId,period}];
-  const symbols=draft.current.symbols.filter(symbol=>assets.some(asset=>asset.symbol===symbol&&next.some(rule=>{const condition=conditions.find(saved=>saved.id===rule.conditionId);return condition&&asset.periods.includes(rule.period)&&savedConditionAllowsAsset(condition,symbol,rule.period);})));
-  change({conditionPeriods:next,symbols});
- };
- const selectAssets=(symbols:string[],checked:boolean)=>{const next=new Set(draft.current.symbols);for(const symbol of symbols){if(checked)next.add(symbol);else next.delete(symbol);}change({symbols:[...next]});};
+ const selectedConditions=new Set(config.conditionIds),scopes=info?.conditionScopes??[];
+ const selectedRules=config.conditionIds.map(id=>({id,condition:conditions.find(condition=>condition.id===id),scope:scopes.find(scope=>scope.conditionId===id)}));
+ const missingConditions=selectedRules.filter(rule=>!rule.condition);
+ const invalid=!config.conditionIds.length?'Select at least one saved condition.':missingConditions.length?'Remove saved conditions that are no longer available.':selectedRules.find(rule=>rule.scope?.error)?.scope?.error??(selectedRules.some(rule=>!rule.scope?.targets.length)?'Run Analysis and save matching assets for every selected condition before starting alerts.':'');
+ const toggleCondition=(id:string,checked:boolean)=>{const next=new Set(draft.current.conditionIds);if(checked)next.add(id);else next.delete(id);change({conditionIds:[...next]});};
+ const periodLabel=(period:string)=>period==='d1'?'Daily (D1)':period==='h1'?'Hourly (H1)':'All analyzed periods (D1 / H1)';
  return <section className="live-alerts" aria-label="Live Alerts configuration">
   <header className="live-alerts-heading"><div><span className="analysis-eyebrow">CLOSED-BAR SIGNALS</span><h2>Live Alerts</h2><p>Send matching saved conditions to your Telegram recipients on daily and hourly closes.</p></div><span className={`live-alerts-state${enabled?' enabled':''}`}>{enabled?'Enabled':'Stopped'}</span></header>
   {(readError||writeError||actionError||info?.error)&&<div className="live-alerts-error" role="alert">{actionError||writeError||readError||info?.error}<button type="button" disabled={busy} onClick={()=>{setRetry(value=>value+1);if(writeError)run(async()=>{await writer.current!.flush();});}}>Retry</button></div>}
   {!ready&&!readError&&<p role="status" className="live-alerts-note">Loading saved alert settings…</p>}
   <div className="live-alerts-columns">
-   <section className="live-alerts-card" aria-label="Alert conditions and periods"><h3>Saved conditions</h3><p>Each selected condition checks only its assigned period, with all its visual rows combined.</p>
+   <section className="live-alerts-card" aria-label="Alert conditions and periods"><h3>Saved conditions</h3><p>Each selected condition inherits its saved Analysis period, matching assets and profitability filter.</p>
     <fieldset disabled={locked} className="live-alerts-condition-selection"><legend className="sr-only">Saved conditions for alerts</legend>
-     <table className="live-alerts-condition-table" aria-label="Saved conditions and periods"><thead><tr><th scope="col">Saved condition</th><th scope="col">Period</th></tr></thead><tbody>
-      {conditions.map(condition=><tr key={condition.id}><td><label><input type="checkbox" aria-label={`Alert condition ${condition.name}`} checked={selectedConditions.has(condition.id)} onChange={event=>setConditionPeriod(condition.id,event.target.checked?'d1':undefined)}/><span><strong>{condition.name}</strong><small>{condition.request.conditions.length} condition rows{condition.request.tradeSimulation?' · SL / TP configured':' · No SL / TP configured'}</small></span></label></td><td><select aria-label={`Alert period for ${condition.name}`} disabled={!selectedConditions.has(condition.id)} value={selectedConditions.get(condition.id)??'d1'} onChange={event=>setConditionPeriod(condition.id,event.target.value)}><option value="">Choose period</option><option value="d1">Daily (D1)</option><option value="h1">Hourly (H1)</option></select></td></tr>)}
-      {missingConditions.map(({conditionId,period})=><tr key={conditionId}><td><label><input type="checkbox" aria-label={`Remove unavailable condition ${conditionId}`} checked onChange={()=>setConditionPeriod(conditionId)}/><span>Unavailable saved condition<small>{conditionId}</small></span></label></td><td>{period==='h1'?'Hourly (H1)':period==='d1'?'Daily (D1)':'Choose period'}</td></tr>)}
+     <table className="live-alerts-condition-table" aria-label="Saved conditions and periods"><thead><tr><th scope="col">Saved condition</th><th scope="col">Period from Analysis</th></tr></thead><tbody>
+      {conditions.map(condition=><tr key={condition.id}><td><label><input type="checkbox" aria-label={`Alert condition ${condition.name}`} checked={selectedConditions.has(condition.id)} onChange={event=>toggleCondition(condition.id,event.target.checked)}/><span><strong>{condition.name}</strong><small>{condition.request.conditions.length} condition rows · Minimum profitability: {condition.request.profitabilityFilter??0}%</small></span></label></td><td>{periodLabel(scopes.find(scope=>scope.conditionId===condition.id)?.period??condition.request.period??'all')}</td></tr>)}
+      {missingConditions.map(({id})=><tr key={id}><td><label><input type="checkbox" aria-label={`Remove unavailable condition ${id}`} checked onChange={()=>toggleCondition(id,false)}/><span>Unavailable saved condition<small>{id}</small></span></label></td><td>Unavailable</td></tr>)}
      </tbody></table>
     </fieldset>
-    {ready&&!conditions.length&&<p>Create a named condition in Analysis using Safe Condition.</p>}
+    {ready&&!conditions.length&&<p>Create a named condition in Analysis using Save as new.</p>}
     <p>Hourly checks start on the next UTC hour. Daily checks start at the next 00:00 UTC. Only conditions whose assigned bar has closed are checked automatically.</p>
    </section>
-   <section className="live-alerts-card live-alerts-assets" aria-label="Downloaded assets for alerts"><div className="live-alerts-card-heading"><h3>Downloaded assets</h3><span>{config.symbols.length} selected</span></div><input type="search" aria-label="Search live alert assets" placeholder="Search assets or categories…" value={query} onChange={event=>setQuery(event.target.value)}/>
-    <div className="live-alerts-select-buttons"><button type="button" disabled={locked||!eligible.length} onClick={()=>change({symbols:eligible.map(asset=>asset.symbol)})}>Select all assets</button><button type="button" disabled={locked||!config.symbols.length} onClick={()=>change({symbols:[]})}>Deselect all assets</button></div>
-    <div className="live-alerts-asset-list">{groups.map(group=><details key={group.category} open className="live-alerts-category"><summary>{group.category}<span>{group.assets.filter(asset=>selectedSymbols.has(asset.symbol)).length} / {group.assets.length}</span></summary><button type="button" disabled={locked||!group.assets.some(asset=>eligibleSymbols.has(asset.symbol))} onClick={()=>selectAssets(group.assets.filter(asset=>eligibleSymbols.has(asset.symbol)).map(asset=>asset.symbol),!group.assets.filter(asset=>eligibleSymbols.has(asset.symbol)).every(asset=>selectedSymbols.has(asset.symbol)))}>Select / deselect {group.category}</button><fieldset disabled={locked} className="live-alerts-choices"><legend className="sr-only">{group.category} assets</legend>{group.assets.map(asset=><label key={asset.symbol}><input type="checkbox" aria-label={`Alert asset ${asset.symbol.toUpperCase()} — ${asset.name}`} checked={selectedSymbols.has(asset.symbol)} disabled={!eligibleSymbols.has(asset.symbol)&&!selectedSymbols.has(asset.symbol)} onChange={event=>toggleSymbol(asset.symbol,event.target.checked)}/><span><strong>{asset.symbol.toUpperCase()} — {asset.name}</strong><small>{asset.periods.map(period=>period.toUpperCase()).join(' · ')} downloaded</small>{assetEvidence(asset.symbol,asset.periods).map(text=><small key={text}>{text}</small>)}</span></label>)}</fieldset></details>)}
-     {missingAssets.map(symbol=><label className="live-alerts-missing" key={symbol}><input type="checkbox" aria-label={`Remove ineligible asset ${symbol}`} disabled={locked} checked onChange={()=>toggleSymbol(symbol,false)}/>{symbol.toUpperCase()} — outside the selected periods or profitability scope</label>)}
-     {ready&&!assets.length&&<p>Download D1 or H1 files in Downloader before selecting assets.</p>}{assets.length>0&&!config.conditionPeriods.length&&<p>Select a saved condition and period to see eligible downloaded assets.</p>}{assets.length>0&&config.conditionPeriods.length>0&&!eligible.length&&<p>No downloaded assets qualify for the selected conditions and periods. Run Analysis to record profitability, or choose a condition with a 0% filter.</p>}{eligible.length>0&&!groups.length&&<p>No assets match your search.</p>}
+   <section className="live-alerts-card live-alerts-assets" aria-label="Monitored assets"><div className="live-alerts-card-heading"><h3>Monitored assets</h3><span>{selectedRules.reduce((count,rule)=>count+(rule.scope?.targets.length??0),0)} condition / asset pairs</span></div>
+    <p>These assets come from each condition’s saved Analysis results. Update and analyze the condition in Analysis to change its scope.</p>
+    <div className="live-alerts-asset-list">{selectedRules.filter(rule=>rule.condition).map(rule=><section className="live-alerts-monitored-condition" aria-label={`Monitored assets for ${rule.condition!.name}`} key={rule.id}><h4>{rule.condition!.name} · {periodLabel(rule.scope?.period??rule.condition!.request.period??'all')}</h4>{!!rule.condition!.analysis?.failedFiles&&<p>Analysis had {rule.condition!.analysis!.failedFiles} failed files; monitoring uses its successfully analyzed matches.</p>}{rule.scope?.error&&<p className="live-alerts-scope-error">{rule.scope.error}</p>}{!!rule.scope?.targets.length&&<ul>{rule.scope.targets.map(target=><li key={`${target.symbol}-${target.period}`}><strong>{target.symbol.toUpperCase()} — {target.name}</strong><small>{target.period.toUpperCase()} · {target.category}</small>{target.profitability&&<small>{profitabilityLabel(target.profitability)}</small>}</li>)}</ul>}</section>)}
+     {ready&&!config.conditionIds.length&&<p>Select saved conditions to see the assets they monitor.</p>}
     </div>
    </section>
   </div>
   <div className="live-alerts-controls"><button type="button" disabled={locked} onClick={()=>run(async()=>{await writer.current!.flush();},'Alert configuration saved.')}>Save config</button>{enabled?<button type="button" className="danger" disabled={busy} onClick={()=>run(()=>api.ConfigureScreenerLiveAlerts({...draft.current,enabled:false}),'Live Alerts stopped.')}>Stop alerts</button>:<button type="button" className="primary" disabled={!ready||busy||info?.running||!!invalid} onClick={()=>run(()=>api.ConfigureScreenerLiveAlerts({...draft.current,enabled:true}),'Live Alerts started.')}>Start alerts</button>}<button type="button" disabled={!enabled||busy||info?.running} onClick={()=>run(()=>api.CheckScreenerLiveAlerts())}>Check now</button>{notice&&<span role="status">{notice}</span>}</div>
-  <div className="live-alerts-note">{!enabled&&invalid&&<p>{invalid}</p>}<p>{enabled?'Stop alerts to edit the configuration.':'Start alerts sends matching signals to the recipients configured in Settings → Telegram Bot.'} CryptoDesk must remain running; enabled alerts resume when you restart it.</p><p>Only downloaded D1 / H1 files are monitored. The indicative entry is the latest closed bar’s close; Stop Loss and Take profit use the saved condition’s simulation settings. Prices are signals, not executed trades.</p></div>
+  <div className="live-alerts-note">{!enabled&&invalid&&<p>{invalid}</p>}<p>{enabled?'Stop alerts to edit the configuration.':'Start alerts sends matching signals to the recipients configured in Settings → Telegram Bot.'} CryptoDesk must remain running; enabled alerts resume when you restart it.</p><p>Only saved matching D1 / H1 assets with downloaded histories are monitored. The indicative entry is the latest closed bar’s close; Stop Loss and Take profit use the saved condition’s simulation settings. Prices are signals, not executed trades.</p></div>
   <section className="live-alerts-card live-alerts-status" aria-label="Live alert status"><div className="live-alerts-card-heading"><h3>{info?.status||'Stopped'}</h3><span>{info?.sent??0} alerts sent</span></div>{info?.running&&<><p>{info.currentAsset||'Checking selected assets…'}</p><progress aria-label="Live alerts progress" value={Math.max(0,Math.min(100,info.progress||0))} max={100}/></>}<dl><div><dt>Last check</dt><dd>{info?.lastRun?analysisDate(info.lastRun):'Not checked yet'}</dd></div><div><dt>Next check</dt><dd>{info?.nextRun?analysisDate(info.nextRun):'—'}</dd></div></dl>
    {!!info?.recent?.length&&<div className="live-alerts-recent"><h3>Recent alerts</h3><ul>{info.recent.map((outcome,index)=><li key={`${outcome.symbol}-${outcome.timeframe}-${outcome.time}-${outcome.conditionName}-${index}`} className={outcome.status}><strong>{outcome.symbol.toUpperCase()} — {outcome.assetName} · {outcome.timeframe.toUpperCase()} · {outcome.conditionName}</strong><span>{outcomeLabels[outcome.status]} · Closed {analysisDate(outcome.time+(outcome.timeframe==='d1'?86400000:3600000))}</span>{outcome.profitability&&<p>{profitabilityLabel(outcome.profitability)}</p>}{outcome.message&&<p>{outcome.message}</p>}</li>)}</ul></div>}
   </section>

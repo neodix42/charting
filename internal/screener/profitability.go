@@ -1,10 +1,10 @@
 package screener
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -13,20 +13,22 @@ import (
 	"unicode/utf8"
 )
 
-// SavedConditionAnalysis records historical simulation evidence, not a forecast
-// or an estimate recalculated from the latest signal candle.
+// SavedConditionAnalysis records a finished analysis's matching assets and any
+// historical simulation evidence, not a forecast of the latest signal candle.
 type SavedConditionAnalysis struct {
-	AnalyzedAt int64                         `json:"analyzedAt"`
-	Assets     []SavedConditionProfitability `json:"assets"`
+	AnalyzedAt  int64                         `json:"analyzedAt"`
+	Assets      []SavedConditionProfitability `json:"assets"`
+	FailedFiles int                           `json:"failedFiles,omitempty"`
 }
 
 type SavedConditionProfitability struct {
-	Symbol            string  `json:"symbol"`
-	Timeframe         string  `json:"timeframe"`
-	FileName          string  `json:"fileName"`
-	Matches           int64   `json:"matches"`
-	TakeProfitHits    int64   `json:"takeProfitHits"`
-	ProfitablePercent float64 `json:"profitablePercent"`
+	Symbol                   string  `json:"symbol"`
+	Timeframe                string  `json:"timeframe"`
+	FileName                 string  `json:"fileName"`
+	Matches                  int64   `json:"matches"`
+	TakeProfitHits           int64   `json:"takeProfitHits"`
+	ProfitablePercent        float64 `json:"profitablePercent"`
+	ProfitabilityUnavailable bool    `json:"profitabilityUnavailable,omitempty"`
 }
 
 const savedProfitabilityAssetsLimit = 32000
@@ -77,7 +79,7 @@ func validateSavedConditionAnalysis(value *SavedConditionAnalysis) error {
 	if value == nil {
 		return nil
 	}
-	if value.AnalyzedAt <= 0 || value.AnalyzedAt > 253402300799999 || len(value.Assets) > savedProfitabilityAssetsLimit {
+	if value.AnalyzedAt <= 0 || value.AnalyzedAt > 253402300799999 || len(value.Assets) > savedProfitabilityAssetsLimit || value.FailedFiles < 0 {
 		return errors.New("invalid recorded analysis timestamp or asset count")
 	}
 	seen := map[string]bool{}
@@ -90,6 +92,9 @@ func validateSavedConditionAnalysis(value *SavedConditionAnalysis) error {
 		}
 		if row.Matches <= 0 || row.TakeProfitHits < 0 || row.TakeProfitHits > row.Matches || !analysisFinite(row.ProfitablePercent) || row.ProfitablePercent < 0 || row.ProfitablePercent > 100 || math.Abs(row.ProfitablePercent-100*float64(row.TakeProfitHits)/float64(row.Matches)) > 1e-9 {
 			return errors.New("invalid recorded profitability counts or percentage")
+		}
+		if row.ProfitabilityUnavailable && (row.TakeProfitHits != 0 || row.ProfitablePercent != 0) {
+			return errors.New("unavailable recorded profitability must not contain simulated outcomes")
 		}
 		key := row.Symbol + "\x00" + row.Timeframe + "\x00" + row.FileName
 		if seen[key] {
@@ -124,27 +129,43 @@ func sameAnalysisProfitabilityRequest(left, right AnalysisRequest) bool {
 }
 
 func completedAnalysisProfitability(a *analysisState) (*SavedConditionAnalysis, error) {
-	if a == nil || a.active || a.phase != "completed" || a.errorText != "" || a.asOf <= 0 {
+	if a == nil || a.active || a.phase != "completed" || a.asOf <= 0 {
 		return nil, nil
 	}
 	snapshot := &SavedConditionAnalysis{AnalyzedAt: a.asOf, Assets: []SavedConditionProfitability{}}
+	completedFiles := 0
 	for _, result := range a.results {
 		if a.duplicateOf[result.ID] != "" {
 			continue
 		}
-		if result.Status != "completed" || result.Error != "" {
-			return nil, nil
-		}
-		if result.Matches <= 0 || result.Simulation == nil || result.Simulation.Unavailable == result.Matches {
+		if result.Status == "failed" || result.Status == "completed" && result.Error != "" {
+			snapshot.FailedFiles++
 			continue
 		}
-		row := SavedConditionProfitability{Symbol: result.Symbol, Timeframe: result.Timeframe, FileName: result.Name, Matches: result.Matches, TakeProfitHits: result.Simulation.TakeProfitHits, ProfitablePercent: result.Simulation.ProfitablePercent}
+		if result.Status != "completed" {
+			return nil, nil
+		}
+		completedFiles++
+		if result.Matches <= 0 {
+			continue
+		}
+		row := SavedConditionProfitability{Symbol: result.Symbol, Timeframe: result.Timeframe, FileName: result.Name, Matches: result.Matches, ProfitabilityUnavailable: true}
+		if result.Simulation != nil && result.Simulation.Unavailable != result.Matches {
+			row.ProfitabilityUnavailable = false
+			row.TakeProfitHits = result.Simulation.TakeProfitHits
+			row.ProfitablePercent = result.Simulation.ProfitablePercent
+		}
 		// Files with no meaningful base period can still be inspected in Analysis,
 		// but cannot become period-specific alert evidence.
 		if row.Timeframe == "" || row.Timeframe == "same" || !validAnalysisTimeframe(row.Timeframe) {
 			continue
 		}
 		snapshot.Assets = append(snapshot.Assets, row)
+	}
+	// A failed file must not hide another file's completed matches. An entirely
+	// failed scan, however, has no usable scope to replace a previous snapshot.
+	if completedFiles == 0 && snapshot.FailedFiles > 0 {
+		return nil, nil
 	}
 	// Multiple legacy files can describe one asset/period. Retaining the best
 	// full-precision ratio preserves every eligible pair without repeating the
@@ -153,7 +174,7 @@ func completedAnalysisProfitability(a *analysisState) (*SavedConditionAnalysis, 
 	for _, row := range snapshot.Assets {
 		key := row.Symbol + "\x00" + row.Timeframe
 		previous, found := best[key]
-		if !found || row.ProfitablePercent > previous.ProfitablePercent || row.ProfitablePercent == previous.ProfitablePercent && row.FileName < previous.FileName {
+		if !found || recordedProfitabilityBetter(row, previous) {
 			best[key] = row
 		}
 	}
@@ -174,6 +195,39 @@ func completedAnalysisProfitability(a *analysisState) (*SavedConditionAnalysis, 
 	return snapshot, nil
 }
 
+func recordedProfitabilityBetter(left, right SavedConditionProfitability) bool {
+	if left.ProfitabilityUnavailable != right.ProfitabilityUnavailable {
+		return !left.ProfitabilityUnavailable
+	}
+	leftRatio := new(big.Int).Mul(big.NewInt(left.TakeProfitHits), big.NewInt(right.Matches))
+	rightRatio := new(big.Int).Mul(big.NewInt(right.TakeProfitHits), big.NewInt(left.Matches))
+	if compared := leftRatio.Cmp(rightRatio); compared != 0 {
+		return compared > 0
+	}
+	return left.FileName < right.FileName
+}
+
+// Compatible evidence survives loading, threshold edits and Save as new, even
+// after restart. Signal rules, source scope and simulation must still agree.
+func compatibleAnalysisProfitability(request AnalysisRequest, saved []SavedAnalysisCondition, a *analysisState) (*SavedConditionAnalysis, error) {
+	var latest *SavedConditionAnalysis
+	for _, condition := range saved {
+		if condition.Analysis != nil && (latest == nil || condition.Analysis.AnalyzedAt > latest.AnalyzedAt) && sameAnalysisProfitabilityRequest(condition.Request, request) {
+			latest = condition.Analysis
+		}
+	}
+	if a != nil && sameAnalysisProfitabilityRequest(a.request, request) {
+		snapshot, err := completedAnalysisProfitability(a)
+		if err != nil {
+			return nil, err
+		}
+		if snapshot != nil && (latest == nil || snapshot.AnalyzedAt >= latest.AnalyzedAt) {
+			latest = snapshot
+		}
+	}
+	return copySavedConditionAnalysis(latest), nil
+}
+
 func (m *Manager) persistCompletedAnalysisProfitabilityLocked(a *analysisState) error {
 	snapshot, err := completedAnalysisProfitability(a)
 	if err != nil {
@@ -188,7 +242,7 @@ func (m *Manager) persistCompletedAnalysisProfitabilityLocked(a *analysisState) 
 	}
 	changed := false
 	for i := range saved {
-		if sameAnalysisProfitabilityRequest(saved[i].Request, a.request) {
+		if sameAnalysisProfitabilityRequest(saved[i].Request, a.request) && (saved[i].Analysis == nil || snapshot.AnalyzedAt >= saved[i].Analysis.AnalyzedAt) && !reflect.DeepEqual(saved[i].Analysis, snapshot) {
 			saved[i].Analysis = copySavedConditionAnalysis(snapshot)
 			changed = true
 		}
@@ -196,15 +250,7 @@ func (m *Manager) persistCompletedAnalysisProfitabilityLocked(a *analysisState) 
 	if !changed {
 		return nil
 	}
-	state := savedAnalysisConditions{Version: 1, Conditions: saved}
-	encoded, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	if len(encoded)+1 > savedConditionsBytes {
-		return errors.New("recorded profitability exceeds saved conditions size limit; previous snapshots preserved")
-	}
-	if err := writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), state); err != nil {
+	if err := m.writeSavedConditions(saved); err != nil {
 		return fmt.Errorf("persist recorded analysis: %w", err)
 	}
 	return nil

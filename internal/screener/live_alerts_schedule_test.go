@@ -23,11 +23,15 @@ func scheduledAlertsFixture(t *testing.T, now time.Time) (*Manager, *LiveAlerts,
 	day := now.UTC().Truncate(24 * time.Hour).UnixMilli()
 	writeDataFile(t, m, "eurusd-h1-2024-01-01-2024-01-04.csv", reviewHourlyCSV(hour-3*time.Hour.Milliseconds(), []float64{10, 11, 12, 13}))
 	writeDataFile(t, m, "eurusd-d1-2024-01-01-2024-01-04.csv", fmt.Sprintf("timestamp,open,high,low,close\n%d,10,12,9,11\n%d,11,13,10,12\n", day-2*(24*time.Hour).Milliseconds(), day-(24*time.Hour).Milliseconds()))
-	hourly, err := m.SaveAnalysisCondition("Hourly condition", defaultAnalysisRequest())
+	hourlyRequest := defaultAnalysisRequest()
+	hourlyRequest.Period = "h1"
+	hourly, err := saveLiveCondition(t, m, "Hourly condition", hourlyRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	daily, err := m.SaveAnalysisCondition("Daily condition", defaultAnalysisRequest())
+	dailyRequest := defaultAnalysisRequest()
+	dailyRequest.Period = "d1"
+	daily, err := saveLiveCondition(t, m, "Daily condition", dailyRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +51,7 @@ func scheduledAlertsFixture(t *testing.T, now time.Time) (*Manager, *LiveAlerts,
 		}
 		return refreshed, ctx.Err()
 	}
-	config := LiveAlertsConfig{Enabled: true, Symbols: []string{"eurusd"}, ConditionPeriods: []LiveAlertConditionPeriod{{ConditionID: hourly.ID, Period: "h1"}, {ConditionID: daily.ID, Period: "d1"}}}
+	config := LiveAlertsConfig{Enabled: true, ConditionIDs: []string{hourly.ID, daily.ID}}
 	if _, err = l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -110,22 +114,23 @@ func TestLiveAlertsMidHourEnableAndRestartWaitUntilExactNextClose(t *testing.T) 
 	}
 }
 
-func TestLiveAlertsSchedulesOnlyAssignedDuePeriodsAndRefreshesTheirCompanions(t *testing.T) {
+func TestLiveAlertsSchedulesOnlyInheritedDuePeriodsAndRefreshesTheirCompanions(t *testing.T) {
 	now := time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC)
 	_, l, config, _ := scheduledAlertsFixture(t, now)
+	config, _ = l.resolveConfig(config)
 	for _, tc := range []struct {
 		name     string
 		from, to time.Time
 		want     []LiveAlertConditionPeriod
 	}{
-		{"hourly", now, now.Add(7 * time.Second), config.ConditionPeriods[:1]},
-		{"midnight", now.Truncate(24 * time.Hour), now.Truncate(24 * time.Hour).Add(7 * time.Second), config.ConditionPeriods},
-		{"suspended-across-midnight", now.Add(11 * time.Hour), now.Add(13 * time.Hour), config.ConditionPeriods},
+		{"hourly", now, now.Add(7 * time.Second), []LiveAlertConditionPeriod{{ConditionID: config.ConditionIDs[0], Period: "h1"}}},
+		{"midnight", now.Truncate(24 * time.Hour), now.Truncate(24 * time.Hour).Add(7 * time.Second), config.scope},
+		{"suspended-across-midnight", now.Add(11 * time.Hour), now.Add(13 * time.Hour), config.scope},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := dueLiveAlertsConfig(config, tc.from, tc.to)
-			if !reflect.DeepEqual(got.ConditionPeriods, tc.want) {
-				t.Fatalf("selected wrong assigned periods: %+v want %+v", got.ConditionPeriods, tc.want)
+			if !reflect.DeepEqual(got.scope, tc.want) {
+				t.Fatalf("selected wrong inherited periods: %+v want %+v", got.scope, tc.want)
 			}
 		})
 	}
@@ -138,7 +143,7 @@ func TestLiveAlertsSchedulesOnlyAssignedDuePeriodsAndRefreshesTheirCompanions(t 
 		t.Fatalf("each condition must run on exactly one period, got %+v", alerts)
 	}
 	for _, alert := range alerts {
-		if alert.Timeframe != liveAlertsConditionPeriod(config, alert.ConditionID) {
+		if !liveAlertsScopeAllows(config, alert.ConditionID, alert.Timeframe) {
 			t.Fatalf("condition ran against another period: %+v", alert)
 		}
 	}
@@ -147,7 +152,7 @@ func TestLiveAlertsSchedulesOnlyAssignedDuePeriodsAndRefreshesTheirCompanions(t 
 func TestLiveAlertsScheduledStaleBarIsUnclaimedButManualCheckRemainsAvailable(t *testing.T) {
 	now := time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC)
 	_, l, config, _ := scheduledAlertsFixture(t, now)
-	config.ConditionPeriods = config.ConditionPeriods[:1]
+	config.ConditionIDs = config.ConditionIDs[:1]
 	var sent int
 	l.send = func(context.Context, LiveAlert) error { sent++; return nil }
 	// The file's last row opens at 12:00. By 14:00 the 13:00 bar is due,
@@ -196,7 +201,7 @@ func TestLiveAlertsBusyRetryCrossingMidnightIncludesNewDailyClose(t *testing.T) 
 func TestLiveAlertsMissingDueHistoryIsReportedWithoutClaims(t *testing.T) {
 	now := time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC)
 	m, l, config, _ := scheduledAlertsFixture(t, now)
-	config.ConditionPeriods = config.ConditionPeriods[:1]
+	config.ConditionIDs = config.ConditionIDs[:1]
 	if err := os.Remove(filepath.Join(m.directory, "eurusd-h1-2024-01-01-2024-01-04.csv")); err != nil {
 		t.Fatal(err)
 	}

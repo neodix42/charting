@@ -94,6 +94,10 @@ func (a *App) SaveScreenerAnalysisCondition(name string, request screener.Analys
 	return a.screener.SaveAnalysisCondition(name, request)
 }
 
+func (a *App) UpdateScreenerAnalysisCondition(id string, request screener.AnalysisRequest) (screener.SavedAnalysisCondition, error) {
+	return a.screener.UpdateAnalysisCondition(id, request)
+}
+
 func (a *App) DeleteScreenerAnalysisCondition(id string) error {
 	return a.screener.DeleteAnalysisCondition(id)
 }

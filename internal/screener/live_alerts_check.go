@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -20,10 +21,27 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if err := validateLiveAlertsConfig(config); err != nil {
 		return err
 	}
+	scope := config.scope
 	config = canonicalLiveAlertsConfig(config)
 	conditions, err := l.selectedConditions(config)
 	if err != nil {
 		return err
+	}
+	if scope == nil {
+		config = resolvedLiveAlertsConfig(config, conditions)
+	} else {
+		config.scope = scope
+	}
+	qualified := make(map[string]map[string]*SavedConditionProfitability, len(conditions))
+	basePairs := map[string]bool{}
+	for _, saved := range conditions {
+		qualified[saved.ID] = savedConditionEligiblePairs(saved)
+		for pair := range qualified[saved.ID] {
+			_, period, _ := strings.Cut(pair, "/")
+			if liveAlertsScopeAllows(config, saved.ID, period) {
+				basePairs[pair] = true
+			}
+		}
 	}
 	m := l.manager
 	m.mu.Lock()
@@ -114,7 +132,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		}
 		s.cache = a.cache
 		a.series[id] = s
-		if liveAlertBaseAllowed(config, conditions, s.metadata.Symbol, s.metadata.Timeframe) {
+		if basePairs[s.metadata.Symbol+"/"+s.metadata.Timeframe] {
 			targets = append(targets, s)
 		}
 	}
@@ -151,10 +169,10 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			}
 		}
 		for _, saved := range conditions {
-			if liveAlertsConditionPeriod(config, saved.ID) != s.metadata.Timeframe {
+			if !liveAlertsScopeAllows(config, saved.ID, s.metadata.Timeframe) {
 				continue
 			}
-			if _, allowed := SavedConditionProfitabilityFor(saved, s.metadata.Symbol, s.metadata.Timeframe); !allowed {
+			if _, allowed := qualified[saved.ID][s.metadata.Symbol+"/"+s.metadata.Timeframe]; !allowed {
 				continue
 			}
 			if err = ctx.Err(); err != nil {
@@ -168,7 +186,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 				continue
 			}
 			a.request = copyAnalysisRequest(saved.Request)
-			// Base scope is the explicit period and saved profitability evidence;
+			// Base scope inherits the saved period and recorded matching assets;
 			// historical categories do not change an already-qualified live pair.
 			a.request.Period, a.request.Categories = "all", nil
 			matched, e := evaluateLiveAlertLatest(ctx, a, s, closed)
@@ -187,8 +205,13 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 				}
 				alert = &value
 			}
-			if e = l.claim(ctx, key, latest.timestamp, alert); e != nil {
-				return e
+			claimed, claimErr := l.claimCurrentCondition(ctx, saved, s.metadata.Symbol, s.metadata.Timeframe, key, latest.timestamp, alert)
+			if claimErr != nil {
+				return claimErr
+			}
+			if !claimed {
+				failures = append(failures, fmt.Errorf("%s changed while its latest bar was being checked; the obsolete result was not claimed", saved.Name))
+				continue
 			}
 			if alert != nil {
 				if e = l.deliver(ctx, *alert); e != nil {
@@ -216,6 +239,33 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	return errors.Join(failures...)
 }
 
+// A saved rule can be updated while a slow refresh is in flight. Serialize its
+// final scope/rule check with the durable claim, so an update before this point
+// cannot publish a stale evaluation. Delivery follows the committed claim.
+func (l *LiveAlerts) claimCurrentCondition(ctx context.Context, evaluated SavedAnalysisCondition, symbol, period, key string, timestamp int64, alert *LiveAlert) (bool, error) {
+	l.manager.mu.Lock()
+	defer l.manager.mu.Unlock()
+	saved, err := l.manager.readSavedConditions()
+	if err != nil {
+		return false, err
+	}
+	for _, current := range saved {
+		if current.ID != evaluated.ID {
+			continue
+		}
+		if !sameAnalysisProfitabilityRequest(current.Request, evaluated.Request) {
+			return false, nil
+		}
+		stats, allowed := SavedConditionProfitabilityFor(current, symbol, period)
+		previousStats, previouslyAllowed := SavedConditionProfitabilityFor(evaluated, symbol, period)
+		if !allowed || !previouslyAllowed || !reflect.DeepEqual(stats, previousStats) {
+			return false, nil
+		}
+		return true, l.claim(ctx, key, timestamp, alert)
+	}
+	return false, nil
+}
+
 func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []SavedAnalysisCondition) ([]historyGroup, error) {
 	names, err := csvNames(directory)
 	if err != nil {
@@ -225,18 +275,18 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 	// condition cannot widen another condition's profitability or period scope.
 	pairs := map[string]bool{}
 	for _, saved := range conditions {
-		period := liveAlertsConditionPeriod(config, saved.ID)
+		eligible := savedConditionEligiblePairs(saved)
 		found := false
 		for _, name := range names {
 			match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
-			if match == nil || match[2] != period || !containsLiveValue(config.Symbols, match[1]) {
+			if match == nil || !liveAlertsScopeAllows(config, saved.ID, match[2]) {
 				continue
 			}
-			if _, allowed := SavedConditionProfitabilityFor(saved, match[1], period); !allowed {
+			if _, allowed := eligible[match[1]+"/"+match[2]]; !allowed {
 				continue
 			}
 			found = true
-			pairs[match[1]+"/"+period] = true
+			pairs[match[1]+"/"+match[2]] = true
 			for _, condition := range saved.Request.Conditions {
 				for _, operand := range conditionOperands(condition) {
 					if operand.Kind == "field" && operand.Timeframe != "" && operand.Timeframe != "same" {
@@ -246,10 +296,7 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 			}
 		}
 		if !found {
-			if saved.Request.ProfitabilityFilter > 0 {
-				return nil, missingLiveConditionTargets(saved, strings.ToUpper(period))
-			}
-			return nil, fmt.Errorf("no downloaded %s history remains for its selected saved condition; download and enrich a selected asset", strings.ToUpper(period))
+			return nil, missingLiveConditionTargets(saved, strings.ToUpper(saved.Request.Period))
 		}
 	}
 	wanted := []string{}

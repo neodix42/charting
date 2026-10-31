@@ -154,3 +154,5 @@ export function TestDucascopyConnection():Promise<jforex.Info>;
 export function TestDucascopyConnectionWithPIN(arg1:string):Promise<jforex.Info>;
 
 export function TestTelegramBot():Promise<telegram.TestResult>;
+
+export function UpdateScreenerAnalysisCondition(arg1:string,arg2:screener.AnalysisRequest):Promise<screener.SavedAnalysisCondition>;
