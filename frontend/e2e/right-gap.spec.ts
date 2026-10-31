@@ -1,4 +1,5 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page,type Route} from '@playwright/test';
+import {openTestApp,reloadTestApp} from './helpers/testApp';
 import intermediate from '../../examples/intermediate-two-tabs.json' with {type:'json'};
 import type {Workspace} from '../src/types';
 import {intervalSeconds} from '../src/types';
@@ -13,7 +14,7 @@ const gaps=(page:Page):Promise<GapMetrics[]>=>page.evaluate(()=>(window as any).
 const saved=(page:Page):Promise<Workspace>=>page.evaluate(()=>(window as any).__testWorkspace());
 async function seed(page:Page,workspace:Workspace){
  await page.addInitScript(({key,workspace})=>{if(!sessionStorage.getItem(key))sessionStorage.setItem(key,JSON.stringify(workspace));},{key:storageKey,workspace});
- await page.goto('/');
+ await openTestApp(page);
  await expect(page.getByTestId('chart-cell')).toHaveCount(workspace.tabs.find(tab=>tab.id===workspace.activeTabId)!.charts.length);
  await expect.poll(async()=>(await gaps(page)).length).toBe(workspace.tabs.find(tab=>tab.id===workspace.activeTabId)!.charts.length);
 }
@@ -33,7 +34,7 @@ async function expectGap(page:Page,count:number,unit:'bars'|'pixels',value:numbe
 }
 
 test('fresh and legacy workspaces display a ten-bar gap without expanding their layouts',async({page})=>{
- await page.goto('/');await expect(page.getByTestId('chart-cell')).toHaveCount(1);await expectGap(page,1,'bars',10);
+ await openTestApp(page);await expect(page.getByTestId('chart-cell')).toHaveCount(1);await expectGap(page,1,'bars',10);
  await page.getByRole('button',{name:'Open settings',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Workspace settings',exact:true});
  await expect(dialog.getByLabel('Chart right gap',{exact:true})).toHaveValue('10');
@@ -42,7 +43,7 @@ test('fresh and legacy workspaces display a ten-bar gap without expanding their 
  const workspace=structuredClone(intermediate) as Workspace;
  for(const tab of workspace.tabs)for(const chart of tab.charts)chart.view={...chart.view,mode:'live',fromSec:null,toSec:null};
  await page.evaluate(({key,workspace})=>sessionStorage.setItem(key,JSON.stringify(workspace)),{key:storageKey,workspace});
- await page.reload();await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(2);await expect(page.getByTestId('chart-cell')).toHaveCount(3);await expectGap(page,3,'bars',10);
+ await reloadTestApp(page);await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(2);await expect(page.getByTestId('chart-cell')).toHaveCount(3);await expectGap(page,3,'bars',10);
  expect((await saved(page)).chartRightGap).toBeUndefined();
 });
 
@@ -57,7 +58,7 @@ test('a gap change repaints every active chart and maximized sibling and persist
  await expect.poll(async()=>(await gaps(page)).every(metric=>!metric.followingLive&&metric.gapBars<-5)).toBe(true);
  const historical=await gaps(page);
  await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
- await page.reload();await expect.poll(async()=>(await gaps(page)).length).toBe(3);
+ await reloadTestApp(page);await expect.poll(async()=>(await gaps(page)).length).toBe(3);
  await expect.poll(async()=>{
   const restored=await gaps(page);
   return restored.length===3&&restored.every((metric,index)=>!metric.followingLive&&Math.abs(metric.gapBars-historical[index].gapBars)<0.2);
@@ -75,14 +76,14 @@ test('a gap change repaints every active chart and maximized sibling and persist
  expect(current.tabs[0].charts[0].indicators).toEqual(workspace.tabs[0].charts[0].indicators);
  await page.locator('[role="tab"][data-tab-id]').nth(1).click();await expectGap(page,1,'bars',23);
  await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
- await page.reload();await expect(page.getByTestId('chart-cell')).toHaveCount(1);await expectGap(page,1,'bars',23);
+ await reloadTestApp(page);await expect(page.getByTestId('chart-cell')).toHaveCount(1);await expectGap(page,1,'bars',23);
  await page.locator('[role="tab"][data-tab-id]').first().click();await expectGap(page,3,'bars',23);
  await page.screenshot({path:'test-results/right-gap-all-charts.png'});
 });
 
 test('pixel gaps stay fixed through zoom, resize, future Ichimoku spans and a new live candle',async({page})=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
- await page.goto('/');await expectGap(page,1,'bars',10);
+ await openTestApp(page);await expectGap(page,1,'bars',10);
  const chart=page.getByTestId('chart-cell');await chart.getByLabel('Indicators',{exact:true}).selectOption('ichimoku');
  let dialog=page.getByRole('dialog',{name:'Ichimoku Cloud parameters',exact:true});await dialog.getByRole('button',{name:'OK',exact:true}).click();
  await expectGap(page,1,'bars',10);
@@ -100,14 +101,28 @@ test('pixel gaps stay fixed through zoom, resize, future Ichimoku spans and a ne
  metric=(await gaps(page))[0];expect(metric.lastX).toBeGreaterThan(0);expect(metric.lastX).toBeLessThan(metric.timeScaleWidth);
  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
  await expect.poll(async()=>(await saved(page)).chartRightGap).toEqual({unit:'pixels',value:79});
- await page.reload();await expectGap(page,1,'pixels',79);
+ // Browser load can precede the async fixture import. Hold that import to
+ // reproduce the CI reload race while checking the saved pixel-gap restore.
+ let releaseBridge!:()=>void,moduleRequested=false,reloadReady=false;
+ const released=new Promise<void>(resolve=>{releaseBridge=resolve;});
+ const holdBridge=async(route:Route)=>{moduleRequested=true;await released;await route.continue();};
+ await page.route('**/src/test/browserBridge.ts*',holdBridge);
+ const reloaded=reloadTestApp(page).then(()=>{reloadReady=true;});
+ try{
+  await expect.poll(()=>moduleRequested).toBe(true);await page.waitForLoadState('load');
+  expect(await page.evaluate(()=>typeof(window as any).__testChartGaps)).toBe('undefined');
+  expect(reloadReady).toBe(false);releaseBridge();await reloaded;
+  await expectGap(page,1,'pixels',79);
+ }finally{
+  releaseBridge();await reloaded;await page.unroute('**/src/test/browserBridge.ts*',holdBridge);
+ }
  await page.getByRole('button',{name:'Open settings',exact:true}).click();dialog=page.getByRole('dialog',{name:'Workspace settings',exact:true});
  await expect(dialog.getByLabel('Chart right gap',{exact:true})).toHaveValue('79');await expect(dialog.getByLabel('Chart right gap unit',{exact:true})).toHaveValue('pixels');
  await page.screenshot({path:'test-results/right-gap-settings.png'});expect(errors).toEqual([]);
 });
 
 test('invalid and unapplied gap drafts preserve the saved rule and zero is accepted',async({page})=>{
- await page.goto('/');await expectGap(page,1,'bars',10);await page.getByRole('button',{name:'Open settings',exact:true}).click();
+ await openTestApp(page);await expectGap(page,1,'bars',10);await page.getByRole('button',{name:'Open settings',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Workspace settings',exact:true}),value=dialog.getByLabel('Chart right gap',{exact:true}),apply=dialog.getByRole('button',{name:'Apply chart gap',exact:true});
  for(const draft of ['','-1','1.5','501']){
   await value.fill(draft);await apply.click();await expect(dialog.getByRole('alert')).toBeVisible();await expectGap(page,1,'bars',10);
@@ -122,7 +137,7 @@ test('invalid and unapplied gap drafts preserve the saved rule and zero is accep
 
 test('Apply refreshes a full older window and a late older page cannot evict the latest candle',async({page})=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
- await page.goto('/');await expectGap(page,1,'bars',10);
+ await openTestApp(page);await expectGap(page,1,'bars',10);
  const oldEnd=await page.evaluate(()=>{
   const api=window.go!.main!.App!,attach=api.AttachChart.bind(api),oldEnd=Math.floor((Date.now()/1000-30*86400)/60)*60;
   const makeBars=(end:number,count:number)=>Array.from({length:count},(_,index)=>({time:end-(count-index-1)*60,open:60000,high:60030,low:59980,close:60010,volume:2,closed:true,quality:'provisional',sourceRevision:1}));
