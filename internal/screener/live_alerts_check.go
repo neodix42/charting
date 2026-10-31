@@ -114,7 +114,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		}
 		s.cache = a.cache
 		a.series[id] = s
-		if containsLiveValue(liveAlertsPeriods(config), s.metadata.Timeframe) {
+		if liveAlertBaseAllowed(config, conditions, s.metadata.Symbol, s.metadata.Timeframe) {
 			targets = append(targets, s)
 		}
 	}
@@ -154,6 +154,9 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			if liveAlertsConditionPeriod(config, saved.ID) != s.metadata.Timeframe {
 				continue
 			}
+			if _, allowed := SavedConditionProfitabilityFor(saved, s.metadata.Symbol, s.metadata.Timeframe); !allowed {
+				continue
+			}
 			if err = ctx.Err(); err != nil {
 				return err
 			}
@@ -165,8 +168,8 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 				continue
 			}
 			a.request = copyAnalysisRequest(saved.Request)
-			// The explicit Live Alerts choices select base assets and periods;
-			// a saved historical screen's filters do not narrow those choices.
+			// Base scope is the explicit period and saved profitability evidence;
+			// historical categories do not change an already-qualified live pair.
 			a.request.Period, a.request.Categories = "all", nil
 			matched, e := evaluateLiveAlertLatest(ctx, a, s, closed)
 			if e != nil {
@@ -214,43 +217,46 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 }
 
 func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []SavedAnalysisCondition) ([]historyGroup, error) {
-	periods := map[string]bool{}
-	for _, period := range liveAlertsPeriods(config) {
-		periods[period] = true
-	}
-	// An explicit companion timeframe belongs to the same signal snapshot. Its
-	// latest data and recipes must be refreshed before compiling the condition.
-	for _, saved := range conditions {
-		for _, condition := range saved.Request.Conditions {
-			for _, operand := range conditionOperands(condition) {
-				if operand.Kind == "field" && operand.Timeframe != "" && operand.Timeframe != "same" {
-					periods[operand.Timeframe] = true
-				}
-			}
-		}
-	}
 	names, err := csvNames(directory)
 	if err != nil {
 		return nil, err
 	}
-	wanted := []string{}
-	for _, name := range names {
-		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
-		if match != nil && containsLiveValue(config.Symbols, match[1]) && periods[match[2]] {
-			wanted = append(wanted, name)
-		}
-	}
-	for _, period := range liveAlertsPeriods(config) {
+	// Build base and dependency pairs per condition. A qualifying symbol for one
+	// condition cannot widen another condition's profitability or period scope.
+	pairs := map[string]bool{}
+	for _, saved := range conditions {
+		period := liveAlertsConditionPeriod(config, saved.ID)
 		found := false
-		for _, name := range wanted {
+		for _, name := range names {
 			match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
-			if match[2] == period {
-				found = true
-				break
+			if match == nil || match[2] != period || !containsLiveValue(config.Symbols, match[1]) {
+				continue
+			}
+			if _, allowed := SavedConditionProfitabilityFor(saved, match[1], period); !allowed {
+				continue
+			}
+			found = true
+			pairs[match[1]+"/"+period] = true
+			for _, condition := range saved.Request.Conditions {
+				for _, operand := range conditionOperands(condition) {
+					if operand.Kind == "field" && operand.Timeframe != "" && operand.Timeframe != "same" {
+						pairs[match[1]+"/"+operand.Timeframe] = true
+					}
+				}
 			}
 		}
 		if !found {
+			if saved.Request.ProfitabilityFilter > 0 {
+				return nil, missingLiveConditionTargets(saved, strings.ToUpper(period))
+			}
 			return nil, fmt.Errorf("no downloaded %s history remains for its selected saved condition; download and enrich a selected asset", strings.ToUpper(period))
+		}
+	}
+	wanted := []string{}
+	for _, name := range names {
+		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+		if match != nil && pairs[match[1]+"/"+match[2]] {
+			wanted = append(wanted, name)
 		}
 	}
 	return groupHistories(directory, wanted), nil
@@ -391,6 +397,7 @@ func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index i
 		return LiveAlert{}, errors.New("Live Alerts requires a finite closing price")
 	}
 	alert := LiveAlert{ConditionID: saved.ID, ConditionName: saved.Name, Symbol: s.metadata.Symbol, AssetName: s.metadata.Description, Timeframe: s.metadata.Timeframe, Time: row.timestamp, EntryPrice: row.values[position]}
+	alert.Profitability, _ = SavedConditionProfitabilityFor(saved, s.metadata.Symbol, s.metadata.Timeframe)
 	config := saved.Request.TradeSimulation
 	if config == nil {
 		return alert, nil
@@ -442,7 +449,7 @@ func (l *LiveAlerts) claim(ctx context.Context, key string, timestamp int64, ale
 		return nil
 	}
 	priorRecent := append([]LiveAlertOutcome{}, l.state.Recent...)
-	l.state.Recent = append([]LiveAlertOutcome{{ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically."}}, l.state.Recent...)
+	l.state.Recent = append([]LiveAlertOutcome{{ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
 	if len(l.state.Recent) > 50 {
 		l.state.Recent = l.state.Recent[:50]
 	}

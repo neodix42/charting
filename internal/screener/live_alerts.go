@@ -40,25 +40,27 @@ type LiveAlertAsset struct {
 // its close, an indicative entry available at signal time. A future next-open
 // execution price cannot be known by a closed-bar alert.
 type LiveAlert struct {
-	ConditionID   string   `json:"conditionId"`
-	ConditionName string   `json:"conditionName"`
-	Symbol        string   `json:"symbol"`
-	AssetName     string   `json:"assetName"`
-	Timeframe     string   `json:"timeframe"`
-	Time          int64    `json:"time"`
-	EntryPrice    float64  `json:"entryPrice"`
-	StopLoss      *float64 `json:"stopLoss,omitempty"`
-	TakeProfit    *float64 `json:"takeProfit,omitempty"`
+	ConditionID   string                       `json:"conditionId"`
+	ConditionName string                       `json:"conditionName"`
+	Symbol        string                       `json:"symbol"`
+	AssetName     string                       `json:"assetName"`
+	Timeframe     string                       `json:"timeframe"`
+	Time          int64                        `json:"time"`
+	EntryPrice    float64                      `json:"entryPrice"`
+	StopLoss      *float64                     `json:"stopLoss,omitempty"`
+	TakeProfit    *float64                     `json:"takeProfit,omitempty"`
+	Profitability *SavedConditionProfitability `json:"profitability,omitempty"`
 }
 
 type LiveAlertOutcome struct {
-	ConditionName string `json:"conditionName"`
-	Symbol        string `json:"symbol"`
-	AssetName     string `json:"assetName"`
-	Timeframe     string `json:"timeframe"`
-	Time          int64  `json:"time"`
-	Status        string `json:"status"`
-	Message       string `json:"message"`
+	ConditionName string                       `json:"conditionName"`
+	Symbol        string                       `json:"symbol"`
+	AssetName     string                       `json:"assetName"`
+	Timeframe     string                       `json:"timeframe"`
+	Time          int64                        `json:"time"`
+	Status        string                       `json:"status"`
+	Message       string                       `json:"message"`
+	Profitability *SavedConditionProfitability `json:"profitability,omitempty"`
 }
 
 type LiveAlertsInfo struct {
@@ -281,6 +283,9 @@ func validateLiveAlertsState(state liveAlertsState) error {
 		if outcome.Time < 0 || len(outcome.Message) > 5000 || (outcome.Status != "sent" && outcome.Status != "failed" && outcome.Status != "claimed" && outcome.Status != "uncertain") {
 			return errors.New("invalid Live Alerts delivery history")
 		}
+		if outcome.Profitability != nil && (!validLiveProfitability(*outcome.Profitability) || outcome.Profitability.Symbol != outcome.Symbol || outcome.Profitability.Timeframe != outcome.Timeframe) {
+			return errors.New("invalid Live Alerts recorded profitability")
+		}
 	}
 	return nil
 }
@@ -333,6 +338,9 @@ func containsLiveValue(values []string, target string) bool {
 func (l *LiveAlerts) Info() LiveAlertsInfo {
 	l.mu.Lock()
 	info := LiveAlertsInfo{Config: copyLiveAlertsConfig(l.state.Config), Running: l.running, LastRun: l.lastRun, NextRun: l.nextRun, Sent: l.state.Sent, Error: l.errorText, Status: l.status, Progress: l.progress, CurrentAsset: l.currentAsset, Recent: append([]LiveAlertOutcome{}, l.state.Recent...), Assets: []LiveAlertAsset{}}
+	for i := range info.Recent {
+		info.Recent[i].Profitability = copyLiveProfitability(info.Recent[i].Profitability)
+	}
 	l.mu.Unlock()
 	assets, err := l.assets()
 	info.Assets = assets
@@ -411,23 +419,26 @@ func (l *LiveAlerts) pruneDeletedConditionWatermarks(saved []SavedAnalysisCondit
 }
 
 func (l *LiveAlerts) validateSelection(config LiveAlertsConfig) error {
-	if _, err := l.selectedConditions(config); err != nil {
+	conditions, err := l.selectedConditions(config)
+	if err != nil {
 		return err
 	}
 	assets, err := l.assets()
 	if err != nil {
 		return err
 	}
-	for _, period := range liveAlertsPeriods(config) {
+	for _, saved := range conditions {
+		period := liveAlertsConditionPeriod(config, saved.ID)
 		found := false
 		for _, asset := range assets {
-			if containsLiveValue(config.Symbols, asset.Symbol) && containsLiveValue(asset.Periods, period) {
+			_, allowed := SavedConditionProfitabilityFor(saved, asset.Symbol, period)
+			if containsLiveValue(config.Symbols, asset.Symbol) && containsLiveValue(asset.Periods, period) && allowed {
 				found = true
 				break
 			}
 		}
 		if !found {
-			return fmt.Errorf("download and enrich at least one selected asset in %s for its saved condition", strings.ToUpper(period))
+			return missingLiveConditionTargets(saved, strings.ToUpper(period))
 		}
 	}
 	for _, symbol := range config.Symbols {
@@ -437,11 +448,11 @@ func (l *LiveAlerts) validateSelection(config LiveAlertsConfig) error {
 				continue
 			}
 			for _, period := range liveAlertsPeriods(config) {
-				found = found || containsLiveValue(asset.Periods, period)
+				found = found || containsLiveValue(asset.Periods, period) && liveAlertBaseAllowed(config, conditions, symbol, period)
 			}
 		}
 		if !found {
-			return fmt.Errorf("download and enrich %s in a selected period before selecting it for Live Alerts", strings.ToUpper(symbol))
+			return fmt.Errorf("%s has no downloaded history eligible for any selected condition's period and profitability filter; update the Live Alerts selection", strings.ToUpper(symbol))
 		}
 	}
 	return nil

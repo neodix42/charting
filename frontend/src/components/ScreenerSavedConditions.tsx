@@ -1,6 +1,7 @@
 import {forwardRef,useEffect,useImperativeHandle,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import type {AnalysisRequest,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import {analysisRequestIdentity} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
 
 export interface ScreenerSavedConditionsHandle {flush():Promise<void>}
@@ -10,6 +11,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
 }>(function ScreenerSavedConditions({api,visible,disabled,canSave,request,onLoad},ref){
  const [conditions,setConditions]=useState<SavedAnalysisCondition[]>([]),[ready,setReady]=useState(false),[listError,setListError]=useState(''),[retry,setRetry]=useState(0);
  const [open,setOpen]=useState(false),[name,setName]=useState(''),[saveError,setSaveError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [loadedId,setLoadedId]=useState<string|null>(null),selectedOnce=useRef(false);
  const [renaming,setRenaming]=useState<SavedAnalysisCondition|null>(null);
  const [context,setContext]=useState<{condition:SavedAnalysisCondition;x:number;y:number;origin:HTMLButtonElement}|null>(null),[deleteError,setDeleteError]=useState('');
  const menu=useRef<HTMLDivElement>(null),renameButton=useRef<HTMLButtonElement>(null),restoreDeleteFocus=useRef<HTMLButtonElement|null>(null),dialogOrigin=useRef<HTMLButtonElement|null>(null);
@@ -22,7 +24,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   let current=true;const revision=++listEpoch.current;
   void api.GetScreenerSavedConditions().then(value=>{if(current&&revision===listEpoch.current){setConditions(value);setReady(true);setListError('');}}).catch(error=>{if(current&&revision===listEpoch.current){setListError(errorText(error));setReady(false);}});
   return ()=>{current=false;};
- },[api,visible,retry]);
+ },[api,visible,retry,disabled]);
  useEffect(()=>{if(!visible)setOpen(false);},[visible]);
  useEffect(()=>{if(!visible||disabled||busy||open)setContext(null);},[visible,disabled,busy,open]);
  useLayoutEffect(()=>{
@@ -73,6 +75,8 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   document.addEventListener('keydown',key);
   return ()=>{document.removeEventListener('keydown',key);if(origin?.isConnected&&!origin.disabled&&origin.getClientRects().length)origin.focus();};
  },[open]);
+ const loaded=conditions.find(condition=>condition.id===loadedId),modified=!!loaded&&analysisRequestIdentity(loaded.request)!==analysisRequestIdentity(request);
+ useEffect(()=>{if(selectedOnce.current||!ready||disabled)return;const same=conditions.filter(condition=>analysisRequestIdentity(condition.request)===analysisRequestIdentity(request));if(same.length===1){selectedOnce.current=true;setLoadedId(same[0].id);}},[conditions,request,ready,disabled]);
  const save=()=>{
   if(flight.current||disabled||!renaming&&!canSave)return;
   const title=name.trim();
@@ -82,7 +86,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
    try{
     const saved=renaming?await api.RenameScreenerAnalysisCondition(renaming.id,title):await api.SaveScreenerAnalysisCondition(title,structuredClone(request));
     listEpoch.current++;
-    if(mounted.current){setConditions(current=>renaming?current.map(item=>item.id===saved.id?saved:item):[...current.filter(item=>item.id!==saved.id),saved]);setOpen(false);setNotice(`${renaming?'Renamed':'Saved'} “${saved.name}”.`);}
+    if(mounted.current){if(!renaming){selectedOnce.current=true;setLoadedId(saved.id);}setConditions(current=>renaming?current.map(item=>item.id===saved.id?saved:item):[...current.filter(item=>item.id!==saved.id),saved]);setOpen(false);setNotice(`${renaming?'Renamed':'Saved'} “${saved.name}”.`);}
    }catch(error){if(mounted.current)setSaveError(errorText(error));throw error;}
    finally{flight.current=null;if(mounted.current)setBusy(false);}
   })();
@@ -102,7 +106,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
   const operation=(async()=>{
    try{
     await api.DeleteScreenerAnalysisCondition(condition.id);listEpoch.current++;
-    if(mounted.current){setConditions(current=>current.filter(item=>item.id!==condition.id));setNotice(`Deleted “${condition.name}”.`);}
+    if(mounted.current){if(loadedId===condition.id)setLoadedId(null);setConditions(current=>current.filter(item=>item.id!==condition.id));setNotice(`Deleted “${condition.name}”.`);}
    }catch(error){if(mounted.current){setDeleteError(errorText(error));setNotice('');}throw error;}
    finally{flight.current=null;if(mounted.current){restoreDeleteFocus.current=origin;setBusy(false);}}
   })();
@@ -113,12 +117,13 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
    <header><h2>Saved conditions</h2><span>{conditions.length}</span></header>
    <button ref={trigger} type="button" className="analysis-save-condition" disabled={!ready||disabled||!canSave||busy} onClick={()=>{dialogOrigin.current=trigger.current;setRenaming(null);setName('');setSaveError('');setNotice('');setOpen(true);}}>Safe Condition</button>
    <p>Select a condition to load all its rows. Apply conditions runs the scan. Right-click a saved condition to rename or delete it.</p>
+   {loaded&&<p className="analysis-loaded-condition" aria-live="polite">Loaded condition: <strong>{loaded.name}</strong>{modified?' · Modified draft':''}</p>}
    {notice&&<p className="analysis-saved-notice" role="status">{notice}</p>}
    {listError&&<div className="analysis-saved-error" role="alert">{listError}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry saved conditions</button></div>}
    {deleteError&&<p className="analysis-saved-error" role="alert">{deleteError}</p>}
    {!ready&&!listError&&<p role="status">Loading saved conditions…</p>}
    {ready&&conditions.length===0&&<p className="analysis-saved-empty">No saved conditions yet.</p>}
-   <div className="analysis-saved-list">{conditions.map(condition=><button type="button" key={condition.id} disabled={!ready||disabled||busy} aria-label={`Load condition ${condition.name}`} aria-haspopup="menu" aria-expanded={context?.condition.id===condition.id} onContextMenu={event=>{event.preventDefault();event.stopPropagation();showMenu(condition,event.currentTarget,event.clientX,event.clientY);}} onKeyDown={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const bounds=event.currentTarget.getBoundingClientRect();showMenu(condition,event.currentTarget,bounds.left,bounds.bottom);}}} onClick={()=>{setContext(null);setNotice('');setDeleteError('');onLoad(structuredClone(condition.request));}}><strong>{condition.name}</strong><small>{condition.request.conditions.length} {condition.request.conditions.length===1?'row':'rows'} · AND</small></button>)}</div>
+   <div className="analysis-saved-list">{conditions.map(condition=><button type="button" key={condition.id} className={loadedId===condition.id?'analysis-condition-loaded':undefined} aria-pressed={loadedId===condition.id} disabled={!ready||disabled||busy} aria-label={`Load condition ${condition.name}`} aria-haspopup="menu" aria-expanded={context?.condition.id===condition.id} onContextMenu={event=>{event.preventDefault();event.stopPropagation();showMenu(condition,event.currentTarget,event.clientX,event.clientY);}} onKeyDown={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const bounds=event.currentTarget.getBoundingClientRect();showMenu(condition,event.currentTarget,bounds.left,bounds.bottom);}}} onClick={()=>{selectedOnce.current=true;setLoadedId(condition.id);setContext(null);setNotice('');setDeleteError('');onLoad(structuredClone(condition.request));}}><strong>{condition.name}</strong><small>{condition.request.conditions.length} {condition.request.conditions.length===1?'row':'rows'} · AND{loadedId===condition.id?modified?' · Loaded, modified':' · Loaded':''}</small></button>)}</div>
   </aside>
   {visible&&context&&!disabled&&!busy&&!open&&createPortal(<div ref={menu} className="analysis-saved-menu" role="menu" aria-label={`Saved condition ${context.condition.name}`} style={{left:context.x,top:context.y}} onContextMenu={event=>event.preventDefault()}><button ref={renameButton} type="button" role="menuitem" tabIndex={-1} onClick={rename}>Rename</button><button type="button" className="danger" role="menuitem" tabIndex={-1} onClick={remove}>Delete</button></div>,document.body)}
   {visible&&open&&<div className="modal-backdrop analysis-save-backdrop"><section ref={dialog} className="modal analysis-save-dialog" role="dialog" tabIndex={-1} aria-modal="true" aria-labelledby="analysis-save-title">

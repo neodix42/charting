@@ -5,13 +5,15 @@ export type AnalysisTradeDirection='long'|'short';
 export interface AnalysisTradeSimulation {direction?:AnalysisTradeDirection|'';stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
 export type AnalysisPeriod='all'|'d1'|'h1';
-export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null}
-export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|''}
-export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest}
+export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
+export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|'';profitabilityFilter?:number}
+export interface SavedConditionProfitability {symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
+export interface SavedConditionAnalysis {analyzedAt:number;assets:SavedConditionProfitability[]}
+export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest;analysis?:SavedConditionAnalysis|null}
 export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
 export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
 export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}
-export interface AnalysisInfo {active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null}
+export interface AnalysisInfo {active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
 export interface AnalysisBar {index:number;time:number;values:Record<string,number>}
 export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];profitableMatches?:Array<{index:number;time:number}>;trade?:{entry:number;stopLoss:number;takeProfit:number}}
 export interface ScreenerAnalysisBackend {
@@ -32,7 +34,7 @@ export interface ScreenerAnalysisBackend {
 export const numberOperand=(value=0):AnalysisOperand=>({kind:'number',value});
 export const fieldOperand=(field='close'):AnalysisOperand=>({kind:'field',field,timeframe:'same',offset:0,aggregate:'value',window:1});
 export const newAnalysisCondition=(id:string=crypto.randomUUID()):AnalysisCondition=>({id,operator:'above',left:fieldOperand(),right:numberOperand(),upper:numberOperand(100),distance:fieldOperand('atr_14'),multiplier:0.2,bars:3,comparison:'above'});
-export const initialAnalysisView=():AnalysisRequest=>({conditions:[newAnalysisCondition('condition-1')]});
+export const initialAnalysisView=():AnalysisRequest=>({conditions:[newAnalysisCondition('condition-1')],profitabilityFilter:85});
 /** Keep custom levels; adapt the conventional OHLC choices when changing sides. */
 export function changeSimulationDirection(value:AnalysisTradeSimulation,direction:AnalysisTradeDirection,fields:readonly string[]):AnalysisTradeSimulation{
  const previous=value.direction||'long',stopLoss=direction==='short'?'high':'low',takeProfit=direction==='short'?'low':'high';
@@ -64,6 +66,7 @@ export function analysisFieldGroups(fields:string[]){
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return priceFields.has(base.toLowerCase())||/^(?:sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
 export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
 export function analysisInputError(view:AnalysisRequest){
+ if(view.profitabilityFilter!==undefined&&(!Number.isInteger(view.profitabilityFilter)||view.profitabilityFilter<0||view.profitabilityFilter>100||view.profitabilityFilter%5!==0))return'Profitability must be 0–100 in steps of 5.';
  if(view.period&&!['all','d1','h1'].includes(view.period))return'Choose All periods, d1 or h1 before scanning.';
  if(view.categories&&view.categories.length===0)return'Select at least one asset category before scanning.';
  if(!view.conditions.length)return'Add at least one condition before scanning.';
@@ -97,4 +100,22 @@ export class AnalysisViewWriter {
   this.flight=(async()=>{try{await this.persist(next);}catch(error){if(!this.pending)this.pending=next;throw error;}finally{this.flight=undefined;}})();
   await this.flight;if(this.pending)return this.flush();
  }
+}
+
+/** The saved backtest is evidence for this condition and base period only. */
+export function savedConditionProfitability(condition:SavedAnalysisCondition,symbol:string,period:string):SavedConditionProfitability|undefined{
+ const threshold=condition.request.profitabilityFilter??0;
+ return condition.analysis?.assets.filter(row=>row.symbol===symbol&&row.timeframe===period&&row.matches>0&&row.takeProfitHits>=0&&row.takeProfitHits<=row.matches&&Number.isFinite(row.profitablePercent)&&(threshold===0||100*row.takeProfitHits/row.matches>=threshold)).sort((a,b)=>b.takeProfitHits/b.matches-a.takeProfitHits/a.matches||(a.fileName<b.fileName?-1:a.fileName>b.fileName?1:0))[0];
+}
+export function savedConditionAllowsAsset(condition:SavedAnalysisCondition,symbol:string,period:string):boolean{
+ return (condition.request.profitabilityFilter??0)===0||!!savedConditionProfitability(condition,symbol,period);
+}
+export function profitabilityLabel(value:SavedConditionProfitability):string{return`Profitability: ${value.profitablePercent.toFixed(2)}%, ${value.takeProfitHits} / ${value.matches} hit TP`;}
+
+/** Compare semantic rule values across Go JSON defaults and older saved drafts. */
+export function analysisRequestIdentity(value:AnalysisRequest,includeProfitability=true):string{
+ const operand=(item?:AnalysisOperand)=>item?.kind==='number'?{kind:'number',value:item.value??0}:item?.kind==='field'?{kind:'field',field:item.field??'',timeframe:item.timeframe||'same',offset:item.offset??0,aggregate:item.aggregate||'value',window:item.aggregate==='highest'||item.aggregate==='lowest'?item.window??1:1}:{kind:''};
+ return JSON.stringify({period:value.period||'all',categories:value.categories?.slice().sort()??null,profitabilityFilter:includeProfitability?value.profitabilityFilter??0:undefined,
+  tradeSimulation:value.tradeSimulation?{direction:value.tradeSimulation.direction||'long',stopLoss:value.tradeSimulation.stopLoss,stopLossBarsAgo:value.tradeSimulation.stopLossBarsAgo??0,takeProfit:value.tradeSimulation.takeProfit,takeProfitMultiple:value.tradeSimulation.takeProfitMultiple??0,duration:value.tradeSimulation.duration}:null,
+  conditions:value.conditions.map(condition=>({operator:condition.operator,comparison:condition.comparison||'above',left:operand(condition.left),right:operand(condition.right),upper:operand(condition.upper),distance:operand(condition.distance),multiplier:condition.multiplier??0,bars:condition.bars??0}))});
 }

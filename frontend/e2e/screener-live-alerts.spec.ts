@@ -12,7 +12,7 @@ async function open(page:Page){
  await openTestApp(page);
  await page.evaluate(async files=>{
   (window as any).__testSetEnrichmentFiles(files);
-  const api=window.go!.main!.App!,view=await api.GetScreenerAnalysisView();
+  const api=window.go!.main!.App!,view={...await api.GetScreenerAnalysisView(),profitabilityFilter:0};
   await api.SaveScreenerAnalysisCondition('Trend entry',view);
   await api.SaveScreenerAnalysisCondition('Momentum entry',{...view,tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:20}});
  },fixtures);
@@ -40,6 +40,7 @@ test('Live Alerts selects saved conditions and downloaded daily/hourly assets, s
  await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('');
  await expect(page.getByRole('checkbox',{name:'Alert condition Momentum entry',exact:true})).toBeChecked();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
  await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('h1');
+ await page.getByRole('button',{name:'Select all assets',exact:true}).click();
  await page.getByRole('button',{name:'Save config',exact:true}).click();await expect(page.getByRole('status')).toContainText('Alert configuration saved.');
  const config=await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config);
  expect(config.enabled).toBe(false);expect(config.conditionPeriods).toHaveLength(2);expect(config.conditionPeriods.map((condition:any)=>condition.period)).toEqual(['d1','h1']);expect(config.symbols).toEqual(['btcusd','eurusd']);
@@ -107,8 +108,8 @@ test('a stale status response cannot undo starting alerts and saved conditions r
 test('deleted conditions and unavailable selected periods remain visible and cannot start alerts',async({page})=>{
  await open(page);await choose(page);await page.getByRole('button',{name:'Save config',exact:true}).click();await expect(page.getByRole('status')).toContainText('Alert configuration saved.');
  await page.getByRole('combobox',{name:'Alert period for Momentum entry',exact:true}).selectOption('d1');
- await expect(page.getByText('Select assets with a downloaded file in the chosen periods.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
- await page.getByRole('checkbox',{name:/Alert asset EURUSD/}).uncheck();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await expect(page.getByRole('checkbox',{name:/Alert asset EURUSD/})).toHaveCount(0);await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ expect((await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).symbols).toEqual(['btcusd']);
  await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  const removed=await page.evaluate(async()=>{const api=window.go!.main!.App!,saved=await api.GetScreenerSavedConditions();await api.DeleteScreenerAnalysisCondition(saved[0].id);return saved[0].id;});
  await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await expect(page.getByText('Remove saved conditions that are no longer available.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();

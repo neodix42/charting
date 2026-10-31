@@ -65,8 +65,8 @@ func TestAnalysisProfitableSortBeforePagination(t *testing.T) {
 		}
 	}
 	page, err := m.AnalysisFiltered(0, 10, AnalysisFilter{IncludeEmpty: true})
-	if err != nil || !reflect.DeepEqual(ids(page.Results), original[:10]) {
-		t.Fatalf("default result order changed: %+v %v", page, err)
+	if err != nil || !reflect.DeepEqual(ids(page.Results), []string{"2", "forex", "4", "6", "8", "10", "0", "11", "9", "7"}) {
+		t.Fatalf("default descending result order missing: %+v %v", page, err)
 	}
 }
 

@@ -1122,6 +1122,7 @@ export namespace screener {
 	    categories: string[];
 	    includeEmpty: boolean;
 	    profitableSort?: string;
+	    profitabilityFilter?: number;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisFilter(source);
@@ -1132,6 +1133,7 @@ export namespace screener {
 	        this.categories = source["categories"];
 	        this.includeEmpty = source["includeEmpty"];
 	        this.profitableSort = source["profitableSort"];
+	        this.profitabilityFilter = source["profitabilityFilter"];
 	    }
 	}
 	export class AnalysisTradeSimulation {
@@ -1243,6 +1245,7 @@ export namespace screener {
 		}
 	}
 	export class AnalysisInfo {
+	    profitabilityFilter: number;
 	    active: boolean;
 	    phase: string;
 	    total: number;
@@ -1266,6 +1269,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profitabilityFilter = source["profitabilityFilter"];
 	        this.active = source["active"];
 	        this.phase = source["phase"];
 	        this.total = source["total"];
@@ -1305,6 +1309,7 @@ export namespace screener {
 
 	export class AnalysisRequest {
 	    conditions: AnalysisCondition[];
+	    profitabilityFilter?: number;
 	    period?: string;
 	    categories: string[];
 	    tradeSimulation?: AnalysisTradeSimulation;
@@ -1316,6 +1321,7 @@ export namespace screener {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
+	        this.profitabilityFilter = source["profitabilityFilter"];
 	        this.period = source["period"];
 	        this.categories = source["categories"];
 	        this.tradeSimulation = this.convertValues(source["tradeSimulation"], AnalysisTradeSimulation);
@@ -1844,10 +1850,67 @@ export namespace screener {
 	        this.concurrency = source["concurrency"];
 	    }
 	}
+	export class SavedConditionProfitability {
+	    symbol: string;
+	    timeframe: string;
+	    fileName: string;
+	    matches: number;
+	    takeProfitHits: number;
+	    profitablePercent: number;
+
+	    static createFrom(source: any = {}) {
+	        return new SavedConditionProfitability(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.fileName = source["fileName"];
+	        this.matches = source["matches"];
+	        this.takeProfitHits = source["takeProfitHits"];
+	        this.profitablePercent = source["profitablePercent"];
+	    }
+	}
+
+	export class SavedConditionAnalysis {
+	    analyzedAt: number;
+	    assets: SavedConditionProfitability[];
+
+	    static createFrom(source: any = {}) {
+	        return new SavedConditionAnalysis(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.analyzedAt = source["analyzedAt"];
+	        this.assets = this.convertValues(source["assets"], SavedConditionProfitability);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class SavedAnalysisCondition {
 	    id: string;
 	    name: string;
 	    request: AnalysisRequest;
+	    analysis?: SavedConditionAnalysis;
 
 	    static createFrom(source: any = {}) {
 	        return new SavedAnalysisCondition(source);
@@ -1858,6 +1921,7 @@ export namespace screener {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.request = this.convertValues(source["request"], AnalysisRequest);
+	        this.analysis = this.convertValues(source["analysis"], SavedConditionAnalysis);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1928,6 +1992,7 @@ export namespace screener {
 	    time: number;
 	    status: string;
 	    message: string;
+	    profitability?: SavedConditionProfitability;
 
 	    static createFrom(source: any = {}) {
 	        return new LiveAlertOutcome(source);
@@ -1942,7 +2007,26 @@ export namespace screener {
 	        this.time = source["time"];
 	        this.status = source["status"];
 	        this.message = source["message"];
+	        this.profitability = this.convertValues(source["profitability"], SavedConditionProfitability);
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 	export class LiveAlertConditionPeriod {

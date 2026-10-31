@@ -38,6 +38,8 @@ type AnalysisCondition struct {
 }
 type AnalysisRequest struct {
 	Conditions []AnalysisCondition `json:"conditions"`
+	// Zero disables profitability filtering and preserves legacy saved rules.
+	ProfitabilityFilter int `json:"profitabilityFilter,omitempty"`
 	// Empty preserves legacy requests that scan every downloaded timeframe.
 	Period string `json:"period,omitempty"`
 	// A nil selection preserves older saved conditions: apply to every asset.
@@ -53,9 +55,10 @@ type AnalysisCatalog struct {
 	Categories []string   `json:"categories"`
 }
 type AnalysisFilter struct {
-	Categories     []string `json:"categories"`
-	IncludeEmpty   bool     `json:"includeEmpty"`
-	ProfitableSort string   `json:"profitableSort,omitempty"`
+	Categories          []string `json:"categories"`
+	IncludeEmpty        bool     `json:"includeEmpty"`
+	ProfitableSort      string   `json:"profitableSort,omitempty"`
+	ProfitabilityFilter *int     `json:"profitabilityFilter,omitempty"`
 }
 type AnalysisResult struct {
 	ID           string                     `json:"id"`
@@ -76,22 +79,23 @@ type AnalysisResult struct {
 	Simulation   *AnalysisSimulationSummary `json:"simulation,omitempty"`
 }
 type AnalysisInfo struct {
-	Active          bool                     `json:"active"`
-	Phase           string                   `json:"phase"`
-	Total           int                      `json:"total"`
-	Completed       int                      `json:"completed"`
-	Failed          int                      `json:"failed"`
-	CurrentFile     string                   `json:"currentFile"`
-	Progress        float64                  `json:"progress"`
-	Rows            int64                    `json:"rows"`
-	TotalMatches    int64                    `json:"totalMatches"`
-	MatchedFiles    int                      `json:"matchedFiles"`
-	Results         []AnalysisResult         `json:"results"`
-	Offset          int                      `json:"offset"`
-	Limit           int                      `json:"limit"`
-	TotalResults    int                      `json:"totalResults"`
-	Error           string                   `json:"error,omitempty"`
-	TradeSimulation *AnalysisTradeSimulation `json:"tradeSimulation,omitempty"`
+	ProfitabilityFilter int                      `json:"profitabilityFilter"`
+	Active              bool                     `json:"active"`
+	Phase               string                   `json:"phase"`
+	Total               int                      `json:"total"`
+	Completed           int                      `json:"completed"`
+	Failed              int                      `json:"failed"`
+	CurrentFile         string                   `json:"currentFile"`
+	Progress            float64                  `json:"progress"`
+	Rows                int64                    `json:"rows"`
+	TotalMatches        int64                    `json:"totalMatches"`
+	MatchedFiles        int                      `json:"matchedFiles"`
+	Results             []AnalysisResult         `json:"results"`
+	Offset              int                      `json:"offset"`
+	Limit               int                      `json:"limit"`
+	TotalResults        int                      `json:"totalResults"`
+	Error               string                   `json:"error,omitempty"`
+	TradeSimulation     *AnalysisTradeSimulation `json:"tradeSimulation,omitempty"`
 }
 type AnalysisBar struct {
 	Index  int64              `json:"index"`
@@ -183,6 +187,9 @@ func baseAnalysisOperator(op string) bool {
 	return false
 }
 func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
+	if err := validateProfitabilityFilter(request.ProfitabilityFilter); err != nil {
+		return err
+	}
 	if request.Period != "" && request.Period != "all" && request.Period != "d1" && request.Period != "h1" {
 		return errors.New("analysis period must be all, d1 or h1")
 	}
@@ -291,7 +298,9 @@ func (m *Manager) AnalysisView() (AnalysisRequest, error) {
 	}
 	err := readState(filepath.Join(m.profile, "screener-analysis.json"), 1024*1024, &saved)
 	if errors.Is(err, os.ErrNotExist) {
-		return defaultAnalysisRequest(), nil
+		request := defaultAnalysisRequest()
+		request.ProfitabilityFilter = 85
+		return request, nil
 	}
 	if err != nil {
 		return AnalysisRequest{}, fmt.Errorf("restore analysis conditions: %w", err)
@@ -385,12 +394,19 @@ func (m *Manager) analysisInfoLocked(offset, limit int) AnalysisInfo {
 }
 func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisFilter) AnalysisInfo {
 	info := AnalysisInfo{Phase: "idle", Results: []AnalysisResult{}, Offset: offset, Limit: limit}
+	if filter.ProfitabilityFilter != nil {
+		info.ProfitabilityFilter = *filter.ProfitabilityFilter
+	}
 	a := m.analysis
 	if a == nil {
 		return info
 	}
 	info.Active, info.Phase, info.CurrentFile, info.Progress, info.Rows, info.Error = a.active, a.phase, a.current, a.progress, a.rows, a.errorText
 	info.TradeSimulation = copyAnalysisTradeSimulation(a.request.TradeSimulation)
+	info.ProfitabilityFilter = a.request.ProfitabilityFilter
+	if filter.ProfitabilityFilter != nil {
+		info.ProfitabilityFilter = *filter.ProfitabilityFilter
+	}
 	info.Total = len(a.results)
 	assetMatches, assetFiles := map[string]int64{}, map[string]int{}
 	filtered := []AnalysisResult{}
@@ -410,11 +426,15 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 			assetFiles[r.Symbol]++
 			assetMatches[r.Symbol] += r.Matches
 		}
-		if includesAnalysisCategory(filter.Categories, r.Category) && (filter.IncludeEmpty || r.Matches > 0 || r.Status == "failed" || r.Status == "cancelled") {
+		if includesAnalysisCategory(filter.Categories, r.Category) && (filter.IncludeEmpty || r.Matches > 0 || r.Status == "failed" || r.Status == "cancelled") && analysisResultMeetsProfitability(r, info.ProfitabilityFilter) {
 			filtered = append(filtered, r)
 		}
 	}
-	if filter.ProfitableSort != "" {
+	{
+		direction := filter.ProfitableSort
+		if direction == "" {
+			direction = "desc"
+		}
 		// Sort the filtered copy before paging, retaining original order for ties
 		// and placing pending/unavailable percentages last in either direction.
 		percentage := func(r AnalysisResult) (float64, bool) {
@@ -433,7 +453,7 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 			if !leftValid {
 				return false
 			}
-			if filter.ProfitableSort == "desc" {
+			if direction == "desc" {
 				return left > right
 			}
 			return left < right
@@ -459,6 +479,11 @@ func (m *Manager) AnalysisFiltered(offset, limit int, filter AnalysisFilter) (An
 	}
 	if err := validateAnalysisCategories(filter.Categories); err != nil {
 		return AnalysisInfo{}, err
+	}
+	if filter.ProfitabilityFilter != nil {
+		if err := validateProfitabilityFilter(*filter.ProfitabilityFilter); err != nil {
+			return AnalysisInfo{}, err
+		}
 	}
 	if filter.ProfitableSort != "" && filter.ProfitableSort != "asc" && filter.ProfitableSort != "desc" {
 		return AnalysisInfo{}, errors.New("profitable percentage sort must be asc or desc")
@@ -579,6 +604,9 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 			}
 		} else {
 			a.phase = "completed"
+			if err := m.persistCompletedAnalysisProfitabilityLocked(a); err != nil {
+				a.errorText = "Save recorded condition profitability: " + cleanMessage(err.Error())
+			}
 		}
 		close(a.done)
 	}()

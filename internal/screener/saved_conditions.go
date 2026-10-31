@@ -14,14 +14,15 @@ import (
 )
 
 const savedConditionsLimit = 100
-const savedConditionsBytes = 8 * 1024 * 1024
+const savedConditionsBytes = 128 * 1024 * 1024
 
 // SavedAnalysisCondition is a named snapshot of all visual AND rows, separate
 // from the editable draft, downloaded data and chart workspace exports.
 type SavedAnalysisCondition struct {
-	ID      string          `json:"id"`
-	Name    string          `json:"name"`
-	Request AnalysisRequest `json:"request"`
+	ID       string                  `json:"id"`
+	Name     string                  `json:"name"`
+	Request  AnalysisRequest         `json:"request"`
+	Analysis *SavedConditionAnalysis `json:"analysis,omitempty"`
 }
 
 type savedAnalysisConditions struct {
@@ -47,7 +48,7 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 		return nil, err
 	}
 	if !st.Mode().IsRegular() || st.Size() > savedConditionsBytes {
-		return nil, errors.New("saved conditions must be a regular file no larger than 8 MiB; original state preserved")
+		return nil, errors.New("saved conditions must be a regular file no larger than 128 MiB; original state preserved")
 	}
 	var saved savedAnalysisConditions
 	if err = readState(path, savedConditionsBytes, &saved); err != nil {
@@ -71,11 +72,14 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 				return nil, errors.New("duplicate saved condition names; original state preserved")
 			}
 		}
+		if err = validateSavedConditionAnalysis(condition.Analysis); err != nil {
+			return nil, fmt.Errorf("invalid saved condition profitability (original state preserved): %w", err)
+		}
 		if err = validateAnalysisRequest(condition.Request, false); err != nil {
 			return nil, fmt.Errorf("invalid saved condition %q (original state preserved): %w", name, err)
 		}
 	}
-	return append([]SavedAnalysisCondition{}, saved.Conditions...), nil
+	return copySavedAnalysisConditions(saved.Conditions), nil
 }
 
 func (m *Manager) SavedAnalysisConditions() ([]SavedAnalysisCondition, error) {
@@ -114,13 +118,19 @@ func (m *Manager) SaveAnalysisCondition(name string, request AnalysisRequest) (S
 		return SavedAnalysisCondition{}, err
 	}
 	condition := SavedAnalysisCondition{ID: hex.EncodeToString(id[:]), Name: name, Request: copyAnalysisRequest(request)}
+	if a := m.analysis; a != nil && sameAnalysisProfitabilityRequest(a.request, request) {
+		condition.Analysis, err = completedAnalysisProfitability(a)
+		if err != nil {
+			return SavedAnalysisCondition{}, fmt.Errorf("record saved condition profitability: %w", err)
+		}
+	}
 	saved := savedAnalysisConditions{Version: 1, Conditions: append(conditions, condition)}
 	encoded, err := json.Marshal(saved)
 	if err != nil {
 		return SavedAnalysisCondition{}, err
 	}
 	if len(encoded)+1 > savedConditionsBytes {
-		return SavedAnalysisCondition{}, errors.New("saved conditions exceed 8 MiB; existing conditions preserved")
+		return SavedAnalysisCondition{}, errors.New("saved conditions exceed 128 MiB; existing conditions preserved")
 	}
 	if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
 		return SavedAnalysisCondition{}, fmt.Errorf("save named condition: %w", err)
@@ -199,7 +209,7 @@ func (m *Manager) RenameAnalysisCondition(id, name string) (SavedAnalysisConditi
 			return SavedAnalysisCondition{}, err
 		}
 		if len(encoded)+1 > savedConditionsBytes {
-			return SavedAnalysisCondition{}, errors.New("saved conditions exceed 8 MiB; existing conditions preserved")
+			return SavedAnalysisCondition{}, errors.New("saved conditions exceed 128 MiB; existing conditions preserved")
 		}
 		if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
 			return SavedAnalysisCondition{}, fmt.Errorf("rename named condition: %w", err)

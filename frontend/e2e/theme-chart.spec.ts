@@ -64,7 +64,7 @@ test('an open Analysis chart follows theme changes in place and releases both ob
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  const file:AnalysisFile={id:'theme-file',name:'btcusd-d1-theme.csv',symbol:'btcusd',timeframe:'d1',fields:['timestamp','open','high','low','close','volume','sma_20','macd_histogram_12_26_9'],bytes:4096};
  const result:AnalysisResult={id:'theme-result',fileId:file.id,name:file.name,symbol:file.symbol,timeframe:file.timeframe,status:'completed',rows:200,matches:1,firstTime:Date.UTC(2024,0,5),lastTime:Date.UTC(2024,0,5)};
- await openTestApp(page);await page.evaluate(file=>(window as any).__testSetEnrichmentFiles([file]),file);
+ await openTestApp(page);await page.evaluate(file=>{(window as any).__testSetEnrichmentFiles([file]);(window as any).__testSetAnalysisView({...((window as any).__testAnalysisView()),profitabilityFilter:0});},file);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
  await page.evaluate(result=>(window as any).__testSetAnalysisInfo({active:false,phase:'completed',total:1,completed:1,failed:0,currentFile:'',progress:100,rows:200,totalMatches:1,matchedFiles:1,results:[result]}),result);

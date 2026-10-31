@@ -58,7 +58,11 @@ func formatScreenerLiveAlert(alert screener.LiveAlert) string {
 		period = 24 * time.Hour
 	}
 	closed := time.UnixMilli(alert.Time).UTC().Add(period)
-	return fmt.Sprintf("CryptoDesk Live Alert\nAsset: %s — %s\nPeriod: %s\nTime (UTC, bar close): %s\nCondition: %s\nEntry (signal close): %s\nSL: %s\nTP: %s",
+	profitability := ""
+	if stats := alert.Profitability; stats != nil && stats.Matches > 0 {
+		profitability = fmt.Sprintf("\nProfitability: %.2f%%, %d / %d hit TP", 100*float64(stats.TakeProfitHits)/float64(stats.Matches), stats.TakeProfitHits, stats.Matches)
+	}
+	return fmt.Sprintf("CryptoDesk Live Alert\nAsset: %s — %s\nPeriod: %s\nTime (UTC, bar close): %s\nCondition: %s%s\nEntry (signal close): %s\nSL: %s\nTP: %s",
 		strings.ToUpper(alert.Symbol), alert.AssetName, alert.Timeframe, closed.Format("2006-01-02 15:04:05"), alert.ConditionName,
-		strconv.FormatFloat(alert.EntryPrice, 'g', -1, 64), level(alert.StopLoss), level(alert.TakeProfit))
+		profitability, strconv.FormatFloat(alert.EntryPrice, 'g', -1, 64), level(alert.StopLoss), level(alert.TakeProfit))
 }

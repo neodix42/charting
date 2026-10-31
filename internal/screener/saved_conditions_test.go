@@ -46,7 +46,9 @@ func TestSavedConditionsRoundTripSnapshotsAllRowsWithoutChangingDraftOrApplying(
 	request.Conditions[0].Left.Field = "changed caller"
 	saved.Request.Conditions[1].Right.Field = "changed response"
 	info, infoErr := m.Analysis(0, 50)
-	if draft, err := m.AnalysisView(); err != nil || !reflect.DeepEqual(draft, defaultAnalysisRequest()) || infoErr != nil || info.Active {
+	defaultDraft := defaultAnalysisRequest()
+	defaultDraft.ProfitabilityFilter = 85
+	if draft, err := m.AnalysisView(); err != nil || !reflect.DeepEqual(draft, defaultDraft) || infoErr != nil || info.Active {
 		t.Fatalf("saving a named condition changed the draft or applied it: %+v %v", draft, err)
 	}
 	m.Close()

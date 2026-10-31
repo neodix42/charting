@@ -46,3 +46,15 @@ func TestLiveAlertsCannotEnableWithoutConfiguredTelegram(t *testing.T) {
 		t.Fatal("enabled alerts without a token and recipient", err)
 	}
 }
+
+func TestLiveAlertMessageIncludesRecordedAnalysisProfitability(t *testing.T) {
+	alert := screener.LiveAlert{Symbol: "eurusd", AssetName: "Euro vs US Dollar", Timeframe: "h1", ConditionName: "Saved strategy", EntryPrice: 1.1, Profitability: &screener.SavedConditionProfitability{Symbol: "eurusd", Timeframe: "h1", Matches: 11, TakeProfitHits: 10, ProfitablePercent: 1000.0 / 11}}
+	message := formatScreenerLiveAlert(alert)
+	if !strings.Contains(message, "Profitability: 90.91%, 10 / 11 hit TP") {
+		t.Fatal("recorded profitability missing or incorrectly rounded", message)
+	}
+	alert.Profitability = nil
+	if strings.Contains(formatScreenerLiveAlert(alert), "Profitability:") {
+		t.Fatal("unrecorded profitability was invented")
+	}
+}

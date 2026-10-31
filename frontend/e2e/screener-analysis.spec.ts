@@ -7,7 +7,7 @@ const fields=['timestamp','open','high','low','close','volume','ema_200','atr_14
 const file=(index:number,symbol='btcusd',timeframe='d1'):AnalysisFile=>({id:`file-${index}`,name:`${symbol}-${timeframe}-${index}.csv`,symbol,timeframe,fields:[...fields],bytes:4096});
 const result=(index:number,symbol='btcusd',matches=2,timeframe='d1'):AnalysisResult=>({id:`result-${index}`,fileId:`file-${index}`,name:file(index,symbol,timeframe).name,symbol,timeframe,status:'completed',rows:200,matches,firstTime:Date.UTC(2024,0,5),lastTime:Date.UTC(2024,0,5+matches-1)});
 async function open(page:Page,files:AnalysisFile[]=[file(0),file(1,'ethusd','h4')]){
- await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
+ await openTestApp(page);await page.evaluate(files=>{(window as any).__testSetEnrichmentFiles(files);const view=(window as any).__testAnalysisView();(window as any).__testSetAnalysisView({...view,profitabilityFilter:0});},files);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Visual condition rows',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
@@ -30,9 +30,7 @@ test('Profitable percentage sorts all pages numerically and preserves category a
  const sort=page.getByRole('button',{name:'Sort by Profitable, %',exact:true}),header=page.getByRole('columnheader',{name:'Profitable, %',exact:true});
  const names=(indices:number[])=>indices.map(index=>results[index].name);
  const shown=page.locator('.analysis-results tr.analysis-file-match td:first-child>strong');
- await expect(header).toHaveAttribute('aria-sort','none');
- await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(shown).toHaveText(names([10,11,12,13]));
- await sort.click();await expect(header).toHaveAttribute('aria-sort','descending');
+ await expect(header).toHaveAttribute('aria-sort','descending');
  await expect(shown).toHaveText(names([2,4,6,8,10,0,11,9,7,5]));
  await expect(page.getByRole('navigation',{name:'Analysis file pages',exact:true})).toContainText('Files 1–10 of 14');
  await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(shown).toHaveText(names([3,1,12,13]));
