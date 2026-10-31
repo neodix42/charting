@@ -25,9 +25,19 @@ type Settings struct {
 
 type configuration struct {
 	Settings
-	ChatID int64 `json:"resolvedChatId,omitempty"`
-	BotID  int64 `json:"resolvedBotId,omitempty"`
+	ChatID   int64               `json:"resolvedChatId,omitempty"`
+	BotID    int64               `json:"resolvedBotId,omitempty"`
+	Resolved []resolvedRecipient `json:"resolvedRecipients,omitempty"`
 }
+
+type resolvedRecipient struct {
+	Recipient string `json:"recipient"`
+	ChatID    int64  `json:"chatId"`
+	BotID     int64  `json:"botId"`
+}
+
+const maxRecipients = 20
+const maxRecipientBytes = 4096
 
 type Store struct {
 	mu       sync.Mutex
@@ -45,17 +55,60 @@ func NewStore(directory string) *Store {
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,32}$`)
 
 func normalizeRecipient(recipient string) (string, error) {
+	if len(recipient) > maxRecipientBytes || !utf8.ValidString(recipient) {
+		return "", errors.New("Recipient list must contain at most 4096 bytes")
+	}
 	recipient = strings.TrimSpace(recipient)
 	if recipient == "" {
 		return "", nil
 	}
+	values := []string{}
+	seen := map[string]bool{}
+	for _, value := range strings.Split(recipient, ",") {
+		normalized, err := normalizeRecipientValue(value)
+		if err != nil {
+			return "", err
+		}
+		key := strings.ToLower(normalized)
+		if !seen[key] {
+			seen[key] = true
+			values = append(values, normalized)
+		}
+	}
+	if len(values) > maxRecipients {
+		return "", errors.New("Specify at most 20 Telegram recipients")
+	}
+	return strings.Join(values, ", "), nil
+}
+
+func normalizeRecipientValue(recipient string) (string, error) {
+	recipient = strings.TrimSpace(recipient)
 	if strings.HasPrefix(recipient, "@") && usernamePattern.MatchString(recipient[1:]) {
 		return recipient, nil
 	}
 	if id, err := strconv.ParseInt(recipient, 10, 64); err == nil && id > 0 && id < 1<<52 {
 		return strconv.FormatInt(id, 10), nil
 	}
-	return "", errors.New("Recipient must be @username or a positive private chat ID")
+	return "", errors.New("Recipients must be comma-separated @usernames or positive private chat IDs, without empty entries")
+}
+
+func recipientValues(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return strings.Split(value, ", ")
+}
+
+func (c configuration) resolved(recipient string) (int64, int64) {
+	for _, target := range c.Resolved {
+		if strings.EqualFold(target.Recipient, recipient) {
+			return target.ChatID, target.BotID
+		}
+	}
+	if strings.EqualFold(c.Recipient, recipient) {
+		return c.ChatID, c.BotID
+	}
+	return 0, 0
 }
 
 func normalize(token string) (string, error) {
@@ -105,6 +158,22 @@ func (s *Store) readLocked() (configuration, error) {
 	if err != nil {
 		return configuration{}, errors.New("could not read Telegram Bot settings; saved file preserved")
 	}
+	if len(settings.Resolved) > maxRecipients {
+		return configuration{}, errors.New("could not read Telegram Bot settings; saved file preserved")
+	}
+	seen := map[string]bool{}
+	for _, target := range settings.Resolved {
+		value, targetErr := normalizeRecipientValue(target.Recipient)
+		key := strings.ToLower(value)
+		selected := false
+		for _, recipient := range recipientValues(settings.Recipient) {
+			selected = selected || strings.EqualFold(value, recipient)
+		}
+		if targetErr != nil || value != target.Recipient || !selected || seen[key] || target.ChatID <= 0 || target.ChatID >= 1<<52 || target.BotID <= 0 {
+			return configuration{}, errors.New("could not read Telegram Bot settings; saved file preserved")
+		}
+		seen[key] = true
+	}
 	return settings, nil
 }
 
@@ -136,8 +205,18 @@ func (s *Store) configure(token string, recipient *string) (Settings, error) {
 	if recipient != nil {
 		settings.Recipient = *recipient
 	}
-	if config.APIToken != settings.APIToken || !strings.EqualFold(config.Recipient, settings.Recipient) {
-		config.ChatID, config.BotID = 0, 0
+	resolved := []resolvedRecipient{}
+	if config.APIToken == settings.APIToken {
+		for _, target := range recipientValues(settings.Recipient) {
+			if id, bot := config.resolved(target); id > 0 && bot > 0 {
+				resolved = append(resolved, resolvedRecipient{target, id, bot})
+			}
+		}
+	}
+	config.Resolved = resolved
+	config.ChatID, config.BotID = 0, 0
+	if len(recipientValues(settings.Recipient)) == 1 && len(resolved) == 1 {
+		config.ChatID, config.BotID = resolved[0].ChatID, resolved[0].BotID
 	}
 	config.Settings = settings
 	data, _ := json.Marshal(config)

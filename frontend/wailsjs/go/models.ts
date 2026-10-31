@@ -2158,6 +2158,8 @@ export namespace telegram {
 	    code?: string;
 	    botUsername?: string;
 	    messageId?: number;
+	    sentCount?: number;
+	    totalRecipients?: number;
 
 	    static createFrom(source: any = {}) {
 	        return new TestResult(source);
@@ -2169,6 +2171,8 @@ export namespace telegram {
 	        this.code = source["code"];
 	        this.botUsername = source["botUsername"];
 	        this.messageId = source["messageId"];
+	        this.sentCount = source["sentCount"];
+	        this.totalRecipients = source["totalRecipients"];
 	    }
 	}
 

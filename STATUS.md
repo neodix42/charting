@@ -1,4 +1,12 @@
-# Implementation status — updated 2026-10-30
+# Implementation status — updated 2026-10-31
+
+## Telegram recipient lists and explicit notification allowlist — 2026-10-31
+
+**Settings → Telegram Bot → Recipients (comma-separated)** accepts up to 20 usernames/private chat IDs. Whitespace is trimmed, repeated entries are normalized, and aliases resolving to the same private chat receive one notification. Existing single-recipient settings stay valid; verified identities are stored per recipient and bot, rechecked before delivery and retained across restart without entering workspace exports/diagnostics. The configured list is the allowlist: an unrelated user sending `/start` is never subscribed or notified.
+
+Test and Live Alerts deliver sequentially to the configured recipients with shared pacing and cancellation. Individual recipient errors allow other targets to be attempted; global/uncertain errors stop remaining sends. Settings display confirmed totals and partial failures; Live Alerts preserve their existing durable signal claim and report partial counts without automatically resending successful or uncertain deliveries. The Test facade and queued delivery deadline now accommodate a paced recipient list; each HTTP call remains bounded. Settings edits between targets stop the original delivery batch. No real Telegram message or user-profile change was made.
+
+Local verification: Telegram package race/vet, bindings facade/private persistence tests, native-production app race tests, frontend typecheck/lint/build, **201 frontend unit tests** and **20 Telegram/Live Alerts browser cases** pass. Tests cover normalization/limits, mixed identifiers, alias deduplication, restart and legacy mapping migration, unlisted `/start` exclusion, cache pruning/token rotation, per-recipient verification, partial/global failures, cancellation/settings edits and failed-save preservation. Native desktop interaction, actual Telegram delivery and Windows execution remain unverified. Evidence is under ignored `.tools/verification/telegram-multi-*`; hosted CI/release verification is pending.
 
 ## Durable Dukascopy chart history — 2026-10-30
 

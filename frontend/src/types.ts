@@ -32,7 +32,7 @@ export interface SaveResult {revision:number;acceptedEditSequence:number}
 export interface CandleStorageInfo {enabled:boolean;directory:string;sizeBytes:number;error?:string}
 export interface TelegramBotSettings {apiToken:string;recipient:string}
 export interface TelegramBotIdentity {id:number;username:string}
-export interface TelegramTestResult {sent:boolean;code?:string;botUsername?:string;messageId?:number}
+export interface TelegramTestResult {sent:boolean;code?:string;botUsername?:string;messageId?:number;sentCount?:number;totalRecipients?:number}
 export interface DucascopySettings {username:string;password:string;environment:'demo'|'live';clearPassword?:boolean}
 export interface DucascopyInfo {username:string;environment:'demo'|'live';passwordConfigured:boolean;runtimeAvailable:boolean;runtimeDirectory:string;javaPath:string;connected:boolean;instrumentCount:number;error?:string}
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string}

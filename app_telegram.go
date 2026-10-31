@@ -18,22 +18,24 @@ func (a *App) ConfigureTelegramBot(token string) (telegram.Settings, error) {
 func (a *App) ConfigureTelegramBotSettings(token, recipient string) (telegram.Settings, error) {
 	return a.telegram.Configure(token, recipient)
 }
-func (a *App) telegramContext() (context.Context, context.CancelFunc) {
+func (a *App) telegramContext(timeout time.Duration) (context.Context, context.CancelFunc) {
 	a.mu.Lock()
 	ctx := a.ctx
 	a.mu.Unlock()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return context.WithTimeout(ctx, 8*time.Second)
+	return context.WithTimeout(ctx, timeout)
 }
 func (a *App) GetTelegramBotIdentity(token string) (telegram.BotIdentity, error) {
-	ctx, cancel := a.telegramContext()
+	ctx, cancel := a.telegramContext(8 * time.Second)
 	defer cancel()
 	return a.telegram.BotIdentity(ctx, token)
 }
 func (a *App) TestTelegramBot() (telegram.TestResult, error) {
-	ctx, cancel := a.telegramContext()
+	// Each recipient is verified and sends are paced; a list needs a longer
+	// overall deadline while every individual HTTP call remains bounded.
+	ctx, cancel := a.telegramContext(3 * time.Minute)
 	defer cancel()
 	return a.telegram.Test(ctx)
 }

@@ -153,3 +153,44 @@ test('a late bot-name failure cannot replace the identity verified by a successf
  await expect(dialog(page).getByRole('note')).toContainText('@VerifiedBot');await page.evaluate(()=>(window as any).__rejectOldBotName());
  await expect(dialog(page).getByRole('note')).toContainText('@VerifiedBot');await expect(dialog(page).getByRole('button',{name:'Retry bot name',exact:true})).toHaveCount(0);
 });
+
+test('comma-separated recipients normalize and persist, with Start help for usernames after numeric IDs',async({page})=>{
+ const requests:string[]=[];page.on('request',request=>{if(request.url().includes('telegram.org'))requests.push(request.url());});
+ await openTestApp(page);await openSettings(page);await expect(token(page)).toBeEnabled();await token(page).fill('123:multi_recipient_fixture');
+ const recipient=dialog(page).getByLabel('Recipient',{exact:true}),testButton=dialog(page).getByRole('button',{name:'Test',exact:true});
+ await expect(recipient).toHaveAttribute('maxlength','4096');
+ await recipient.fill(' 00042 , @Alice, @ALICE, +0042, @Bob ');
+ await expect(dialog(page).getByRole('note')).toContainText('@Alice, @Bob must open bot @ExplicitCryptoDeskBot');
+ await expect(testButton).toBeEnabled();await save(page).click();
+ await expect(recipient).toHaveValue('42, @Alice, @Bob');
+ expect((await page.evaluate(()=>window.go!.main!.App!.GetTelegramBotSettings())).recipient).toBe('42, @Alice, @Bob');
+ await testButton.click();await expect(dialog(page).getByRole('status')).toHaveText('Test notifications sent to 3 recipients.');
+ await page.reload();await expect(page.getByRole('button',{name:'Open settings',exact:true})).toBeVisible();await openSettings(page);
+ await expect(recipient).toHaveValue('42, @Alice, @Bob');
+ expect(requests).toEqual([]);
+});
+
+test('comma-separated recipient validation rejects incomplete lists and enforces the distinct-recipient limit',async({page})=>{
+ await openTestApp(page);await openSettings(page);await expect(token(page)).toBeEnabled();await token(page).fill('123:multi_validation_fixture');
+ const recipient=dialog(page).getByLabel('Recipient',{exact:true}),testButton=dialog(page).getByRole('button',{name:'Test',exact:true});
+ for(const value of ['42,','42,,@alice','@alice,-42','@alice,0','42,@bad name',Array.from({length:21},(_,index)=>`@person_${index}`).join(',')]){
+  await recipient.fill(value);await expect(testButton).toBeDisabled();await expect(save(page)).toBeDisabled();
+  await expect(dialog(page).getByText('Use up to 20 @usernames or positive private chat IDs separated by commas, without empty entries.',{exact:true})).toBeVisible();
+ }
+ await recipient.fill(Array.from({length:20},(_,index)=>`@person_${index}`).concat('@PERSON_0').join(','));
+ await expect(testButton).toBeEnabled();await expect(save(page)).toBeEnabled();
+ await recipient.fill('');await expect(testButton).toBeDisabled();await expect(save(page)).toBeEnabled();
+});
+
+test('partial multi-recipient tests disclose delivered counts and never retry automatically',async({page})=>{
+ await openTestApp(page);await openSettings(page);await expect(token(page)).toBeEnabled();await token(page).fill('123:multi_partial_fixture');
+ await dialog(page).getByLabel('Recipient',{exact:true}).fill('42, @not_started');
+ await page.evaluate(()=>{(window as any).__multiTelegramTests=0;window.go!.main!.App!.TestTelegramBot=async()=>{(window as any).__multiTelegramTests++;return{sent:false,code:'recipientNotFound',botUsername:'ExplicitCryptoDeskBot',sentCount:1,totalRecipients:2};};});
+ const testButton=dialog(page).getByRole('button',{name:'Test',exact:true});await testButton.click();
+ await expect(dialog(page).getByRole('alert')).toContainText('Test notifications sent to 1 of 2 recipients.');
+ await expect(dialog(page).getByRole('alert')).toContainText('testing again also notifies recipients who already received this test.');
+ expect(await page.evaluate(()=>(window as any).__multiTelegramTests)).toBe(1);
+ await page.evaluate(()=>{window.go!.main!.App!.TestTelegramBot=async()=>({sent:false,code:'rateLimit',sentCount:0,totalRecipients:2});});
+ await testButton.click();await expect(dialog(page).getByRole('alert')).toContainText('No test notifications were confirmed for 2 recipients.');
+ await expect(dialog(page).getByRole('alert')).toContainText('Telegram is limiting requests.');
+});
