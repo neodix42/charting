@@ -244,7 +244,16 @@ func TestLiveAlertsFailedNonMatchFlushRetriesWithoutChangingBar(t *testing.T) {
 		t.Fatal(err)
 	}
 	originalPath := l.path
-	l.path = t.TempDir()
+	failedPath := t.TempDir()
+	refresh := l.refresh
+	first := true
+	l.refresh = func(ctx context.Context, directory string, groups []historyGroup, asOf int64) (map[string]bool, error) {
+		if first {
+			l.path = failedPath
+			first = false
+		}
+		return refresh(ctx, directory, groups, asOf)
+	}
 	asOf := time.Date(2024, 1, 1, 3, 30, 0, 0, time.UTC).UnixMilli()
 	if err = l.check(context.Background(), config, asOf); err == nil || !l.watermarksDirty {
 		t.Fatal("unsaved no-match watermarks were discarded", err)

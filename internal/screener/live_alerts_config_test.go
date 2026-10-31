@@ -55,7 +55,7 @@ func TestLiveAlertsLegacyScopeMigrationPreservesStateUntilSaved(t *testing.T) {
 			if err = readState(l.path, liveAlertsStateBytes, &saved); err != nil {
 				t.Fatal(err)
 			}
-			if saved.Version != 3 || !reflect.DeepEqual(saved.Config.ConditionIDs, []string{id}) || !reflect.DeepEqual(saved.Watermarks, original.Watermarks) || saved.Recent[0].Status != "uncertain" {
+			if saved.Version != 4 || !reflect.DeepEqual(saved.Config.ConditionIDs, []string{id}) || !reflect.DeepEqual(saved.Watermarks, original.Watermarks) || saved.Recent[0].Status != "uncertain" {
 				t.Fatal("migration save lost identities or delivery history", saved)
 			}
 		})

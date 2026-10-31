@@ -33,10 +33,11 @@ function parameterRequest(indicator,values,source='close') {
 
 // Old CryptoDesk CSVs predate recipe manifests. Their names encode all reviewed
 // parameters. Backup requests also disambiguate a MACD line with no signal column.
-async function recipesFor(headers,saved=[]) {
+async function recipesFor(headers,saved=[],requiredFields=[]) {
   const normalized=headers.map(key), base=new Set([...candleFields,...tickFields]);
   if(normalized.some(value=>!value)||new Set(normalized).size!==normalized.length)throw Error('CSV contains empty or duplicate field names.');
-  const derived=normalized.filter(name=>!base.has(name));
+  if(!Array.isArray(requiredFields)||requiredFields.length>512||requiredFields.some(value=>typeof value!=='string'||!key(value)||value.length>1024))throw Error('Required condition fields must be a bounded list of field names.');
+  const derived=[...new Set([...normalized,...requiredFields.map(key)].filter(name=>!base.has(name)))];
   const wanted=new Set(derived),recipes=[],covered=new Set();
   const add=async request=>{
     const checked=validate(request);
@@ -156,7 +157,17 @@ async function refresh(request,options={}) {
     savedRecipes=JSON.parse(await fsp.readFile(request.recipeFile,'utf8'))??[];
   }
   if(!Array.isArray(savedRecipes)||savedRecipes.length>2000)throw Error('Applied indicator recipe list is invalid.');
-  const recipes=await recipesFor(scanned.headers,savedRecipes);
+  const requiredFields=request.requiredFields??[];
+  const recipes=await recipesFor(scanned.headers,savedRecipes,requiredFields);
+  const headers=[...scanned.headers],normalized=headers.map(key);
+  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers)));
+  const available=new Set(calculations.flatMap(calculate=>calculate.columns));
+  for(const field of requiredFields.map(key)){
+    if(normalized.includes(field))continue;
+    if(!available.has(field))throw Error(`Cannot reproduce required condition field "${field}". Original CSV kept.`);
+    headers.push(field);normalized.push(field);
+  }
+  if(requiredFields.length&&headers.length>512)throw Error('Required condition fields exceed the 512-column Analysis limit. Original CSV kept.');
   if(scanned.last>now)throw Error('CSV contains future timestamps; original file kept.');
   const closed=closedBoundary(now,request.timeframe);
   const namedStart=Date.parse(`${request.from}T00:00:00.000Z`);
@@ -185,10 +196,9 @@ async function refresh(request,options={}) {
       if(!/Dukascopy returned no rows|No available history in the requested UTC date range/.test(error.message))throw error;
     }
   }
-  const headers=scanned.headers,normalized=headers.map(key),timestampIndex=normalized.indexOf('timestamp');
+  const timestampIndex=normalized.indexOf('timestamp');
   const base=request.timeframe==='tick'?tickFields:candleFields;
   const baseIndexes=base.map(name=>normalized.indexOf(name));
-  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers)));
   const outputs=calculations.map(calculate=>calculate.columns.map(name=>normalized.indexOf(name)));
   const leftRows=records(request.input);await leftRows.next();
   const rightRows=records(downloaded);
@@ -207,6 +217,7 @@ async function refresh(request,options={}) {
   };
   const baseKey=row=>JSON.stringify(baseIndexes.map(index=>Number(row[index])));
   const append=async row=>{
+    while(row.length<headers.length)row.push('');
     const timestamp=Number(row[timestampIndex]);
     firstTimestamp??=timestamp;lastTimestamp=timestamp;
     for(let index=0;index<calculations.length;index++){

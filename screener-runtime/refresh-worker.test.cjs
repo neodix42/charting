@@ -53,6 +53,9 @@ test('all 42 indicator and time field headers can migrate their complete applied
     const recipes=await recipesFor([...header,...original.columns]);
     const restored=(await Promise.all(recipes.map(recipe=>calculator(recipe,header)))).flatMap(value=>value.columns);
     assert.ok(original.columns.every(column=>restored.includes(column)),definition.id);
+    const required=await recipesFor(header,[],original.columns);
+    const ensured=(await Promise.all(required.map(recipe=>calculator(recipe,header)))).flatMap(value=>value.columns);
+    assert.ok(original.columns.every(column=>ensured.includes(column)),`${definition.id}: missing required columns`);
   }
   const tick=['timestamp','askPrice','bidPrice','askVolume','bidVolume'];
   for(const source of ['auto','askprice']){
@@ -64,6 +67,49 @@ test('all 42 indicator and time field headers can migrate their complete applied
   const scientific=await calculator({indicator:'alma',parameters:{period:3,offset:1e-7,sigma:6},source:'close'},header);
   assert.deepEqual(scientific.columns,['alma_3_1e-7_6']);
   assert.deepEqual(await recipesFor([...header,...scientific.columns]),[{indicator:'alma',parameters:{period:3,offset:1e-7,sigma:6},source:'close'}]);
+});
+
+test('refresh restores required condition fields, fills missing bars and recalculates every output before publishing',async t=>{
+  const original=`${header.join(',')},ema_2\n${row(start,10).join(',')},\n${row(start+2*day,50).join(',')},30\n`;
+  const asOf=start+3*day+12345,request={...await fixture(t,original),asOf,requiredFields:['weekday','kijun_2','sma_2','close']};
+  let endpoint;
+  const result=await refresh(request,{emit:()=>{},download:async input=>{
+    endpoint=input.to;
+    await fs.writeFile(input.output,csv([row(start,10),row(start+day,20),row(start+2*day,30),row(start+3*day,40)]));
+  }});
+  const actual=await read(request.output);
+  assert.equal(endpoint,new Date(asOf).toISOString());
+  assert.equal(result.checkedThrough,asOf);assert.equal(result.lastTimestamp,start+2*day);
+  assert.equal(result.addedRows,1);assert.equal(result.updatedRows,1);
+  assert.deepEqual(actual.map(value=>Number(value.close)),[10,20,30]);
+  assert.deepEqual(actual.map(value=>value.weekday),['1','2','3']);
+  assert.deepEqual(actual.map(value=>value.kijun_2),['','15','25']);
+  assert.deepEqual(actual.map(value=>value.sma_2),['','15','25']);
+  assert.deepEqual(new Set(result.recipes.map(value=>value.indicator)),new Set(['ema','weekday','kijun','sma']));
+  assert.equal(await fs.readFile(request.input,'utf8'),original);
+});
+
+test('unknown or invalid required condition fields fail before provider access and preserve the input',async t=>{
+  const original=csv([row(start,10)]),request=await fixture(t,original);
+  for(const requiredFields of [['unknown_17'],['weekday',null],Array(513).fill('weekday')]){
+    await assert.rejects(refresh({...request,requiredFields},{now:start+day,emit:()=>{},download:()=>assert.fail('invalid field reached the provider')}),/Required condition fields|unrecognized derived column/);
+    assert.equal(await fs.readFile(request.input,'utf8'),original);
+    await assert.rejects(fs.stat(request.output),{code:'ENOENT'});
+  }
+});
+
+test('tick companions retain bid-price inputs while adding required indicators and time fields',async t=>{
+  const tickHeader='timestamp,askPrice,bidPrice,askVolume,bidVolume';
+  const original=`${tickHeader}\n${start},2,1,10,20\n`;
+  const request={...await fixture(t,original),timeframe:'tick',requiredFields:['bidprice','weekday','sma_2_bidprice']};
+  await refresh(request,{now:start+1000,emit:()=>{},download:async input=>{
+    await fs.writeFile(input.output,`${tickHeader}\n${start},2,1,10,20\n${start+500},4,3,10,20\n`);
+  }});
+  const actual=await read(request.output);
+  assert.deepEqual(actual.map(value=>value.bidPrice),['1','3']);
+  assert.deepEqual(actual.map(value=>value.weekday),['1','1']);
+  assert.deepEqual(actual.map(value=>value.sma_2_bidprice),['','2']);
+  assert.equal(await fs.readFile(request.input,'utf8'),original);
 });
 
 test('the batch execution cutoff controls the download endpoint, newest closed bar and appended indicator values',async t=>{

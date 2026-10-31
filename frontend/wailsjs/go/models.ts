@@ -2158,6 +2158,36 @@ export namespace screener {
 		    return a;
 		}
 	}
+	export class LiveAlertCheck {
+	    conditionId: string;
+	    name: string;
+	    assetsScanned: number;
+	    lastChecked: number;
+	    nextCheck: number;
+	    sentAlerts: number;
+	    status: string;
+	    manual: boolean;
+	    error: string;
+	    timingHint?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new LiveAlertCheck(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conditionId = source["conditionId"];
+	        this.name = source["name"];
+	        this.assetsScanned = source["assetsScanned"];
+	        this.lastChecked = source["lastChecked"];
+	        this.nextCheck = source["nextCheck"];
+	        this.sentAlerts = source["sentAlerts"];
+	        this.status = source["status"];
+	        this.manual = source["manual"];
+	        this.error = source["error"];
+	        this.timingHint = source["timingHint"];
+	    }
+	}
 	export class LiveAlertsInfo {
 	    savedConditionsRevision: number;
 	    config: LiveAlertsConfig;
@@ -2172,6 +2202,7 @@ export namespace screener {
 	    currentAsset: string;
 	    assets: LiveAlertAsset[];
 	    recent: LiveAlertOutcome[];
+	    checks: LiveAlertCheck[];
 
 	    static createFrom(source: any = {}) {
 	        return new LiveAlertsInfo(source);
@@ -2192,6 +2223,7 @@ export namespace screener {
 	        this.currentAsset = source["currentAsset"];
 	        this.assets = this.convertValues(source["assets"], LiveAlertAsset);
 	        this.recent = this.convertValues(source["recent"], LiveAlertOutcome);
+	        this.checks = this.convertValues(source["checks"], LiveAlertCheck);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

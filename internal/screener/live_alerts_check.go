@@ -17,7 +17,7 @@ func (l *LiveAlerts) check(ctx context.Context, config LiveAlertsConfig, asOf in
 	return l.checkCycle(ctx, config, asOf, false)
 }
 
-func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, asOf int64, scheduled bool) error {
+func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, asOf int64, scheduled bool) (cycleErr error) {
 	if err := validateLiveAlertsConfig(config); err != nil {
 		return err
 	}
@@ -31,6 +31,37 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		config = resolvedLiveAlertsConfig(config, conditions)
 	} else {
 		config.scope = scope
+	}
+	if scheduled {
+		// Re-check current saved timing before any provider work. A queued
+		// scheduled scope can outlive a calendar-rule edit; manual checks still
+		// refresh and evaluate the latest closed candle immediately.
+		due := []SavedAnalysisCondition{}
+		dueIDs := []string{}
+		dueScope := []LiveAlertConditionPeriod{}
+		seen := map[string]bool{}
+		for _, saved := range conditions {
+			found := false
+			for pair := range savedConditionEligiblePairs(saved) {
+				_, period, _ := strings.Cut(pair, "/")
+				if !liveAlertsScopeAllows(config, saved.ID, period) || !liveAlertConditionDueAt(saved, period, time.UnixMilli(asOf)) {
+					continue
+				}
+				found = true
+				key := saved.ID + "/" + period
+				if !seen[key] {
+					seen[key] = true
+					dueScope = append(dueScope, LiveAlertConditionPeriod{ConditionID: saved.ID, Period: period})
+				}
+			}
+			if found {
+				due, dueIDs = append(due, saved), append(dueIDs, saved.ID)
+			}
+		}
+		conditions, config.ConditionIDs, config.scope = due, dueIDs, dueScope
+		if len(conditions) == 0 {
+			return nil
+		}
 	}
 	qualified := make(map[string]map[string]*SavedConditionProfitability, len(conditions))
 	basePairs := map[string]bool{}
@@ -53,11 +84,9 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		m.mu.Unlock()
 		return errLiveAlertsBusy
 	}
+	runtimeMessage := ""
 	if l.refresh == nil {
-		if message := m.refreshRuntimeError(); message != "" {
-			m.mu.Unlock()
-			return errors.New(message)
-		}
+		runtimeMessage = m.refreshRuntimeError()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
@@ -75,6 +104,21 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		m.mu.Unlock()
 		m.wg.Done()
 	}()
+	run, err := l.beginCheckHistory(config, !scheduled)
+	if err != nil {
+		return err
+	}
+	defer func() { cycleErr = errors.Join(cycleErr, run.finish(cycleErr)) }()
+	if runtimeMessage != "" {
+		return errors.New(runtimeMessage)
+	}
+	failPair := func(symbol, period string, failure error) {
+		for _, saved := range conditions {
+			if _, allowed := qualified[saved.ID][symbol+"/"+period]; allowed && liveAlertsScopeAllows(config, saved.ID, period) {
+				run.failed(saved.ID, failure)
+			}
+		}
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -85,11 +129,45 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if err != nil {
 		return err
 	}
+	plannedBase := map[string]bool{}
+	for _, group := range groups {
+		match := downloadFilename.FindStringSubmatch(strings.ToLower(group.name))
+		if match == nil || !basePairs[match[1]+"/"+match[2]] {
+			continue
+		}
+		pair := match[1] + "/" + match[2]
+		plannedBase[pair] = true
+		for _, saved := range conditions {
+			if _, allowed := qualified[saved.ID][pair]; allowed && liveAlertsScopeAllows(config, saved.ID, match[2]) {
+				run.expectPair(saved.ID, match[1], match[2])
+			}
+		}
+	}
 	refresh := l.refresh
 	if refresh == nil {
-		refresh = l.refreshSelected
+		required := liveAlertRequiredFields(config, conditions)
+		refresh = func(ctx context.Context, directory string, groups []historyGroup, asOf int64) (map[string]bool, error) {
+			return l.refreshSelectedWithFields(ctx, directory, groups, asOf, required)
+		}
 	}
-	refreshed, refreshErr := refresh(ctx, directory, groups, asOf)
+	refreshAsOf := asOf
+	if scheduled {
+		// A publication/busy retry retains its original signal cutoff, but
+		// refresh still catches data up through this attempt's execution time.
+		refreshAsOf = max(asOf, l.now().UTC().UnixMilli())
+	}
+	m.mu.Lock()
+	m.refreshAsOf = refreshAsOf
+	m.mu.Unlock()
+	refreshed, refreshErr := refresh(ctx, directory, groups, refreshAsOf)
+	if refreshErr != nil {
+		for pair := range plannedBase {
+			if !refreshed[pair] {
+				symbol, period, _ := strings.Cut(pair, "/")
+				failPair(symbol, period, refreshErr)
+			}
+		}
+	}
 	if refreshErr != nil && len(refreshed) == 0 {
 		return refreshErr
 	}
@@ -128,6 +206,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		s, e := indexAnalysisCSV(ctx, directory, name, filepath.Join(work, id+".rows"), func(float64) {})
 		if e != nil {
 			failures = append(failures, fmt.Errorf("index %s: %w", name, e))
+			failPair(match[1], match[2], e)
 			continue
 		}
 		s.cache = a.cache
@@ -150,6 +229,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		if closed == 0 {
 			if scheduled {
 				failures = append(failures, fmt.Errorf("%s %s: %w", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar))
+				failPair(s.metadata.Symbol, s.metadata.Timeframe, errLiveAlertsPendingBar)
 			}
 			continue
 		}
@@ -165,6 +245,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			expected := time.UnixMilli(asOf).UTC().Truncate(interval).Add(-interval).UnixMilli()
 			if latest.timestamp != expected {
 				failures = append(failures, fmt.Errorf("%s %s: %w; waiting for the bar closing at %s", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar, time.UnixMilli(expected).Add(interval).UTC().Format(time.RFC3339)))
+				failPair(s.metadata.Symbol, s.metadata.Timeframe, errLiveAlertsPendingBar)
 				continue
 			}
 		}
@@ -183,15 +264,19 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			previous, seen := l.state.Watermarks[key]
 			l.mu.Unlock()
 			if seen && latest.timestamp <= previous {
+				run.processedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
 				continue
 			}
 			a.request = copyAnalysisRequest(saved.Request)
 			// Base scope inherits the saved period and recorded matching assets;
 			// historical categories do not change an already-qualified live pair.
 			a.request.Period, a.request.Categories = "all", nil
+			run.scanned(saved.ID, s.metadata.Symbol)
 			matched, e := evaluateLiveAlertLatest(ctx, a, s, closed)
 			if e != nil {
 				failures = append(failures, fmt.Errorf("%s %s, %s: %w", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, saved.Name, e))
+				run.failed(saved.ID, e)
+				run.processedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
 				continue
 			}
 			// A matching claim commits before sending; non-match watermarks are
@@ -201,26 +286,31 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 				value, e := liveAlertFromMatch(saved, s, closed-1, latest)
 				if e != nil {
 					failures = append(failures, e)
+					run.failed(saved.ID, e)
 					continue
 				}
 				alert = &value
 			}
 			claimed, claimErr := l.claimCurrentCondition(ctx, saved, s.metadata.Symbol, s.metadata.Timeframe, key, latest.timestamp, alert)
 			if claimErr != nil {
+				run.failed(saved.ID, claimErr)
 				return claimErr
 			}
 			if !claimed {
-				failures = append(failures, fmt.Errorf("%s changed while its latest bar was being checked; the obsolete result was not claimed", saved.Name))
+				failure := fmt.Errorf("%s changed while its latest bar was being checked; the obsolete result was not claimed", saved.Name)
+				failures = append(failures, failure)
+				run.failed(saved.ID, failure)
 				continue
 			}
 			if alert != nil {
 				if e = l.deliver(ctx, *alert); e != nil {
-					// Delivery uses one shared Telegram recipient. Stop after the
-					// first failure instead of repeating a refused/rate-limited
-					// request and consuming claims for every remaining signal.
+					run.failed(saved.ID, e)
+					// Stop after the first failed signal delivery, preserving
+					// unattempted signals and the existing recipient fan-out.
 					return errors.Join(append(failures, e)...)
 				}
 			}
+			run.processedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
 		}
 		// Non-matching bars cannot send notifications. Batch their durable
 		// watermarks per asset instead of rewriting the entire state per rule.
@@ -310,6 +400,10 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 }
 
 func (l *LiveAlerts) refreshSelected(ctx context.Context, directory string, groups []historyGroup, asOf int64) (map[string]bool, error) {
+	return l.refreshSelectedWithFields(ctx, directory, groups, asOf, nil)
+}
+
+func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory string, groups []historyGroup, asOf int64, required map[string][]string) (map[string]bool, error) {
 	m := l.manager
 	jobs := make([]RefreshJob, len(groups))
 	for i, group := range groups {
@@ -350,7 +444,11 @@ func (l *LiveAlerts) refreshSelected(ctx context.Context, directory string, grou
 			})
 		}
 		if err == nil {
-			err = m.refreshFile(ctx, i, directory, job, legacy[job.Name], asOf)
+			pair := ""
+			if match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name)); match != nil {
+				pair = match[1] + "/" + match[2]
+			}
+			err = m.refreshFileRequired(ctx, i, directory, job, legacy[job.Name], asOf, required[pair])
 		}
 		if err != nil {
 			m.mu.Lock()
@@ -526,6 +624,7 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 	defer l.mu.Unlock()
 	if err == nil {
 		l.state.Sent++
+		l.recordConfirmedAlertLocked(alert.ConditionID)
 	}
 	if len(l.state.Recent) > 0 {
 		outcome := &l.state.Recent[0]

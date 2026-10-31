@@ -2,7 +2,7 @@ import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
 import {initialLiveAlertsConfig,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
-const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
+const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
 it('serializes disabled alert drafts, keeps latest selections and never starts delivery through autosave',async()=>{
  let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});

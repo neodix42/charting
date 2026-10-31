@@ -123,7 +123,10 @@ func savedConditionEligiblePairs(saved SavedAnalysisCondition) map[string]*Saved
 func resolvedLiveAlertsConfig(config LiveAlertsConfig, conditions []SavedAnalysisCondition) LiveAlertsConfig {
 	config = canonicalLiveAlertsConfig(config)
 	config.scope = []LiveAlertConditionPeriod{}
+	config.calendar = append([]SavedAnalysisCondition(nil), conditions...)
+	config.ConditionIDs = []string{}
 	for _, saved := range conditions {
+		config.ConditionIDs = append(config.ConditionIDs, saved.ID)
 		for pair := range savedConditionEligiblePairs(saved) {
 			_, period, _ := strings.Cut(pair, "/")
 			if !liveAlertsScopeAllows(config, saved.ID, period) {

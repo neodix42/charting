@@ -249,6 +249,13 @@ type refreshEvent struct {
 }
 
 func (m *Manager) refreshFile(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64) error {
+	return m.refreshFileRequired(ctx, index, directory, job, legacy, asOf, nil)
+}
+
+// Live conditions may need an indicator that is missing from this history.
+// Add it in the same download/recalculation/publication transaction, retaining
+// the existing manual Refresh behavior when no extra fields are requested.
+func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64, requiredFields []string) error {
 	match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name))
 	if match == nil {
 		return errors.New("cannot identify the Dukascopy instrument, timeframe and start date from this CSV filename; original kept")
@@ -289,8 +296,9 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 		CoverageDigest   string           `json:"coverageDigest"`
 		OwnerPipe        bool             `json:"ownerPipe"`
 		AsOf             int64            `json:"asOf"`
+		RequiredFields   []string         `json:"requiredFields,omitempty"`
 		ProviderSession  *providerSession `json:"providerSession,omitempty"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, ProviderSession: sessionFromContext(ctx)})
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work

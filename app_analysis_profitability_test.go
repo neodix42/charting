@@ -101,6 +101,14 @@ func TestAnalysisProfitabilitySurvivesFacadeSaveScanRestartAndAlertFormatting(t 
 	if err != nil || len(info.ConditionScopes) != 2 {
 		t.Fatalf("condition-only configuration did not inherit scope: %+v %v", info, err)
 	}
+	if len(info.Checks) != 2 {
+		t.Fatalf("facade omitted selected condition check rows: %+v", info.Checks)
+	}
+	for _, check := range info.Checks {
+		if check.Name == "" || check.Status != "never" || check.AssetsScanned != 0 || check.LastChecked != 0 || check.NextCheck != 0 || check.SentAlerts != 0 {
+			t.Fatalf("facade invented a check before execution: %+v", check)
+		}
+	}
 	for _, scope := range info.ConditionScopes {
 		if scope.Error != "" || scope.Period != "h1" || len(scope.Targets) != 1 || scope.Targets[0].Symbol != "eurusd" || scope.Targets[0].Period != "h1" || scope.Targets[0].Profitability == nil {
 			t.Fatalf("incorrect inherited assets/period/profitability: %+v", scope)
