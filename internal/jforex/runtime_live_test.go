@@ -34,18 +34,14 @@ func TestPackagedJavaBridgeOfflineProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer process.stop()
-	var version struct {
-		Protocol    int    `json:"protocol"`
-		SDKVersion  string `json:"sdkVersion"`
-		JavaVersion int    `json:"javaVersion"`
-	}
+	var version bridgeVersion
 	rpc, stop := context.WithTimeout(ctx, 30*time.Second)
 	err = process.call(rpc, map[string]any{"op": "version"}, &version)
 	stop()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version.Protocol != 1 || version.SDKVersion != "3.6.51" || version.JavaVersion < 17 {
+	if version.Protocol != 1 || version.SDKVersion != "3.6.51" || version.JavaVersion < 17 || version.InstrumentCatalog != bridgeInstrumentCatalog {
 		t.Fatalf("unexpected actual bridge version %+v", version)
 	}
 	// EOF is how abrupt owner loss reaches the child even without a close RPC.

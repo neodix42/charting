@@ -77,5 +77,6 @@ printf '\n%s\n' \
   "Ready to run: $APP_ROOT/cryptodesk" \
   "Linux archive: $APP_ROOT/$RELEASE_NAME.tar.gz" \
   "Checksums: $APP_ROOT/cryptodesk-SHA256SUMS" \
-  'Runtime requirements: GTK3, WebKitGTK 4.1 and libsoup3; JForex forex charts also require Java 17+.' \
-  'For forex charts, run ./scripts/install-user.sh to install/update the user-local JForex bridge; see README.md.'
+  'Runtime requirements: GTK3, WebKitGTK 4.1 and libsoup3; Dukascopy charts also require Java 17+.' \
+  'Dukascopy uses the installed user-local bridge, which this build does not replace.' \
+  'Run ./scripts/install-user.sh after rebuilding, then restart CryptoDesk to use the updated bridge.'

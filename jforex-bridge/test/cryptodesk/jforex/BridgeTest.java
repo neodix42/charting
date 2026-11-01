@@ -98,6 +98,9 @@ public final class BridgeTest {
             default -> null;
         });
         try (Bridge bridge = new Bridge(() -> { factories.incrementAndGet(); return client; }, events::add)) {
+            JsonObject version = good(bridge, request("version")).getAsJsonObject("result");
+            check(version.get("instrumentCatalog").getAsString().equals("all-available-v1"), "bridge advertises the full account catalog before authentication");
+            check(factories.get() == 0 && !connected.get(), "version handshake must not initialize or authenticate the SDK");
             check(!bridge.handle(request("instruments")).get("ok").getAsBoolean(), "unauthenticated catalog must fail");
             JsonObject captcha = request("captcha"); captcha.addProperty("cacheDirectory", cache.toString());
             check(good(bridge, captcha).getAsJsonObject("result").get("imageDataUrl").getAsString().startsWith("data:image/png;base64,"), "PNG login challenge");

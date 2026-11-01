@@ -171,7 +171,8 @@ public final class Bridge implements AutoCloseable {
             Object result = switch (op) {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
-                case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature());
+                case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
+                    "instrumentCatalog", "all-available-v1");
                 case "instruments" -> instruments();
                 case "history" -> history(request);
                 case "subscribe" -> subscribe(request);

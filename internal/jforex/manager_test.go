@@ -56,6 +56,112 @@ func dukascopyAssetFixtures() []domain.Instrument {
 	}
 }
 
+func TestIncompatibleBridgeStopsBeforeCredentialsOrPINAndPreservesSettings(t *testing.T) {
+	for _, scenario := range []string{"version-legacy", "version-wrong-catalog", "version-wrong-protocol", "version-wrong-sdk"} {
+		for _, operation := range []string{"connection", "pin", "challenge", "catalog"} {
+			t.Run(scenario+"/"+operation, func(t *testing.T) {
+				trace := filepath.Join(t.TempDir(), "protocol-operations")
+				t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
+				m, count := testManager(t, scenario)
+				before, err := os.ReadFile(m.path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch operation {
+				case "connection":
+					_, err = m.TestConnection(context.Background())
+				case "pin":
+					_, err = m.TestConnectionWithPIN(context.Background(), "transient-test-pin")
+				case "challenge":
+					_, err = m.Challenge(context.Background())
+				case "catalog":
+					_, err = m.Instruments(context.Background())
+				}
+				if err == nil || !strings.Contains(err.Error(), "installed JForex bridge") || !strings.Contains(err.Error(), "install-user.sh") || !strings.Contains(err.Error(), "Restart CryptoDesk") {
+					t.Fatalf("missing actionable compatibility failure: %v", err)
+				}
+				operations, readErr := os.ReadFile(trace)
+				if readErr != nil || string(operations) != "version\n" || count.Load() != 1 {
+					t.Fatalf("incompatible bridge received credentials/PIN, or automatically retried: %q starts=%d err=%v", operations, count.Load(), readErr)
+				}
+				m.mu.Lock()
+				retained := m.process != nil || m.authenticated || m.online || m.operations != 0
+				m.mu.Unlock()
+				if retained || m.Info().Connected {
+					t.Fatal("incompatible process retained by manager")
+				}
+				// Shutdown waits for tracked children. It must return even though
+				// this incompatible child was never attached to m.process.
+				closed := make(chan struct{})
+				go func() { m.Close(); close(closed) }()
+				select {
+				case <-closed:
+				case <-time.After(3 * time.Second):
+					t.Fatal("incompatible bridge child was not reaped")
+				}
+				after, readErr := os.ReadFile(m.path)
+				if readErr != nil || string(after) != string(before) || !m.Info().PasswordConfigured {
+					t.Fatalf("compatibility failure changed saved credentials: %v", readErr)
+				}
+			})
+		}
+	}
+}
+
+func TestCompatibleBridgeHandshakePrecedesPINImageAndReusesProcess(t *testing.T) {
+	trace := filepath.Join(t.TempDir(), "protocol-operations")
+	t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
+	m, count := testManager(t, "pin")
+	if _, err := m.Challenge(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.TestConnectionWithPIN(context.Background(), "image-code"); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := os.ReadFile(trace)
+	if err != nil || string(operations) != "version\ncaptcha\nconnect\n" || count.Load() != 1 {
+		t.Fatalf("handshake order/process reuse: %q starts=%d err=%v", operations, count.Load(), err)
+	}
+}
+
+func TestCanceledBridgeHandshakeStopsWithoutLoginOrRetry(t *testing.T) {
+	trace := filepath.Join(t.TempDir(), "protocol-operations")
+	t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
+	m, count := testManager(t, "version-hang")
+	done := make(chan error, 1)
+	go func() { _, err := m.TestConnection(context.Background()); done <- err }()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		data, _ := os.ReadFile(trace)
+		if string(data) == "version\n" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("bridge did not begin handshake")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	m.CancelConnectionTest()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled handshake did not preserve cancellation: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("canceled handshake did not stop")
+	}
+	operations, err := os.ReadFile(trace)
+	if err != nil || string(operations) != "version\n" || count.Load() != 1 {
+		t.Fatalf("canceled handshake logged in or retried: %q starts=%d err=%v", operations, count.Load(), err)
+	}
+	m.mu.Lock()
+	retained := m.process != nil || m.operations != 0
+	m.mu.Unlock()
+	if retained {
+		t.Fatal("canceled handshake retained a process/operation")
+	}
+}
+
 func TestAllDukascopyAssetClassesUseSharedCatalogHistoryAndStream(t *testing.T) {
 	m, count := testManager(t, "all-assets")
 	items, err := m.Instruments(context.Background())
@@ -601,6 +707,14 @@ func TestBridgeHelperProcess(t *testing.T) {
 		var id, op string
 		_ = json.Unmarshal(request["id"], &id)
 		_ = json.Unmarshal(request["op"], &op)
+		if trace := os.Getenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE"); trace != "" {
+			file, err := os.OpenFile(trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			if err != nil {
+				os.Exit(3)
+			}
+			_, _ = fmt.Fprintln(file, op)
+			_ = file.Close()
+		}
 		if scenario == "all-assets" && (op == "history" || op == "subscribe") {
 			var key domain.FeedKey
 			_ = json.Unmarshal(request["feedKey"], &key)
@@ -616,6 +730,22 @@ func TestBridgeHelperProcess(t *testing.T) {
 			}
 		}
 		switch op {
+		case "version":
+			version := bridgeVersion{Protocol: 1, SDKVersion: "3.6.51", JavaVersion: 17, InstrumentCatalog: bridgeInstrumentCatalog}
+			switch scenario {
+			case "version-legacy":
+				respond(id, map[string]any{"protocol": 1, "sdkVersion": "3.6.51", "javaVersion": 17})
+				continue
+			case "version-wrong-catalog":
+				version.InstrumentCatalog = "forex-only"
+			case "version-wrong-protocol":
+				version.Protocol = 2
+			case "version-wrong-sdk":
+				version.SDKVersion = "0.0.0"
+			case "version-hang":
+				select {}
+			}
+			respond(id, version)
 		case "connect":
 			connections++
 			if scenario == "hang-retest" && connections > 1 {
