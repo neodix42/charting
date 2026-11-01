@@ -51,7 +51,7 @@ export const DucascopySetting=forwardRef<DucascopySettingHandle,{api:Backend;vis
    const tested=await(environment==='live'&&pin.trim()?api.TestDucascopyConnectionWithPIN(pin.trim()):api.TestDucascopyConnection());
    if(cancelRequested.current||!current())return;
    if(tested.connected)changed();
-   if(current()){setInfo(tested);setPIN('');setChallenge('');if(tested.connected)setStatus(`Connected to JForex ${tested.environment==='live'?'Live':'Demo'} · ${tested.instrumentCount} forex pairs available.`);else setError(tested.error||testError);}
+   if(current()){setInfo(tested);setPIN('');setChallenge('');if(tested.connected)setStatus(`Connected to JForex ${tested.environment==='live'?'Live':'Demo'} · ${tested.instrumentCount} instruments available.`);else setError(tested.error||testError);}
   }).catch(reason=>{if(cancelRequested.current||!current())return;const message=saving?safeSaveError(reason):kind==='challenge'?challengeError:testError;if(current()){setError(message);setPIN('');setChallenge('');}if(saving)throw new Error(message);}).finally(()=>{if(generation.current===version){pending.current=null;savingRequest.current=null;requestKind.current=null;if(alive.current)setOperation(null);}});
   pending.current=task;void task.catch(()=>{});
  };
@@ -66,7 +66,7 @@ export const DucascopySetting=forwardRef<DucascopySettingHandle,{api:Backend;vis
   cancellation.current=task;void task.catch(()=>{});
  };
  return <form hidden={!visible} className="settings-section ducascopy-setting" aria-label="Dukascopy settings" onSubmit={event=>{event.preventDefault();perform('save');}}>
-  <h3>JForex connection</h3><p>Use your Dukascopy JForex credentials for forex history and live Bid quotes. Select Dukascopy as the chart source after saving.</p>
+  <h3>JForex connection</h3><p>Use your Dukascopy JForex credentials for history and live Bid quotes across all instruments available to your account. Select Dukascopy as the chart source after saving.</p>
   {loading&&<p role="status">Loading JForex settings…</p>}
   <label className="setting-row"><span><strong>Environment</strong><small>Use credentials for the selected JForex environment.</small></span><select aria-label="JForex environment" value={environment} disabled={disabled} onChange={event=>{setEnvironment(event.target.value as DucascopySettings['environment']);edit();}}><option value="demo">Demo</option><option value="live">Live</option></select></label>
   <label className="candle-storage-path"><span>JForex Username</span><input aria-label="JForex Username" autoComplete="off" autoCapitalize="off" spellCheck={false} maxLength={256} value={username} disabled={disabled} onChange={event=>{setUsername(event.target.value);edit();}}/></label>

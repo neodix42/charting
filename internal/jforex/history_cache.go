@@ -61,7 +61,7 @@ func openChartHistoryCache(directory string) (*chartHistoryCache, error) {
 	info, err := os.Lstat(path)
 	if err == nil {
 		if !info.Mode().IsRegular() || info.Size() > chartCoverageBytes {
-			return nil, errors.New("local forex coverage must be a regular file no larger than 4 MiB; original preserved")
+			return nil, errors.New("local Dukascopy coverage must be a regular file no larger than 4 MiB; original preserved")
 		}
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
@@ -70,21 +70,21 @@ func openChartHistoryCache(directory string) (*chartHistoryCache, error) {
 		decoder := json.NewDecoder(bytes.NewReader(data))
 		decoder.DisallowUnknownFields()
 		if err = decoder.Decode(&state); err != nil {
-			return nil, fmt.Errorf("invalid local forex coverage (original preserved): %w", err)
+			return nil, fmt.Errorf("invalid local Dukascopy coverage (original preserved): %w", err)
 		}
 		if decoder.Decode(new(any)) != io.EOF || state.Version != chartCoverageVersion || len(state.Entries) > chartCoverageEntries {
-			return nil, errors.New("invalid local forex coverage version/count; original preserved")
+			return nil, errors.New("invalid local Dukascopy coverage version/count; original preserved")
 		}
 		for _, entry := range state.Entries {
 			if validateKey(entry.Key) != nil || entry.From < 0 || entry.To <= entry.From || entry.To > 32503680000 || entry.Rows < 0 || entry.Rows >= candlecache.MaxRangeLimit || len(entry.Times) != 64 {
-				return nil, errors.New("invalid local forex coverage range; original preserved")
+				return nil, errors.New("invalid local Dukascopy coverage range; original preserved")
 			}
 			if _, err = hex.DecodeString(entry.Times); err != nil {
-				return nil, errors.New("invalid local forex coverage fingerprint; original preserved")
+				return nil, errors.New("invalid local Dukascopy coverage fingerprint; original preserved")
 			}
 		}
 		if st, statErr := os.Lstat(filepath.Join(directory, candlecache.DatabaseFilename)); statErr != nil || !st.Mode().IsRegular() {
-			return nil, errors.New("local forex coverage exists without its candle database; original files preserved")
+			return nil, errors.New("local Dukascopy coverage exists without its candle database; original files preserved")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -336,13 +336,13 @@ func (m *Manager) RecordHistoryCoverage(key domain.FeedKey, from, to int64, expe
 	}
 	c.mu.Lock()
 	if from < 0 || to <= from || to > exchange.BucketStart(c.now().Unix(), exchange.TimeframeSeconds(key.Timeframe)) {
-		err = errors.New("invalid closed forex stream coverage range")
+		err = errors.New("invalid closed Dukascopy stream coverage range")
 	} else {
 		start, end, chainErr := c.streamChainLocked(key)
 		if chainErr != nil {
 			err = chainErr
 		} else if end != 0 && (from > end || to < start) {
-			err = errors.New("forex history coverage cannot skip an unchecked range")
+			err = errors.New("Dukascopy history coverage cannot skip an unchecked range")
 		} else {
 			err = c.recordProofLocked(key, from, to, true, expected...)
 		}
@@ -379,7 +379,7 @@ func (c *chartHistoryCache) saveCoverageLocked(entries []chartHistoryCoverage) e
 		return err
 	}
 	if len(data) > chartCoverageBytes {
-		return errors.New("local forex coverage exceeds its supported size")
+		return errors.New("local Dukascopy coverage exceeds its supported size")
 	}
 	temp, err := os.CreateTemp(filepath.Dir(c.path), ".coverage-*")
 	if err != nil {
@@ -435,7 +435,7 @@ func (c *chartHistoryCache) recordProofLocked(key domain.FeedKey, from, to int64
 	}
 	for _, bar := range expected {
 		if bar.Closed && bar.Time >= from && bar.Time < to && !stored[bar.Time] {
-			return errors.New("closed forex candles were not committed; the catch-up checkpoint was preserved")
+			return errors.New("closed Dukascopy candles were not committed; the catch-up checkpoint was preserved")
 		}
 	}
 	entry := chartHistoryCoverage{Key: key, chartHistorySpan: chartHistorySpan{from, to}, Rows: len(bars), Times: chartTimesFingerprint(bars), Stream: stream}
@@ -497,7 +497,7 @@ func (c *chartHistoryCache) history(ctx context.Context, key domain.FeedKey, fro
 	closed := exchange.BucketStart(c.now().Unix(), exchange.TimeframeSeconds(key.Timeframe))
 	missing := missingChartSpans(from, to, spans)
 	// A recent query also reconciles one closed overlapping bar, while immutable
-	// older pages (including sparse forex weekends) are wholly reusable.
+	// older pages (including sparse Dukascopy weekends) are wholly reusable.
 	if to > closed {
 		overlap := max(from, closed-exchange.TimeframeSeconds(key.Timeframe))
 		missing = append(missing, chartHistorySpan{overlap, to})

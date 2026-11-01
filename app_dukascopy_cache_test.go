@@ -47,73 +47,81 @@ func configureCachedForex(t *testing.T, manager *jforex.Manager, username, envir
 }
 
 func TestDukascopyChartsRestorePrivateCandlesAndAppendAcceptedUpdatesAcrossRestart(t *testing.T) {
-	profile := t.TempDir()
-	public := candlestorage.New(profile, nil)
-	defer public.Close()
-	private := jforex.New(profile)
-	defer private.Close()
-	configureCachedForex(t, private, "cache-account-a", "demo")
-	key := domain.FeedKey{Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"}
-	base := time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC).Unix()
-	bars := []domain.Candle{
-		{Time: base, Open: 1.1, High: 1.3, Low: 1, Close: 1.2, Volume: 7, Closed: true, Quality: "authoritative", SourceRevision: 500},
-		{Time: base + 3600, Open: 1.2, High: 1.4, Low: 1.1, Close: 1.3, Volume: 8, Closed: true, Quality: "authoritative", SourceRevision: 501},
-	}
-	cache := chartCandleCache{manager: public, forex: private}
-	cache.Put(key, bars)
-	if stored, err := cache.Range(key, 0, 0, 100); err != nil || len(stored) != len(bars) {
-		t.Fatalf("private chart history was not stored: %+v %v", stored, err)
-	}
-	private.Close()
+	for _, key := range []domain.FeedKey{
+		{Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "metal", Instrument: "XAUUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "cfd", Instrument: "AAPLUSUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "cfd", Instrument: "BTCUSD", Timeframe: "1h"},
+	} {
+		t.Run(key.Market+"/"+key.Instrument, func(t *testing.T) {
+			profile := t.TempDir()
+			public := candlestorage.New(profile, nil)
+			defer public.Close()
+			private := jforex.New(profile)
+			defer private.Close()
+			configureCachedForex(t, private, "cache-account-a", "demo")
+			base := time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC).Unix()
+			bars := []domain.Candle{
+				{Time: base, Open: 1.1, High: 1.3, Low: 1, Close: 1.2, Volume: 7, Closed: true, Quality: "authoritative", SourceRevision: 500},
+				{Time: base + 3600, Open: 1.2, High: 1.4, Low: 1.1, Close: 1.3, Volume: 8, Closed: true, Quality: "authoritative", SourceRevision: 501},
+			}
+			cache := chartCandleCache{manager: public, forex: private}
+			cache.Put(key, bars)
+			if stored, err := cache.Range(key, 0, 0, 100); err != nil || len(stored) != len(bars) {
+				t.Fatalf("private chart history was not stored: %+v %v", stored, err)
+			}
+			private.Close()
 
-	restored := jforex.New(profile)
-	defer restored.Close()
-	transport := &cachedForexTransport{started: make(chan func([]domain.Candle, domain.Health), 1)}
-	service := market.New(market.Options{Cache: chartCandleCache{manager: public, forex: restored}, Factory: func(string) (exchange.Adapter, error) { return transport, nil }})
-	defer service.Close()
-	app := &App{jforex: restored, market: service}
-	snapshot, err := app.AttachChart("restored-forex-chart", 1, key, 0, 0)
-	if err != nil || len(snapshot.Bars) != 2 || snapshot.Health.State != "cached" {
-		t.Fatalf("opening a chart did not return its local history immediately: %+v %v", snapshot, err)
-	}
-	if snapshot.Bars[0].Time != bars[0].Time || snapshot.Bars[0].Close != bars[0].Close || snapshot.Bars[0].SourceRevision != 0 {
-		t.Fatalf("restored history or session revisions are wrong: %+v", snapshot.Bars)
-	}
-	var publish func([]domain.Candle, domain.Health)
-	select {
-	case publish = <-transport.started:
-	case <-time.After(time.Second):
-		t.Fatal("chart did not subscribe after restoring local history")
-	}
-	current := domain.Candle{Time: base + 7200, Open: 1.3, High: 1.6, Low: 1.2, Close: 1.5, Volume: 9, Quality: "provisional", SourceRevision: 1}
-	publish([]domain.Candle{current}, domain.Health{State: "live"})
-	closed := current
-	closed.Closed, closed.Quality, closed.SourceRevision, closed.Close = true, "authoritative", 2, 1.6
-	publish([]domain.Candle{closed}, domain.Health{})
-	// An old live event must neither reopen the closed candle nor corrupt disk.
-	publish([]domain.Candle{current}, domain.Health{})
-	// A history seed captured before the native close is older even though it
-	// contains an authoritative closed bar.
-	staleSeed := closed
-	staleSeed.SourceRevision, staleSeed.Close, staleSeed.Volume = 1, 1.4, 4
-	publish([]domain.Candle{staleSeed}, domain.Health{})
-	service.Close()
-	restored.Close()
+			restored := jforex.New(profile)
+			defer restored.Close()
+			transport := &cachedForexTransport{started: make(chan func([]domain.Candle, domain.Health), 1)}
+			service := market.New(market.Options{Cache: chartCandleCache{manager: public, forex: restored}, Factory: func(string) (exchange.Adapter, error) { return transport, nil }})
+			defer service.Close()
+			app := &App{jforex: restored, market: service}
+			snapshot, err := app.AttachChart("restored-forex-chart", 1, key, 0, 0)
+			if err != nil || len(snapshot.Bars) != 2 || snapshot.Health.State != "cached" {
+				t.Fatalf("opening a chart did not return its local history immediately: %+v %v", snapshot, err)
+			}
+			if snapshot.Bars[0].Time != bars[0].Time || snapshot.Bars[0].Close != bars[0].Close || snapshot.Bars[0].SourceRevision != 0 {
+				t.Fatalf("restored history or session revisions are wrong: %+v", snapshot.Bars)
+			}
+			var publish func([]domain.Candle, domain.Health)
+			select {
+			case publish = <-transport.started:
+			case <-time.After(time.Second):
+				t.Fatal("chart did not subscribe after restoring local history")
+			}
+			current := domain.Candle{Time: base + 7200, Open: 1.3, High: 1.6, Low: 1.2, Close: 1.5, Volume: 9, Quality: "provisional", SourceRevision: 1}
+			publish([]domain.Candle{current}, domain.Health{State: "live"})
+			closed := current
+			closed.Closed, closed.Quality, closed.SourceRevision, closed.Close = true, "authoritative", 2, 1.6
+			publish([]domain.Candle{closed}, domain.Health{})
+			// An old live event must neither reopen the closed candle nor corrupt disk.
+			publish([]domain.Candle{current}, domain.Health{})
+			// A history seed captured before the native close is older even though it
+			// contains an authoritative closed bar.
+			staleSeed := closed
+			staleSeed.SourceRevision, staleSeed.Close, staleSeed.Volume = 1, 1.4, 4
+			publish([]domain.Candle{staleSeed}, domain.Health{})
+			service.Close()
+			restored.Close()
 
-	again := jforex.New(profile)
-	defer again.Close()
-	stored, err := (chartCandleCache{manager: public, forex: again}).Range(key, 0, 0, 100)
-	if err != nil || len(stored) != 3 || stored[0].Close != bars[0].Close || !stored[2].Closed || stored[2].Close != closed.Close || stored[2].Volume != closed.Volume {
-		t.Fatalf("restart lost the append or persisted a rejected stale event: %+v %v", stored, err)
-	}
-	if info, err := public.Info(); err != nil || info.Enabled {
-		t.Fatalf("forex persistence unexpectedly enabled public crypto storage: %+v %v", info, err)
-	}
-	if actual, err := public.Range(key, 0, 0, 100); err != nil || len(actual) != 0 {
-		t.Fatalf("forex candles leaked into public storage: %+v %v", actual, err)
-	}
-	if _, err := os.Stat(filepath.Join(profile, "jforex-runtime")); !os.IsNotExist(err) {
-		t.Fatalf("local restoration unexpectedly prepared the SDK: %v", err)
+			again := jforex.New(profile)
+			defer again.Close()
+			stored, err := (chartCandleCache{manager: public, forex: again}).Range(key, 0, 0, 100)
+			if err != nil || len(stored) != 3 || stored[0].Close != bars[0].Close || !stored[2].Closed || stored[2].Close != closed.Close || stored[2].Volume != closed.Volume {
+				t.Fatalf("restart lost the append or persisted a rejected stale event: %+v %v", stored, err)
+			}
+			if info, err := public.Info(); err != nil || info.Enabled {
+				t.Fatalf("forex persistence unexpectedly enabled public crypto storage: %+v %v", info, err)
+			}
+			if actual, err := public.Range(key, 0, 0, 100); err != nil || len(actual) != 0 {
+				t.Fatalf("forex candles leaked into public storage: %+v %v", actual, err)
+			}
+			if _, err := os.Stat(filepath.Join(profile, "jforex-runtime")); !os.IsNotExist(err) {
+				t.Fatalf("local restoration unexpectedly prepared the SDK: %v", err)
+			}
+		})
 	}
 }
 

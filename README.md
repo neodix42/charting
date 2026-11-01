@@ -2,9 +2,9 @@
 
 <img src="frontend/src/assets/cryptodesk.svg" width="64" height="64" alt="CryptoDesk diamond logo">
 
-**Live market charts and a visual historical Screener for Ubuntu and Windows.** Follow crypto spot/perpetual markets and JForex forex quotes, download historical datasets, calculate indicators, and find the bars where your conditions matched—all from one desktop workspace.
+**Live market charts and a visual historical Screener for Ubuntu and Windows.** Follow crypto spot/perpetual markets and JForex forex, metal and CFD quotes, download historical datasets, calculate indicators, and find the bars where your conditions matched—all from one desktop workspace.
 
-[Download](#download) · [Charting features](#charting-features) · [Forex](#dukascopy-forex-charts) · [Screener](#screener) · [Visual filters](#analysis-build-smart-filters-visually) · [Predictions](#predictions) · [Build from source](#build-from-source) · [Full user guide](APP_README.md)
+[Download](#download) · [Charting features](#charting-features) · [Dukascopy](#dukascopy-charts) · [Screener](#screener) · [Visual filters](#analysis-build-smart-filters-visually) · [Predictions](#predictions) · [Build from source](#build-from-source) · [Full user guide](APP_README.md)
 
 ![CryptoDesk light-theme workspace with two BTCUSDT charts, moving averages, volume and MACD](docs/screenshots/chart-workspace.png)
 
@@ -12,7 +12,7 @@
 
 - **A workspace that remembers your layout.** Up to 20 chart tabs and 9 charts per tab, with independent instruments, periods, indicators and drawings.
 - **Public market data without an account.** Binance and Bybit spot/perpetual markets, plus Coinbase spot. No API keys required.
-- **Authenticated forex charts.** Dukascopy JForex historical Bid candles and realtime quotes through the included bridge, using your Demo or Live credentials.
+- **Authenticated Dukascopy charts.** JForex forex, metals and CFDs (indices, commodities, stocks, ETFs and crypto) available to your Demo or Live account, with historical Bid candles and realtime quotes through the included bridge.
 - **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download multiple symbols in parallel with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
 - **Smart visual filters.** Compare prices, indicators, numbers and earlier bars; combine conditions, scan every closed historical bar, inspect matches on a chart, and optionally simulate SL/TP outcomes.
@@ -30,7 +30,7 @@
 
 **Extract the complete archive.** Ubuntu and Windows packages include the private Node runtime, Dukascopy downloader, indicator library and browser support used by Screener. Keep `screener-runtime` alongside the application; no global Node/npm or runtime `npx` installation is needed. See [updating the Screener downloader](#updating-the-screener-downloader) to check, restore or upgrade its pinned dependency.
 
-For forex charts on **Linux**, run the archive's `./install-user.sh` to install the bridge in **`$HOME/.local/share/cryptodesk-app/jforex-runtime`**. Launching from a source checkout or another folder uses this same installation. An absolute `XDG_DATA_HOME` selects the corresponding user-data location. On **Windows**, keep the included **`jforex-runtime`** folder beside the executable. JForex additionally needs **Java 17 or newer** installed separately. Its pinned vendor SDK downloads into the private app profile on the first connection; it is separate from the preinstalled Screener downloader.
+For Dukascopy charts on **Linux**, run the archive's `./install-user.sh` to install the bridge in **`$HOME/.local/share/cryptodesk-app/jforex-runtime`**. Launching from a source checkout or another folder uses this same installation. An absolute `XDG_DATA_HOME` selects the corresponding user-data location. On **Windows**, keep the included **`jforex-runtime`** folder beside the executable. JForex additionally needs **Java 17 or newer** installed separately. Its pinned vendor SDK downloads into the private app profile on the first connection; it is separate from the preinstalled Screener downloader.
 
 The Windows ZIP includes a pinned WebView2 runtime. Keep `WebView2` and `portable.marker` beside the executable in a writable local folder; application data stays in its portable `data` folder. The executable is unsigned; native Windows GUI verification remains pending. See [Windows portable details](docs/WINDOWS_PORTABLE.md) and [installation instructions](APP_README.md#run-the-built-release).
 
@@ -51,7 +51,7 @@ sudo apt install -y \
 
 These are runtime packages; Go, a compiler and the `-dev` packages are needed only when building from source. Run CryptoDesk from a graphical desktop session with working graphics drivers. GitHub releases build on Ubuntu 24.04 x64; older systems require separate verification, and local builds inherit their build host's glibc requirement. The Linux archive includes optional `install-user.sh` for application-menu and desktop shortcuts. Linux releases use the system GTK/WebKit libraries; the separate bundled GTK/WebKit archive is retired.
 
-For **JForex forex charts**, also install a Java runtime:
+For **JForex charts**, also install a Java runtime:
 
 ```bash
 sudo apt install -y openjdk-17-jre-headless
@@ -61,7 +61,7 @@ sudo apt install -y openjdk-17-jre-headless
 
 First launch opens **one tab with one chart**. New tabs also start with one chart; larger grids add empty slots for you to fill. Later launches restore your actual saved workspace.
 
-- **Independent charts:** choose source, instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets; Dukascopy supplies the connected JForex account's available forex pairs.
+- **Independent charts:** choose source, instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets; Dukascopy supplies all instruments available to the connected JForex account, including forex, metals and CFDs.
 - **Indicators and drawings:** SMA, EMA, Ichimoku Cloud and MACD, with editable parameters, colors and multiple instances. Adjust moving-average widths and resize MACD panes. Add arrows, horizontal levels and trend lines; select, move or remove drawings.
 - **Flexible layouts:** drag tabs/charts, resize grid tracks, maximize a chart, rename tabs and duplicate layouts. Shared period and indicator controls apply to the current tab's charts.
 - **Display controls:** Dark, Light, Matrix (black/lime), Cyberpunk and Red Sands themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Theme** updates the interface, opened dropdown menus and chart colors immediately and remembers your choice. **Font size** scales interface text and chart labels from **10–24 px** (default **15**).
@@ -74,17 +74,19 @@ Settings are grouped into **Appearance**, **Storage**, **Screener**, **Predictio
 
 In **Settings → Telegram Bot**, enter your masked **Telegram Bot API Token** and **Recipients (comma-separated)**, for example `@alice, @bob, 12345678` (up to 20 usernames/private chat IDs). The app displays the actual bot name when usernames are entered. Each selected user must open it and press **Start**. Click **Test** to save the settings and send one notification per unique chat, with partial-delivery feedback when needed. Only listed recipients receive notifications; other people pressing `/start` are not subscribed. Token, recipient list and individually verified chat IDs persist locally outside workspace exports and diagnostics. Save sends no messages. Start automatic monitoring explicitly in **Screener → Live Alerts**.
 
-## Dukascopy forex charts
+<a id="dukascopy-forex-charts"></a>
+
+## Dukascopy charts
 
 1. Install **Java 17+**, and on Linux run the release's `./install-user.sh`. Linux prefers **`/usr/bin/java`**, followed by Java on `PATH`, then `JAVA_HOME/bin/java`; an IDE's `JAVA_HOME` does not replace the system runtime. Windows users can use [Eclipse Temurin 17 x64](https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64), with Java on `PATH` or `JAVA_HOME` set to its installation folder.
 2. Open **Settings → Dukascopy**, select **Demo** or **Live**, enter **JForex Username** and **JForex Password**, then click **Test connection**. First setup downloads about **43 MB** of checksum-pinned SDK dependencies; **Cancel test** stops a pending connection check. Live accounts can use the optional displayed PIN challenge.
-3. Select **Dukascopy** in a chart's source dropdown, then choose a **Forex** pair. The list is discovered from the authenticated account, rather than a promised universal instrument list.
+3. Select **Dukascopy** in a chart's source dropdown, then choose any available **Forex**, **Metal** or **CFD** instrument. The complete list is discovered from the authenticated account, including its supported currencies, metals, indices, commodities, stocks, ETFs and crypto CFDs.
 
-Charts use **Bid** history and live quotes, with all seven chart periods and UTC candle boundaries. Forex weekends/holidays remain gaps; the status shows quote freshness and market closures. Volume is the SDK's quote volume in millions, rather than centralized exchange trade volume.
+Charts use **Bid** history and live quotes, with all seven chart periods and UTC candle boundaries. Forex weekends/holidays remain gaps; the status shows quote freshness and market closures. Volume retains the SDK's native values (forex in millions; other assets in provider units), rather than centralized exchange trade volume.
 
 Historical data loads independently of connection controls and live subscriptions. Slow history requests have a 45-second deadline and report a chart error while live quotes remain subscribed. **Close settings** cancels a pending connection/PIN test after saving credentials, so a stalled check does not hold the dialog open.
 
-Credentials stay in the local profile outside workspace exports; the password is masked and stored without application-level encryption. JForex charts automatically save accepted closed candles in a private account/environment-scoped SQLite cache, alongside the SDK cache. Reopening or restarting restores local candles immediately, then appends missing data with a small overlap instead of downloading the full initial history again. Successful query checkpoints preserve weekend gaps and allow interrupted catch-up to resume safely. Older downloaded pages are reused locally too; current partial candles still refresh from the provider. This persistence remains active independently of the optional public-crypto Storage setting. Changing identities preserves each account’s own history, and cache errors remain visible. Screener CSV downloads continue to use dukascopy-node independently. See the [JForex setup, storage and PIN guide](APP_README.md#dukascopy-forex-charts); [STATUS.md](STATUS.md) records automated checks, reported Live connectivity and remaining live/desktop verification.
+Credentials stay in the local profile outside workspace exports; the password is masked and stored without application-level encryption. JForex charts automatically save accepted closed candles in a private account/environment-scoped SQLite cache, alongside the SDK cache. Reopening or restarting restores local candles immediately, then appends missing data with a small overlap instead of downloading the full initial history again. Successful query checkpoints preserve weekend gaps and allow interrupted catch-up to resume safely. Older downloaded pages are reused locally too; current partial candles still refresh from the provider. This persistence remains active independently of the optional public-crypto Storage setting. Changing identities preserves each account’s own history, and cache errors remain visible. Screener CSV downloads continue to use dukascopy-node independently. See the [JForex setup, storage and PIN guide](APP_README.md#dukascopy-charts); [STATUS.md](STATUS.md) records automated checks, reported Live connectivity and remaining live/desktop verification.
 
 ## Screener
 

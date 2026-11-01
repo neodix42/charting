@@ -26,7 +26,7 @@ test('JForex credentials save privately, retain a masked password across restart
  await dialog(page).getByRole('tab',{name:'Debug',exact:true}).click();await dialog(page).getByRole('button',{name:'Refresh diagnostics',exact:true}).click();await expect(dialog(page).locator('.diagnostics')).not.toContainText('private-test-password');
  await reloadTestApp(page);await openSettings(page);await expect(username(page)).toHaveValue('explicit-demo');await expect(password(page)).toHaveValue('');await expect(connectionTest(page)).toBeEnabled();
  expect(await page.evaluate(()=>(window as any).__testDucascopyTests())).toBe(0);
- await connectionTest(page).click();await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 3 forex pairs available.');expect(await page.evaluate(()=>(window as any).__testDucascopyTests())).toBe(1);
+ await connectionTest(page).click();await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 10 instruments available.');expect(await page.evaluate(()=>(window as any).__testDucascopyTests())).toBe(1);
  await environment(page).selectOption('live');await expect(connectionTest(page)).toBeDisabled();await expect(save(page)).toBeDisabled();await expect(form(page)).toContainText('Enter a password for the new username or environment.');
  await environment(page).selectOption('demo');await form(page).getByRole('checkbox',{name:'Remove saved password',exact:true}).check();await expect(connectionTest(page)).toBeDisabled();await save(page).click();await expect(form(page).getByRole('status')).toHaveText('Saved JForex password removed.');
  expect((await page.evaluate(()=>window.go!.main!.App!.GetDucascopy())).passwordConfigured).toBe(false);expect(remoteRequests).toEqual([]);
@@ -70,7 +70,7 @@ test('Live PIN challenge stays transient, tests once and clears after use and id
  await form(page).getByRole('button',{name:'Load PIN challenge',exact:true}).click();await expect(form(page).getByRole('img',{name:'JForex login PIN challenge',exact:true})).toBeVisible();await expect(password(page)).toHaveValue('');
  const pin=form(page).getByLabel('JForex PIN',{exact:true});await pin.fill('54792');const before=await connectionTest(page).boundingBox();await connectionTest(page).dblclick();const testing=form(page).getByRole('button',{name:'Testing connection…',exact:true});await expect(testing).toBeDisabled();const after=await testing.boundingBox();expect(before).not.toBeNull();expect(after).not.toBeNull();expect(Math.abs(before!.x+before!.width-after!.x-after!.width)).toBeLessThan(1);
  expect(await page.evaluate(()=>(window as any).__testJForexPINs())).toEqual(['54792']);expect(JSON.stringify(await page.evaluate(()=>(window as any).__testWorkspace()))).not.toContain('54792');expect(await page.evaluate(()=>sessionStorage.getItem('cryptodesk-explicit-test-ducascopy'))).not.toContain('54792');
- await page.evaluate(()=>(window as any).__releaseJForexPIN());await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Live · 3 forex pairs available.');await expect(pin).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__releaseJForexPIN());await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Live · 10 instruments available.');await expect(pin).toHaveCount(0);
  await form(page).getByRole('button',{name:'Load PIN challenge',exact:true}).click();await pin.fill('87654');await username(page).fill('another-live');await expect(pin).toHaveCount(0);await expect(form(page).getByRole('img')).toHaveCount(0);
 });
 
@@ -87,6 +87,32 @@ test('Dukascopy lists discovered forex pairs, displays Bid quotes and persists t
  await expect(page.locator('.save-indicator.saved')).toBeVisible();await reloadTestApp(page);await expect(page.getByRole('combobox',{name:'Exchange',exact:true})).toHaveValue('dukascopy');await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toContainText('USD/JPY');await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Forex');
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);await page.locator('[role="tab"][data-tab-id]').first().click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);
  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('coinbase');await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Spot');await expect(page.getByLabel('Price side',{exact:true})).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>(window as any).__testSubscriptions())).toMatchObject([{feedKey:{exchange:'coinbase',market:'spot',instrument:'BTC-USD'}}]);
+});
+
+test('Dukascopy offers account metals and every CFD category and restores their own Bid feeds',async({page})=>{
+ await openTestApp(page);await credentials(page);await selectSource(page);
+ const openPicker=async()=>{await page.getByRole('button',{name:'Select instrument',exact:true}).click();await expect(picker(page)).toBeVisible();};
+ await openPicker();await expect(picker(page)).toContainText('All available instruments from the connected JForex account');await expect(picker(page).locator('.product-list button')).toHaveCount(10);
+ for(const label of ['XAU/USD Metal','XAG/USD Metal','USA500.IDX/USD CFD','BRENT.CMD/USD CFD','AAPL.US/USD CFD','SPY.US/USD CFD','BTC/USD CFD'])await expect(picker(page).getByRole('button',{name:label,exact:true})).toBeVisible();
+ for(const asset of [
+  {query:'Gold',symbol:'XAU/USD',instrument:'XAUUSD',market:'metal',label:'Metal',close:'2,601.00'},
+  {query:'crude',symbol:'BRENT.CMD/USD',instrument:'BRENTCMDUSD',market:'cfd',label:'CFD',close:'81.00'},
+  {query:'USA500.IDX',symbol:'USA500.IDX/USD',instrument:'USA500IDXUSD',market:'cfd',label:'CFD',close:'5,001.00'},
+  {query:'crypto',symbol:'BTC/USD',instrument:'BTCUSD',market:'cfd',label:'CFD',close:'60,001.00'},
+  {query:'Apple',symbol:'AAPL.US/USD',instrument:'AAPLUSUSD',market:'cfd',label:'CFD',close:'201.00'},
+ ]){
+  if(!await picker(page).isVisible())await openPicker();
+  await picker(page).getByRole('textbox',{name:'Search instruments',exact:true}).fill(asset.query);await expect(picker(page).locator('.product-list button')).toHaveCount(1);
+  await picker(page).getByRole('button',{name:`${asset.symbol} ${asset.label}`,exact:true}).click();
+  await expect(page.getByLabel('Selected market',{exact:true})).toHaveText(asset.label);await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toContainText(asset.symbol);
+  await expect(page.getByLabel('OHLCV',{exact:true})).toContainText(asset.close);await expect(page.getByLabel('Price side',{exact:true})).toHaveText('Bid');await expect(page.getByLabel('Last quote',{exact:true})).toContainText('Quote');await expect(page.getByLabel('OHLCV',{exact:true})).toContainText('provider units');
+  await expect.poll(()=>page.evaluate(()=>(window as any).__testSubscriptions())).toMatchObject([{feedKey:{exchange:'dukascopy',market:asset.market,instrument:asset.instrument,timeframe:'1h'}}]);
+  await page.getByRole('button',{name:'Return to live',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testHistoryKeys())).toContainEqual({exchange:'dukascopy',market:asset.market,instrument:asset.instrument,timeframe:'1h'});
+ }
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();await reloadTestApp(page);await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toContainText('AAPL.US/USD');await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('CFD');await expect(page.getByLabel('Price side',{exact:true})).toHaveText('Bid');
+ await page.getByRole('button',{name:'Add tab',exact:true}).click();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Spot');await expect.poll(()=>page.evaluate(()=>(window as any).__testSubscriptions())).toMatchObject([{feedKey:{exchange:'binance',market:'spot'}}]);
+ await page.locator('[role="tab"][data-tab-id]').first().click();await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toContainText('AAPL.US/USD');await expect.poll(()=>page.evaluate(()=>(window as any).__testSubscriptions())).toMatchObject([{feedKey:{exchange:'dukascopy',market:'cfd',instrument:'AAPLUSUSD'}}]);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);await page.locator('[role="tab"][data-tab-id]').first().click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);
 });
 
 test('saving credentials recovers a Dukascopy source selected before setup and refreshes its instrument catalog',async({page})=>{
@@ -146,8 +172,8 @@ test('Cancel test releases the controls while an obsolete transport response is 
  });
  await openSettings(page);await connectionTest(page).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__obsoleteJForexTest)).toBe('function');
  await form(page).getByRole('button',{name:'Cancel test',exact:true}).click();await expect(connectionTest(page)).toBeEnabled();
- await connectionTest(page).click();await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 3 forex pairs available.');
- await page.evaluate(()=>(window as any).__obsoleteJForexTest());await expect(username(page)).toHaveValue('explicit-demo');await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 3 forex pairs available.');await expect(form(page).getByRole('alert')).toHaveCount(0);
+ await connectionTest(page).click();await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 10 instruments available.');
+ await page.evaluate(()=>(window as any).__obsoleteJForexTest());await expect(username(page)).toHaveValue('explicit-demo');await expect(form(page).getByRole('status')).toHaveText('Connected to JForex Demo · 10 instruments available.');await expect(form(page).getByRole('alert')).toHaveCount(0);
 });
 
 test('a cancellation failure preserves Settings and credentials until close is retried',async({page})=>{

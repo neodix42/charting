@@ -4,7 +4,7 @@ import type {PredictionsBackend} from './workspace/predictions';
 import type {ThemeName} from './workspace/themes';
 
 export type Exchange = 'binance'|'bybit'|'coinbase'|'dukascopy';
-export type Market = 'spot'|'perpetual'|'forex';
+export type Market = 'spot'|'perpetual'|'forex'|'metal'|'cfd';
 export type Interval = '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'1w';
 export const intervals: Interval[] = ['1m','5m','15m','1h','4h','1d','1w'];
 export const intervalSeconds: Record<Interval,number> = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400,'1w':604800};

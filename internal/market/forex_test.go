@@ -13,41 +13,48 @@ func forexKey() domain.FeedKey {
 	return domain.FeedKey{Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"}
 }
 
-func TestForexHistoryRemembersSparseAndEmptyClosedRangesWithoutInventingCandles(t *testing.T) {
-	friday := time.Date(2026, 10, 23, 20, 0, 0, 0, time.UTC).Unix()
-	bar := domain.Candle{Time: friday, Open: 1.1, High: 1.2, Low: 1, Close: 1.15, Volume: 3, Closed: true, Quality: "authoritative"}
-	a := &diskHistoryAdapter{historyBars: []domain.Candle{bar}}
-	s := newDiskTestService(t, nil, a, friday+5*86400)
-	key := forexKey()
-	for i := 0; i < 2; i++ {
-		page, err := s.History(context.Background(), "weekend", key, friday, friday+3*86400, 1000)
-		if err != nil || !reflect.DeepEqual(page.Bars, []domain.Candle{bar}) {
-			t.Fatalf("sparse history: %+v %v", page, err)
-		}
-	}
-	if a.calls() != 1 {
-		t.Fatal("legitimate weekend gaps were repeatedly fetched", a.calls())
-	}
-	a.historyMu.Lock()
-	a.historyBars = nil
-	a.historyMu.Unlock()
-	for i := 0; i < 2; i++ {
-		page, err := s.History(context.Background(), "closed", key, friday+86400, friday+2*86400, 1000)
-		if err != nil || len(page.Bars) != 0 {
-			t.Fatalf("closed-market page: %+v %v", page, err)
-		}
-	}
-	if a.calls() != 2 {
-		t.Fatal("empty checked range was not remembered", a.calls())
-	}
-	if !s.ForgetProvider("dukascopy") {
-		t.Fatal("idle provider could not be invalidated")
-	}
-	if _, err := s.History(context.Background(), "new-account", key, friday, friday+3*86400, 1000); err != nil {
-		t.Fatal(err)
-	}
-	if a.calls() != 3 {
-		t.Fatal("account change reused old checked coverage")
+func TestDukascopyHistoryRemembersSparseAndEmptyClosedRangesWithoutInventingCandles(t *testing.T) {
+	for _, key := range []domain.FeedKey{
+		{Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "metal", Instrument: "XAUUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "cfd", Instrument: "USA30IDXUSD", Timeframe: "1h"},
+	} {
+		t.Run(key.Market, func(t *testing.T) {
+			friday := time.Date(2026, 10, 23, 20, 0, 0, 0, time.UTC).Unix()
+			bar := domain.Candle{Time: friday, Open: 1.1, High: 1.2, Low: 1, Close: 1.15, Volume: 3, Closed: true, Quality: "authoritative"}
+			a := &diskHistoryAdapter{historyBars: []domain.Candle{bar}}
+			s := newDiskTestService(t, nil, a, friday+5*86400)
+			for i := 0; i < 2; i++ {
+				page, err := s.History(context.Background(), "weekend", key, friday, friday+3*86400, 1000)
+				if err != nil || !reflect.DeepEqual(page.Bars, []domain.Candle{bar}) {
+					t.Fatalf("sparse history: %+v %v", page, err)
+				}
+			}
+			if a.calls() != 1 {
+				t.Fatal("legitimate weekend gaps were repeatedly fetched", a.calls())
+			}
+			a.historyMu.Lock()
+			a.historyBars = nil
+			a.historyMu.Unlock()
+			for i := 0; i < 2; i++ {
+				page, err := s.History(context.Background(), "closed", key, friday+86400, friday+2*86400, 1000)
+				if err != nil || len(page.Bars) != 0 {
+					t.Fatalf("closed-market page: %+v %v", page, err)
+				}
+			}
+			if a.calls() != 2 {
+				t.Fatal("empty checked range was not remembered", a.calls())
+			}
+			if !s.ForgetProvider("dukascopy") {
+				t.Fatal("idle provider could not be invalidated")
+			}
+			if _, err := s.History(context.Background(), "new-account", key, friday, friday+3*86400, 1000); err != nil {
+				t.Fatal(err)
+			}
+			if a.calls() != 3 {
+				t.Fatal("account change reused old checked coverage")
+			}
+		})
 	}
 }
 

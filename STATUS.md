@@ -1,4 +1,21 @@
-# Implementation status — updated 2026-10-31
+# Implementation status — updated 2026-11-01
+
+## Complete account-supported Dukascopy chart catalog — 2026-11-01
+
+Dukascopy chart discovery now includes every instrument returned by the connected account's JForex `getAvailableInstruments()` instead of filtering to ISO fiat pairs. Forex, metals and CFDs have explicit market identities throughout the Java bridge, Go validation, portable schema, chart selector and saved drawings. Supported account offerings can include indices, commodities, stocks, ETFs, bonds and crypto CFDs. SDK symbols, tick precision, descriptions and asset groups are preserved for display/search. Crypto contracts are CFDs, while USD/CNH remains Forex despite Java's ISO currency table omitting CNH. Existing forex identities and account/environment cache locations/formats remain unchanged.
+
+All Dukascopy market classes use Bid labels, quote freshness, provider-native volume, market closure status, bounded history and active-tab-only subscriptions. Private SQLite/cache regressions cover non-forex restore/append across restart, market/instrument/timeframe identity, account isolation and sparse market closures. Browser coverage selects metals, oil, an index, crypto and stocks, verifies precision and historical requests, restores a CFD after reload and checks tab/Screener lease cleanup. Catalog and Java lifecycle regressions also include ETF and unavailable/wrong-market selection cases.
+
+Verified locally on Ubuntu 26.04.1 x86_64, Go 1.26.8, Node 24.19.0/npm 11.17.0, with the existing project-local native SDK and pinned JForex SDK 3.6.51/API 2.13.99:
+
+- `go test -race ./internal/... ./cmd/...`, `go test -race -tags bindings .`, `go vet ./internal/... ./cmd/...` and `go vet -tags bindings .` pass.
+- With `source scripts/native-env.sh`, `go test -race -tags webkit2_41 .` and `go build -tags webkit2_41 -trimpath -o .tools/verification/dukascopy-assets-desktop .` pass.
+- `python3 scripts/jforex_bundle.py --test` passes after the CNH correction, exercising production Java protocol/history/stream logic and actual offline SDK bootstrap. `--output .tools/verification/dukascopy-assets-runtime --verify .tools/verification/dukascopy-assets-runtime` rebuilds and verifies the five-file bridge inventory.
+- `python3 -m unittest discover -s scripts -p 'test_jforex*.py'` passes **16 packaging tests**. An initial dotted-module invocation failed Python import resolution; the repository's discovery invocation resolves it without code changes.
+- Frontend `npm run typecheck`, `npm run lint`, `npm test` (**205 tests**) and `npm run test:e2e -- e2e/ducascopy.spec.ts e2e/markets.spec.ts` (**25 browser cases**, including production build) pass. The build retains its existing large-chunk warning.
+- Draft 2020-12 schema validation accepts all three Dukascopy markets and rejects them on incompatible providers. `git diff --check` passes.
+
+Authenticated account discovery/history/live quotes, native desktop interaction and Windows execution are **UNVERIFIED / UNRUN** for this change. Automated tests use explicit offline transports and temporary profiles; no account login, user-data rewrite, system installation or installed-bridge replacement was performed. Release archives have not been rebuilt. To use/verify the change on an actual account, build the updated app and bridge, run the normal user installer on Linux (or retain the updated sibling bridge on Windows), restart, then browse the account's metals/CFDs and check real Bid history/live updates.
 
 ## Calendar-aware Live Alerts, ordered refresh and check history — 2026-10-31
 

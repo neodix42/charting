@@ -221,7 +221,7 @@ func (m *Manager) ensure(ctx context.Context, login bool, pin string, force bool
 	config := m.config
 	if config.Username == "" || config.Password == "" {
 		m.mu.Unlock()
-		return nil, &exchange.Error{Kind: "restricted", Message: "Configure a Dukascopy JForex username and password in Settings → Dukascopy before opening a forex chart"}
+		return nil, &exchange.Error{Kind: "restricted", Message: "Configure a Dukascopy JForex username and password in Settings → Dukascopy before opening a Dukascopy chart"}
 	}
 	p := m.process
 	if p != nil {
@@ -441,9 +441,9 @@ func (m *Manager) Instruments(ctx context.Context) ([]domain.Instrument, error) 
 	}
 	seen := map[string]bool{}
 	for _, instrument := range instruments {
-		key := domain.FeedKey{Exchange: "dukascopy", Market: "forex", Instrument: instrument.NativeID, Timeframe: "1m"}
-		if key.Validate() != nil || instrument.Market != "forex" || seen[instrument.NativeID] || instrument.BaseAsset == "" || instrument.QuoteAsset == "" {
-			return nil, errors.New("The JForex bridge returned an invalid forex instrument")
+		key := domain.FeedKey{Exchange: "dukascopy", Market: instrument.Market, Instrument: instrument.NativeID, Timeframe: "1m"}
+		if key.Validate() != nil || seen[instrument.NativeID] || instrument.BaseAsset == "" || instrument.QuoteAsset == "" {
+			return nil, errors.New("The JForex bridge returned an invalid instrument")
 		}
 		seen[instrument.NativeID] = true
 	}
@@ -459,8 +459,8 @@ func validateKey(key domain.FeedKey) error {
 	if err := key.Validate(); err != nil {
 		return &exchange.Error{Kind: "unsupportedInterval", Message: err.Error()}
 	}
-	if key.Exchange != "dukascopy" || key.Market != "forex" {
-		return &exchange.Error{Kind: "unknownInstrument", Message: "The JForex adapter supplies Dukascopy forex quotes only"}
+	if key.Exchange != "dukascopy" {
+		return &exchange.Error{Kind: "unknownInstrument", Message: "The JForex adapter supplies Dukascopy quotes only"}
 	}
 	return nil
 }
@@ -564,7 +564,7 @@ func (m *Manager) History(ctx context.Context, key domain.FeedKey, from, to int6
 		}
 	}
 	if cache == nil {
-		return nil, errors.New("Configure Dukascopy credentials before requesting forex history")
+		return nil, errors.New("Configure Dukascopy credentials before requesting Dukascopy history")
 	}
 	cache.mu.Lock()
 	beforeWrite := cache.writes
@@ -588,7 +588,7 @@ func (m *Manager) Stream(ctx context.Context, key domain.FeedKey, emit func([]do
 	if err := validateKey(key); err != nil {
 		return err
 	}
-	emit(nil, domain.Health{State: "connecting", Reason: "Connecting to authenticated Dukascopy forex Bid quotes"})
+	emit(nil, domain.Health{State: "connecting", Reason: "Connecting to authenticated Dukascopy Bid quotes"})
 	setup, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	p, release, err := m.begin(setup, true, "")
 	if err != nil {

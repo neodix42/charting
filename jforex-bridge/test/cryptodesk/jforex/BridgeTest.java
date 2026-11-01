@@ -45,6 +45,7 @@ public final class BridgeTest {
     }
     static JsonObject request(String op) { JsonObject out = new JsonObject(); out.addProperty("id", "test-" + op); out.addProperty("op", op); return out; }
     static JsonObject feed(String instrument) { return JsonParser.parseString("{\"exchange\":\"dukascopy\",\"market\":\"forex\",\"instrument\":\"" + instrument + "\",\"timeframe\":\"1m\"}").getAsJsonObject(); }
+    static JsonObject feed(Instrument instrument, String market) { JsonObject out = feed(instrument.name()); out.addProperty("market", market); return out; }
     static JsonObject good(Bridge bridge, JsonObject request) { JsonObject response = bridge.handle(request); check(response.get("ok").getAsBoolean(), response.toString()); return response; }
     public static void main(String[] args) throws Exception {
         Path cache = Files.createTempDirectory("cryptodesk-jforex-test-");
@@ -54,6 +55,13 @@ public final class BridgeTest {
         AtomicInteger factories = new AtomicInteger(), historyCalls = new AtomicInteger(), authArgs = new AtomicInteger();
         AtomicReference<Object[]> historyArguments = new AtomicReference<>();
         AtomicReference<IStrategy> strategy = new AtomicReference<>();
+        Map<Instrument, String> offered = new HashMap<>(Map.of(Instrument.EURUSD, "forex", Instrument.USDJPY, "forex",
+            Instrument.BTCUSD, "cfd", Instrument.ETHUSD, "cfd", Instrument.XAUUSD, "metal", Instrument.XAGUSD, "metal",
+            Instrument.AAPLUSUSD, "cfd", Instrument.USA30IDXUSD, "cfd", Instrument.BRENTCMDUSD, "cfd", Instrument.SPYUSUSD, "cfd"));
+        Instrument offshoreYuan = Instrument.fromString("USD/CNH");
+        check(offshoreYuan != null && offshoreYuan.getSecondaryJFCurrency().getJavaCurrency() == null,
+            "regression covers SDK fiat absent from Java ISO currencies");
+        offered.put(offshoreYuan, "forex");
         long now = System.currentTimeMillis() / 60000 * 60000;
         AtomicReference<IBar> active = new AtomicReference<>(bar(now, 1.10, 1.15, 1.09, 1.14));
         IHistory history = fake(IHistory.class, (method, values) -> switch (method) {
@@ -82,7 +90,7 @@ public final class BridgeTest {
             case "isConnected" -> connected.get();
             case "connect" -> { authArgs.set(values.length); connected.set(true); yield null; }
             case "getCaptchaImage" -> new BufferedImage(3, 2, BufferedImage.TYPE_INT_RGB);
-            case "getAvailableInstruments" -> Set.of(Instrument.EURUSD, Instrument.USDJPY, Instrument.BTCUSD, Instrument.ETHUSD, Instrument.XAUUSD);
+            case "getAvailableInstruments" -> offered.keySet();
             case "getSubscribedInstruments" -> new HashSet<>(subscribed);
             case "unsubscribeInstruments" -> { subscribed.removeAll((Set<Instrument>) values[0]); yield null; }
             case "startStrategy" -> { strategy.set((IStrategy) values[0]); strategy.get().onStart(context); yield 7L; }
@@ -94,10 +102,27 @@ public final class BridgeTest {
             JsonObject captcha = request("captcha"); captcha.addProperty("cacheDirectory", cache.toString());
             check(good(bridge, captcha).getAsJsonObject("result").get("imageDataUrl").getAsString().startsWith("data:image/png;base64,"), "PNG login challenge");
             JsonObject login = request("connect"); login.addProperty("username", "fake-user"); login.addProperty("password", "never-log-secret"); login.addProperty("pin", "fake-pin"); login.addProperty("environment", "live"); login.addProperty("cacheDirectory", cache.toString());
-            good(bridge, login); check(factories.get() == 1 && authArgs.get() == 4, "CAPTCHA and PIN login must share the same SDK client");
+            JsonObject connectedInfo = good(bridge, login).getAsJsonObject("result");
+            check(connectedInfo.get("instrumentCount").getAsInt() == offered.size(), "connection count includes every offered instrument");
+            check(factories.get() == 1 && authArgs.get() == 4, "CAPTCHA and PIN login must share the same SDK client");
             JsonArray catalog = good(bridge, request("instruments")).getAsJsonArray("result");
-            check(catalog.size() == 2, "catalog excludes SDK crypto and metals even if FOREX type");
-            check(catalog.get(0).getAsJsonObject().get("nativeId").getAsString().equals("EURUSD"), "stable sorted pair names");
+            check(catalog.size() == offered.size(), "catalog includes all account-supported forex, metals, stocks, indices, commodities, ETFs and crypto");
+            List<String> expectedNames = offered.keySet().stream().map(Instrument::name).sorted().toList();
+            for (int i = 0; i < catalog.size(); i++) {
+                JsonObject item = catalog.get(i).getAsJsonObject();
+                String nativeName = expectedNames.get(i);
+                check(item.get("nativeId").getAsString().equals(nativeName), "stable sorted native names");
+                Instrument instrument = offered.keySet().stream().filter(value -> value.name().equals(nativeName)).findFirst().orElseThrow();
+                check(item.get("market").getAsString().equals(offered.get(instrument)), "correct market for " + instrument);
+                check(item.get("baseAsset").getAsString().equals(instrument.getPrimaryJFCurrency().getCurrencyCode()), "preserve non-ISO primary asset");
+                check(item.get("quoteAsset").getAsString().equals(instrument.getSecondaryJFCurrency().getCurrencyCode()), "preserve quote asset");
+                check(new java.math.BigDecimal(item.get("priceIncrement").getAsString()).scale() == instrument.getTickScale(), "SDK precision preserved");
+                JsonObject metadata = item.getAsJsonObject("providerMetadata");
+                check(metadata.get("sdkSymbol").getAsString().equals(instrument.toString()) && metadata.get("sdkType").getAsString().equals(instrument.getType().name()), "native symbol/type metadata preserved");
+                check(metadata.get("volumeUnit").getAsString().equals(offered.get(instrument).equals("forex") ? "millions" : "provider units"), "non-FX volume has no invented currency unit");
+                if (instrument == Instrument.BTCUSD) check(metadata.get("assetType").getAsString().equals("crypto"), "SDK FOREX crypto is discoverable as crypto CFD");
+                if (instrument == offshoreYuan) check(metadata.get("assetType").getAsString().equals("forex"), "non-ISO fiat remains a forex asset");
+            }
             JsonObject query = request("history"); query.add("feedKey", feed("EURUSD")); query.addProperty("limit", 3); query.addProperty("from", (now - 60000) / 1000); query.addProperty("to", now / 1000);
             JsonArray bars = good(bridge, query).getAsJsonArray("result"); check(bars.size() == 1, "history honors exclusive UTC seconds range");
             check(bars.get(0).getAsJsonObject().get("closed").getAsBoolean(), "past candles are closed");
@@ -139,7 +164,26 @@ public final class BridgeTest {
             JsonObject unsubscribe = request("unsubscribe"); unsubscribe.addProperty("subscriptionId", "view-1"); good(bridge, unsubscribe); check(subscribed.contains(Instrument.EURUSD), "shared instrument stays subscribed for remaining view");
             unsubscribe.addProperty("subscriptionId", "view-2"); good(bridge, unsubscribe); check(subscribed.isEmpty(), "last inactive chart unsubscribes SDK instrument");
             before = events.size(); strategy.get().onTick(Instrument.EURUSD, tick(now + 2000, 1.15)); check(events.size() == before, "inactive feeds emit no updates");
-            JsonObject unknown = query.deepCopy(); unknown.add("feedKey", feed("BTCUSD")); check(!bridge.handle(unknown).get("ok").getAsBoolean(), "unavailable pair fails closed");
+            for (var entry : offered.entrySet()) {
+                Instrument instrument = entry.getKey();
+                if (entry.getValue().equals("forex")) continue;
+                JsonObject selectedFeed = feed(instrument, entry.getValue());
+                JsonObject selectedHistory = query.deepCopy(); selectedHistory.add("feedKey", selectedFeed);
+                check(good(bridge, selectedHistory).getAsJsonArray("result").size() == 1 && historyArguments.get()[0] == instrument, "non-FX history uses the exact SDK instrument");
+                String subscriptionId = "asset-" + instrument.name();
+                JsonObject selectedSubscription = request("subscribe"); selectedSubscription.addProperty("subscriptionId", subscriptionId); selectedSubscription.add("feedKey", selectedFeed);
+                good(bridge, selectedSubscription);
+                await(() -> { synchronized (events) { return events.stream().anyMatch(event -> event.get("subscriptionId").getAsString().equals(subscriptionId) && event.has("health") && event.getAsJsonObject("health").get("state").getAsString().equals("live")); } }, "non-FX seed finishes");
+                check(subscribed.equals(Set.of(instrument)), "only selected non-FX instrument is subscribed");
+                strategy.get().onTick(instrument, tick(now + 3000, 12.5));
+                JsonObject latest = events.stream().filter(event -> event.has("bars")).reduce((first, secondEvent) -> secondEvent).orElseThrow();
+                check(latest.get("subscriptionId").getAsString().equals(subscriptionId) && latest.getAsJsonArray("bars").get(0).getAsJsonObject().get("close").getAsDouble() == 12.5, "selected non-FX feed receives its real Bid ticks");
+                unsubscribe.addProperty("subscriptionId", subscriptionId); good(bridge, unsubscribe);
+                check(subscribed.isEmpty(), "non-FX unsubscribe releases SDK instrument");
+                JsonObject wrongMarket = selectedHistory.deepCopy(); wrongMarket.getAsJsonObject("feedKey").addProperty("market", "forex");
+                check(!bridge.handle(wrongMarket).get("ok").getAsBoolean(), "non-FX cannot masquerade as a fiat pair");
+            }
+            JsonObject unknown = query.deepCopy(); unknown.add("feedKey", feed("GBPUSD")); check(!bridge.handle(unknown).get("ok").getAsBoolean(), "unavailable account instrument fails closed");
             query.addProperty("limit", 5001); check(!bridge.handle(query).get("ok").getAsBoolean(), "bounded history requests");
             good(bridge, request("disconnect")); check(!connected.get(), "disconnect closes session");
         }
@@ -166,7 +210,8 @@ public final class BridgeTest {
             good(bridge, login);
             check(loginCalls.get() == 1 && strategyCalls.get() == 2, "retry restarts failed data strategy without reauthenticating the SDK session");
         }
-        check(Bridge.isFiatForex(Instrument.EURUSD) && !Bridge.isFiatForex(Instrument.BTCUSD), "strict fiat pair classification");
+        check(Bridge.isFiatForex(Instrument.EURUSD) && Bridge.isFiatForex(offshoreYuan)
+            && !Bridge.isFiatForex(Instrument.BTCUSD), "fiat including non-ISO CNH stays separate from crypto");
         System.out.println("JForex bridge offline SDK protocol checks passed");
         Files.delete(cache);
     }

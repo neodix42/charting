@@ -45,6 +45,83 @@ func forexKey() domain.FeedKey {
 	return domain.FeedKey{Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"}
 }
 
+func dukascopyAssetFixtures() []domain.Instrument {
+	return []domain.Instrument{
+		{NativeID: "XAUUSD", Market: "metal", BaseAsset: "XAU", QuoteAsset: "USD", PriceIncrement: "0.001", SupportedIntervals: domain.Intervals, ProviderMetadata: map[string]string{"sdkSymbol": "XAU/USD", "priceSide": "bid"}},
+		{NativeID: "AAPLUSUSD", Market: "cfd", BaseAsset: "AAPL.US", QuoteAsset: "USD", PriceIncrement: "0.001", SupportedIntervals: domain.Intervals, ProviderMetadata: map[string]string{"sdkSymbol": "AAPL.US/USD", "priceSide": "bid"}},
+		{NativeID: "USA30IDXUSD", Market: "cfd", BaseAsset: "USA30.IDX", QuoteAsset: "USD", PriceIncrement: "0.001", SupportedIntervals: domain.Intervals},
+		{NativeID: "BRENTCMDUSD", Market: "cfd", BaseAsset: "BRENT.CMD", QuoteAsset: "USD", PriceIncrement: "0.001", SupportedIntervals: domain.Intervals},
+		{NativeID: "SPYUSUSD", Market: "cfd", BaseAsset: "SPY.US", QuoteAsset: "USD", PriceIncrement: "0.001", SupportedIntervals: domain.Intervals},
+		{NativeID: "BTCUSD", Market: "cfd", BaseAsset: "BTC", QuoteAsset: "USD", PriceIncrement: "0.01", SupportedIntervals: domain.Intervals, ProviderMetadata: map[string]string{"assetType": "crypto"}},
+	}
+}
+
+func TestAllDukascopyAssetClassesUseSharedCatalogHistoryAndStream(t *testing.T) {
+	m, count := testManager(t, "all-assets")
+	items, err := m.Instruments(context.Background())
+	if err != nil || len(items) != 8 || m.Info().InstrumentCount != 8 {
+		t.Fatal("full account catalog was not retained", items, m.Info(), err)
+	}
+	for i := 1; i < len(items); i++ {
+		if items[i-1].NativeID >= items[i].NativeID {
+			t.Fatal("catalog is not sorted by native ID", items)
+		}
+	}
+	for _, expected := range dukascopyAssetFixtures() {
+		t.Run(expected.NativeID, func(t *testing.T) {
+			found := false
+			for _, actual := range items {
+				if actual.NativeID == expected.NativeID {
+					found = reflect.DeepEqual(actual, expected)
+				}
+			}
+			if !found {
+				t.Fatal("catalog changed provider metadata or asset identity", expected, items)
+			}
+			key := domain.FeedKey{Exchange: "dukascopy", Market: expected.Market, Instrument: expected.NativeID, Timeframe: "1h"}
+			bars, err := m.History(context.Background(), key, 1792368000, 1792378800, 3)
+			if err != nil || len(bars) != 3 || math.Abs(bars[1].Close-1.2) > 1e-10 {
+				t.Fatal("non-forex history failed normalization", bars, err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			updates := make(chan []domain.Candle, 10)
+			done := make(chan error, 1)
+			go func() {
+				done <- m.Stream(ctx, key, func(bars []domain.Candle, _ domain.Health) {
+					if len(bars) > 0 {
+						updates <- bars
+					}
+				})
+			}()
+			waitBars(t, updates)
+			cancel()
+			select {
+			case err := <-done:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("non-forex subscription did not detach")
+			}
+		})
+	}
+	if count.Load() != 1 {
+		t.Fatal("asset types did not share authenticated SDK process", count.Load())
+	}
+}
+
+func TestDukascopyCatalogRejectsMalformedAndOtherProviderMarkets(t *testing.T) {
+	for _, scenario := range []string{"catalog-wrong-market", "catalog-unknown-market", "catalog-duplicate", "catalog-missing-asset", "catalog-unsafe-id"} {
+		t.Run(scenario, func(t *testing.T) {
+			m, _ := testManager(t, scenario)
+			if _, err := m.Instruments(context.Background()); err == nil || !strings.Contains(err.Error(), "invalid instrument") {
+				t.Fatal("malformed catalog accepted", err)
+			}
+		})
+	}
+}
+
 func TestSettingsPersistWithoutExposingPasswordAndIdentityChangesRequireNewSecret(t *testing.T) {
 	m, count := testManager(t, "")
 	if count.Load() != 0 {
@@ -524,6 +601,20 @@ func TestBridgeHelperProcess(t *testing.T) {
 		var id, op string
 		_ = json.Unmarshal(request["id"], &id)
 		_ = json.Unmarshal(request["op"], &op)
+		if scenario == "all-assets" && (op == "history" || op == "subscribe") {
+			var key domain.FeedKey
+			_ = json.Unmarshal(request["feedKey"], &key)
+			matched := false
+			for _, instrument := range dukascopyAssetFixtures() {
+				if key.Exchange == "dukascopy" && key.Market == instrument.Market && key.Instrument == instrument.NativeID && key.Timeframe == "1h" {
+					matched = true
+				}
+			}
+			if !matched {
+				_ = encoder.Encode(map[string]any{"id": id, "ok": false, "error": map[string]any{"kind": "unknownInstrument", "message": "Dukascopy fixture feed identity changed"}})
+				continue
+			}
+		}
 		switch op {
 		case "connect":
 			connections++
@@ -543,7 +634,24 @@ func TestBridgeHelperProcess(t *testing.T) {
 			challenge = true
 			respond(id, LoginChallenge{ImageDataURL: pngImage})
 		case "instruments":
-			respond(id, []domain.Instrument{{NativeID: "USDJPY", Market: "forex", BaseAsset: "USD", QuoteAsset: "JPY", SupportedIntervals: domain.Intervals}, {NativeID: "EURUSD", Market: "forex", BaseAsset: "EUR", QuoteAsset: "USD", SupportedIntervals: domain.Intervals}})
+			items := []domain.Instrument{{NativeID: "USDJPY", Market: "forex", BaseAsset: "USD", QuoteAsset: "JPY", SupportedIntervals: domain.Intervals}, {NativeID: "EURUSD", Market: "forex", BaseAsset: "EUR", QuoteAsset: "USD", SupportedIntervals: domain.Intervals}}
+			if scenario == "all-assets" {
+				items = append(items, dukascopyAssetFixtures()...)
+			} else if strings.HasPrefix(scenario, "catalog-") {
+				switch scenario {
+				case "catalog-wrong-market":
+					items[0].Market = "spot"
+				case "catalog-unknown-market":
+					items[0].Market = "future"
+				case "catalog-duplicate":
+					items = append(items, items[0])
+				case "catalog-missing-asset":
+					items[0].BaseAsset = ""
+				case "catalog-unsafe-id":
+					items[0].NativeID = "https://invalid.example/symbol"
+				}
+			}
+			respond(id, items)
 		case "history":
 			if scenario == "hang-history" {
 				select {}

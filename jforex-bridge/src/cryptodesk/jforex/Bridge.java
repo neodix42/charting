@@ -22,6 +22,12 @@ public final class Bridge implements AutoCloseable {
     static final List<String> INTERVALS = List.of("1m", "5m", "15m", "1h", "4h", "1d", "1w");
     static final int MAX_LINE = 65536;
     static final int SEED_RANGE_BARS = 1000;
+    // SDK predefined instruments have no group until account metadata loads.
+    // Explicit provider crypto codes are a fallback, never an ISO-currency test:
+    // offshore yuan (CNH), for example, is fiat despite having no Java Currency.
+    // https://www.dukascopy.com/swiss/english/crypto/range-of-markets/
+    private static final Set<String> CRYPTO_CURRENCIES = Set.of("BTC", "ETH", "LTC", "BCH", "XLM", "DSH", "TRX",
+        "ADA", "UNI", "LNK", "AVE", "CMP", "YFI", "BAT");
     private final Supplier<IClient> factory;
     private final Consumer<JsonObject> output;
     private final Map<String, Subscription> subscriptions = new ConcurrentHashMap<>();
@@ -116,7 +122,7 @@ public final class Bridge implements AutoCloseable {
                 if (sub.seedError != null) health(sub.id, "error", sub.seedError, 0);
                 else if (sub.loading) health(sub.id, "reconciling", "Loading JForex Bid candles; live quotes remain subscribed", 0);
                 else if (context.getDataService().isOfflineTime(nowMillis.getAsLong(), sub.instrument))
-                    health(sub.id, "marketClosed", "JForex reports this forex market is closed", 0);
+                    health(sub.id, "marketClosed", "JForex reports this market is closed", 0);
                 else health(sub.id, "live", "Connected to JForex Bid feed", 0);
             } catch (Exception ignored) { health(sub.id, "live", "Connected to JForex Bid feed", 0); }
         }
@@ -231,11 +237,9 @@ public final class Bridge implements AutoCloseable {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(35);
         while (!client.isConnected() && System.nanoTime() < deadline && !closing) Thread.sleep(100);
         if (!client.isConnected()) throw new Failure("offline", "JForex connection timed out. Check credentials, account environment and network access.");
-        TreeSet<Instrument> forex = new TreeSet<>(Comparator.comparing(Instrument::name));
-        for (Instrument instrument : client.getAvailableInstruments()) {
-            if (isFiatForex(instrument)) forex.add(instrument);
-        }
-        available = Collections.unmodifiableSet(forex);
+        TreeSet<Instrument> instruments = new TreeSet<>(Comparator.comparing(Instrument::name));
+        instruments.addAll(client.getAvailableInstruments());
+        available = Collections.unmodifiableSet(instruments);
         strategyReady = new CountDownLatch(1);
         strategyId = client.startStrategy(strategy, (pid, source, error) -> allHealth("error", "JForex data strategy failed"));
         if (!strategyReady.await(15, TimeUnit.SECONDS) || context == null) throw new Failure("offline", "JForex data strategy did not become ready");
@@ -276,23 +280,55 @@ public final class Bridge implements AutoCloseable {
     }
 
     static boolean isFiatForex(Instrument instrument) {
-        if (instrument.getType() != IFinancialInstrument.Type.FOREX) return false;
-        try {
-            Currency.getInstance(instrument.getPrimaryJFCurrency().getCurrencyCode());
-            Currency.getInstance(instrument.getSecondaryJFCurrency().getCurrencyCode());
-            return true;
-        } catch (IllegalArgumentException ignored) { return false; }
+        return instrument.getType() == IFinancialInstrument.Type.FOREX && !isCrypto(instrument);
+    }
+
+    private static boolean isCrypto(Instrument instrument) {
+        if (instrument.getGroup() != null) return instrument.getGroup().isCrypto();
+        return instrument.getType() == IFinancialInstrument.Type.FOREX
+            && (CRYPTO_CURRENCIES.contains(instrument.getPrimaryJFCurrency().getCurrencyCode())
+                || CRYPTO_CURRENCIES.contains(instrument.getSecondaryJFCurrency().getCurrencyCode()));
+    }
+
+    static String market(Instrument instrument) {
+        // The SDK also uses FOREX for cryptocurrencies such as BTC/USD. Keep
+        // existing fiat identities while exposing those contracts as CFDs.
+        if (isFiatForex(instrument)) return "forex";
+        return instrument.getType() == IFinancialInstrument.Type.METAL ? "metal" : "cfd";
+    }
+
+    private static String assetType(Instrument instrument) {
+        if (instrument.getGroup() != null) {
+            var group = instrument.getGroup();
+            if (group.isCrypto()) return "crypto";
+            if (group.isCfdCommodities()) return "commodity";
+            if (group.isCfdIndices()) return "index";
+            if (group.isCfdStocks()) return "stock";
+            if (group.isCfdETF()) return "etf";
+            if (group.isCfdBonds()) return "bond";
+        }
+        if (isCrypto(instrument)) return "crypto";
+        return market(instrument);
     }
 
     private Object instruments() {
         requireConnected();
         List<Object> result = new ArrayList<>();
         for (Instrument instrument : available) {
-            result.add(Map.of("nativeId", instrument.name(), "market", "forex",
+            Map<String, String> metadata = new HashMap<>();
+            metadata.put("priceSide", "bid");
+            metadata.put("volumeUnit", isFiatForex(instrument) ? "millions" : "provider units");
+            metadata.put("sdkSymbol", instrument.toString());
+            metadata.put("sdkType", instrument.getType().name());
+            metadata.put("assetType", assetType(instrument));
+            if (instrument.getDescription() != null) metadata.put("description", instrument.getDescription());
+            if (instrument.getGroup() != null && instrument.getGroup().getName() != null)
+                metadata.put("group", instrument.getGroup().getName());
+            result.add(Map.of("nativeId", instrument.name(), "market", market(instrument),
                 "baseAsset", instrument.getPrimaryJFCurrency().getCurrencyCode(), "quoteAsset", instrument.getSecondaryJFCurrency().getCurrencyCode(),
                 "priceIncrement", BigDecimal.ONE.movePointLeft(instrument.getTickScale()).toPlainString(),
                 "sizeIncrement", "", "availability", "available", "supportedIntervals", INTERVALS,
-                "providerMetadata", Map.of("priceSide", "bid", "volumeUnit", "millions", "sdkSymbol", instrument.toString())));
+                "providerMetadata", metadata));
         }
         return result;
     }
@@ -373,7 +409,7 @@ public final class Bridge implements AutoCloseable {
         }
         // Account-scoped local candles already supply the old history. Fetch
         // only the overlap and missing suffix, bounded per SDK request/event.
-        // Empty successful chunks are valid forex market closures.
+        // Empty successful chunks are valid market closures.
         from = history.getBarStart(sub.period, from);
         while (from <= end) {
             if (closing || Thread.currentThread().isInterrupted() || sub.seedGeneration.get() != generation) throw new InterruptedException();
@@ -422,7 +458,7 @@ public final class Bridge implements AutoCloseable {
                 emitBars(sub, new ArrayList<>(bars.values()), coverageFrom, coverageTo);
             if (finished) {
                 if (context.getDataService().isOfflineTime(nowMillis.getAsLong(), sub.instrument))
-                    health(sub.id, "marketClosed", "JForex reports this forex market is closed", 0);
+                    health(sub.id, "marketClosed", "JForex reports this market is closed", 0);
                 else health(sub.id, "live", "Connected to JForex Bid feed; waiting for market updates", 0);
             }
             return true;
@@ -515,12 +551,13 @@ public final class Bridge implements AutoCloseable {
         }
     }
     private Feed feed(JsonObject value) {
-        if (value == null || !"dukascopy".equals(text(value, "exchange", 32)) || !"forex".equals(text(value, "market", 32)))
-            throw new Failure("unknownInstrument", "Select a Dukascopy forex instrument");
-        String symbol = text(value, "instrument", 32), timeframe = text(value, "timeframe", 8);
+        if (value == null || !"dukascopy".equals(text(value, "exchange", 32)))
+            throw new Failure("unknownInstrument", "Select a Dukascopy instrument");
+        String symbol = text(value, "instrument", 128), timeframe = text(value, "timeframe", 8);
         Instrument instrument = null;
         for (Instrument item : available) if (item.name().equals(symbol)) { instrument = item; break; }
-        if (instrument == null) throw new Failure("unknownInstrument", "This forex pair is unavailable for the connected JForex account");
+        if (instrument == null || !market(instrument).equals(text(value, "market", 32)))
+            throw new Failure("unknownInstrument", "This instrument or market is unavailable for the connected JForex account");
         Period period = PERIODS.get(timeframe);
         if (period == null) throw new Failure("unsupportedInterval", "Unsupported JForex chart period");
         return new Feed(instrument, period);

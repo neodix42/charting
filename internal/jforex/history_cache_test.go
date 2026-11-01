@@ -299,6 +299,51 @@ func TestHistoryCacheManagerRestartAccountIsolationAndProvisionalWrites(t *testi
 	}
 }
 
+func TestDukascopyAssetHistoryRestoresSeparatelyWithoutStartingJava(t *testing.T) {
+	m, count := testManager(t, "")
+	keys := []domain.FeedKey{forexKey(),
+		{Exchange: "dukascopy", Market: "metal", Instrument: "XAUUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "cfd", Instrument: "AAPLUSUSD", Timeframe: "1h"},
+		{Exchange: "dukascopy", Market: "cfd", Instrument: "BTCUSD", Timeframe: "1h"},
+	}
+	for index, key := range keys {
+		bar := cacheBar(historyCacheStart)
+		bar.Open, bar.Low, bar.High, bar.Close = float64(index+1)*100, float64(index+1)*100, float64(index+1)*100+2, float64(index+1)*100+1
+		if err := m.StoreCandles(key, []domain.Candle{bar}); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.RecordHistoryCoverage(key, historyCacheStart, historyCacheStart+3600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if count.Load() != 0 {
+		t.Fatal("persisting asset data started Java")
+	}
+	profile := filepath.Dir(m.path)
+	m.Close()
+	restored := newManager(profile, bridgeRuntime{}, nil)
+	defer restored.Close()
+	for index, key := range keys {
+		bars, err := restored.History(context.Background(), key, historyCacheStart, historyCacheStart+3600, 10)
+		if err != nil || len(bars) != 1 || bars[0].Close != float64(index+1)*100+1 {
+			t.Fatal("asset history mixed or required Java after restart", key, bars, err)
+		}
+		otherPeriod := key
+		otherPeriod.Timeframe = "1d"
+		if bars, err = restored.CachedCandles(otherPeriod, 0, 0, 10); err != nil || len(bars) != 0 {
+			t.Fatal("cached asset history leaked across periods", otherPeriod, bars, err)
+		}
+	}
+	if _, err := restored.Configure(Settings{Username: testUsername, Password: testPassword, Environment: "live"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range keys {
+		if bars, err := restored.CachedCandles(key, 0, 0, 10); err != nil || len(bars) != 0 {
+			t.Fatal("asset history leaked across account environments", key, bars, err)
+		}
+	}
+}
+
 func TestStreamHistoryCheckpointDoesNotFollowLaterNativeCandlesAcrossFailedGap(t *testing.T) {
 	m, _ := testManager(t, "")
 	key := forexKey()

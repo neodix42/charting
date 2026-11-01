@@ -329,7 +329,9 @@
           "enum": [
             "spot",
             "perpetual",
-            "forex"
+            "forex",
+            "metal",
+            "cfd"
           ]
         },
         "instrument": {
@@ -432,7 +434,11 @@
           "then": {
             "properties": {
               "market": {
-                "const": "forex"
+                "enum": [
+                  "forex",
+                  "metal",
+                  "cfd"
+                ]
               }
             }
           }
@@ -554,7 +560,9 @@
           "enum": [
             "spot",
             "perpetual",
-            "forex"
+            "forex",
+            "metal",
+            "cfd"
           ]
         },
         "instrument": {
@@ -646,7 +654,11 @@
           "then": {
             "properties": {
               "market": {
-                "const": "forex"
+                "enum": [
+                  "forex",
+                  "metal",
+                  "cfd"
+                ]
               }
             }
           }

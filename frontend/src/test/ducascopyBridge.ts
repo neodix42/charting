@@ -7,9 +7,20 @@ export function ducascopyBridge(){
  let saved:DucascopySettings=JSON.parse(sessionStorage.getItem(key)||'null')??{username:'',password:'',environment:'demo'};
  let connected=false,tests=0;
  const pairs=[['EUR','USD'],['GBP','USD'],['USD','JPY']];
- const info=():DucascopyInfo=>({username:saved.username,environment:saved.environment,passwordConfigured:!!saved.password,runtimeAvailable:true,runtimeDirectory:'/explicit-test/jforex',javaPath:'/explicit-test/java/bin/java',connected,instrumentCount:connected?pairs.length:0});
+ const catalog:Instrument[]=[...pairs.map(([baseAsset,quoteAsset])=>({nativeId:baseAsset+quoteAsset,market:'forex' as const,baseAsset,quoteAsset,priceIncrement:quoteAsset==='JPY'?'0.001':'0.00001',sizeIncrement:'0.001',availability:'available',supportedIntervals:intervals,providerMetadata:{priceSide:'bid',volumeUnit:`million ${baseAsset}`,sdkSymbol:`${baseAsset}/${quoteAsset}`,description:`${baseAsset} / ${quoteAsset} · explicit JForex test fixture`}})),
+  ...[
+   {nativeId:'XAUUSD',market:'metal' as const,baseAsset:'XAU',sdkSymbol:'XAU/USD',description:'Gold'},
+   {nativeId:'XAGUSD',market:'metal' as const,baseAsset:'XAG',sdkSymbol:'XAG/USD',description:'Silver'},
+   {nativeId:'USA500IDXUSD',market:'cfd' as const,baseAsset:'USA500.IDX',sdkSymbol:'USA500.IDX/USD',description:'US 500 index'},
+   {nativeId:'BRENTCMDUSD',market:'cfd' as const,baseAsset:'BRENT.CMD',sdkSymbol:'BRENT.CMD/USD',description:'Brent crude oil'},
+   {nativeId:'AAPLUSUSD',market:'cfd' as const,baseAsset:'AAPL.US',sdkSymbol:'AAPL.US/USD',description:'Apple stock'},
+   {nativeId:'SPYUSUSD',market:'cfd' as const,baseAsset:'SPY.US',sdkSymbol:'SPY.US/USD',description:'SPDR S&P 500 ETF'},
+   {nativeId:'BTCUSD',market:'cfd' as const,baseAsset:'BTC',sdkSymbol:'BTC/USD',description:'Bitcoin',assetType:'crypto'},
+  ].map(({sdkSymbol,description,assetType,...item})=>({...item,quoteAsset:'USD',priceIncrement:'0.01',sizeIncrement:'',availability:'available',supportedIntervals:intervals,providerMetadata:{priceSide:'bid',volumeUnit:'provider units',sdkSymbol,description,assetType:assetType||item.market}})),
+ ];
+ const info=():DucascopyInfo=>({username:saved.username,environment:saved.environment,passwordConfigured:!!saved.password,runtimeAvailable:true,runtimeDirectory:'/explicit-test/jforex',javaPath:'/explicit-test/java/bin/java',connected,instrumentCount:connected?catalog.length:0});
  const connect=()=>{if(!saved.username||!saved.password)throw Error('Save JForex credentials in Settings → Dukascopy.');connected=true;};
- const instruments=():Instrument[]=>{connect();return pairs.map(([baseAsset,quoteAsset])=>({nativeId:baseAsset+quoteAsset,market:'forex',baseAsset,quoteAsset,priceIncrement:quoteAsset==='JPY'?'0.001':'0.00001',sizeIncrement:'0.001',availability:'available',supportedIntervals:intervals,providerMetadata:{priceType:'bid',volumeUnit:`million ${baseAsset}`,description:`${baseAsset} / ${quoteAsset} · explicit JForex test fixture`}}));};
+ const instruments=():Instrument[]=>{connect();return structuredClone(catalog);};
  const api:Pick<Backend,'GetDucascopy'|'ConfigureDucascopy'|'TestDucascopyConnection'|'GetDucascopyLoginChallenge'|'TestDucascopyConnectionWithPIN'|'CancelDucascopyConnectionTest'>={
   async GetDucascopy(){return info();},
   async ConfigureDucascopy(request){

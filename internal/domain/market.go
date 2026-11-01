@@ -41,7 +41,7 @@ func (k FeedKey) Validate() error {
 func supportedMarket(exchange, market string) bool {
 	switch exchange {
 	case "dukascopy":
-		return market == "forex"
+		return market == "forex" || market == "metal" || market == "cfd"
 	case "binance", "bybit":
 		return market == "spot" || market == "perpetual"
 	case "coinbase":
