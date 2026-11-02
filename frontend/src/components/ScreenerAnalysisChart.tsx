@@ -6,7 +6,7 @@ import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
-import {analysisMatchMarkers,analysisTradePriceLines,profitableMatchColor} from '../charts/analysisMarkers';
+import {analysisMatchMarkers,analysisTradeExecutionDetails,analysisTradePriceLines,profitableMatchColor} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -26,6 +26,7 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  const row=hover??data.bars.find(bar=>bar.index===data.matchIndex)??data.bars.find(bar=>bar.time===data.matchTime);
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
  const tradePrices=analysisTradePriceLines(data);
+ const executionDetails=analysisTradeExecutionDetails(data);
  useEffect(()=>{
   const update=()=>setTheme(document.documentElement.dataset.theme??'light');update();
   const observer=new MutationObserver(update);observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});analysisChartResources.observers++;
@@ -115,7 +116,8 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  useEffect(()=>{applyTheme.current(theme);},[theme,data,signature,height]);
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(10,fontSize)}});},[fontSize]);
  return <>
-  <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
+  <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{hover?'Hovered bar':'Signal bar'}: {analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
+  {!!executionDetails.length&&<div className="analysis-chart-note analysis-trade-execution" aria-label="Selected trade timing and outcome"><dl>{executionDetails.map(({label,value})=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p>Match marks the signal bar; entry uses the next available bar’s open. Times identify UTC bars, not the exact intrabar exit time.</p></div>}
   {!!data.profitableMatches?.length&&<p className="analysis-chart-note analysis-chart-legend"><span aria-hidden="true" style={{backgroundColor:profitableMatchColor}}/>Green dot: match whose simulated trade hit TP.</p>}
   {!!tradePrices.length&&<div className="analysis-chart-note analysis-trade-prices" aria-label="Simulated trade prices">{tradePrices.map(line=><span key={line}>{line}</span>)}</div>}
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
@@ -150,7 +152,7 @@ export function ScreenerAnalysisChart({api,selection,onClose,onNavigate}:{api:Sc
  const step=async(direction:-1|1)=>{if(navigationBusy.current)return;navigationBusy.current=true;setNavigating(true);setError('');try{await navigate.current(direction);}catch(error){setError(errorText(error));}finally{navigationBusy.current=false;setNavigating(false);}};
  return <div className="modal-backdrop analysis-chart-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}><section className="analysis-chart-modal" ref={dialog} role="dialog" aria-modal="true" aria-label="Analysis match chart">
   <header><div><span className="analysis-eyebrow">MATCH INSPECTION</span><h2>{selection.result.symbol.toUpperCase()||selection.result.name} <span>{selection.result.timeframe}</span></h2><p>{selection.result.name}</p></div><button ref={close} type="button" aria-label="Close analysis chart" onClick={onClose}>×</button></header>
-  <nav aria-label="Matching occurrences"><button type="button" disabled={loading||navigating} onClick={()=>void step(-1)}>← Previous match</button><div><strong>Occurrence {selection.occurrence+1} of {data?.totalMatches??selection.result.matches}</strong><span>{data?analysisDate(data.matchTime):'Loading match…'}</span></div><button type="button" disabled={loading||navigating} onClick={()=>void step(1)}>Next match →</button></nav>
+  <nav aria-label="Matching occurrences"><button type="button" disabled={loading||navigating} onClick={()=>void step(-1)}>← Previous match</button><div><strong>Occurrence {selection.occurrence+1} of {data?.totalMatches??selection.result.matches}</strong><span>{data?`Signal bar: ${analysisDate(data.matchTime)}`:'Loading match…'}</span></div><button type="button" disabled={loading||navigating} onClick={()=>void step(1)}>Next match →</button></nav>
   <p className="analysis-chart-note">Closed bars from downloaded files. Previous / Next visits every occurrence, continuing across matching files.</p>
   {error&&<div className="analysis-error" role="alert">{error}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry chart</button></div>}
   {loading&&<p className="analysis-empty" role="status">Loading bars and enriched indicators around this match…</p>}

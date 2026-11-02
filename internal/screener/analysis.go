@@ -112,7 +112,16 @@ type AnalysisTradeLevels struct {
 	TakeProfit float64 `json:"takeProfit"`
 }
 
-const analysisTradeRecordSize = 25
+// Execution timestamps identify source bars, never the unknown intrabar touch time.
+type AnalysisTradeExecution struct {
+	EntryTime int64  `json:"entryTime"`
+	Outcome   string `json:"outcome"`
+	ExitTime  int64  `json:"exitTime,omitempty"`
+}
+
+const analysisTradeRecordSize = 42
+
+var analysisTradeOutcomes = [...]string{"", "takeProfit", "stopLoss", "expired", "insufficientData", "unavailable"}
 
 type AnalysisChart struct {
 	ResultID          string                    `json:"resultId"`
@@ -128,6 +137,7 @@ type AnalysisChart struct {
 	Bars              []AnalysisBar             `json:"bars"`
 	ProfitableMatches []AnalysisProfitableMatch `json:"profitableMatches,omitempty"`
 	Trade             *AnalysisTradeLevels      `json:"trade,omitempty"`
+	TradeExecution    *AnalysisTradeExecution   `json:"tradeExecution,omitempty"`
 }
 type analysisState struct {
 	active                                     bool
@@ -775,11 +785,27 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 			record[0] = 1
 			binary.LittleEndian.PutUint64(record[1:9], math.Float64bits(entry))
 			binary.LittleEndian.PutUint64(record[9:17], math.Float64bits(stopLoss))
-			binary.LittleEndian.PutUint64(record[17:], math.Float64bits(takeProfit))
+			binary.LittleEndian.PutUint64(record[17:25], math.Float64bits(takeProfit))
+			binary.LittleEndian.PutUint64(record[25:33], uint64(simulation.currentTime))
 			if _, err := trades.WriteAt(record[:], occurrence*analysisTradeRecordSize); err != nil {
 				return fmt.Errorf("store analysis trade prices: %w", err)
 			}
 			return nil
+		}
+		simulation.onOutcome = func(occurrence int64, outcome string, exitBarTime int64) error {
+			for code, name := range analysisTradeOutcomes {
+				if name != outcome || code == 0 {
+					continue
+				}
+				var record [9]byte
+				binary.LittleEndian.PutUint64(record[:8], uint64(exitBarTime))
+				record[8] = byte(code)
+				if _, err := trades.WriteAt(record[:], occurrence*analysisTradeRecordSize+33); err != nil {
+					return fmt.Errorf("store analysis trade outcome: %w", err)
+				}
+				return nil
+			}
+			return errors.New("unknown analysis trade outcome")
 		}
 		// One byte per occurrence keeps random outcome updates independent of
 		// the buffered match index. Sparse zero bytes mean not a TP winner.
@@ -847,7 +873,9 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 			simulation.match(row)
 		}
 	}
-	simulation.finish()
+	if err = simulation.finish(); err != nil {
+		return err
+	}
 	if err = buffered.Flush(); err != nil {
 		return err
 	}
@@ -1021,7 +1049,12 @@ func (m *Manager) AnalysisChart(resultID string, occurrence, before, after int) 
 			return AnalysisChart{}, err
 		}
 		if record[0] == 1 {
-			chart.Trade = &AnalysisTradeLevels{Entry: math.Float64frombits(binary.LittleEndian.Uint64(record[1:9])), StopLoss: math.Float64frombits(binary.LittleEndian.Uint64(record[9:17])), TakeProfit: math.Float64frombits(binary.LittleEndian.Uint64(record[17:]))}
+			chart.Trade = &AnalysisTradeLevels{Entry: math.Float64frombits(binary.LittleEndian.Uint64(record[1:9])), StopLoss: math.Float64frombits(binary.LittleEndian.Uint64(record[9:17])), TakeProfit: math.Float64frombits(binary.LittleEndian.Uint64(record[17:25]))}
+			code := int(record[41])
+			if code == 0 || code >= len(analysisTradeOutcomes) {
+				return AnalysisChart{}, errors.New("invalid analysis trade outcome record")
+			}
+			chart.TradeExecution = &AnalysisTradeExecution{EntryTime: int64(binary.LittleEndian.Uint64(record[25:33])), ExitTime: int64(binary.LittleEndian.Uint64(record[33:41])), Outcome: analysisTradeOutcomes[code]}
 		}
 	}
 	return chart, nil

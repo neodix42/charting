@@ -752,6 +752,57 @@ test('profitable chart matches render green dots across themes and navigation wi
  await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
 });
 
+test('Match Inspection distinguishes Long and Short stop outcomes from TP and retains off-window execution bars',async({page})=>{
+ await open(page,[file(0)]);await complete(page,[result(0,'btcusd',4)]);
+ const day=86400000,start=Date.UTC(2025,0,1),bars=Array.from({length:9},(_,index)=>({index,time:start+index*day,values:{open:100,high:105,low:95,close:101}}));
+ const base:AnalysisChart={resultId:'result-0',name:file(0).name,symbol:'btcusd',timeframe:'d1',occurrence:0,totalMatches:4,matchTime:bars[7].time,matchIndex:7,startIndex:0,fields:['open','high','low','close'],bars,trade:{entry:100,stopLoss:90,takeProfit:110},tradeExecution:{entryTime:start+9*day,outcome:'stopLoss',exitTime:start+30*day},profitableMatches:[]};
+ await page.evaluate(charts=>(window as any).__testSetAnalysisCharts(charts),{
+  'result-0:0':base,
+  'result-0:1':{...base,occurrence:1,matchIndex:8,matchTime:bars[8].time,trade:{entry:100,stopLoss:110,takeProfit:90},tradeExecution:{entryTime:start+10*day,outcome:'stopLoss',exitTime:start+31*day}},
+  'result-0:2':{...base,occurrence:2,tradeExecution:{entryTime:start+9*day,outcome:'takeProfit',exitTime:start+9*day},profitableMatches:[{index:7,time:bars[7].time}]},
+  'result-0:3':{...base,occurrence:3,tradeExecution:undefined,trade:undefined},
+ });
+ await page.getByRole('row',{name:'BTCUSD d1 · 4 matches',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true}),execution=dialog.getByLabel('Selected trade timing and outcome',{exact:true});
+ await expect(execution.locator('dt')).toHaveText(['Signal bar start','Entry bar start','Outcome','Exit bar start']);
+ await expect(execution.locator('dd')).toHaveText(['2025-01-08 00:00:00 UTC','2025-01-10 00:00:00 UTC','Stop Loss hit','2025-01-31 00:00:00 UTC']);
+ await expect(execution).not.toContainText('Take Profit hit');await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
+ await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toContainText('SL 90');
+ const canvas=await dialog.getByTestId('analysis-chart').locator('canvas').first().boundingBox();expect(canvas).not.toBeNull();
+ await page.mouse.move(canvas!.x+canvas!.width*0.45,canvas!.y+canvas!.height*0.35);
+ await expect(dialog.getByLabel('Match bar values',{exact:true}).locator('strong')).toContainText('Hovered bar:');
+ await expect(execution.locator('dd')).toHaveText(['2025-01-08 00:00:00 UTC','2025-01-10 00:00:00 UTC','Stop Loss hit','2025-01-31 00:00:00 UTC']);
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
+ await expect(execution.locator('dd')).toHaveText(['2025-01-09 00:00:00 UTC','2025-01-11 00:00:00 UTC','Stop Loss hit','2025-02-01 00:00:00 UTC']);
+ await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toContainText('SL 110');
+ await expect(execution).not.toContainText('Take Profit hit');await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
+ await expect(execution.locator('dd')).toHaveText(['2025-01-08 00:00:00 UTC','2025-01-10 00:00:00 UTC','Take Profit hit','2025-01-10 00:00:00 UTC']);
+ await expect(dialog.locator('.analysis-chart-legend')).toBeVisible();
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
+ await expect(dialog.getByText('Occurrence 4 of 4',{exact:true})).toBeVisible();await expect(execution).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+});
+
+test('switching occurrences and closing a pending chart cannot restore stale trade outcomes',async({page})=>{
+ await open(page,[file(0)]);await complete(page,[result(0,'btcusd',2)]);
+ const start=Date.UTC(2025,0,8),bars=Array.from({length:4},(_,index)=>({index,time:start+index*86400000,values:{open:100,high:105,low:95,close:101}}));
+ const base:AnalysisChart={resultId:'result-0',name:file(0).name,symbol:'btcusd',timeframe:'d1',occurrence:0,totalMatches:2,matchTime:start,matchIndex:0,startIndex:0,fields:['open','high','low','close'],bars,trade:{entry:100,stopLoss:90,takeProfit:110},tradeExecution:{entryTime:bars[1].time,outcome:'takeProfit',exitTime:bars[1].time},profitableMatches:[{index:0,time:start}]};
+ await page.evaluate(charts=>(window as any).__testSetAnalysisCharts(charts),{'result-0:0':base,'result-0:1':{...base,occurrence:1,matchTime:bars[1].time,matchIndex:1}});
+ const inspect=page.getByRole('row',{name:'BTCUSD d1 · 2 matches',exact:true});await inspect.click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true}),execution=dialog.getByLabel('Selected trade timing and outcome',{exact:true});
+ await expect(execution).toContainText('Take Profit hit');
+ await page.evaluate(()=>(window as any).__testAnalysisChartDelay(600));
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
+ await expect(execution).toHaveCount(0);await expect(dialog.getByText('Loading bars and enriched indicators around this match…',{exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();
+ await page.evaluate(chart=>{(window as any).__testAnalysisChartDelay(0);(window as any).__testSetAnalysisCharts({'result-0:0':chart});},{...base,tradeExecution:{entryTime:bars[1].time,outcome:'stopLoss',exitTime:bars[2].time},profitableMatches:[]});
+ await inspect.click();await expect(execution).toContainText('Stop Loss hit');
+ await page.waitForTimeout(700);await expect(execution).toContainText('Stop Loss hit');await expect(execution).not.toContainText('Take Profit hit');
+ await expect(dialog.getByText('Occurrence 1 of 2',{exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+});
+
 
 test('Short simulation defaults and risk targets persist in drafts and saved conditions and remain attached to results',async({page})=>{
  await open(page,[file(0)]);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();

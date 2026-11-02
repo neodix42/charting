@@ -152,9 +152,11 @@ type analysisTradeSimulator struct {
 	expiration             []*analysisSimulatedTrade
 	stops, profits         analysisTradeHeap
 	index, matches         int64
+	currentTime            int64
 	stopHistory            []analysisStopSample
 	onTakeProfit           func(occurrence int64) error
 	onEntry                func(occurrence int64, entry, stopLoss, takeProfit float64) error
+	onOutcome              func(occurrence int64, outcome string, exitBarTime int64) error
 }
 
 type analysisStopSample struct {
@@ -249,6 +251,14 @@ func (s *analysisTradeSimulator) resolve(trade *analysisSimulatedTrade) {
 	delete(s.active, trade.id)
 }
 
+func (s *analysisTradeSimulator) recordOutcome(trade *analysisSimulatedTrade, outcome string, exitBarTime int64) error {
+	s.resolve(trade)
+	if s.onOutcome != nil {
+		return s.onOutcome(trade.occurrence, outcome, exitBarTime)
+	}
+	return nil
+}
+
 func (s *analysisTradeSimulator) hit(h *analysisTradeHeap, price float64) error {
 	for h.Len() > 0 {
 		trade := h.trades[0]
@@ -261,7 +271,13 @@ func (s *analysisTradeSimulator) hit(h *analysisTradeHeap, price float64) error 
 			break
 		}
 		heap.Pop(h)
-		s.resolve(trade)
+		outcome := "takeProfit"
+		if h.stop {
+			outcome = "stopLoss"
+		}
+		if err := s.recordOutcome(trade, outcome, s.currentTime); err != nil {
+			return err
+		}
 		if h.stop {
 			s.summary.StopLossHits++
 		} else {
@@ -297,6 +313,7 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 		return nil
 	}
 	s.index = index
+	s.currentTime = row.timestamp
 	if len(s.stopHistory) > 0 {
 		s.stopHistory[index%int64(len(s.stopHistory))] = analysisStopSample{index: index, value: row.values[s.stopLoss], valid: true}
 	}
@@ -307,7 +324,9 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 		// resolved trades remain resolved; only still-open trades are unavailable.
 		s.summary.Unavailable += int64(len(s.active))
 		for _, trade := range s.active {
-			s.resolve(trade)
+			if err := s.recordOutcome(trade, "unavailable", 0); err != nil {
+				return err
+			}
 		}
 		if s.pending != nil {
 			s.summary.Unavailable++
@@ -358,7 +377,9 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 	slot := index % int64(s.config.Duration)
 	if trade := s.expiration[slot]; trade != nil {
 		if trade.active {
-			s.resolve(trade)
+			if err := s.recordOutcome(trade, "expired", s.currentTime); err != nil {
+				return err
+			}
 			s.summary.Expired++
 		}
 		s.expiration[slot] = nil
@@ -368,18 +389,21 @@ func (s *analysisTradeSimulator) advance(index int64, row analysisRow) error {
 	return nil
 }
 
-func (s *analysisTradeSimulator) finish() {
+func (s *analysisTradeSimulator) finish() error {
 	if s == nil || s.unsupported {
-		return
+		return nil
 	}
 	s.summary.InsufficientData += int64(len(s.active))
 	for _, trade := range s.active {
-		s.resolve(trade)
+		if err := s.recordOutcome(trade, "insufficientData", 0); err != nil {
+			return err
+		}
 	}
 	if s.pending != nil {
 		s.summary.InsufficientData++
 		s.pending = nil
 	}
+	return nil
 }
 
 func (s *analysisTradeSimulator) snapshot(matches int64) *AnalysisSimulationSummary {

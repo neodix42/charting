@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest';
-import {analysisMatchMarkers,profitableMatchColor} from '../charts/analysisMarkers';
+import {analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 
@@ -141,5 +141,30 @@ describe('Profitable match chart markers',()=>{
   expect(analysisMatchMarkers({...chart,trade:{entry:0.0000002,stopLoss:0.000000123456789,takeProfit:0.000000234567891}},'blue').slice(1).map(marker=>marker.text)).toEqual(['Entry 0.0000002','SL 0.000000123456789','TP 0.000000234567891']);
   for(const field of ['entry','stopLoss','takeProfit'])for(const invalid of [NaN,Infinity])expect(analysisMatchMarkers({...chart,trade:{entry:105,stopLoss:90,takeProfit:135,[field]:invalid}},'blue')).toHaveLength(1);
   expect(analysisMatchMarkers({...chart,trade:{entry:0,stopLoss:-1,takeProfit:1}},'blue')[1].text).toBe('Entry 0');
+ });
+});
+
+describe('Selected simulated trade timing and outcome',()=>{
+ const chart:AnalysisChart={resultId:'file',name:'test',symbol:'test',timeframe:'d1',occurrence:0,totalMatches:1,matchTime:Date.UTC(2025,0,8),matchIndex:0,startIndex:0,fields:['close'],bars:[{index:0,time:Date.UTC(2025,0,8),values:{close:100}}]};
+ it('reports the recorded signal, entry and exit bars even when execution is outside the visible chart',()=>{
+  const details=analysisTradeExecutionDetails({...chart,tradeExecution:{entryTime:Date.UTC(2025,0,9),outcome:'stopLoss',exitTime:Date.UTC(2025,0,10)}});
+  expect(details).toEqual([{label:'Signal bar start',value:'2025-01-08 00:00:00 UTC'},{label:'Entry bar start',value:'2025-01-09 00:00:00 UTC'},{label:'Outcome',value:'Stop Loss hit'},{label:'Exit bar start',value:'2025-01-10 00:00:00 UTC'}]);
+ });
+ it('keeps Stop Loss outcomes distinct from TP independently of Long or Short price brackets',()=>{
+  for(const trade of [{entry:100,stopLoss:90,takeProfit:110},{entry:100,stopLoss:110,takeProfit:90}]){
+   const details=analysisTradeExecutionDetails({...chart,trade,tradeExecution:{entryTime:Date.UTC(2025,0,9),outcome:'stopLoss',exitTime:Date.UTC(2025,0,9)}});
+   expect(details.find(detail=>detail.label==='Outcome')?.value).toBe('Stop Loss hit');
+   expect(details.some(detail=>detail.value==='Take Profit hit')).toBe(false);
+  }
+  expect(analysisTradeExecutionDetails({...chart,tradeExecution:{entryTime:Date.UTC(2025,0,9),outcome:'takeProfit',exitTime:Date.UTC(2025,0,9)}}).find(detail=>detail.label==='Outcome')?.value).toBe('Take Profit hit');
+ });
+ it('does not invent an exit for unresolved outcomes or legacy chart responses',()=>{
+  expect(analysisTradeExecutionDetails(chart)).toEqual([]);
+  expect(analysisTradeExecutionDetails({...chart,tradeExecution:{entryTime:NaN,outcome:'stopLoss'}})).toEqual([]);
+  for(const outcome of ['insufficientData','unavailable'] as const){
+   const details=analysisTradeExecutionDetails({...chart,tradeExecution:{entryTime:Date.UTC(2025,0,9),outcome,exitTime:Date.UTC(2025,0,10)}});
+   expect(details.map(detail=>detail.label)).toEqual(['Signal bar start','Entry bar start','Outcome']);
+  }
+  expect(analysisTradeExecutionDetails({...chart,tradeExecution:{entryTime:Date.UTC(2025,0,9),outcome:'expired',exitTime:Date.UTC(2025,0,10)}}).at(-1)).toEqual({label:'Exit bar start',value:'2025-01-10 00:00:00 UTC'});
  });
 });

@@ -182,7 +182,7 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 		t.Fatalf("outcomes not one byte per occurrence: %+v %v", stat, err)
 	}
 	stat, err = os.Stat(m.analysis.matchFiles[result.ID] + ".trades")
-	if err != nil || stat.Size() != result.Matches*25 {
+	if err != nil || stat.Size() != result.Matches*analysisTradeRecordSize {
 		t.Fatalf("trade prices not indexed per occurrence: %+v %v", stat, err)
 	}
 	for _, occurrence := range []int{0, 256, 1024, 2049, 2050} {
@@ -192,6 +192,16 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 		}
 		if (chart.Trade == nil) != (occurrence == 2050) || chart.Trade != nil && *chart.Trade != (AnalysisTradeLevels{100, 90, 110}) {
 			t.Fatalf("wrong occurrence trade prices at %d: %+v", occurrence, chart.Trade)
+		}
+		if occurrence == 2050 {
+			if chart.TradeExecution != nil {
+				t.Fatalf("unentered tail match has execution: %+v", chart.TradeExecution)
+			}
+		} else {
+			at := int64(1704067200000) + int64(occurrence+1)*60000
+			if chart.TradeExecution == nil || *chart.TradeExecution != (AnalysisTradeExecution{EntryTime: at, Outcome: "takeProfit", ExitTime: at}) {
+				t.Fatalf("wrong occurrence execution at %d: %+v", occurrence, chart.TradeExecution)
+			}
 		}
 		want := min(2050, occurrence+501) - max(0, occurrence-500)
 		if len(chart.ProfitableMatches) != want {
@@ -211,7 +221,7 @@ func TestAnalysisProfitableChartMarkersAcrossDensePagesAndLifecycle(t *testing.T
 	}
 	result = resultNamed(t, waitAnalysis(t, m), name)
 	chart, err := m.AnalysisChart(result.ID, 0, 0, 1)
-	if err != nil || len(chart.ProfitableMatches) != 0 || chart.Trade != nil {
+	if err != nil || len(chart.ProfitableMatches) != 0 || chart.Trade != nil || chart.TradeExecution != nil {
 		t.Fatalf("disabled simulation leaked previous markers: %+v %v", chart, err)
 	}
 	if _, err := os.Stat(oldWork); !os.IsNotExist(err) {
