@@ -71,10 +71,12 @@ public final class BridgeTest {
             case "getBars" -> throw new AssertionError("blocking historical SDK method must not be used");
             case "readBars" -> {
                 historyCalls.incrementAndGet(); historyArguments.set(values);
-                LoadingDataListener listener = (LoadingDataListener) values[7];
-                for (IBar item : List.of(bar(now - 120000, 1.07, 1.10, 1.06, 1.08), bar(now - 60000, 1.08, 1.12, 1.07, 1.10), active.get()))
+                LoadingDataListener listener = (LoadingDataListener) values[values.length - 2];
+                for (IBar item : List.of(bar(now - 120000, 1.07, 1.10, 1.06, 1.08), bar(now - 60000, 1.08, 1.12, 1.07, 1.10), active.get())) {
+                    if (values.length == 8 && (item.getTime() < (Long) values[4] || item.getTime() > (Long) values[5])) continue;
                     listener.newBar((Instrument) values[0], (Period) values[1], OfferSide.BID, item.getTime(), item.getOpen(), item.getClose(), item.getLow(), item.getHigh(), item.getVolume());
-                ((LoadingProgressListener) values[8]).loadingFinished(true, now - 120000, now, now);
+                }
+                ((LoadingProgressListener) values[values.length - 1]).loadingFinished(true, now - 120000, now, now);
                 yield null;
             }
             default -> null;

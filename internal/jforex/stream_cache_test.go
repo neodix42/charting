@@ -12,9 +12,96 @@ import (
 	"time"
 
 	"cryptodesk/internal/domain"
+	"cryptodesk/internal/exchange"
 )
 
 const streamCacheStart int64 = 1700002800
+
+func TestDailyWeeklyStreamResumesConfirmedCoverageWithLocalHistoryAfterRestart(t *testing.T) {
+	for _, interval := range []string{"1d", "1w"} {
+		for _, market := range []string{"forex", "cfd"} {
+			t.Run(interval+"/"+market, func(t *testing.T) {
+				trace := filepath.Join(t.TempDir(), "subscribe-anchors.txt")
+				t.Setenv("CRYPTODESK_JFOREX_CACHE_TRACE", trace)
+				m, launches := testManager(t, "stream-long-period")
+				key := forexKey()
+				key.Timeframe, key.Market = interval, market
+				if market == "cfd" {
+					key.Instrument = "USA30IDXUSD"
+				}
+				start := time.Date(2023, time.November, 6, 0, 0, 0, 0, time.UTC).Unix()
+				step := exchange.TimeframeSeconds(interval)
+				// A successful sparse query proves the intervening market closure;
+				// only actual provider candles belong in the saved chart.
+				if err := m.StoreCandles(key, []domain.Candle{cacheBar(start), cacheBar(start + 2*step)}); err != nil {
+					t.Fatal(err)
+				}
+				if err := m.RecordHistoryCoverage(key, start, start+3*step); err != nil {
+					t.Fatal(err)
+				}
+				// A later close and an incomplete tick candle do not establish the
+				// missing interior coverage after an interrupted catch-up.
+				provisional := cacheBar(start + 6*step)
+				provisional.Closed, provisional.Quality = false, "provisional"
+				if err := m.StoreCandles(key, []domain.Candle{cacheBar(start + 5*step), provisional}); err != nil {
+					t.Fatal(err)
+				}
+				checkLocal := func(manager *Manager) {
+					t.Helper()
+					bars, err := manager.CachedCandles(key, 0, 0, 10)
+					if err != nil || len(bars) != 3 || bars[2].Time != start+5*step {
+						t.Fatalf("closed local candles unavailable before login: %+v %v", bars, err)
+					}
+					for _, bar := range bars {
+						if !bar.Closed || bar.SourceRevision != 0 {
+							t.Fatalf("provisional/session-specific candle persisted: %+v", bar)
+						}
+					}
+					bars, err = manager.History(context.Background(), key, start, start+3*step, 10)
+					if err != nil || len(bars) != 2 || bars[0].Time != start || bars[1].Time != start+2*step {
+						t.Fatalf("covered sparse history required a provider request: %+v %v", bars, err)
+					}
+					if anchor, err := manager.HistoryAnchor(key); err != nil || anchor != start+2*step {
+						t.Fatalf("resume lost one-period overlap or skipped an unchecked gap: %d %v", anchor, err)
+					}
+				}
+				stream := func(manager *Manager) {
+					t.Helper()
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					ready, done := make(chan struct{}, 1), make(chan error, 1)
+					go func() {
+						done <- manager.Stream(ctx, key, func(_ []domain.Candle, health domain.Health) {
+							if health.State == "live" {
+								ready <- struct{}{}
+							}
+						})
+					}()
+					awaitCachedStream(t, ready, done)
+					stopCachedStream(t, cancel, done)
+				}
+				checkLocal(m)
+				if launches.Load() != 0 {
+					t.Fatal("local history unexpectedly started Java")
+				}
+				stream(m)
+				m.Close()
+				restored := newManager(filepath.Dir(m.path), m.runtime, m.factory)
+				defer restored.Close()
+				checkLocal(restored)
+				if launches.Load() != 1 {
+					t.Fatal("restart local history unexpectedly started Java")
+				}
+				stream(restored)
+				data, err := os.ReadFile(trace)
+				anchor := strconv.FormatInt(start+2*step, 10) + "\n"
+				if err != nil || string(data) != anchor+anchor {
+					t.Fatalf("daily/weekly subscribe failed to request the durable historical overlap: %q %v", data, err)
+				}
+			})
+		}
+	}
+}
 
 func streamCacheFixture(t *testing.T) (*Manager, string) {
 	t.Helper()

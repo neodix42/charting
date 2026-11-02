@@ -37,7 +37,12 @@ public final class BridgeResponsivenessTest {
         Fixture(long timeout) throws Exception { this(timeout, System::currentTimeMillis); }
         Fixture(long timeout, LongSupplier clock) throws Exception {
             IHistory history = fake(IHistory.class, (method, args) -> switch (method) {
-                case "getBarStart" -> Math.floorDiv((Long) args[1], ((Period) args[0]).getInterval()) * ((Period) args[0]).getInterval();
+                case "getBarStart" -> {
+                    Period period = (Period) args[0]; long time = (Long) args[1], step = period.getInterval();
+                    // Native weekly candles start Monday; the Unix epoch was Thursday.
+                    long offset = period.equals(Period.WEEKLY) ? 3 * Period.DAILY.getInterval() : 0;
+                    yield Math.floorDiv(time + offset, step) * step - offset;
+                }
                 case "getBar" -> { blockingCacheReads.incrementAndGet(); long step = ((Period) args[1]).getInterval(); yield bar(System.currentTimeMillis() / step * step, 1.1, 1.13, 1.09, 1.12); }
                 case "getLastTick" -> { blockingCacheReads.incrementAndGet(); yield tick(System.currentTimeMillis(), 1.12); }
                 case "getBars" -> throw new AssertionError("synchronous history must not block bridge commands");
