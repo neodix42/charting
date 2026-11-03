@@ -6,7 +6,7 @@ import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
-import {analysisMatchMarkers,analysisTradeExecutionDetails,analysisTradePriceLines,profitableMatchColor} from '../charts/analysisMarkers';
+import {analysisMatchMarkers,analysisTradeExecutionDetails,analysisTradePriceLines} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -53,9 +53,10 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
     const info=original();if(!info||!tradePrices.length)return info;
     // Marker autoscaling does not include stacked text heights. Reserve room
     // for Match plus each price, using the current global chart font size.
-    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4*(tradePrices.length+1)+44)}};
+    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4*(tradePrices.length+1)+20)}};
    };
    main.applyOptions({autoscaleInfoProvider:tradeAutoscale});
+   main.priceScale().applyOptions({scaleMargins:{top:0.08,bottom:0.08}});
    const matchMarker=(color:string)=>analysisMatchMarkers(data,color);
    markers=createSeriesMarkers(main,matchMarker(palette.accent));
    const panes=new Map<string,number>();
@@ -70,7 +71,9 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
      if(!panes.has(group)){const added=chart.addPane();added.setStretchFactor(1);panes.set(group,chart.panes().length-1);}
      pane=panes.get(group)!;
     }
-    const options={color:colors[plotFields.indexOf(field)%colors.length],title:analysisFieldLabel(field),priceLineVisible:false,lastValueVisible:true};
+    // Distant price indicators remain on the candle scale, but must not
+    // compress the candles when Match Inspection opens or pans.
+    const options={color:colors[plotFields.indexOf(field)%colors.length],title:analysisFieldLabel(field),priceLineVisible:false,lastValueVisible:true,...(pane===0?{autoscaleInfoProvider:()=>null}:{})};
     if(/volume(?:\[|$)|histogram/i.test(field)){
      const series=chart.addSeries(HistogramSeries,options,pane);series.setData(histogramData(field,document.documentElement.dataset.theme??'light'));histograms.push({series,field});
     }else{
@@ -118,8 +121,6 @@ function AnalysisPlot({data}:{data:AnalysisChart}){
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{hover?'Hovered bar':'Signal bar'}: {analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
   {!!executionDetails.length&&<div className="analysis-chart-note analysis-trade-execution" aria-label="Selected trade timing and outcome"><dl>{executionDetails.map(({label,value})=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p>Match marks the signal bar; entry uses the next available bar’s open. Times identify UTC bars, not the exact intrabar exit time.</p></div>}
-  {!!data.profitableMatches?.length&&<p className="analysis-chart-note analysis-chart-legend"><span aria-hidden="true" style={{backgroundColor:profitableMatchColor}}/>Green dot: match whose simulated trade hit TP.</p>}
-  {!!tradePrices.length&&<div className="analysis-chart-note analysis-trade-prices" aria-label="Simulated trade prices">{tradePrices.map(line=><span key={line}>{line}</span>)}</div>}
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
   <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-chart-font-size={chartFontSize(10,fontSize)} data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
   {duplicates&&<p className="analysis-chart-note">Each observation is evaluated. Ticks sharing an identical timestamp display their last price on the chart.</p>}

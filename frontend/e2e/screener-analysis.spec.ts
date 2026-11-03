@@ -740,7 +740,7 @@ test('profitable chart matches render green dots across themes and navigation wi
  const greenPixels=()=>page.getByTestId('analysis-chart').locator('canvas').evaluateAll(canvases=>canvases.reduce((count,element)=>{const canvas=element as HTMLCanvasElement,context=canvas.getContext('2d');if(!context)return count;const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;for(let i=0;i<pixels.length;i+=4)if(pixels[i]===22&&pixels[i+1]===163&&pixels[i+2]===74&&pixels[i+3]===255)count++;return count;},0));
  await page.getByRole('row',{name:'BTCUSD d1 · 3 matches',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});
- await expect(dialog.getByText('Green dot: match whose simulated trade hit TP.',{exact:true})).toBeVisible();
+ await expect(dialog.getByText('Green dot: match whose simulated trade hit TP.',{exact:true})).toHaveCount(0);
  for(const theme of ['dark','light','matrix','cyberpunk','red-sands','light']){
   await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
   await expect.poll(greenPixels).toBeGreaterThan(15);await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:2});
@@ -767,18 +767,18 @@ test('Match Inspection distinguishes Long and Short stop outcomes from TP and re
  await expect(execution.locator('dt')).toHaveText(['Signal bar start','Entry bar start','Outcome','Exit bar start']);
  await expect(execution.locator('dd')).toHaveText(['2025-01-08 00:00:00 UTC','2025-01-10 00:00:00 UTC','Stop Loss hit','2025-01-31 00:00:00 UTC']);
  await expect(execution).not.toContainText('Take Profit hit');await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
- await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toContainText('SL 90');
+ await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toHaveCount(0);
  const canvas=await dialog.getByTestId('analysis-chart').locator('canvas').first().boundingBox();expect(canvas).not.toBeNull();
  await page.mouse.move(canvas!.x+canvas!.width*0.45,canvas!.y+canvas!.height*0.35);
  await expect(dialog.getByLabel('Match bar values',{exact:true}).locator('strong')).toContainText('Hovered bar:');
  await expect(execution.locator('dd')).toHaveText(['2025-01-08 00:00:00 UTC','2025-01-10 00:00:00 UTC','Stop Loss hit','2025-01-31 00:00:00 UTC']);
  await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
  await expect(execution.locator('dd')).toHaveText(['2025-01-09 00:00:00 UTC','2025-01-11 00:00:00 UTC','Stop Loss hit','2025-02-01 00:00:00 UTC']);
- await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toContainText('SL 110');
+ await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toHaveCount(0);
  await expect(execution).not.toContainText('Take Profit hit');await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
  await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
  await expect(execution.locator('dd')).toHaveText(['2025-01-08 00:00:00 UTC','2025-01-10 00:00:00 UTC','Take Profit hit','2025-01-10 00:00:00 UTC']);
- await expect(dialog.locator('.analysis-chart-legend')).toBeVisible();
+ await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
  await dialog.getByRole('button',{name:'Next match →',exact:true}).click();
  await expect(dialog.getByText('Occurrence 4 of 4',{exact:true})).toBeVisible();await expect(execution).toHaveCount(0);
  await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
@@ -877,9 +877,7 @@ test('Match Inspection stacks recorded Entry/SL/TP below Match and triples the f
  await page.getByRole('row',{name:'BTCUSD d1 · 3 matches',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true});
  const prices=dialog.getByLabel('Simulated trade prices',{exact:true});
- await expect(prices.locator('span')).toHaveText(['Entry 105','SL 90','TP 135']);
- const tops=await prices.locator('span').evaluateAll(elements=>elements.map(element=>element.getBoundingClientRect().top));
- expect(tops[0]).toBeLessThan(tops[1]);expect(tops[1]).toBeLessThan(tops[2]);
+ await expect(prices).toHaveCount(0);await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
  const widthRatio=()=>page.getByTestId('analysis-chart').evaluate(element=>Number((element as HTMLElement).dataset.initialBarSpacing)/Number((element as HTMLElement).dataset.fittedBarSpacing));
  await expect.poll(widthRatio).toBeCloseTo(3,5);
  await expect.poll(()=>page.evaluate(()=>{
@@ -896,9 +894,55 @@ test('Match Inspection stacks recorded Entry/SL/TP below Match and triples the f
   await page.evaluate(theme=>{(window as any).__analysisDrawnTexts=[];document.documentElement.dataset.theme=theme;},theme);
   await expect.poll(()=>page.evaluate(()=>['Entry 105','SL 90','TP 135'].every(text=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text===text)))).toBe(true);
  }
- await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices.locator('span')).toHaveText(['Entry 100','SL 95','TP 115']);
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>['Entry 100','SL 95','TP 115'].every(text=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text===text)))).toBe(true);
  await expect.poll(widthRatio).toBeCloseTo(3,5);await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
  await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(widthRatio).toBeCloseTo(3,5);
- await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(prices.locator('span')).toHaveText(['Entry 100','SL 95','TP 115']);
+ await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>['Entry 100','SL 95','TP 115'].every(text=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text===text)))).toBe(true);
+ await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+});
+
+
+test('Match Inspection opens with readable candles despite distant price overlays and lower indicator panes',async({page})=>{
+ await open(page,[file(0)]);await complete(page,[result(0,'btcusd',1)]);
+ await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
+ const start=Date.UTC(2025,0,1),bars=Array.from({length:201},(_,index)=>{
+  const open=1000+Math.sin(index/5)*12,close=open+(index%2?4:-4);
+  return {index,time:start+index*86400000,values:{open,high:Math.max(open,close)+5,low:Math.min(open,close)-5,close,sma_200:500+index/10,senkou_b_52:1500+index/10,kijun_26:1005,volume:20+index%7,weekday:index%7+1,macd_histogram_12_26_9:Math.sin(index/4)*5}};
+ });
+ const chart:AnalysisChart={resultId:'result-0',name:file(0).name,symbol:'btcusd',timeframe:'d1',occurrence:0,totalMatches:1,matchTime:bars[120].time,matchIndex:120,startIndex:0,fields:Object.keys(bars[0].values),bars,trade:{entry:995,stopLoss:980,takeProfit:1025},profitableMatches:[{index:120,time:bars[120].time}]};
+ await page.evaluate(chart=>{
+  (window as any).__testSetAnalysisCharts({'result-0:0':chart});
+  const original=CanvasRenderingContext2D.prototype.fillText;(window as any).__analysisDrawnTexts=[];
+  CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){
+   if(text==='Match'||/^(Entry|SL|TP) /.test(text))(window as any).__analysisDrawnTexts.push({text,y,height:this.canvas.height});
+   if(maxWidth===undefined)original.call(this,text,x,y);else original.call(this,text,x,y,maxWidth);
+  };
+ },chart);
+ await page.getByRole('row',{name:'BTCUSD d1 · 1 matches',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Analysis match chart',exact:true}),plot=dialog.getByTestId('analysis-chart');
+ await expect(plot).toHaveAttribute('data-pane-count','4');
+ await expect(dialog.getByLabel('Simulated trade prices',{exact:true})).toHaveCount(0);await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
+ // Inspect the actual price-pane pixels, rather than mirroring scale options:
+ // distant SMA/Ichimoku values previously squeezed all candle wicks to a few pixels.
+ const candleFraction=()=>plot.locator('canvas').first().evaluate(element=>{
+  const canvas=element as HTMLCanvasElement,context=canvas.getContext('2d')!,pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+  let top=canvas.height,bottom=-1;
+  for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){
+   const offset=(y*canvas.width+x)*4;
+   if(pixels[offset+3]===255&&((pixels[offset]===21&&pixels[offset+1]===123&&pixels[offset+2]===101)||(pixels[offset]===189&&pixels[offset+1]===69&&pixels[offset+2]===84))){top=Math.min(top,y);bottom=Math.max(bottom,y);}
+  }
+  return bottom<top?0:(bottom-top+1)/canvas.height;
+ });
+ await expect.poll(candleFraction).toBeGreaterThan(0.4);
+ await expect.poll(()=>page.evaluate(()=>{
+  const texts=(window as any).__analysisDrawnTexts,lines=['Match','Entry 995','SL 980','TP 1,025'].map(text=>texts.findLast((item:any)=>item.text===text));
+  return lines.every(Boolean)&&lines.every((line:any,index:number)=>(index===0||line.y>lines[index-1].y)&&line.y<line.height);
+ })).toBe(true);
+ await page.screenshot({path:'../.tools/verification/analysis-vertical.png',fullPage:true});
+ const before=await candleFraction(),canvas=await plot.locator('canvas').first().boundingBox(),host=await plot.boundingBox();expect(canvas).not.toBeNull();expect(host).not.toBeNull();
+ const axisX=canvas!.x+canvas!.width+(host!.width-canvas!.width)/2;
+ await page.mouse.move(axisX,canvas!.y+canvas!.height*.45);await page.mouse.down();await page.mouse.move(axisX,canvas!.y+canvas!.height*.7,{steps:12});await page.mouse.up();
+ await expect.poll(async()=>Math.abs(await candleFraction()-before)).toBeGreaterThan(.03);
+ await page.screenshot({path:'../.tools/verification/analysis-vertical-manual.png',fullPage:true});
  await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
 });
