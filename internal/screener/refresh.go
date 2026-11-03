@@ -190,45 +190,68 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64, 
 	m.mu.Lock()
 	count := len(m.refreshJobs)
 	m.mu.Unlock()
-	runFilePoolWithConcurrency(count, concurrency, func(index int) {
-		m.mu.Lock()
-		if ctx.Err() != nil {
-			m.refreshJobs[index].Status, m.refreshJobs[index].Message = "cancelled", "Refresh cancelled; original file kept"
-			m.mu.Unlock()
-			return
-		}
-		m.refreshJobs[index].Status, m.refreshJobs[index].Message = "running", "Checking saved data and indicator recipes"
-		job := m.refreshJobs[index]
-		m.mu.Unlock()
-		var err error
-		if len(job.fileIDAliases) > 1 {
-			job.Name, err = m.consolidateHistory(ctx, directory, job.Name, legacy, func(message string) {
-				m.mu.Lock()
-				m.refreshJobs[index].Message = message
+	// Refresh retained daily histories before rebuilding any weekly derivatives.
+	for _, weekly := range []bool{false, true} {
+		runFilePoolWithConcurrency(count, concurrency, func(index int) {
+			m.mu.Lock()
+			match := downloadFilename.FindStringSubmatch(strings.ToLower(m.refreshJobs[index].Name))
+			isWeekly := match != nil && match[2] == "w1"
+			if isWeekly != weekly {
 				m.mu.Unlock()
-			})
-			if err == nil {
-				job.FileID = dataFileID(directory, job.Name)
-				m.mu.Lock()
-				m.refreshJobs[index].Name, m.refreshJobs[index].FileID = job.Name, job.FileID
-				m.mu.Unlock()
+				return
 			}
-		}
-		if err == nil {
-			err = m.refreshFile(ctx, index, directory, job, legacy[job.Name], asOf)
-		}
-		m.mu.Lock()
-		if m.refreshJobs[index].Status != "completed" {
 			if ctx.Err() != nil {
 				m.refreshJobs[index].Status, m.refreshJobs[index].Message = "cancelled", "Refresh cancelled; original file kept"
-			} else if err != nil {
-				m.refreshJobs[index].Status, m.refreshJobs[index].Message = "failed", cleanMessage(err.Error())
-			} else {
-				m.refreshJobs[index].Status, m.refreshJobs[index].Message = "failed", "Refresh did not publish its CSV"
+				m.mu.Unlock()
+				return
 			}
-		}
-		m.mu.Unlock()
-	})
+			if weekly {
+				ready := false
+				for _, daily := range m.refreshJobs {
+					other := downloadFilename.FindStringSubmatch(strings.ToLower(daily.Name))
+					if other != nil && other[1] == match[1] && other[2] == "d1" && daily.Status == "completed" {
+						ready = true
+					}
+				}
+				if !ready {
+					m.refreshJobs[index].Status, m.refreshJobs[index].Message = "failed", "Daily history did not refresh; original weekly file kept"
+					m.mu.Unlock()
+					return
+				}
+			}
+			m.refreshJobs[index].Status, m.refreshJobs[index].Message = "running", "Checking saved data and indicator recipes"
+			job := m.refreshJobs[index]
+			m.mu.Unlock()
+			var err error
+			if len(job.fileIDAliases) > 1 {
+				job.Name, err = m.consolidateHistory(ctx, directory, job.Name, legacy, func(message string) {
+					m.mu.Lock()
+					m.refreshJobs[index].Message = message
+					m.mu.Unlock()
+				})
+				if err == nil {
+					job.FileID = dataFileID(directory, job.Name)
+					m.mu.Lock()
+					m.refreshJobs[index].Name, m.refreshJobs[index].FileID = job.Name, job.FileID
+					m.mu.Unlock()
+				}
+			}
+			if err == nil {
+				err = m.refreshFile(ctx, index, directory, job, legacy[job.Name], asOf)
+			}
+			m.mu.Lock()
+			if m.refreshJobs[index].Status != "completed" {
+				if ctx.Err() != nil {
+					m.refreshJobs[index].Status, m.refreshJobs[index].Message = "cancelled", "Refresh cancelled; original file kept"
+				} else if err != nil {
+					m.refreshJobs[index].Status, m.refreshJobs[index].Message = "failed", cleanMessage(err.Error())
+				} else {
+					m.refreshJobs[index].Status, m.refreshJobs[index].Message = "failed", "Refresh did not publish its CSV"
+				}
+			}
+			m.mu.Unlock()
+		})
+	}
 }
 
 type refreshEvent struct {
@@ -285,6 +308,14 @@ func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory 
 	if err = writeSyncedExclusive(recipePath, encoded); err != nil {
 		return err
 	}
+	dailyPlanFile := ""
+	dailyOriginals := map[string]os.FileInfo{}
+	if match[2] == "w1" {
+		dailyPlanFile, dailyOriginals, err = prepareWeeklyDailyPlan(Job{Symbol: match[1], Timeframe: "w1", AsOf: asOf}, directory, work)
+		if err != nil {
+			return err
+		}
+	}
 	input, _ := json.Marshal(struct {
 		Input            string           `json:"input"`
 		Output           string           `json:"output"`
@@ -292,13 +323,14 @@ func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory 
 		Timeframe        string           `json:"timeframe"`
 		From             string           `json:"from"`
 		RecipeFile       string           `json:"recipeFile"`
+		DailyPlanFile    string           `json:"dailyPlanFile,omitempty"`
 		CoverageVerified bool             `json:"coverageVerified"`
 		CoverageDigest   string           `json:"coverageDigest"`
 		OwnerPipe        bool             `json:"ownerPipe"`
 		AsOf             int64            `json:"asOf"`
 		RequiredFields   []string         `json:"requiredFields,omitempty"`
 		ProviderSession  *providerSession `json:"providerSession,omitempty"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx)})
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work
@@ -395,6 +427,11 @@ func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory 
 	defer m.mu.Unlock()
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	for filename, info := range dailyOriginals {
+		if err := unchangedFile(filename, info); err != nil {
+			return err
+		}
 	}
 	if err = unchangedFile(source, original); err != nil {
 		return err

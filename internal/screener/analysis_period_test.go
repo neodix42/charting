@@ -15,11 +15,12 @@ func TestAnalysisPeriodScansOnlySelectedBaseFilesAndRetainsCompanionBars(t *test
 	hourlyName := "btcusd-h1-2024-01-01-2024-01-03.csv"
 	writeDataFile(t, m, dailyName, fmt.Sprintf("timestamp,close\n%d,100\n%d,200\n", base, base+86_400_000))
 	writeDataFile(t, m, hourlyName, fmt.Sprintf("timestamp,close\n%d,101\n%d,201\n", base+23*3_600_000, base+47*3_600_000))
+	writeDataFile(t, m, "btcusd-w1-2024-01-01-2024-01-15.csv", fmt.Sprintf("timestamp,close\n%d,100\n%d,200\n", base, base+604_800_000))
 	writeDataFile(t, m, "btcusd-m1-2024-01-01-2024-01-03.csv", analysisCSV([]float64{2, 3}))
 	// Invalid assets from unselected categories cannot affect a selected scan.
 	writeDataFile(t, m, "eurusd-h1-2024-01-01-2024-01-03.csv", "timestamp,close\ninvalid,2\n")
 	request := AnalysisRequest{Conditions: []AnalysisCondition{analysisCondition("above", analysisField("close"), analysisNumber(1))}, Categories: []string{categoryForSymbol(t, "btcusd")}}
-	for _, period := range []string{"", "all", "d1", "h1"} {
+	for _, period := range []string{"", "all", "d1", "h1", "w1"} {
 		t.Run("period-"+period, func(t *testing.T) {
 			request.Period = period
 			if _, err := m.StartAnalysis(request); err != nil {
@@ -28,7 +29,7 @@ func TestAnalysisPeriodScansOnlySelectedBaseFilesAndRetainsCompanionBars(t *test
 			info := waitAnalysis(t, m)
 			wantFiles := 1
 			if period == "" || period == "all" {
-				wantFiles = 3
+				wantFiles = 4
 			}
 			if info.Total != wantFiles || info.Failed != 0 || info.TotalMatches != int64(wantFiles*2) || len(info.Results) != wantFiles {
 				t.Fatalf("period %q scanned incorrect files: %+v", period, info)
@@ -60,7 +61,7 @@ func TestAnalysisPeriodScansOnlySelectedBaseFilesAndRetainsCompanionBars(t *test
 }
 
 func TestAnalysisPeriodPersistsDraftAndSavedConditionAndRejectsUnknownPeriods(t *testing.T) {
-	for _, period := range []string{"", "all", "d1", "h1"} {
+	for _, period := range []string{"", "all", "d1", "h1", "w1"} {
 		t.Run("period-"+period, func(t *testing.T) {
 			profile := t.TempDir()
 			m := savedConditionManager(t, profile)
@@ -109,5 +110,38 @@ func TestAnalysisUnavailableOrInvalidPeriodKeepsPreviousResults(t *testing.T) {
 		if got, _ := m.Analysis(0, 200); !reflect.DeepEqual(got, before) {
 			t.Fatalf("rejected period %q discarded previous results", period)
 		}
+	}
+}
+
+func TestAnalysisWeeklyCompanionIsAvailableOnlyAtMondayUTCClose(t *testing.T) {
+	m := analysisTestManager(t)
+	base := time.Date(2023, 12, 25, 0, 0, 0, 0, time.UTC).UnixMilli()
+	const day = int64(86_400_000)
+	weeklyName := "btcusd-w1-2023-12-25-2024-01-08.csv"
+	dailyName := "btcusd-d1-2023-12-30-2024-01-08.csv"
+	writeDataFile(t, m, weeklyName, fmt.Sprintf("timestamp,close\n%d,100\n%d,200\n", base, base+7*day))
+	writeDataFile(t, m, dailyName, fmt.Sprintf("timestamp,close\n%d,101\n%d,101\n%d,101\n%d,201\n", base+5*day, base+6*day, base+7*day, base+13*day))
+	weekly := analysisField("close")
+	weekly.Timeframe = "w1"
+	request := AnalysisRequest{Period: "d1", Conditions: []AnalysisCondition{analysisCondition("above", analysisField("close"), weekly)}}
+	if _, err := m.StartAnalysis(request); err != nil {
+		t.Fatal(err)
+	}
+	info := waitAnalysis(t, m)
+	if info.Total != 1 || info.Failed != 0 || info.Results[0].Matches != 3 {
+		t.Fatalf("weekly alignment leaked future data or missed boundary: %+v", info)
+	}
+	chart, err := m.AnalysisChart(info.Results[0].ID, 0, 1, 1)
+	if err != nil || len(chart.Bars) < 2 {
+		t.Fatalf("weekly companion chart unavailable: %+v %v", chart, err)
+	}
+	if _, exists := chart.Bars[0].Values["w1:close"]; exists {
+		t.Fatal("chart exposed weekly companion before Monday UTC close")
+	}
+	if chart.Bars[1].Values["w1:close"] != 100 {
+		t.Fatalf("chart lost weekly companion at exact Monday boundary: %+v", chart.Bars)
+	}
+	if got := analysisClosedAt(base, "w1"); got != base+7*day {
+		t.Fatalf("weekly analysis close changed at year boundary: %d", got)
 	}
 }

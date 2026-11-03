@@ -4,7 +4,7 @@ export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparis
 export type AnalysisTradeDirection='long'|'short';
 export interface AnalysisTradeSimulation {direction?:AnalysisTradeDirection|'';stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
-export type AnalysisPeriod='all'|'d1'|'h1';
+export type AnalysisPeriod='all'|'w1'|'d1'|'h1';
 export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|'';profitabilityFilter?:number}
 export interface SavedConditionProfitability {profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
@@ -69,7 +69,7 @@ export function analysisPriceOverlay(field:string){const base=fieldParts(field).
 export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
 export function analysisInputError(view:AnalysisRequest){
  if(view.profitabilityFilter!==undefined&&(!Number.isInteger(view.profitabilityFilter)||view.profitabilityFilter<0||view.profitabilityFilter>100||view.profitabilityFilter%5!==0))return'Profitability must be 0–100 in steps of 5.';
- if(view.period&&!['all','d1','h1'].includes(view.period))return'Choose All periods, d1 or h1 before scanning.';
+ if(view.period&&!['all','w1','d1','h1'].includes(view.period))return'Choose All periods, w1, d1 or h1 before scanning.';
  if(view.categories&&view.categories.length===0)return'Select at least one asset category before scanning.';
  if(!view.conditions.length)return'Add at least one condition before scanning.';
  if(view.conditions.length>32)return'Use at most 32 conditions.';

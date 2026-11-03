@@ -372,3 +372,50 @@ func TestDatasetsRejectAmbiguousRangesAndUnavailableSelections(t *testing.T) {
 		t.Fatal("unavailable downloaded selection accepted")
 	}
 }
+
+func TestWeeklyDatasetForecastAndSelectionSurviveRestart(t *testing.T) {
+	profile, directory := t.TempDir(), t.TempDir()
+	dataset := Dataset{ID: "weekly-source", Symbol: "eurusd", Name: "Euro vs US Dollar", Period: "w1", Filename: "eurusd-w1-2010-01-04-2021-07-12.csv", Directory: directory}
+	start := time.Date(2010, 1, 4, 0, 0, 0, 0, time.UTC).UnixMilli()
+	var text strings.Builder
+	text.WriteString("timestamp,close\n")
+	for i := range 601 {
+		fmt.Fprintf(&text, "%d,%d\n", start+int64(i)*604_800_000, i+10)
+	}
+	path := filepath.Join(directory, dataset.Filename)
+	if err := os.WriteFile(path, []byte(text.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source := func() ([]Dataset, error) { return []Dataset{dataset}, nil }
+	runtime := &fakeModelRuntime{status: RuntimeStatus{Ready: true, ModelReady: true, RuntimeReady: true}}
+	m := New(profile, source, runtime)
+	t.Cleanup(m.Close)
+	if datasets, err := m.Datasets(); err != nil || len(datasets) != 1 || datasets[0].Period != "w1" {
+		t.Fatalf("weekly source missing from prediction inventory: %+v %v", datasets, err)
+	}
+	selection := Selection{Asset: "eurusd", Period: "w1", ContextLength: 512, Horizon: 2}
+	if _, err := m.Start(selection); err != nil {
+		t.Fatal(err)
+	}
+	info := waitManager(t, m)
+	if info.Error != "" || len(info.Forecasts) != 1 || info.Forecasts[0].Period != "w1" {
+		t.Fatalf("weekly forecast was not published: %+v", info)
+	}
+	forecastID := info.Forecasts[0].ID
+	forecast, err := m.Forecast(forecastID)
+	if err != nil || len(forecast.History) != 512 || forecast.History[0].Time != start+89*604_800_000 || forecast.History[511].Close != 610 {
+		t.Fatalf("weekly forecast history is incorrect: %+v %v", forecast, err)
+	}
+	m.Close()
+	restarted := New(profile, source, runtime)
+	t.Cleanup(restarted.Close)
+	if got := restarted.Info(); got.Error != "" || got.Selection.Period != "w1" || len(got.Forecasts) != 1 || got.Forecasts[0].ID != forecastID {
+		t.Fatalf("weekly selection or forecast lost on restart: %+v", got)
+	}
+	if _, err = restarted.Forecast(forecastID); err != nil {
+		t.Fatalf("saved weekly forecast rejected: %v", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != text.String() {
+		t.Fatal("weekly prediction modified its source")
+	}
+}

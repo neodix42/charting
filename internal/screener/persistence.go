@@ -235,10 +235,13 @@ func (m *Manager) loadDownloads() error {
 	if err != nil || directory != saved.Directory {
 		return errors.New("invalid saved download directory")
 	}
-	if len(saved.Jobs) == 0 || len(saved.Jobs) > len(catalogAssets) || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
+	if len(saved.Jobs) == 0 || len(saved.Jobs) > 2*len(catalogAssets) || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid saved download queue limits")
 	}
-	request := Request{Concurrency: saved.Concurrency}
+	request, err := downloadBatchRequest(saved.Jobs, saved.Concurrency)
+	if err != nil {
+		return err
+	}
 	ids := map[string]bool{}
 	for _, job := range saved.Jobs {
 		id, e := hex.DecodeString(job.ID)
@@ -246,13 +249,6 @@ func (m *Manager) loadDownloads() error {
 			return errors.New("invalid saved download job")
 		}
 		ids[job.ID] = true
-		if request.Timeframe == "" {
-			request.Timeframe, request.From, request.To = job.Timeframe, job.From, job.To
-		}
-		if job.Timeframe != request.Timeframe || job.From != request.From || job.To != request.To {
-			return errors.New("saved jobs do not belong to one batch")
-		}
-		request.Symbols = append(request.Symbols, job.Symbol)
 		switch job.Status {
 		case "queued", "running", "completed", "failed", "cancelled":
 		default:
@@ -425,4 +421,42 @@ func (m *Manager) Resume() (Info, error) {
 	}
 	m.beginLocked()
 	return m.infoLocked(), nil
+}
+
+// Weekly requests retain an explicit daily job for each symbol. Validate the
+// exact two-phase shape on restore instead of accepting arbitrary mixed batches.
+func downloadBatchRequest(jobs []Job, concurrency int) (Request, error) {
+	request := Request{Concurrency: concurrency}
+	if len(jobs) == 0 {
+		return request, errors.New("empty saved download batch")
+	}
+	first := jobs[0]
+	request.Timeframe, request.From, request.To = first.Timeframe, first.From, first.To
+	weekly := false
+	for _, job := range jobs {
+		weekly = weekly || job.Timeframe == "w1"
+	}
+	count := len(jobs)
+	if weekly {
+		if count%2 != 0 {
+			return request, errors.New("weekly batch is missing its daily prerequisites")
+		}
+		count /= 2
+		request.Timeframe = "w1"
+	}
+	for i, job := range jobs {
+		period := request.Timeframe
+		if weekly && i < count {
+			period = "d1"
+		}
+		if job.Timeframe != period || job.From != first.From || job.To != first.To || (weekly && job.AsOf != first.AsOf) {
+			return request, errors.New("saved jobs do not belong to one batch")
+		}
+		if i < count {
+			request.Symbols = append(request.Symbols, job.Symbol)
+		} else if job.Symbol != jobs[i-count].Symbol {
+			return request, errors.New("weekly batch has mismatched daily prerequisites")
+		}
+	}
+	return request, nil
 }

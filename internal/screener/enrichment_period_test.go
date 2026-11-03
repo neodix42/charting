@@ -222,3 +222,36 @@ func TestEnrichmentPeriodKeepsRecipeIdentityAndRefreshReplayIndependentOfScope(t
 		t.Fatalf("refresh changed recipe identity: %+v %v", metadata, err)
 	}
 }
+
+func TestEnrichmentWeeklyPeriodLeavesDailyHistoryUntouched(t *testing.T) {
+	m := sourceEnrichmentManager(t, false)
+	weeklyName := "eurusd-w1-2024-01-01-2024-01-15.csv"
+	dailyName := "eurusd-d1-2024-01-01-2024-01-15.csv"
+	weeklyPath := writeDataFile(t, m, weeklyName, "timestamp,open,high,low,close,volume\n1704067200000,1,3,0,2,7\n1704672000000,2,4,1,3,9\n")
+	dailyPath := writeDataFile(t, m, dailyName, candleCSV)
+	before := enrichmentTreeSnapshot(t, m.directory)
+	if _, err := m.StartEnrichment(EnrichmentRequest{Indicator: "sma", Parameters: map[string]float64{"period": 2}, Period: "w1"}); err != nil {
+		t.Fatal(err)
+	}
+	info := waitEnrichment(t, m, []string{dataFileID(m.directory, weeklyName)})
+	if info.Total != 1 || info.Completed != 1 || info.Failed != 0 || len(info.Jobs) != 1 || info.Jobs[0].Rows != 2 {
+		t.Fatalf("weekly enrichment selected incorrect histories: %+v", info)
+	}
+	data, err := os.ReadFile(weeklyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
+	if err != nil || len(rows) != 3 || rows[0][6] != "sma_2" || rows[1][6] != "" || rows[2][6] != "2.5" {
+		t.Fatalf("weekly indicator values are incorrect: %s %v", data, err)
+	}
+	after := enrichmentTreeSnapshot(t, m.directory)
+	if !reflect.DeepEqual(before[dailyPath], after[dailyPath]) {
+		t.Fatal("weekly enrichment changed daily history")
+	}
+	metadata, err := readFileMetadata(m.directory, weeklyName)
+	if err != nil || len(metadata.Recipes) != 1 || metadata.Recipes[0].Period != "" {
+		t.Fatalf("weekly period changed recipe identity: %+v %v", metadata, err)
+	}
+	assertNoEnrichmentScratch(t, m.directory)
+}

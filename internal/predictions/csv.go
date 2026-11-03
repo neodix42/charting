@@ -18,7 +18,7 @@ import (
 
 func validPeriod(period string) bool {
 	switch period {
-	case "s1", "m1", "m5", "m15", "m30", "h1", "h4", "d1", "mn1":
+	case "s1", "m1", "m5", "m15", "m30", "h1", "h4", "d1", "w1", "mn1":
 		return true
 	}
 	return false
@@ -45,6 +45,8 @@ func closedAt(timestamp int64, period string) int64 {
 		return timestamp + 14_400_000
 	case "d1":
 		return timestamp + 86_400_000
+	case "w1":
+		return timestamp + 604_800_000
 	}
 	return math.MaxInt64
 }

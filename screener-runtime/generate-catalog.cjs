@@ -25,7 +25,10 @@ for (const line of readme.split('\n')) {
 }
 assert.deepEqual([...seen].sort(), Object.keys(api.instrumentMetaData).sort());
 assert.ok(groups.every(group => group.instruments.length));
-const result = { version: pkg.version, groups, timeframes: Object.values(api.Timeframe) };
+// w1 is app-derived from retained daily history, not an upstream timeframe.
+const timeframes = Object.values(api.Timeframe);
+timeframes.splice(timeframes.indexOf('d1') + 1, 0, 'w1');
+const result = { version: pkg.version, groups, timeframes };
 const destination = path.join(__dirname, '../internal/screener/catalog.json');
 const output = `${JSON.stringify(result, null, 2)}\n`;
 if (process.argv.includes('--check')) {

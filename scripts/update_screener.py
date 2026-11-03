@@ -21,7 +21,7 @@ SOURCE_FILES = ("screener-runtime/package.json", "screener-runtime/package-lock.
                 "internal/screener/catalog.json")
 PUBLISH_FILES = (*SOURCE_FILES, "screener-runtime/node_modules")
 NPM_OPTIONS = ["--ignore-scripts", "--no-audit", "--no-fund", "--fetch-retries=0", "--fetch-timeout=15000"]
-SUPPORTED_TIMEFRAMES = ["tick", "s1", "m1", "m5", "m15", "m30", "h1", "h4", "d1", "mn1"]
+SUPPORTED_TIMEFRAMES = ["tick", "s1", "m1", "m5", "m15", "m30", "h1", "h4", "d1", "w1", "mn1"]
 
 
 def stable_version(value):

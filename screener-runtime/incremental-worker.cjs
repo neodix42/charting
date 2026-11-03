@@ -32,7 +32,7 @@ function missing(from,to,covered){
 function nextBar(timestamp,timeframe){
   if(timeframe==='tick')return timestamp+1;
   if(timeframe==='mn1'){const date=new Date(timestamp);return Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,1);}
-  const duration={s1:1000,m1:60000,m5:300000,m15:900000,m30:1800000,h1:3600000,h4:14400000,d1:86400000}[timeframe];
+  const duration={s1:1000,m1:60000,m5:300000,m15:900000,m30:1800000,h1:3600000,h4:14400000,d1:86400000,w1:604800000}[timeframe];
   if(!duration)throw Error('Unsupported download timeframe.');
   return timestamp+duration;
 }

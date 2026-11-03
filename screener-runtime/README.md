@@ -17,6 +17,7 @@ The release runtime includes:
 screener-runtime/
   node                  # node.exe on Windows
   worker.cjs
+  weekly-worker.cjs     # local weekly aggregation from retained daily history
   package.json
   package-lock.json
   node_modules/
@@ -40,6 +41,12 @@ instruments. The result is embedded in Go, so catalog browsing needs no network.
 The README's earliest date is descriptive; the download API applies its own
 timeframe-specific availability limits. All 10 exported timeframes are exposed:
 `tick`, `s1`, `m1`, `m5`, `m15`, `m30`, `h1`, `h4`, `d1`, and `mn1`.
+The application additionally exposes `w1`, derived locally from retained `d1`
+history. Daily preparation precedes weekly conversion; covered daily ranges make
+no provider requests. Weekly bars begin Monday 00:00 UTC, sum decimal volume
+exactly, and retain partial edge weeks from the available daily rows. Daily files
+and their indicator columns remain available. Weekly Refresh runs after daily
+Refresh, merges retained weekly history and replays weekly indicator recipes.
 
 Dates are UTC; `from` is inclusive and `to` is exclusive. CSV output preserves
 the library's default bid candles, volume units (millions), and flat filtering.
@@ -101,7 +108,8 @@ go test -race ./internal/screener
 ```
 
 The deterministic worker tests inject only transport responses. Production
-decoder, aggregation and CSV formatting come from the pinned installed package.
+decoder and source formatting come from the pinned installed package; weekly
+aggregation uses the local production helper.
 The Go tests run real child processes through the production protocol and cover
 validation, bounded parallel dispatch, stable result ordering, errors, cancellation,
 shutdown, preservation of existing output, and restoration of legacy preferences

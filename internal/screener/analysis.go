@@ -200,8 +200,8 @@ func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
 	if err := validateProfitabilityFilter(request.ProfitabilityFilter); err != nil {
 		return err
 	}
-	if request.Period != "" && request.Period != "all" && request.Period != "d1" && request.Period != "h1" {
-		return errors.New("analysis period must be all, d1 or h1")
+	if request.Period != "" && request.Period != "all" && request.Period != "d1" && request.Period != "h1" && request.Period != "w1" {
+		return errors.New("analysis period must be all, w1, d1 or h1")
 	}
 	if err := validateAnalysisCategories(request.Categories); err != nil {
 		return err

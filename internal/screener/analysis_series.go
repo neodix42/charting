@@ -126,6 +126,8 @@ func analysisClosedAt(timestamp int64, tf string) int64 {
 		return timestamp + 14_400_000
 	case "d1":
 		return timestamp + 86_400_000
+	case "w1":
+		return timestamp + 604_800_000
 	case "mn1":
 		return time.UnixMilli(timestamp).UTC().AddDate(0, 1, 0).UnixMilli()
 	}

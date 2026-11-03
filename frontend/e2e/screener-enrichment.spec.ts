@@ -202,7 +202,7 @@ test('Period scopes enrichment across all pages while retaining the full file li
  await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  const period=page.getByLabel('Enrichment period',{exact:true}),scope=page.getByLabel('Enrichment file scope',{exact:true});
- await expect(period).toHaveValue('all');await expect(period.locator('option')).toHaveText(['All periods','tick','s1','m1','m5','m15','m30','h1','h4','d1','mn1']);
+ await expect(period).toHaveValue('all');await expect(period.locator('option')).toHaveText(['All periods','tick','s1','m1','m5','m15','m30','h1','h4','d1','w1','mn1']);
  await expect(scope).toHaveText('28 of 28 files selected · All periods');
  await period.selectOption('m5');await expect(scope).toHaveText('9 of 28 files selected · m5');
  await expect(panel(page).locator('tbody tr')).toHaveCount(20);await expect(panel(page)).toContainText('1–20 of 28 files');

@@ -338,14 +338,20 @@ func (m *Manager) Start(request Request) (Info, error) {
 	if err := recoverHistoryPublications(m.directory); err != nil {
 		return m.infoLocked(), err
 	}
-	jobs := make([]Job, len(request.Symbols))
+	periods := []string{request.Timeframe}
+	if request.Timeframe == "w1" {
+		periods = []string{"d1", "w1"}
+	}
+	jobs := make([]Job, 0, len(request.Symbols)*len(periods))
 	asOf := time.Now().UnixMilli()
-	for i, symbol := range request.Symbols {
-		var id [16]byte
-		if _, err := rand.Read(id[:]); err != nil {
-			return m.infoLocked(), err
+	for _, period := range periods {
+		for _, symbol := range request.Symbols {
+			var id [16]byte
+			if _, err := rand.Read(id[:]); err != nil {
+				return m.infoLocked(), err
+			}
+			jobs = append(jobs, Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
 		}
-		jobs[i] = Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: request.Timeframe, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"}
 	}
 	oldJobs, oldDirectory, oldPublication := m.jobs, m.batchDirectory, m.publication
 	m.jobs, m.batchDirectory, m.publication = jobs, m.directory, map[string]string{}
@@ -444,57 +450,76 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 	// number of independent symbol jobs shares a single provider limiter.
 	workers = min(workers, MaxConcurrency)
 	sourceBatchSize := 1
-	next := 0
-	var pool sync.WaitGroup
-	pool.Add(workers)
-	for range workers {
-		go func() {
-			defer pool.Done()
-			for {
-				m.mu.Lock()
-				if next >= len(m.jobs) || ctx.Err() != nil {
-					m.mu.Unlock()
-					return
-				}
-				i := next
-				next++
-				if m.jobs[i].Status != "queued" {
-					m.mu.Unlock()
-					continue
-				}
-				m.jobs[i].Status, m.jobs[i].Message = "running", "Starting Dukascopy downloader"
-				job := m.jobs[i]
-				m.mu.Unlock()
-				output, message, err := m.download(ctx, i, job, directory, sourceBatchSize)
-				m.mu.Lock()
-				if m.jobs[i].Status == "completed" {
-					// Publication already committed atomically with its completed status.
-				} else if ctx.Err() != nil {
-					if m.jobs[i].Status != "cancelled" {
-						m.jobs[i].Status, m.jobs[i].Message = "queued", "Paused; resumes from its saved checkpoint"
+	// Weekly aggregation runs only after all retained daily prerequisites finish.
+	// Both phases are durable queue jobs, so restart never mistakes a daily
+	// publication for a completed weekly conversion.
+	for _, weekly := range []bool{false, true} {
+		next := 0
+		var pool sync.WaitGroup
+		pool.Add(workers)
+		for range workers {
+			go func() {
+				defer pool.Done()
+				for {
+					m.mu.Lock()
+					if next >= len(m.jobs) || ctx.Err() != nil {
+						m.mu.Unlock()
+						return
 					}
-				} else if err != nil {
-					m.jobs[i].Status, m.jobs[i].Message = "failed", cleanMessage(err.Error())
-				} else {
-					m.jobs[i].Status, m.jobs[i].Progress, m.jobs[i].Message, m.jobs[i].OutputPath = "completed", 100, message, output
-				}
-				saved := m.saveDownloadsLocked()
-				terminal := m.jobs[i].Status == "completed" || m.jobs[i].Status == "cancelled"
-				if m.jobs[i].Status == "failed" {
-					if _, checkpointErr := os.Stat(filepath.Join(m.jobDirectory(job), "checkpoint.json")); errors.Is(checkpointErr, os.ErrNotExist) {
-						// Existing histories keep one checkpoint per missing range.
-						_, rangesErr := os.Stat(filepath.Join(m.jobDirectory(job), "ranges.json"))
-						terminal = errors.Is(rangesErr, os.ErrNotExist)
+					i := next
+					next++
+					if m.jobs[i].Status != "queued" || (m.jobs[i].Timeframe == "w1") != weekly {
+						m.mu.Unlock()
+						continue
+					}
+					if weekly {
+						ready := false
+						for _, daily := range m.jobs {
+							if daily.Symbol == m.jobs[i].Symbol && daily.Timeframe == "d1" && daily.Status == "completed" {
+								ready = true
+							}
+						}
+						if !ready {
+							m.jobs[i].Status, m.jobs[i].Message = "failed", "Daily prerequisite did not complete; retry downloads before converting to w1"
+							m.saveDownloadsLocked()
+							m.mu.Unlock()
+							continue
+						}
+					}
+					m.jobs[i].Status, m.jobs[i].Message = "running", "Starting Dukascopy downloader"
+					job := m.jobs[i]
+					m.mu.Unlock()
+					output, message, err := m.download(ctx, i, job, directory, sourceBatchSize)
+					m.mu.Lock()
+					if m.jobs[i].Status == "completed" {
+						// Publication already committed atomically with its completed status.
+					} else if ctx.Err() != nil {
+						if m.jobs[i].Status != "cancelled" {
+							m.jobs[i].Status, m.jobs[i].Message = "queued", "Paused; resumes from its saved checkpoint"
+						}
+					} else if err != nil {
+						m.jobs[i].Status, m.jobs[i].Message = "failed", cleanMessage(err.Error())
+					} else {
+						m.jobs[i].Status, m.jobs[i].Progress, m.jobs[i].Message, m.jobs[i].OutputPath = "completed", 100, message, output
+					}
+					saved := m.saveDownloadsLocked()
+					terminal := m.jobs[i].Status == "completed" || m.jobs[i].Status == "cancelled"
+					if m.jobs[i].Status == "failed" {
+						if _, checkpointErr := os.Stat(filepath.Join(m.jobDirectory(job), "checkpoint.json")); errors.Is(checkpointErr, os.ErrNotExist) {
+							// Existing histories keep one checkpoint per missing range.
+							_, rangesErr := os.Stat(filepath.Join(m.jobDirectory(job), "ranges.json"))
+							terminal = errors.Is(rangesErr, os.ErrNotExist)
+						}
+					}
+					m.mu.Unlock()
+					if saved && terminal {
+						m.cleanupJobAt(directory, job)
 					}
 				}
-				m.mu.Unlock()
-				if saved && terminal {
-					m.cleanupJobAt(directory, job)
-				}
-			}
-		}()
+			}()
+		}
+		pool.Wait()
 	}
-	pool.Wait()
 }
 
 type workerEvent struct {
@@ -523,6 +548,17 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	if err != nil {
 		return "", "", err
 	}
+	dailyPlanFile := ""
+	if job.Timeframe == "w1" {
+		var dailyOriginals map[string]os.FileInfo
+		dailyPlanFile, dailyOriginals, err = prepareWeeklyDailyPlan(job, directory, jobDirectory)
+		if err != nil {
+			return "", "", err
+		}
+		for filename, info := range dailyOriginals {
+			originals[filename] = info
+		}
+	}
 	partial := filepath.Join(jobDirectory, "data.part")
 	if info, e := os.Lstat(partial); e == nil && !info.Mode().IsRegular() {
 		return "", "", errors.New("saved download partial must be a regular file")
@@ -548,9 +584,10 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		Resume          bool             `json:"resume"`
 		OwnerPipe       bool             `json:"ownerPipe"`
 		PlanFile        string           `json:"planFile,omitempty"`
+		DailyPlanFile   string           `json:"dailyPlanFile,omitempty"`
 		AsOf            int64            `json:"asOf"`
 		ProviderSession *providerSession `json:"providerSession,omitempty"`
-	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), plan.AsOf, sessionFromContext(ctx)})
+	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), dailyPlanFile, plan.AsOf, sessionFromContext(ctx)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
 	owner, err := cmd.StdinPipe()
@@ -654,7 +691,18 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	if ctx.Err() != nil {
 		return "", "", ctx.Err()
 	}
+	for filename, original := range originals {
+		if err := unchangedFile(filename, original); err != nil {
+			return "", "", err
+		}
+	}
 	name := fmt.Sprintf("%s-%s-%s-%s.csv", job.Symbol, job.Timeframe, job.From, job.To)
+	if job.Timeframe == "w1" {
+		name, err = canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, nil, fileMetadata{FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp})
+		if err != nil {
+			return "", "", err
+		}
+	}
 	// A source introduced after the plan was frozen must not cause a second
 	// history. Retry the request with a new plan instead of inventing a suffix.
 	names, err := csvNames(directory)

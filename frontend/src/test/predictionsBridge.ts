@@ -4,7 +4,7 @@ import {initialPredictionSelection} from '../workspace/predictions';
 /** Explicit, offline browser fixture. This module is never a production fallback. */
 export function predictionsBridge():PredictionsBackend {
  const key='cryptodesk-explicit-test-predictions';
- const datasets:PredictionDataset[]=[{id:'bitcoin-daily',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'d1',filename:'btcusd-d1.csv'},{id:'bitcoin-hourly',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'h1',filename:'btcusd-h1.csv'},{id:'euro-daily',symbol:'eurusd',name:'Euro vs US Dollar',period:'d1',filename:'eurusd-d1.csv'}];
+ const datasets:PredictionDataset[]=[{id:'bitcoin-daily',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'d1',filename:'btcusd-d1.csv'},{id:'bitcoin-hourly',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'h1',filename:'btcusd-h1.csv'},{id:'bitcoin-weekly',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'w1',filename:'btcusd-w1.csv'},{id:'euro-daily',symbol:'eurusd',name:'Euro vs US Dollar',period:'d1',filename:'eurusd-d1.csv'}];
  const saved=JSON.parse(sessionStorage.getItem(key)||'null') as {info:PredictionInfo;forecasts:PredictionForecast[]}|null;
  let forecasts:PredictionForecast[]=saved?.forecasts??[],info:PredictionInfo=saved?.info??{settings:{model:'Datadog/Toto-2.0-313m',modelDirectory:'/explicit-test/models'},models:[{id:'Datadog/Toto-2.0-313m',name:'Toto 2.0 · 313M'}],defaultModelDirectory:'/explicit-test/models',forecastDirectory:'/explicit-test/predictions',selection:initialPredictionSelection(),runtime:{ready:false,runtimeReady:true,modelReady:false},active:false,event:{phase:'idle',progress:0,message:''},forecasts:[]};
  const calls={get:0,datasets:0,prepare:0,start:0,cancel:0,configure:0,save:0,forecast:0,remove:0};
@@ -13,7 +13,7 @@ export function predictionsBridge():PredictionsBackend {
  const validate=(value:PredictionSelection)=>{if(![512,1024].includes(value.contextLength)||!Number.isInteger(value.horizon)||value.horizon<1||value.horizon>256)throw Error('Select 512 or 1024 historical bars and 1–256 future bars');};
  const finish=()=>{
   const dataset=datasets.find(value=>value.symbol===info.selection.asset&&value.period===info.selection.period);if(!dataset)throw Error('No selected fixture dataset');
-  const asOf=Date.UTC(2026,9,29),step=dataset.period==='h1'?3600000:86400000,createdAt=asOf+forecasts.length+1;
+  const asOf=Date.UTC(2026,9,dataset.period==='w1'?26:29),step=dataset.period==='w1'?604800000:dataset.period==='h1'?3600000:86400000,createdAt=asOf+forecasts.length+1;
   const history=Array.from({length:info.selection.contextLength},(_,index)=>({time:asOf-(info.selection.contextLength-index)*step,close:100+index*.1+Math.sin(index/8)*2})),last=history.at(-1)!.close;
   const forecast:PredictionForecast={id:`${createdAt}-fixture-${forecasts.length}`,createdAt,asOf,model:info.settings.model,modelRevision:'explicit-fixture-revision',symbol:dataset.symbol,assetName:dataset.name,period:dataset.period,contextLength:info.selection.contextLength,horizon:info.selection.horizon,sourceFile:dataset.filename,sourceHash:'explicit-test-hash',history,points:Array.from({length:info.selection.horizon},(_,index)=>({step:index+1,median:last+index*.2,lower:last+index*.2-5-index*.2,upper:last+index*.2+5+index*.2}))};
   forecasts=[forecast,...forecasts];const {history:_history,points:_points,sourceFile:_source,sourceHash:_hash,modelRevision:_revision,...summary}=forecast;

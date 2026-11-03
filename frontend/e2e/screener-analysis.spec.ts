@@ -560,7 +560,7 @@ test('scan categories default to all, survive row edits and reload, and are incl
 test('Analysis data period persists with categories and saved conditions, and limits the submitted scan',async({page})=>{
  await open(page,[file(0),file(1,'btcusd','h1'),file(2,'ethusd','h4'),file(3,'eurusd')]);
  const period=control(page,'Analysis period of data'),apply=page.getByRole('button',{name:'Apply conditions',exact:true});
- await expect(period).toHaveValue('all');await expect(period.locator('option')).toHaveText(['All periods','d1 · Daily','h1 · Hourly']);
+ await expect(period).toHaveValue('all');await expect(period.locator('option')).toHaveText(['All periods','w1 · Weekly','d1 · Daily','h1 · Hourly']);
  await expect(page.locator('.analysis-apply-row')).toContainText('4 of 4 files');
  await period.selectOption('h1');await expect(page.locator('.analysis-apply-row')).toContainText('1 of 4 files');
  await period.selectOption('d1');await control(page,'Scan Forex').uncheck();

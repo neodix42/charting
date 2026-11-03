@@ -41,7 +41,7 @@ type FilePage struct {
 	PeriodCounts map[string]int `json:"periodCounts,omitempty"`
 }
 
-var downloadFilename = regexp.MustCompile(`^([a-z0-9]+)-(tick|s1|m1|m5|m15|m30|h1|h4|d1|mn1)-(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.csv$`)
+var downloadFilename = regexp.MustCompile(`^([a-z0-9]+)-(tick|s1|m1|m5|m15|m30|h1|h4|d1|w1|mn1)-(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.csv$`)
 
 func dataFileID(directory, name string) string {
 	sum := sha256.Sum256([]byte(filepath.Join(directory, name)))

@@ -49,6 +49,7 @@ function isEmptyDataSource({url, buffer}) {
 // one source at a time so years of ticks never accumulate in memory. Each
 // source file contains whole UTC aggregation buckets (hour/day/month/year).
 async function download(request, options = {}) {
+  if (request.timeframe === 'w1') return require('./weekly-worker.cjs').weeklyDownload(request, options);
   if (request.planFile) return require('./incremental-worker.cjs').extendDownload(request, options);
   const api = options.api || require('dukascopy-node');
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));

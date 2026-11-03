@@ -70,8 +70,8 @@ describe('Analysis field selection and validation',()=>{
  it('keeps legacy all-period requests valid and accepts only supported base periods',()=>{
   const request=initialAnalysisView();
   expect(analysisInputError(request)).toBe('');
-  for(const period of ['','all','d1','h1'] as const)expect(analysisInputError({...request,period})).toBe('');
-  for(const period of ['h4','D1','same'])expect(analysisInputError({...request,period:period as never})).toContain('Choose All periods, d1 or h1');
+  for(const period of ['','all','w1','d1','h1'] as const)expect(analysisInputError({...request,period})).toBe('');
+  for(const period of ['h4','D1','same'])expect(analysisInputError({...request,period:period as never})).toContain('Choose All periods, w1, d1 or h1');
  });
  it('requires both simulation fields and a bounded integer duration, while retaining legacy requests',()=>{
   const request=initialAnalysisView(),tradeSimulation={stopLoss:'low',takeProfit:'ema_200',duration:20};

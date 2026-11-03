@@ -108,6 +108,7 @@ async function scan(filename,timeframe,onProgress) {
 }
 
 function overlapStart(last,timeframe) {
+  if(timeframe==='w1')return last-14*86400000;
   if(timeframe==='mn1'){
     const date=new Date(last);return Date.UTC(date.getUTCFullYear(),date.getUTCMonth()-1,1);
   }
@@ -117,6 +118,7 @@ function overlapStart(last,timeframe) {
 }
 
 function closedBoundary(now,timeframe){
+  if(timeframe==='w1'){const week=7*86400000,monday=4*86400000;return Math.floor((now-monday)/week)*week+monday;}
   if(timeframe==='tick')return now;
   if(timeframe==='mn1'){const date=new Date(now);return Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),1);}
   const duration={s1:1000,m1:60000,m5:300000,m15:900000,m30:1800000,h1:3600000,h4:14400000,d1:86400000}[timeframe];
@@ -157,6 +159,7 @@ async function refresh(request,options={}) {
     savedRecipes=JSON.parse(await fsp.readFile(request.recipeFile,'utf8'))??[];
   }
   if(!Array.isArray(savedRecipes)||savedRecipes.length>2000)throw Error('Applied indicator recipe list is invalid.');
+  if(request.timeframe==='w1')return require('./weekly-worker.cjs').weeklyRefresh(request,savedRecipes,scanned,{...options,now,emit:report});
   const requiredFields=request.requiredFields??[];
   const recipes=await recipesFor(scanned.headers,savedRecipes,requiredFields);
   const headers=[...scanned.headers],normalized=headers.map(key);

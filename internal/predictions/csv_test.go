@@ -94,3 +94,37 @@ func TestCSVTimestampAndMonthlyBoundaryAreUTC(t *testing.T) {
 		}
 	}
 }
+
+func TestCSVWeeklySnapshotExcludesOpenWeekAtMondayUTCBoundary(t *testing.T) {
+	start := time.Date(2010, 12, 27, 0, 0, 0, 0, time.UTC).UnixMilli()
+	const week = int64(604_800_000)
+	directory := t.TempDir()
+	dataset := Dataset{ID: "weekly-history", Symbol: "eurusd", Period: "w1", Filename: "history.csv", Directory: directory}
+	var data strings.Builder
+	data.WriteString("timestamp,close\n")
+	for i := range 514 {
+		fmt.Fprintf(&data, "%d,%d\n", start+int64(i)*week, i+10)
+	}
+	path := filepath.Join(directory, dataset.Filename)
+	if err := os.WriteFile(path, []byte(data.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	selection := Selection{Asset: dataset.Symbol, Period: "w1", ContextLength: 512, Horizon: 20}
+	if err := validateSelection(selection, true); err != nil {
+		t.Fatal(err)
+	}
+	asOf := start + 512*week
+	snapshot, err := readSource(context.Background(), dataset, selection, asOf)
+	if err != nil || len(snapshot.history) != 512 || snapshot.history[511].Time != start+511*week || snapshot.history[511].Close != 521 {
+		t.Fatalf("weekly close context is incorrect: %+v %v", snapshot.history, err)
+	}
+	if _, err = readSource(context.Background(), dataset, selection, asOf-1); err == nil || !strings.Contains(err.Error(), "511 fully closed") {
+		t.Fatalf("open week entered forecast context: %v", err)
+	}
+	if got := closedAt(start, "w1"); got != start+week {
+		t.Fatalf("weekly close changed at year boundary: %d", got)
+	}
+	if original, _ := os.ReadFile(path); string(original) != data.String() {
+		t.Fatal("weekly forecast modified its source")
+	}
+}
