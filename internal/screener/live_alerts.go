@@ -245,7 +245,7 @@ func liveAlertsScopeAllows(config LiveAlertsConfig, id, period string) bool {
 }
 
 func validateLiveAlertsConfig(config LiveAlertsConfig) error {
-	if len(config.ConditionIDs) > savedConditionsLimit || len(config.Periods) > 2 || len(config.ConditionPeriods) > savedConditionsLimit || len(config.Symbols) > len(catalogAssets) {
+	if len(config.ConditionIDs) > savedConditionsLimit || len(config.Periods) > 3 || len(config.ConditionPeriods) > savedConditionsLimit || len(config.Symbols) > len(catalogAssets) {
 		return errors.New("too many selected Live Alerts conditions, symbols or periods")
 	}
 	if len(config.ConditionPeriods) > 0 && (len(config.ConditionIDs) > 0 || len(config.Periods) > 0) {
@@ -253,13 +253,13 @@ func validateLiveAlertsConfig(config LiveAlertsConfig) error {
 	}
 	seen := map[string]bool{}
 	for _, period := range config.Periods {
-		if (period != "d1" && period != "h1") || seen[period] {
+		if !supportedLiveAlertPeriod(period) || seen[period] {
 			return errors.New("invalid legacy Live Alerts periods")
 		}
 		seen[period] = true
 	}
 	for _, rule := range config.ConditionPeriods {
-		if rule.Period != "d1" && rule.Period != "h1" && rule.Period != "" {
+		if !supportedLiveAlertPeriod(rule.Period) && rule.Period != "" {
 			return errors.New("invalid legacy Live Alerts condition period")
 		}
 	}
@@ -285,7 +285,7 @@ func validateLiveAlertsConfig(config LiveAlertsConfig) error {
 }
 
 func validateLiveAlertsState(state liveAlertsState) error {
-	if (state.Version != 1 && state.Version != 2 && state.Version != 3 && state.Version != 4) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*len(catalogAssets)*2 {
+	if (state.Version != 1 && state.Version != 2 && state.Version != 3 && state.Version != 4) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*len(catalogAssets)*3 {
 		return errors.New("invalid Live Alerts state version or count")
 	}
 	validationConfig := state.Config
@@ -338,7 +338,7 @@ func (l *LiveAlerts) assets() ([]LiveAlertAsset, error) {
 	bySymbol := map[string]*LiveAlertAsset{}
 	for _, name := range names {
 		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
-		if match == nil || (match[2] != "d1" && match[2] != "h1") {
+		if match == nil || !supportedLiveAlertPeriod(match[2]) {
 			continue
 		}
 		if _, known := catalogAssets[match[1]]; !known {
@@ -636,13 +636,31 @@ func (l *LiveAlerts) CheckNow() (LiveAlertsInfo, error) {
 	return l.Info(), nil
 }
 
-func nextLiveAlertCheck(now time.Time, periods []string) time.Time {
-	interval := 24 * time.Hour
-	if containsLiveValue(periods, "h1") {
-		interval = time.Hour
+// Weekly bars use Monday 00:00 UTC rather than Unix-epoch week alignment.
+func supportedLiveAlertPeriod(period string) bool {
+	return period == "h1" || period == "d1" || period == "w1"
+}
+
+func liveAlertPeriodStart(now time.Time, period string) time.Time {
+	utc := now.UTC()
+	if period == "w1" {
+		day := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
+		return day.AddDate(0, 0, -(int(day.Weekday())+6)%7)
 	}
-	now = now.UTC()
-	return now.Truncate(interval).Add(interval)
+	if period == "h1" {
+		return utc.Truncate(time.Hour)
+	}
+	return utc.Truncate(24 * time.Hour)
+}
+
+func nextLiveAlertCheck(now time.Time, periods []string) time.Time {
+	period, interval := "d1", 24*time.Hour
+	if containsLiveValue(periods, "h1") {
+		period, interval = "h1", time.Hour
+	} else if !containsLiveValue(periods, "d1") && containsLiveValue(periods, "w1") {
+		period, interval = "w1", 7*24*time.Hour
+	}
+	return liveAlertPeriodStart(now, period).Add(interval)
 }
 
 func liveAlertsCalendarIdentity(config LiveAlertsConfig) string {

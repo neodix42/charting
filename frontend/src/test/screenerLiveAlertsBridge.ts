@@ -19,7 +19,7 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
   const files=(window as unknown as {__testEnrichmentFiles?:()=>Array<{symbol?:string;timeframe?:string;error?:string}>}).__testEnrichmentFiles?.()??[];
   const grouped=new Map<string,LiveAlertAsset>();
   for(const file of files){
-   if(!file.symbol||!file.timeframe||!['d1','h1'].includes(file.timeframe)||file.error)continue;
+   if(!file.symbol||!file.timeframe||!['w1','d1','h1'].includes(file.timeframe)||file.error)continue;
    let asset=grouped.get(file.symbol);
    if(!asset){const group=catalog().groups.find(group=>group.instruments.some(item=>item.id===file.symbol)),instrument=group?.instruments.find(item=>item.id===file.symbol);asset={symbol:file.symbol,name:instrument?.name??file.symbol.toUpperCase(),category:group?.name??'Other',periods:[]};grouped.set(file.symbol,asset);}
    if(!asset.periods.includes(file.timeframe))asset.periods.push(file.timeframe);
@@ -29,17 +29,22 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
  const scopes=()=>{
   const saved=savedConditions(),inventory=assets();
   return saved.map(condition=>{
-   const period=condition.request.period||'all',targets=(condition.analysis?.assets??[]).filter(row=>row.matches>0&&['d1','h1'].includes(row.timeframe)&&(period==='all'||row.timeframe===period)&&inventory.some(asset=>asset.symbol===row.symbol&&asset.periods.includes(row.timeframe))&&((condition.request.profitabilityFilter??0)===0||!!savedConditionProfitability(condition,row.symbol,row.timeframe))).map(row=>{const asset=inventory.find(asset=>asset.symbol===row.symbol)!,profitability=savedConditionProfitability(condition,row.symbol,row.timeframe);return{symbol:row.symbol,name:asset.name,category:asset.category,period:row.timeframe,...(profitability?{profitability}:{})};});
+   const period=condition.request.period||'all',targets=(condition.analysis?.assets??[]).filter(row=>row.matches>0&&['w1','d1','h1'].includes(row.timeframe)&&(period==='all'||row.timeframe===period)&&inventory.some(asset=>asset.symbol===row.symbol&&asset.periods.includes(row.timeframe))&&((condition.request.profitabilityFilter??0)===0||!!savedConditionProfitability(condition,row.symbol,row.timeframe))).map(row=>{const asset=inventory.find(asset=>asset.symbol===row.symbol)!,profitability=savedConditionProfitability(condition,row.symbol,row.timeframe);return{symbol:row.symbol,name:asset.name,category:asset.category,period:row.timeframe,...(profitability?{profitability}:{})};});
    const error=!condition.analysis?`${condition.name} has no recorded Analysis matching assets; apply this saved condition in Analysis before enabling its ${period.toUpperCase()} alerts`:!targets.length?(condition.request.profitabilityFilter??0)>0?`${condition.name} has no downloaded ${period.toUpperCase()} assets meeting its recorded ${condition.request.profitabilityFilter}% profitability filter; reapply its saved rules in Analysis`:`${condition.name} has no downloaded ${period.toUpperCase()} assets in its recorded Analysis matches; reapply its saved rules in Analysis`:'';
    return{conditionId:condition.id,period,targets,error};
   });
  };
+ const nextClose=(period:string,now=Date.now())=>{
+  const interval=period==='w1'?604800000:period==='d1'?86400000:3600000,origin=period==='w1'?4*86400000:0;
+  return (Math.floor((now-origin)/interval)+1)*interval+origin;
+ };
+ const nextScopeClose=(scope:ReturnType<typeof scopes>[number]|undefined)=>Math.min(...(scope?.targets.length?scope.targets.map(target=>nextClose(target.period)):[nextClose(scope?.period==='w1'?'w1':scope?.period==='h1'?'h1':'d1')]));
  const snapshot=()=>{
   const saved=savedConditions(),available=new Set(saved.map(condition=>condition.id)),ids=info.config.conditionIds.filter(id=>available.has(id));
   if(ids.length!==info.config.conditionIds.length||info.checks.some(check=>!available.has(check.conditionId))){info={...info,config:{enabled:info.config.enabled&&ids.length>0,conditionIds:ids},checks:info.checks.filter(check=>available.has(check.conditionId))};sessionStorage.setItem(key,JSON.stringify(info.config));persistHistory();}
   const conditionScopes=scopes(),checks=ids.map(conditionId=>{
-   const previous=info.checks.find(check=>check.conditionId===conditionId),scope=conditionScopes.find(scope=>scope.conditionId===conditionId),interval=scope?.targets.some(target=>target.period==='h1')?3600000:86400000;
-   return{conditionId,name:saved.find(condition=>condition.id===conditionId)!.name,assetsScanned:previous?.assetsScanned??0,lastChecked:previous?.lastChecked??0,nextCheck:info.config.enabled?(previous?.nextCheck||(Math.floor(Date.now()/interval)+1)*interval):0,sentAlerts:previous?.sentAlerts??0,status:previous?.status??'never' as const,manual:previous?.manual??false,error:previous?.error??'',...(previous?.timingHint?{timingHint:previous.timingHint}:{})};
+   const previous=info.checks.find(check=>check.conditionId===conditionId),scope=conditionScopes.find(scope=>scope.conditionId===conditionId);
+   return{conditionId,name:saved.find(condition=>condition.id===conditionId)!.name,assetsScanned:previous?.assetsScanned??0,lastChecked:previous?.lastChecked??0,nextCheck:info.config.enabled?(previous?.nextCheck||nextScopeClose(scope)):0,sentAlerts:previous?.sentAlerts??0,status:previous?.status??'never' as const,manual:previous?.manual??false,error:previous?.error??'',...(previous?.timingHint?{timingHint:previous.timingHint}:{})};
   });
   return structuredClone({...info,checks,savedConditionsRevision:(window as unknown as {__testSavedAnalysisConditionsRevision?:()=>number}).__testSavedAnalysisConditionsRevision?.()??0,conditionScopes,assets:assets()});
  };
@@ -49,8 +54,8 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
    writes.push(structuredClone(value));if(gate)await gate;if(errors.save)throw Error(errors.save);
    const selected=scopes().filter(scope=>value.conditionIds.includes(scope.conditionId));
    if(value.enabled&&(!value.conditionIds.length||selected.length!==value.conditionIds.length||selected.some(scope=>scope.error||!scope.targets.length)))throw Error('Select saved conditions with analyzed matching assets.');
-   const interval=selected.some(scope=>scope.targets.some(target=>target.period==='h1'))?3600000:86400000;
-   info={...info,config:structuredClone(value),error:'',running:false,status:value.enabled?'Waiting for next closed bar':'Disabled',nextRun:value.enabled?(Math.floor(Date.now()/interval)+1)*interval:0};
+   const nextRun=selected.length?Math.min(...selected.map(nextScopeClose)):0;
+   info={...info,config:structuredClone(value),error:'',running:false,status:value.enabled?'Waiting for next closed bar':'Disabled',nextRun:value.enabled?nextRun:0};
    sessionStorage.setItem(key,JSON.stringify(info.config));return snapshot();
   },
   async CheckScreenerLiveAlerts(){checks++;if(errors.check)throw Error(errors.check);if(!info.config.enabled)throw Error('Start Live Alerts before checking.');const started=Date.now(),selected=new Set(info.config.conditionIds),attempts=snapshot().checks.map(check=>({...check,assetsScanned:0,lastChecked:started,status:'running' as const,manual:true,error:''}));info={...info,checks:[...info.checks.filter(check=>!selected.has(check.conditionId)),...attempts],running:true,status:'Checking selected assets',currentAsset:scopes().filter(scope=>info.config.conditionIds.includes(scope.conditionId)).flatMap(scope=>scope.targets)[0]?.symbol??'',progress:0};persistHistory();return snapshot();},

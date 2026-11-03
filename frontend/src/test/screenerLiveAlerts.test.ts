@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -19,4 +19,16 @@ it('retains failed alert selections for close retry and copies caller data',asyn
  const writer=new LiveAlertsConfigWriter(persist,errors),draft={...initialLiveAlertsConfig(),conditionIds:['signal']};
  writer.edit(draft);draft.conditionIds[0]='changed';await expect(writer.flush()).rejects.toThrow('settings disk full');expect(writer.busy).toBe(true);
  await writer.flush();expect(errors).toHaveBeenCalled();expect(persist.mock.calls[1][0].conditionIds).toEqual(['signal']);expect(writer.busy).toBe(false);
+});
+
+it('labels inherited weekly periods and reports the following Monday as the weekly signal close',()=>{
+ expect(liveAlertPeriodLabel('w1')).toBe('Weekly (W1)');
+ expect(liveAlertPeriodLabel('all')).toBe('All analyzed periods (W1 / D1 / H1)');
+ expect(liveAlertPeriodLabel('h1')).toBe('Hourly (H1)');
+ expect(liveAlertPeriodLabel('d1')).toBe('Daily (D1)');
+ expect(liveAlertPeriodLabel('m5')).toBe('M5');
+ const monday=Date.UTC(2026,9,26);
+ expect(liveAlertBarClose(monday,'w1')).toBe(Date.UTC(2026,10,2));
+ expect(liveAlertBarClose(monday,'d1')).toBe(Date.UTC(2026,9,27));
+ expect(liveAlertBarClose(monday,'h1')).toBe(Date.UTC(2026,9,26,1));
 });

@@ -26,7 +26,7 @@ func nextLiveAlertConditionClose(after time.Time, saved SavedAnalysisCondition, 
 		return time.Time{}, false
 	}
 	schedule := liveAlertCalendar(saved.Request)
-	close := after.UTC().Truncate(interval).Add(interval)
+	close := liveAlertPeriodStart(after, period).Add(interval)
 	for range count {
 		if schedule.allows(close.Add(-interval)) {
 			return close, true
@@ -45,7 +45,7 @@ func liveAlertConditionDueAt(saved SavedAnalysisCondition, period string, cutoff
 	if !supported {
 		return false
 	}
-	return liveAlertCalendar(saved.Request).allows(cutoff.UTC().Truncate(interval).Add(-interval))
+	return liveAlertCalendar(saved.Request).allows(liveAlertPeriodStart(cutoff, period).Add(-interval))
 }
 
 func liveAlertCalendarPeriod(saved SavedAnalysisCondition, period string) (time.Duration, int, bool) {
@@ -57,6 +57,8 @@ func liveAlertCalendarPeriod(saved SavedAnalysisCondition, period string) (time.
 		return time.Hour, 7 * 24, true
 	case "d1":
 		return 24 * time.Hour, 7, true
+	case "w1":
+		return 7 * 24 * time.Hour, 1, true
 	default:
 		return 0, 0, false
 	}
@@ -156,7 +158,7 @@ func liveAlertConditionTimingHint(saved SavedAnalysisCondition, period string, n
 		// Disabled monitoring also has no next check. Describe impossibility
 		// only when the calendar itself admits no opening for this period.
 		for slot, allowed := range schedule.allowed {
-			if allowed && (period == "h1" || slot%24 == 0) {
+			if allowed && (period == "h1" || period == "d1" && slot%24 == 0 || period == "w1" && slot == 0) {
 				return ""
 			}
 		}

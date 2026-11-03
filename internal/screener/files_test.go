@@ -202,3 +202,85 @@ func TestDownloadedSymbolsUsePublishedFilesAcrossRestartAndFolderChanges(t *test
 		t.Fatalf("old folder assets retained: %+v %v", info, err)
 	}
 }
+
+func TestFilesForPeriodFiltersMixedInventoryBeforePaginationAndKeepsGlobalCounts(t *testing.T) {
+	m := New(t.TempDir())
+	defer m.Close()
+	if err := os.MkdirAll(m.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 27 {
+		for _, period := range []string{"d1", "w1"} {
+			writeDataFile(t, m, fmt.Sprintf("asset%03d-%s-2024-01-01-2024-02-01.csv", i, period), candleCSV)
+		}
+	}
+	writeDataFile(t, m, "EURUSD-W1-2024-01-01-2024-02-01.CSV", candleCSV)
+	writeDataFile(t, m, "custom.csv", candleCSV)
+	wantCounts := map[string]int{"d1": 27, "w1": 28}
+	seen := map[string]bool{}
+	for _, offset := range []int{0, 20, 40} {
+		page, err := m.FilesForPeriod(offset, 20, "w1")
+		wantRows := 20
+		if offset == 20 {
+			wantRows = 8
+		} else if offset == 40 {
+			wantRows = 0
+		}
+		if err != nil || page.Total != 28 || page.AllTotal != 56 || page.Offset != offset || page.Limit != 20 || len(page.Files) != wantRows || !reflect.DeepEqual(page.PeriodCounts, wantCounts) {
+			t.Fatalf("weekly page %d has wrong filtered/global counts: %+v %v", offset, page, err)
+		}
+		for _, file := range page.Files {
+			if file.Timeframe != "w1" || seen[file.ID] || file.Error != "" || len(file.Fields) == 0 {
+				t.Fatalf("weekly page included a duplicate/nonweekly/unreadable history: %+v", file)
+			}
+			seen[file.ID] = true
+		}
+	}
+	if len(seen) != 28 {
+		t.Fatalf("weekly pagination lost files: %d", len(seen))
+	}
+	for _, period := range []string{"", "all"} {
+		page, err := m.FilesForPeriod(40, 20, period)
+		if err != nil || page.Total != 56 || page.AllTotal != 56 || len(page.Files) != 16 || !reflect.DeepEqual(page.PeriodCounts, wantCounts) {
+			t.Fatalf("All periods page lost global inventory: %+v %v", page, err)
+		}
+		if page.Files[len(page.Files)-1].Name != "custom.csv" {
+			t.Fatalf("All periods omitted custom CSV: %+v", page.Files)
+		}
+	}
+	legacy, err := m.Files(40, 20)
+	all, allErr := m.FilesForPeriod(40, 20, "all")
+	if err != nil || allErr != nil || !reflect.DeepEqual(legacy, all) {
+		t.Fatalf("legacy Files call changed its inventory semantics: %+v %+v %v %v", legacy, all, err, allErr)
+	}
+	missing, err := m.FilesForPeriod(0, 20, "h1")
+	if err != nil || missing.Total != 0 || missing.AllTotal != 56 || len(missing.Files) != 0 || !reflect.DeepEqual(missing.PeriodCounts, wantCounts) {
+		t.Fatalf("empty period lost total inventory counts: %+v %v", missing, err)
+	}
+}
+
+func TestFilesForPeriodValidatesPeriodAndPageWithoutReadingUnrelatedFiles(t *testing.T) {
+	m := New(t.TempDir())
+	defer m.Close()
+	if err := os.MkdirAll(m.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, period := range []string{"1w", "W1", " d1", "unknown"} {
+		if _, err := m.FilesForPeriod(0, 20, period); err == nil {
+			t.Fatalf("accepted unsupported file period %q", period)
+		}
+	}
+	for _, bounds := range [][2]int{{-1, 20}, {0, 0}, {0, 201}} {
+		if _, err := m.FilesForPeriod(bounds[0], bounds[1], "w1"); err == nil {
+			t.Fatalf("accepted invalid file page %v", bounds)
+		}
+	}
+	// Bad data from another period or a custom file must not become a visible
+	// weekly error, including when the matching period has no files.
+	writeDataFile(t, m, "eurusd-d1-2024-01-01-2024-02-01.csv", "\"unterminated")
+	writeDataFile(t, m, "custom.csv", "\"unterminated")
+	page, err := m.FilesForPeriod(0, 20, "w1")
+	if err != nil || page.Total != 0 || page.AllTotal != 2 || len(page.Files) != 0 || page.PeriodCounts["d1"] != 1 {
+		t.Fatalf("unrelated malformed files leaked into weekly page: %+v %v", page, err)
+	}
+}

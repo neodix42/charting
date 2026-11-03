@@ -54,6 +54,10 @@ func (a *App) GetScreenerFiles(offset, limit int) (screener.FilePage, error) {
 	return a.screener.Files(offset, limit)
 }
 
+func (a *App) GetScreenerFilesForPeriod(offset, limit int, period string) (screener.FilePage, error) {
+	return a.screener.FilesForPeriod(offset, limit, period)
+}
+
 func (a *App) GetScreenerEnrichment(fileIDs []string) (screener.EnrichmentInfo, error) {
 	return a.screener.Enrichment(fileIDs)
 }

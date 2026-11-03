@@ -178,6 +178,10 @@ export function GetScreenerFiles(arg1, arg2) {
   return window['go']['main']['App']['GetScreenerFiles'](arg1, arg2);
 }
 
+export function GetScreenerFilesForPeriod(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetScreenerFilesForPeriod'](arg1, arg2, arg3);
+}
+
 export function GetScreenerIndicators() {
   return window['go']['main']['App']['GetScreenerIndicators']();
 }

@@ -36,6 +36,7 @@ type FilePage struct {
 	Directory    string         `json:"directory"`
 	Files        []DataFile     `json:"files"`
 	Total        int            `json:"total"`
+	AllTotal     int            `json:"allTotal"`
 	Offset       int            `json:"offset"`
 	Limit        int            `json:"limit"`
 	PeriodCounts map[string]int `json:"periodCounts,omitempty"`
@@ -95,13 +96,18 @@ func downloadedSymbols(directory string) ([]string, error) {
 	return symbols, nil
 }
 
-func describeFile(directory, name string) DataFile {
+func describeFileName(directory, name string) DataFile {
 	file := DataFile{ID: dataFileID(directory, name), Name: name, Fields: []string{}}
 	if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
 		file.Symbol, file.Timeframe, file.From, file.To = match[1], match[2], match[3], match[4]
 	}
 	asset := describeAsset(file.Symbol, name)
 	file.Description, file.Category = asset.description, asset.category
+	return file
+}
+
+func describeFile(directory, name string) DataFile {
+	file := describeFileName(directory, name)
 	full := filepath.Join(directory, name)
 	info, err := os.Lstat(full)
 	if err != nil || !info.Mode().IsRegular() {
@@ -157,8 +163,26 @@ func describeFile(directory, name string) DataFile {
 }
 
 func (m *Manager) Files(offset, limit int) (FilePage, error) {
+	return m.FilesForPeriod(offset, limit, "all")
+}
+
+// FilesForPeriod filters before pagination while preserving whole-inventory
+// counts for enrichment scope and the independently global Refresh action.
+func (m *Manager) FilesForPeriod(offset, limit int, period string) (FilePage, error) {
 	if offset < 0 || limit < 1 || limit > 200 {
 		return FilePage{}, errors.New("file page requires a nonnegative offset and a limit between 1 and 200")
+	}
+	if period != "" && period != "all" {
+		valid := false
+		for _, candidate := range loadCatalog().Timeframes {
+			if period == candidate {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return FilePage{}, fmt.Errorf("unsupported file period %q", period)
+		}
 	}
 	m.mu.Lock()
 	directory := m.directory
@@ -168,16 +192,22 @@ func (m *Manager) Files(offset, limit int) (FilePage, error) {
 	if err != nil {
 		return page, err
 	}
-	page.Total = len(names)
-	// Batch scope includes every list page. Count only recognized download
-	// periods without reading the contents of off-page histories.
+	page.AllTotal = len(names)
+	// Count the complete inventory without opening off-page histories; only
+	// matching filenames can enter the page (custom CSVs require All periods).
+	filtered := make([]string, 0, len(names))
 	for _, name := range names {
-		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+		if match != nil {
 			page.PeriodCounts[match[2]]++
 		}
+		if period == "" || period == "all" || (match != nil && match[2] == period) {
+			filtered = append(filtered, name)
+		}
 	}
-	start := min(offset, len(names))
-	for _, name := range names[start : start+min(limit, len(names)-start)] {
+	page.Total = len(filtered)
+	start := min(offset, len(filtered))
+	for _, name := range filtered[start : start+min(limit, len(filtered)-start)] {
 		page.Files = append(page.Files, describeFile(directory, name))
 	}
 	return page, nil

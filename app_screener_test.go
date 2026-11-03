@@ -305,3 +305,29 @@ func TestScreenerRenameSavedConditionFacadePersists(t *testing.T) {
 		t.Fatalf("facade rename changed the editable draft: %+v %v", restored, err)
 	}
 }
+
+func TestScreenerFilesForPeriodFacadePreservesFullInventoryAndFiltersRows(t *testing.T) {
+	manager := screener.New(t.TempDir())
+	defer manager.Close()
+	app := &App{screener: manager}
+	directory := manager.Info().Directory
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, period := range []string{"d1", "w1"} {
+		if err := os.WriteFile(filepath.Join(directory, "eurusd-"+period+"-2024-01-01-2024-02-01.csv"), []byte("timestamp,close\n1704067200000,1\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := app.GetScreenerFilesForPeriod(0, 20, "w1")
+	if err != nil || page.Total != 1 || page.AllTotal != 2 || len(page.Files) != 1 || page.Files[0].Timeframe != "w1" || page.PeriodCounts["d1"] != 1 || page.PeriodCounts["w1"] != 1 {
+		t.Fatalf("filtered facade returned wrong scope: %+v %v", page, err)
+	}
+	all, err := app.GetScreenerFiles(0, 20)
+	if err != nil || all.Total != 2 || all.AllTotal != 2 || len(all.Files) != 2 {
+		t.Fatalf("legacy facade no longer lists all periods: %+v %v", all, err)
+	}
+	if _, err := app.GetScreenerFilesForPeriod(0, 20, "1w"); err == nil {
+		t.Fatal("facade accepted an unsupported period")
+	}
+}

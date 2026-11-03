@@ -23,7 +23,8 @@ test('Enrichment scopes w1 to weekly files while retaining daily files in the in
  await page.getByRole('button',{name:'Enrich 1 file',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testEnrichmentRequest()?.period)).toBe('w1');
  expect(await page.evaluate(()=>(window as any).__testEnrichment().jobs.map((job:any)=>job.fileId))).toEqual(['btc-w1']);
- await expect(page.locator('#screener-enrichment tbody tr')).toHaveCount(2);
+ await expect(page.locator('#screener-enrichment tbody tr')).toHaveCount(1);await expect(page.locator('#screener-enrichment tbody tr')).toContainText('btcusd-w1.csv');
+ expect(await page.evaluate(()=>(window as any).__testEnrichmentFiles().map((file:ScreenerDataFile)=>file.timeframe))).toEqual(['d1','w1']);
 });
 
 test('Analysis saves and restores w1 and scans only weekly files',async({page})=>{

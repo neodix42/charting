@@ -13,6 +13,13 @@ export interface ScreenerLiveAlertsBackend {
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
 }
 export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,conditionIds:[]});
+export function liveAlertPeriodLabel(period:string):string {
+ switch(period){case 'w1':return 'Weekly (W1)';case 'd1':return 'Daily (D1)';case 'h1':return 'Hourly (H1)';case '':case 'all':return 'All analyzed periods (W1 / D1 / H1)';default:return period.toUpperCase();}
+}
+export function liveAlertBarClose(timestamp:number,period:string):number {
+ const duration:Record<string,number>={w1:604800000,d1:86400000,h1:3600000};
+ return timestamp+(duration[period]??0);
+}
 
 /** Only disabled drafts autosave; starting delivery is an explicit action. */
 export class LiveAlertsConfigWriter {

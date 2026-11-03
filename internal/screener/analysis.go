@@ -148,8 +148,8 @@ type analysisState struct {
 	done                                       chan struct{}
 	request                                    AnalysisRequest
 	results                                    []AnalysisResult
-	// Period filtering applies only to base results; other timeframes remain
-	// indexed so explicitly selected companion operands retain closed-bar data.
+	// Index only selected base files and explicitly used companion periods for
+	// the same assets; unrelated downloads do not enter the analysis snapshot.
 	indexFiles []DataFile
 	series     map[string]*analysisSeries
 	matchFiles map[string]string
@@ -539,14 +539,32 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 		return AnalysisInfo{}, errors.New("select at least one asset category")
 	}
 	files := []DataFile{}
-	indexFiles := []DataFile{}
+	candidates := []DataFile{}
+	baseSymbols := map[string]bool{}
 	for _, name := range names {
-		file := describeFile(m.directory, name)
+		// Planning needs identity/category only. Read CSV contents in the
+		// background indexer, after applying the base and companion scope.
+		file := describeFileName(m.directory, name)
 		if includesAnalysisCategory(request.Categories, file.Category) {
-			indexFiles = append(indexFiles, file)
+			candidates = append(candidates, file)
 			if includesAnalysisPeriod(request.Period, file.Timeframe) {
 				files = append(files, file)
+				baseSymbols[file.Symbol] = true
 			}
+		}
+	}
+	companionPeriods := map[string]bool{}
+	for _, condition := range request.Conditions {
+		for _, operand := range conditionOperands(condition) {
+			if operand.Kind == "field" && operand.Timeframe != "" && operand.Timeframe != "same" {
+				companionPeriods[operand.Timeframe] = true
+			}
+		}
+	}
+	indexFiles := []DataFile{}
+	for _, file := range candidates {
+		if includesAnalysisPeriod(request.Period, file.Timeframe) || (file.Symbol != "" && baseSymbols[file.Symbol] && companionPeriods[file.Timeframe]) {
+			indexFiles = append(indexFiles, file)
 		}
 	}
 	if len(files) == 0 {

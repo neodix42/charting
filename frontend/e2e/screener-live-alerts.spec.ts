@@ -67,3 +67,27 @@ test('check history shows authoritative execution counts and UTC eligibility, pe
  await page.evaluate(async id=>{await window.go!.main!.App!.DeleteScreenerAnalysisCondition(id);},ids[0]);await expect(history.getByRole('rowheader')).toHaveText(['Momentum entry']);await expect(page.getByRole('checkbox',{name:'Alert condition Renamed daily',exact:true})).toHaveCount(0);await expect(page.getByRole('region',{name:'Monitored assets for Renamed daily',exact:true})).toHaveCount(0);await expect(page.getByText('Unavailable saved condition',{exact:true})).toHaveCount(0);await expect(page.locator('.live-alerts-recent')).toContainText('Trend entry');expect((await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).conditionIds).toEqual([ids[1]]);
  await reloadTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),fixtures);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await expect(history.getByRole('rowheader')).toHaveText(['Momentum entry']);await expect(page.locator('.live-alerts-recent')).toContainText('Historical delivery stays named as sent');
 });
+
+test('existing weekly conditions use downloaded W1 matches and next Monday close without reapplying Analysis',async({page})=>{
+ await page.clock.setFixedTime(Date.UTC(2026,10,3,12));await openTestApp(page);
+ await page.evaluate(async files=>{
+  const weekly={...files[0],id:'btc-w1',name:'btcusd-w1.csv',timeframe:'w1'},lowProfit={...weekly,id:'eur-w1',name:'eurusd-w1.csv',symbol:'eurusd'};
+  (window as any).__testSetEnrichmentFiles([...files,weekly,lowProfit]);
+  const api=window.go!.main!.App!,view={...await api.GetScreenerAnalysisView(),period:'w1',profitabilityFilter:80,tradeSimulation:{direction:'short',stopLoss:'high',takeProfit:'low',duration:20}};
+  await api.StartScreenerAnalysis(view);
+  (window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results:[weekly,lowProfit].map((file,index)=>({...file,id:`weekly-result-${index}`,fileId:file.id,status:'completed',rows:100,matches:10,simulation:{takeProfitHits:8-index,stopLossHits:2+index,expired:0,insufficientData:0,invalidLevels:0,unavailable:0,profitablePercent:80-index*10}}))});
+  await api.SaveScreenerAnalysisCondition('weekly short',view);
+ },fixtures);
+ await reloadTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ const condition=page.getByRole('checkbox',{name:'Alert condition weekly short',exact:true});await expect(condition).toBeEnabled();
+ const row=page.getByRole('table',{name:'Saved conditions and periods',exact:true}).getByRole('row').filter({has:condition});
+ await expect(row).toContainText('Weekly (W1)');await expect(row).not.toContainText('All analyzed periods');
+ await condition.check();
+ const monitored=page.getByRole('region',{name:'Monitored assets for weekly short',exact:true});await expect(monitored.locator('li')).toHaveCount(1);await expect(monitored).toContainText('BTCUSD');await expect(monitored).toContainText('W1');await expect(monitored).toContainText('Profitability: 80.00%, 8 / 10 hit TP');await expect(monitored).not.toContainText('no downloaded W1 assets');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Start alerts',exact:true}).click();await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toBeVisible();
+ const history=page.getByRole('table',{name:'Alert check history',exact:true});await expect(history).toContainText('2026-11-09 00:00:00 UTC');
+ const state=await page.evaluate(()=>(window as any).__testLiveAlertsInfo());expect(state.nextRun).toBe(Date.UTC(2026,10,9));expect(state.checks[0].nextCheck).toBe(Date.UTC(2026,10,9));expect(state.conditionScopes[0].targets.map((target:any)=>target.period)).toEqual(['w1']);expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
+ await page.evaluate(()=>(window as any).__testSetLiveAlertsInfo({recent:[{assetName:'Bitcoin vs US Dollar',symbol:'btcusd',timeframe:'w1',time:Date.UTC(2026,9,26),conditionName:'weekly short',status:'sent',message:'Weekly signal'}]}));
+ await expect(page.locator('.live-alerts-recent')).toContainText('Closed 2026-11-02 00:00:00 UTC');await page.getByRole('button',{name:'Stop alerts',exact:true}).click();await expect(condition).toBeEnabled();
+});

@@ -1552,6 +1552,7 @@ export namespace screener {
 	    directory: string;
 	    files: DataFile[];
 	    total: number;
+	    allTotal: number;
 	    offset: number;
 	    limit: number;
 	    periodCounts?: Record<string, number>;
@@ -1565,6 +1566,7 @@ export namespace screener {
 	        this.directory = source["directory"];
 	        this.files = this.convertValues(source["files"], DataFile);
 	        this.total = source["total"];
+	        this.allTotal = source["allTotal"];
 	        this.offset = source["offset"];
 	        this.limit = source["limit"];
 	        this.periodCounts = source["periodCounts"];

@@ -131,3 +131,53 @@ test('refresh keeps whole-batch progress across completed, active and queued fil
  await expect(page.getByRole('progressbar',{name:'Overall data refresh progress',exact:true})).toHaveAttribute('value','42');
  await expect(page.getByRole('button',{name:'Cancel refresh',exact:true})).toBeEnabled();
 });
+
+test('Refresh offers header cancellation for a filtered list and preserves completed files',async({page})=>{
+ await openTestApp(page);
+ const files=Array.from({length:4},(_,index)=>{const timeframe=index%2?'w1':'d1';return{...file(index),timeframe,name:file(index).name.replace('-d1-',`-${timeframe}-`)};});
+ await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),files);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ await page.getByLabel('Enrichment period',{exact:true}).selectOption('w1');await expect(panel(page).locator('tbody tr')).toHaveCount(2);
+ const actions=panel(page).locator('.enrichment-file-actions');
+ await actions.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ expect((await page.evaluate(()=>(window as any).__testRefresh())).jobs).toHaveLength(4);
+ await page.evaluate(()=>{
+  const info=(window as any).__testRefresh() as ScreenerRefreshInfo;
+  (window as any).__testSetRefresh({...info,completed:1,failed:1,currentFile:info.jobs[2].name,currentProgress:35,jobs:info.jobs.map((job,index)=>({...job,status:['completed','failed','running','queued'][index],progress:index===0?100:index===2?35:0,message:index===0?'Finished history retained':index===1?'Explicit file failure':'Waiting for refresh'}))});
+ });
+ const cancel=actions.getByRole('button',{name:'Cancel refresh',exact:true});await expect(cancel).toBeEnabled();
+ await cancel.click();await expect(cancel).toHaveCount(0);
+ await expect(panel(page).getByLabel('Data refresh progress',{exact:true})).toContainText('1 / 4 complete · 1 failed · 2 cancelled');
+ const info=await page.evaluate(()=>(window as any).__testRefresh()) as ScreenerRefreshInfo;
+ expect(info.active).toBe(false);expect(info.jobs.map(job=>job.status)).toEqual(['completed','failed','cancelled','cancelled']);
+ expect(info.jobs[0].message).toBe('Finished history retained');expect(info.jobs[0].progress).toBe(100);
+ expect(await page.evaluate(()=>(window as any).__testEnrichmentFiles())).toEqual(files);
+ await expect(actions.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+});
+
+test('Refresh can be cancelled from its header while the selected period has no files',async({page})=>{
+ await open(page,1);await page.getByLabel('Enrichment period',{exact:true}).selectOption('w1');
+ await expect(panel(page).locator('tbody tr')).toHaveCount(0);
+ const actions=panel(page).locator('.enrichment-file-actions');
+ await actions.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await expect(actions.getByRole('button',{name:'Cancel refresh',exact:true})).toBeEnabled();
+ expect((await page.evaluate(()=>(window as any).__testRefresh())).total).toBe(1);
+ await actions.getByRole('button',{name:'Cancel refresh',exact:true}).click();
+ await expect(panel(page).getByLabel('Data refresh progress',{exact:true})).toContainText('1 cancelled');
+ await expect(actions.getByRole('button',{name:'Cancel refresh',exact:true})).toHaveCount(0);
+ await expect(panel(page).locator('tbody tr')).toHaveCount(0);
+});
+
+test('a failed cancellation keeps the active Refresh cancel button available to retry',async({page})=>{
+ await open(page,1);const actions=panel(page).locator('.enrichment-file-actions');
+ await actions.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,cancel=api.CancelScreenerRefresh;
+  api.CancelScreenerRefresh=async()=>{api.CancelScreenerRefresh=cancel;throw Error('Explicit refresh cancellation failure');};
+ });
+ const cancel=actions.getByRole('button',{name:'Cancel refresh',exact:true});await cancel.click();
+ await expect(panel(page).getByRole('alert')).toContainText('Explicit refresh cancellation failure');
+ expect((await page.evaluate(()=>(window as any).__testRefresh())).active).toBe(true);await expect(cancel).toBeEnabled();
+ await cancel.click();await expect(cancel).toHaveCount(0);await expect(panel(page).getByRole('alert')).toHaveCount(0);
+ expect((await page.evaluate(()=>(window as any).__testRefresh())).active).toBe(false);
+});

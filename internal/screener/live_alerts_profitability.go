@@ -78,7 +78,7 @@ func copyLiveProfitability(value *SavedConditionProfitability) *SavedConditionPr
 }
 
 func savedConditionPeriodAllowed(saved SavedAnalysisCondition, period string) bool {
-	return (period == "h1" || period == "d1") && includesAnalysisPeriod(saved.Request.Period, period)
+	return supportedLiveAlertPeriod(period) && includesAnalysisPeriod(saved.Request.Period, period)
 }
 
 // Build one bounded lookup per condition when previewing or checking a batch.

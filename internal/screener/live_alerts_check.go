@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 )
@@ -238,11 +239,8 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			return e
 		}
 		if scheduled {
-			interval := time.Hour
-			if s.metadata.Timeframe == "d1" {
-				interval = 24 * time.Hour
-			}
-			expected := time.UnixMilli(asOf).UTC().Truncate(interval).Add(-interval).UnixMilli()
+			interval, _, _ := liveAlertCalendarPeriod(SavedAnalysisCondition{}, s.metadata.Timeframe)
+			expected := liveAlertPeriodStart(time.UnixMilli(asOf), s.metadata.Timeframe).Add(-interval).UnixMilli()
 			if latest.timestamp != expected {
 				failures = append(failures, fmt.Errorf("%s %s: %w; waiting for the bar closing at %s", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar, time.UnixMilli(expected).Add(interval).UTC().Format(time.RFC3339)))
 				failPair(s.metadata.Symbol, s.metadata.Timeframe, errLiveAlertsPendingBar)
@@ -389,6 +387,14 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 			return nil, missingLiveConditionTargets(saved, strings.ToUpper(saved.Request.Period))
 		}
 	}
+	// Every derived weekly history needs its retained daily source refreshed
+	// first, whether w1 is a base target or an explicit operand dependency.
+	for pair := range pairs {
+		symbol, period, _ := strings.Cut(pair, "/")
+		if period == "w1" {
+			pairs[symbol+"/d1"] = true
+		}
+	}
 	wanted := []string{}
 	for _, name := range names {
 		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
@@ -396,7 +402,15 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 			wanted = append(wanted, name)
 		}
 	}
-	return groupHistories(directory, wanted), nil
+	groups := groupHistories(directory, wanted)
+	// Preserve normal ordering within each phase while ensuring that even a
+	// differently sorted symbol's d1 prerequisite precedes all w1 rebuilds.
+	sort.SliceStable(groups, func(i, j int) bool {
+		left := downloadFilename.FindStringSubmatch(strings.ToLower(groups[i].name))
+		right := downloadFilename.FindStringSubmatch(strings.ToLower(groups[j].name))
+		return left != nil && right != nil && left[2] != "w1" && right[2] == "w1"
+	})
+	return groups, nil
 }
 
 func (l *LiveAlerts) refreshSelected(ctx context.Context, directory string, groups []historyGroup, asOf int64) (map[string]bool, error) {
@@ -436,7 +450,10 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 		m.refreshJobs[i].Status, m.refreshJobs[i].Message = "running", "Appending closed bars and updating applied indicators"
 		job := m.refreshJobs[i]
 		m.mu.Unlock()
-		if len(group.ids) > 1 {
+		if match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name)); match != nil && match[2] == "w1" && !refreshed[match[1]+"/d1"] {
+			err = errors.New("daily history did not refresh; original weekly history kept; download or refresh retained d1 data first")
+		}
+		if err == nil && len(group.ids) > 1 {
 			job.Name, err = m.consolidateHistory(ctx, directory, job.Name, legacy, func(message string) {
 				m.mu.Lock()
 				m.refreshJobs[i].Message = message
