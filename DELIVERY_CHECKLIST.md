@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Live Alerts error details — 2026-11-04
+
+- [x] Status/settings, scope, failed checks and failed/uncertain deliveries use keyboard-accessible expandable error icons with full stored details.
+- [x] Duplicate publication failures collapse once; distinct contexts, partial Telegram counts, persisted history and delivery claims remain correct in Go/race/browser tests.
+- [x] Source-based loading explanation documented, with no claim that profile latency was measured or optimized.
+- [x] Frontend typecheck/lint/214 tests, all Live Go race regressions, bindings/vet, nine browser tests, Linux build/checksums and diff checks pass.
+- [ ] Native desktop/Windows interaction and actual Telegram/provider verification remain unrun; restart the rebuilt executable for the manual disclosure check.
+
 ## Automatic chart history retries and Low/High — 2026-11-04
 
 - [x] JForex seed failures retry indefinitely with capped backoff, continuous live quotes, checkpoint reuse, stale-result fencing and retry cancellation; actual SDK-interface offline tests pass.

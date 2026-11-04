@@ -3,6 +3,7 @@ package screener
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestLiveAlertsCheckHistoryCountsActualUniqueAssetsAndSurvivesRestart(t *testing.T) {
@@ -527,5 +529,70 @@ func TestLiveAlertsSleepPastEligibleCalendarCloseWaitsWithoutInventingCheck(t *t
 	info := waitLiveSchedule(t, l, func(info LiveAlertsInfo) bool { return info.NextRun == want && !info.Running })
 	if info.LastRun != 0 || info.Error != "" || refreshes.Load() != 0 || info.Checks[0].Status != "never" || info.Checks[0].LastChecked != 0 {
 		t.Fatal("suspension invented an empty or historic calendar check", info, refreshes.Load())
+	}
+}
+
+func TestLiveAlertsHistoryDeduplicatesFailuresAndKeepsDeliveryDetails(t *testing.T) {
+	m, l, config, _ := liveAlertsFixture(t)
+	id := config.ConditionIDs[0]
+	run, err := l.beginCheckHistory(config, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		run.failed(id, errLiveAlertsPendingBar)
+	}
+	delivery := errors.New("Telegram alert for RACEITEUR, safe 5: Telegram alert delivery: 1 of 2 recipients confirmed; no automatic resend: Telegram operation failed (recipientNotFound)")
+	run.failed(id, delivery)
+	if !errors.Is(run.failures[id], errLiveAlertsPendingBar) || !errors.Is(run.failures[id], delivery) {
+		t.Fatal("deduplication lost original error types")
+	}
+	if err = run.finish(run.failures[id]); err != nil {
+		t.Fatal(err)
+	}
+	message := l.Info().Checks[0].Error
+	if strings.Count(message, errLiveAlertsPendingBar.Error()) != 1 || !strings.Contains(message, delivery.Error()) {
+		t.Fatalf("lost or repeated details: %q", message)
+	}
+	restored, err := NewLiveAlerts(m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	if restored.Info().Checks[0].Error != message {
+		t.Fatal("restart changed deduplicated error")
+	}
+	// Old state may already contain a flattened duplicate chain. Reading it
+	// cleans the display without rewriting user history or delivery watermarks.
+	l.mu.Lock()
+	state := l.state.Checks[id]
+	legacy := strings.Repeat(errLiveAlertsPendingBar.Error()+" ", 5) + delivery.Error()
+	state.Error = legacy
+	l.state.Checks[id] = state
+	l.mu.Unlock()
+	if got := l.Info().Checks[0].Error; strings.Count(got, errLiveAlertsPendingBar.Error()) != 1 || !strings.Contains(got, delivery.Error()) {
+		t.Fatal("old saved duplicate chain not cleaned", got)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.state.Checks[id].Error != legacy {
+		t.Fatal("reading error details rewrote saved history")
+	}
+}
+
+func TestLiveAlertsErrorMessagesKeepDistinctContextsAndLongDetails(t *testing.T) {
+	first := fmt.Errorf("EURUSD h1: %w", errLiveAlertsPendingBar)
+	second := fmt.Errorf("GBPUSD h1: %w", errLiveAlertsPendingBar)
+	long := errors.New(strings.Repeat("detail ", 200) + "recipientNotFound")
+	got := checkHistoryMessage(errors.Join(first, second, first, long, long))
+	if strings.Count(got, "EURUSD h1") != 1 || strings.Count(got, "GBPUSD h1") != 1 || strings.Count(got, "recipientNotFound") != 1 || len(got) < 1000 {
+		t.Fatal("distinct/full details not retained", got)
+	}
+	bounded := liveAlertErrorText(strings.Repeat("€", 2000))
+	if len(bounded) > 5000 || !utf8.ValidString(bounded) {
+		t.Fatal("error exceeded valid saved-state bounds")
+	}
+	if checkHistoryMessage(nil) != "" {
+		t.Fatal("nil error produced a message")
 	}
 }

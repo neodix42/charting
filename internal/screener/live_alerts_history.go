@@ -155,19 +155,65 @@ func (r *liveAlertCheckRun) failed(conditionID string, err error) {
 	r.live.mu.Lock()
 	defer r.live.mu.Unlock()
 	if !r.finished {
-		r.failures[conditionID] = errors.Join(r.failures[conditionID], err)
+		r.failures[conditionID] = joinLiveAlertErrors(r.failures[conditionID], err)
 	}
+}
+
+// Keep distinct asset/context errors and their original types for errors.Is;
+// repeated shared failures must not crowd out a later delivery error.
+func joinLiveAlertErrors(values ...error) error {
+	seen := map[string]bool{}
+	var unique []error
+	var visit func(error)
+	visit = func(err error) {
+		if err == nil {
+			return
+		}
+		if joined, ok := err.(interface{ Unwrap() []error }); ok {
+			for _, child := range joined.Unwrap() {
+				visit(child)
+			}
+			return
+		}
+		if text := err.Error(); !seen[text] {
+			seen[text] = true
+			unique = append(unique, err)
+		}
+	}
+	for _, err := range values {
+		visit(err)
+	}
+	return errors.Join(unique...)
+}
+
+func liveAlertErrorText(message string) string {
+	seen := map[string]bool{}
+	var lines []string
+	for _, line := range strings.Split(message, "\n") {
+		text := strings.Join(strings.Fields(line), " ")
+		// Earlier versions flattened errors.Join into adjacent identical sentences.
+		pending := errLiveAlertsPendingBar.Error()
+		for strings.Contains(text, pending+" "+pending) {
+			text = strings.ReplaceAll(text, pending+" "+pending, pending)
+		}
+		if text != "" && !seen[text] {
+			seen[text] = true
+			lines = append(lines, text)
+		}
+	}
+	message = strings.Join(lines, "\n")
+	// Saved check/outcome records have an existing 5,000-byte resource limit.
+	if len(message) > 5000 {
+		message = strings.ToValidUTF8(message[:5000], "")
+	}
+	return message
 }
 
 func checkHistoryMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	message := cleanMessage(err.Error())
-	if len(message) > 5000 {
-		message = message[:5000]
-	}
-	return message
+	return liveAlertErrorText(err.Error())
 }
 
 func (r *liveAlertCheckRun) finish(cycleErr error) error {
@@ -236,7 +282,7 @@ func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertCondit
 			continue
 		}
 		state, checked := states[condition.ID]
-		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: state.Error}
+		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
 		if !checked {
 			row.Status = "never"
 		}

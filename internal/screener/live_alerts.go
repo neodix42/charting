@@ -382,8 +382,9 @@ func (l *LiveAlerts) Info() LiveAlertsInfo {
 	}
 	l.manager.mu.Unlock()
 	l.mu.Lock()
-	info := LiveAlertsInfo{SavedConditionsRevision: revision, Config: copyLiveAlertsConfig(l.state.Config), Running: l.running, LastRun: l.lastRun, NextRun: l.nextRun, Sent: l.state.Sent, Error: l.errorText, Status: l.status, Progress: l.progress, CurrentAsset: l.currentAsset, Recent: append([]LiveAlertOutcome{}, l.state.Recent...), Assets: assets, ConditionScopes: []LiveAlertConditionScope{}, Checks: []LiveAlertCheck{}}
+	info := LiveAlertsInfo{SavedConditionsRevision: revision, Config: copyLiveAlertsConfig(l.state.Config), Running: l.running, LastRun: l.lastRun, NextRun: l.nextRun, Sent: l.state.Sent, Error: liveAlertErrorText(l.errorText), Status: l.status, Progress: l.progress, CurrentAsset: l.currentAsset, Recent: append([]LiveAlertOutcome{}, l.state.Recent...), Assets: assets, ConditionScopes: []LiveAlertConditionScope{}, Checks: []LiveAlertCheck{}}
 	for i := range info.Recent {
+		info.Recent[i].Message = liveAlertErrorText(info.Recent[i].Message)
 		info.Recent[i].Profitability = copyLiveProfitability(info.Recent[i].Profitability)
 	}
 	states := copyLiveCheckStates(l.state.Checks)
@@ -803,7 +804,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			if !l.state.Config.Enabled {
 				l.status, l.nextRun = "Disabled", 0
 			} else if err != nil {
-				l.errorText, l.status = cleanMessage(err.Error()), "Check stopped"
+				l.errorText, l.status = checkHistoryMessage(err), "Check stopped"
 				if errors.Is(err, errLiveAlertsBusy) || (errors.Is(err, errLiveAlertsPendingBar) && l.now().Sub(time.UnixMilli(asOf)) < liveAlertPublicationWindow) {
 					retry := copyLiveAlertsConfig(config)
 					l.retryConfig, l.retryAsOf, l.retryManual = &retry, asOf, manual

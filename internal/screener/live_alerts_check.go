@@ -647,7 +647,7 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 		outcome := &l.state.Recent[0]
 		outcome.Status, outcome.Message = "sent", "Telegram alert sent"
 		if err != nil {
-			outcome.Status, outcome.Message = "failed", cleanMessage(err.Error())+". This bar will not be resent automatically; check Telegram before any manual action."
+			outcome.Status, outcome.Message = "failed", liveAlertErrorText(err.Error()+". This bar will not be resent automatically; check Telegram before any manual action.")
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "uncertain") {
 				outcome.Status = "uncertain"
 			}

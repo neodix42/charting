@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -31,4 +31,12 @@ it('labels inherited weekly periods and reports the following Monday as the week
  expect(liveAlertBarClose(monday,'w1')).toBe(Date.UTC(2026,10,2));
  expect(liveAlertBarClose(monday,'d1')).toBe(Date.UTC(2026,9,27));
  expect(liveAlertBarClose(monday,'h1')).toBe(Date.UTC(2026,9,26,1));
+});
+
+it('cleans repeated joined and legacy publication errors without dropping delivery or asset context',()=>{
+ const pending='the newly closed bar is not yet available from the provider',delivery='Telegram alert for RACEITEUR, safe 5: 1 of 2 recipients confirmed; no automatic resend (recipientNotFound)';
+ expect(liveAlertErrorText(`${pending}\n${pending}\n${delivery}\n${delivery}`)).toBe(`${pending}\n${delivery}`);
+ expect(liveAlertErrorText(`${pending} `.repeat(5)+delivery)).toBe(`${pending} ${delivery}`);
+ expect(liveAlertErrorText(`EURUSD: ${pending}\nGBPUSD: ${pending}`)).toBe(`EURUSD: ${pending}\nGBPUSD: ${pending}`);
+ expect(liveAlertErrorText('   \n')).toBe('');
 });

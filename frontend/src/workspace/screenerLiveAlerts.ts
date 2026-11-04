@@ -34,3 +34,11 @@ export class LiveAlertsConfigWriter {
   await this.flight;if(this.pending)return this.flush();
  }
 }
+
+/** Also cleans old persisted checks whose joined errors were flattened to one line. */
+export function liveAlertErrorText(message:string):string {
+ const pending='the newly closed bar is not yet available from the provider';
+ let text=[...new Set(message.split(/\r?\n/).map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean))].join('\n');
+ while(text.includes(`${pending} ${pending}`))text=text.replaceAll(`${pending} ${pending}`,pending);
+ return text;
+}
