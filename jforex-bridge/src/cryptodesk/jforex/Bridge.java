@@ -42,6 +42,7 @@ public final class Bridge implements AutoCloseable {
     private final Map<Instrument, Integer> historyUsers = new HashMap<>();
     private final Set<Instrument> requestedInstruments = new HashSet<>();
     private final long historyTimeoutMillis;
+    private final long historyRetryMillis;
     private final LongSupplier nowMillis;
     private volatile IClient client;
     private volatile IContext context;
@@ -66,7 +67,7 @@ public final class Bridge implements AutoCloseable {
                         JsonObject bar = tickCandle(sub, tick, start);
                         sub.lastTickTime = tick.getTime(); sub.lastTime = start; sub.last = bar;
                         emitBars(sub, List.of(bar));
-                        if (sub.seedError != null) health(sub.id, "error", sub.seedError, tick.getTime());
+                        if (sub.seedError != null) health(sub.id, "reconciling", sub.seedError, tick.getTime());
                         else if (sub.loading) health(sub.id, "reconciling", loadingReason(sub), tick.getTime());
                         else health(sub.id, "live", "Receiving JForex Bid ticks", tick.getTime());
                     }
@@ -110,8 +111,11 @@ public final class Bridge implements AutoCloseable {
         this(factory, output, historyTimeoutMillis, System::currentTimeMillis);
     }
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis) {
+        this(factory, output, historyTimeoutMillis, nowMillis, 2_000);
+    }
+    Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis, long historyRetryMillis) {
         this.factory = factory; this.output = output;
-        this.historyTimeoutMillis = historyTimeoutMillis; this.nowMillis = nowMillis;
+        this.historyTimeoutMillis = historyTimeoutMillis; this.nowMillis = nowMillis; this.historyRetryMillis = historyRetryMillis;
         deadlines.setRemoveOnCancelPolicy(true);
         reconnect.scheduleWithFixedDelay(this::heartbeat, 15, 15, TimeUnit.SECONDS);
     }
@@ -119,7 +123,7 @@ public final class Bridge implements AutoCloseable {
         if (closing || client == null || !client.isConnected() || context == null) return;
         for (Subscription sub : subscriptions.values()) {
             try {
-                if (sub.seedError != null) health(sub.id, "error", sub.seedError, 0);
+                if (sub.seedError != null) health(sub.id, "reconciling", sub.seedError, 0);
                 else if (sub.loading) health(sub.id, "reconciling", loadingReason(sub), 0);
                 else if (context.getDataService().isOfflineTime(nowMillis.getAsLong(), sub.instrument))
                     health(sub.id, "marketClosed", "JForex reports this market is closed", 0);
@@ -404,19 +408,44 @@ public final class Bridge implements AutoCloseable {
     }
 
     private void scheduleSeed(Subscription sub) {
-        long generation = sub.seedGeneration.incrementAndGet();
-        if (sub.seed != null) sub.seed.cancel();
-        sub.loading = true; sub.loadingCurrent = false; sub.seedError = null;
-        sub.seed = submitData(() -> {
-            try { seed(sub, generation); }
-            catch (Exception ignored) { if (!Thread.currentThread().isInterrupted()) seedFailed(sub, generation, "JForex historical data could not be loaded. Live quotes remain subscribed; retry the chart to reload history."); }
-        }, message -> seedFailed(sub, generation, message));
+        synchronized (sub) {
+            if (subscriptions.get(sub.id) != sub || closing) return;
+            long generation = sub.seedGeneration.incrementAndGet();
+            if (sub.seedRetry != null) { sub.seedRetry.cancel(false); sub.seedRetry = null; }
+            if (sub.seed != null) sub.seed.cancel();
+            sub.loading = true; sub.loadingCurrent = false; sub.seedError = null;
+            sub.seed = submitData(() -> {
+                try { seed(sub, generation); }
+                catch (Exception ignored) { if (!Thread.currentThread().isInterrupted()) seedFailed(sub, generation, "JForex historical data could not be loaded."); }
+            }, message -> seedFailed(sub, generation, message));
+        }
     }
     private void seedFailed(Subscription sub, long generation, String message) {
         synchronized (sub) {
             if (subscriptions.get(sub.id) != sub || closing || !sub.seedGeneration.compareAndSet(generation, generation + 1)) return;
-            sub.loading = false; sub.seedError = message; health(sub.id, "error", message, 0);
+            sub.loading = true;
+            // The request deadline also serves explicit history calls. Seed
+            // failures own their retry and must never ask for a manual reload.
+            String reason = message.contains("timed out") ? "JForex historical data loading timed out."
+                : "JForex historical data could not be loaded.";
+            long delay = Math.min(30_000L, historyRetryMillis * (1L << Math.min(sub.seedFailures++, 4)));
+            sub.seedError = reason + " Retrying automatically; live quotes remain subscribed.";
+            health(sub.id, "reconciling", sub.seedError, 0);
+            scheduleSeedRetry(sub, generation + 1, delay);
         }
+    }
+    private void scheduleSeedRetry(Subscription sub, long generation, long delay) {
+        sub.seedRetry = deadlines.schedule(() -> {
+            synchronized (sub) {
+                if (subscriptions.get(sub.id) != sub || closing || sub.seedGeneration.get() != generation) return;
+                sub.seedRetry = null;
+                if (client == null || !client.isConnected() || context == null) {
+                    scheduleSeedRetry(sub, generation, delay);
+                    return;
+                }
+                scheduleSeed(sub);
+            }
+        }, delay, TimeUnit.MILLISECONDS);
     }
     private void seed(Subscription sub, long generation) throws Exception {
         IHistory history = context.getHistory();
@@ -478,7 +507,11 @@ public final class Bridge implements AutoCloseable {
         }
         synchronized (sub) {
             if (subscriptions.get(sub.id) != sub || closing || sub.seedGeneration.get() != generation || Thread.currentThread().isInterrupted()) return false;
-            if (finished) { sub.loading = false; sub.seedError = null; }
+            if (requestedFrom == 0 && source.isEmpty()) {
+                seedFailed(sub, generation, "JForex has not returned historical bars yet.");
+                return false;
+            }
+            if (finished) { sub.loading = false; sub.seedError = null; sub.seedFailures = 0; }
             sub.historyFrom = Math.max(sub.historyFrom, Math.min(checkedThrough, current - sub.period.getInterval()));
             if (!bars.isEmpty()) {
                 if (sub.last != null && sub.lastTime >= bars.lastKey()
@@ -586,7 +619,11 @@ public final class Bridge implements AutoCloseable {
 
     private Object unsubscribe(String id) {
         Subscription sub = subscriptions.remove(id);
-        if (sub != null && sub.seed != null) sub.seed.cancel();
+        if (sub != null) synchronized (sub) {
+            sub.seedGeneration.incrementAndGet();
+            if (sub.seedRetry != null) sub.seedRetry.cancel(false);
+            if (sub.seed != null) sub.seed.cancel();
+        }
         releaseInstruments();
         return Map.of();
     }
@@ -664,7 +701,9 @@ public final class Bridge implements AutoCloseable {
         out.add("health", health); output.accept(out);
     }
     private void disconnect() {
-        closing = true; subscriptions.clear(); available = Set.of(); context = null; connectedOnce = false;
+        closing = true;
+        for (Subscription sub : subscriptions.values()) unsubscribe(sub.id);
+        available = Set.of(); context = null; connectedOnce = false;
         for (DataJob job : dataJobs) job.cancel();
         synchronized (instrumentLock) { historyUsers.clear(); requestedInstruments.clear(); }
         IClient old = client; client = null;
@@ -702,6 +741,7 @@ public final class Bridge implements AutoCloseable {
     static final class Subscription {
         final String id; final Instrument instrument; final Period period; long lastTime; volatile long lastTickTime; JsonObject last;
         final AtomicLong seedGeneration = new AtomicLong(); volatile DataJob seed; volatile boolean loading; volatile boolean loadingCurrent; volatile String seedError; volatile long historyFrom;
+        Future<?> seedRetry; int seedFailures;
         Subscription(String id, Instrument instrument, Period period) { this.id = id; this.instrument = instrument; this.period = period; }
     }
     static final class Failure extends RuntimeException {

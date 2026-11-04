@@ -8,7 +8,7 @@ export type Market = 'spot'|'perpetual'|'forex'|'metal'|'cfd';
 export type Interval = '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'1w';
 export const intervals: Interval[] = ['1m','5m','15m','1h','4h','1d','1w'];
 export const intervalSeconds: Record<Interval,number> = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400,'1w':604800};
-export type IndicatorType = 'sma'|'ema'|'ichimoku'|'macd';
+export type IndicatorType = 'sma'|'ema'|'low'|'high'|'ichimoku'|'macd';
 export interface IndicatorParameters {period?:number;conversion?:number;base?:number;spanB?:number;displacement?:number;fast?:number;slow?:number;signal?:number}
 export type IndicatorLineWidth = 1|2|3|4;
 export interface IndicatorConfig {id:string;type:IndicatorType;parameters:IndicatorParameters;color?:string;lineWidth?:IndicatorLineWidth;paneStretchFactor?:number}
@@ -42,7 +42,7 @@ export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategori
 export interface ScreenerJob {id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
 export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[];downloadedSymbols?:string[]}
 export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
-export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string}
+export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'low'|'high'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string}
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
 export interface ScreenerDataFile {id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
 export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;allTotal?:number;offset:number;limit:number;periodCounts?:Record<string,number>}

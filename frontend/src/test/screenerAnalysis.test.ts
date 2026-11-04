@@ -31,7 +31,7 @@ describe('Analysis field selection and validation',()=>{
   expect(analysisFieldGroups(['timestamp','close','macd_12_26','macd_histogram_12_26_9']).map(([group])=>group)).toEqual(['Price / OHLC','MACD']);
  });
  it('classifies price overlays and separate indicator panes even with timeframe/offset qualifiers',()=>{
-  for(const field of ['ema_200','bb_upper_20_2','senkou_a_9_26','d1:sma_200[offset 1][highest 20]','d1:close'])expect(analysisPriceOverlay(field)).toBe(true);
+  for(const field of ['low_10','high_10','d1:low_200[offset 1]','ema_200','bb_upper_20_2','senkou_a_9_26','d1:sma_200[offset 1][highest 20]','d1:close'])expect(analysisPriceOverlay(field)).toBe(true);
   for(const field of ['atr_14','macd_signal_12_26_9','rsi_14','d1:macd_histogram_12_26_9'])expect(analysisPriceOverlay(field)).toBe(false);
  });
  it('groups calendar fields as UTC time values, including qualified timeframe fields',()=>{

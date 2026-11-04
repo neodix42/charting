@@ -725,6 +725,40 @@
       "input": "timestamp",
       "parameters": [],
       "note": "UTC hour from the row timestamp: 0 through 23. No warm-up."
+    },
+    {
+      "id": "low",
+      "name": "Lowest low (Low)",
+      "category": "Price range",
+      "input": "low",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 10,
+          "min": 1,
+          "max": 2000,
+          "step": 1
+        }
+      ],
+      "note": "Rolling lowest low of the last N bars, including the current row. Warm-up rows stay blank."
+    },
+    {
+      "id": "high",
+      "name": "Highest high (High)",
+      "category": "Price range",
+      "input": "high",
+      "parameters": [
+        {
+          "key": "period",
+          "label": "Period",
+          "default": 10,
+          "min": 1,
+          "max": 2000,
+          "step": 1
+        }
+      ],
+      "note": "Rolling highest high of the last N bars, including the current row. Warm-up rows stay blank."
     }
   ]
 }

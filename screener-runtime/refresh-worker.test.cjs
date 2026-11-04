@@ -47,7 +47,7 @@ test('first refresh repairs an internal hole, revises overlap and enriches all a
   assert.equal(events.at(-1).type,'done');
 });
 
-test('all 42 indicator and time field headers can migrate their complete applied recipes and reproduce columns',async()=>{
+test('all 44 indicator and time field headers can migrate their complete applied recipes and reproduce columns',async()=>{
   for(const definition of catalog.indicators){
     const original=await calculator({indicator:definition.id,source:'auto'},header);
     const recipes=await recipesFor([...header,...original.columns]);
@@ -277,4 +277,14 @@ test('closed boundaries use UTC month transitions and exact daily/minute interva
   assert.equal(closedBoundary(Date.UTC(2024,2,15),'mn1'),Date.UTC(2024,2,1));
   assert.equal(closedBoundary(start+123456,'m1'),start+120000);
   assert.equal(closedBoundary(start+123456,'d1'),start);
+});
+
+test('Refresh recovers Low/High recipes from columns and replays them on merged candles',async()=>{
+  const recipes=await recipesFor([...header,'low_3','high_3']);
+  assert.deepEqual(recipes,[{indicator:'low',parameters:{period:3},source:'auto'},{indicator:'high',parameters:{period:3},source:'auto'}]);
+  for(const recipe of recipes){
+    const calculate=await calculator(recipe,header);
+    const values=[10,4,20,15,12].map((price,i)=>calculate.next(row(start+i*day,price).map(String),i+2)[0]);
+    assert.deepEqual(values,recipe.indicator==='low'?['','','3','3','11']:['','','21','21','21']);
+  }
 });

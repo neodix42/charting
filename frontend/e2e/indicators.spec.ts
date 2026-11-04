@@ -67,3 +67,20 @@ test('a delayed indicator history response cannot enter a different timeframe',a
  await chart.getByRole('button',{name:'Timeframe 1w',exact:true}).click();await expect(chart.getByLabel('Retry indicator history')).toBeVisible();await page.evaluate(()=>(window as any).__releaseIndicatorHistory());
  await expect(chart.getByRole('button',{name:'Edit SMA (2000)',exact:true})).toHaveAttribute('title',/100 bars loaded; 2000 required/);await expect(chart.getByRole('button',{name:'Timeframe 1w',exact:true})).toHaveAttribute('aria-pressed','true');expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(initialAttachments+1);
 });
+
+test('SMA defaults to red 200 and Low/High configure, persist, edit and remove without reconnecting',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto('/');const chart=page.getByTestId('chart-cell');await expect(page.getByLabel('OHLCV')).toContainText('C');const attachments=await page.evaluate(()=>(window as any).__testAttachCount());
+ await chart.getByLabel('Indicators',{exact:true}).selectOption('sma');let dialog=page.getByRole('dialog',{name:'SMA parameters',exact:true});
+ await expect(dialog.getByLabel('Period',{exact:true})).toHaveValue('200');await expect(dialog.getByLabel('Indicator color',{exact:true})).toHaveValue('#ff0000');await dialog.getByRole('button',{name:'OK',exact:true}).click();
+ for(const [type,name] of [['low','Low'],['high','High']]){
+  await chart.getByLabel('Indicators',{exact:true}).selectOption(type);dialog=page.getByRole('dialog',{name:`${name} parameters`,exact:true});await expect(dialog.getByLabel('Period',{exact:true})).toHaveValue('10');await expect(dialog).toContainText(type==='low'?'lowest low':'highest high');await dialog.getByRole('button',{name:'OK',exact:true}).click();await expect(chart.getByRole('button',{name:`Edit ${name} (10)`,exact:true})).toBeVisible();
+ }
+ await expect(page.getByRole('button',{name:'All changes saved'})).toBeVisible();const before=await savedChart(page);
+ expect(before.indicators.map((value:any)=>[value.type,value.parameters.period])).toEqual([['sma',200],['low',10],['high',10]]);expect(before.indicators[0].color).toBe('#ff0000');expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
+ for(const [name,period,color] of [['Low','3','#123456'],['SMA','13','#456789']]){
+  await chart.getByRole('button',{name:`Edit ${name} (${name==='Low'?10:200})`,exact:true}).click();dialog=page.getByRole('dialog',{name:`${name} parameters`,exact:true});await dialog.getByLabel('Period',{exact:true}).fill(period);await dialog.getByLabel('Indicator color',{exact:true}).fill(color);await dialog.getByRole('button',{name:'OK',exact:true}).click();
+ }
+ await expect(page.getByRole('button',{name:'All changes saved'})).toBeVisible();const edited=await savedChart(page);await page.reload();await expect(chart.locator('.indicator-chip')).toHaveCount(3);expect((await savedChart(page)).indicators).toEqual(edited.indicators);
+ await chart.getByRole('button',{name:'Edit SMA (13)',exact:true}).click();dialog=page.getByRole('dialog',{name:'SMA parameters',exact:true});await expect(dialog.getByLabel('Period',{exact:true})).toHaveValue('13');await expect(dialog.getByLabel('Indicator color',{exact:true})).toHaveValue('#456789');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await chart.getByRole('button',{name:'Remove Low (3)',exact:true}).click();await chart.getByRole('button',{name:'Remove High (10)',exact:true}).click();await expect(chart.locator('.indicator-chip')).toHaveCount(1);expect(errors).toEqual([]);
+});

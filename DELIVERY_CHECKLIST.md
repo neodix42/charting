@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Automatic chart history retries and Low/High — 2026-11-04
+
+- [x] JForex seed failures retry indefinitely with capped backoff, continuous live quotes, checkpoint reuse, stale-result fencing and retry cancellation; actual SDK-interface offline tests pass.
+- [x] Chart and Enrichment Low/High use complete trailing wick windows; validation, corrections, persistence, refresh recipes and browser controls pass.
+- [x] New chart SMA defaults to red/200; saved parameters/colors persist unchanged.
+- [x] Scoped Go race/vet, bindings tests, frontend typecheck/lint/213 unit tests, 25 browser tests, 97 runtime tests, Linux build/checksums and packaged offline smoke pass; see STATUS.md.
+- [ ] Install the rebuilt bridge explicitly and verify authenticated timeout recovery/native desktop controls. Windows execution remains unrun; no installation or user-data changes were performed.
+
 ## Installed JForex paths and workspace preservation — 2026-10-29
 
 - [x] Linux selects the user's installed bridge independently of checkout/executable paths; Windows portability and explicit test overrides remain supported.

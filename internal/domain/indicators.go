@@ -25,7 +25,7 @@ var indicatorColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 func validateIndicator(i Indicator) error {
 	var names []string
 	switch i.Type {
-	case "sma", "ema":
+	case "sma", "ema", "low", "high":
 		names = []string{"period"}
 	case "ichimoku":
 		names = []string{"conversion", "base", "spanB", "displacement"}

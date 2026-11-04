@@ -32,7 +32,7 @@ function validate(request) {
   if ('fast' in parameters && parameters.fast >= parameters.slow) throw new Error('Fast period must be smaller than slow period.');
   let source = request.source || 'auto';
   if (!['auto', 'close', 'open', 'high', 'low', 'bidprice', 'askprice'].includes(source)) throw new Error('Unsupported price source.');
-  if(definition.input==='timestamp')source='auto';
+  if(['timestamp','low','high'].includes(definition.input))source='auto';
   return {definition, parameters, source};
 }
 
@@ -58,6 +58,7 @@ async function calculator(request, headers) {
   let required;
   switch (definition.input) {
     case 'price': required = [price]; break;
+    case 'low':case 'high': required = [definition.input]; break;
     case 'hl': required = ['high', 'low']; break;
     case 'hlc': required = ['high', 'low', 'close']; break;
     case 'hlcv': required = ['high', 'low', 'close', 'volume']; break;
@@ -77,6 +78,22 @@ async function calculator(request, headers) {
   const cloud = period => new api.IchimokuCloud({conversionInterval:period,baseInterval:period,spanBInterval:period});
   if (simple[definition.id]) scalar(simple[definition.id], p.period);
   else switch (definition.id) {
+    case 'low':case 'high': {
+      // A bounded monotonic deque gives exact wick extrema with amortized O(1)
+      // work per CSV row. No price-source override or future rows enter a window.
+      const queue=[];let head=0,index=0,result;
+      add({
+        add(value){
+          while(queue.length>head&&(definition.id==='low'?queue.at(-1).value>=value:queue.at(-1).value<=value))queue.pop();
+          queue.push({index,value});
+          while(queue[head].index<=index-p.period)head++;
+          result=index>=p.period-1?queue[head].value:undefined;index++;
+          if(head>=p.period){queue.splice(0,head);head=0;}
+        },
+        getResult(){return result;},
+      },[`${definition.id}_${p.period}`]);
+      break;
+    }
     case 'alma': scalar(api.ALMA, p.period, p.offset, p.sigma); break;
     case 'macd': {
       const indicator = new api.MACD(new api.EMA(p.fast), new api.EMA(p.slow), new api.EMA(p.signal));
@@ -114,7 +131,7 @@ async function calculator(request, headers) {
         return Number(value);
       });
       let input = values[0];
-      if (definition.input !== 'price') {
+      if (!['price','low','high'].includes(definition.input)) {
         input = Object.fromEntries(required.map((name,index) => [name,values[index]]));
         if (input.high < input.low || ('close' in input && (input.close < input.low || input.close > input.high)) ||
             ('open' in input && (input.open < input.low || input.open > input.high)) || ('volume' in input && input.volume < 0)) {

@@ -180,3 +180,18 @@ func TestMACDPaneStretchFactorJSONStrictness(t *testing.T) {
 		})
 	}
 }
+
+func TestRollingExtremaValidation(t *testing.T) {
+	for _, kind := range []string{"low", "high"} {
+		for _, period := range []int{1, 10, 2000} {
+			w := NewWorkspace()
+			w.Tabs[0].Charts[0].Indicators = []Indicator{{ID: ID(), Type: kind, Parameters: map[string]int{"period": period}}}
+			cloneWorkspace(t, w)
+		}
+		for _, parameters := range []map[string]int{nil, {"period": 0}, {"period": 2001}, {"period": 10, "fast": 1}} {
+			if err := validateIndicator(Indicator{Type: kind, Parameters: parameters}); err == nil {
+				t.Fatalf("accepted invalid %s: %v", kind, parameters)
+			}
+		}
+	}
+}

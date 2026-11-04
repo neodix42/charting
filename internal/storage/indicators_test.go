@@ -27,6 +27,8 @@ func TestWeeklyIndicatorsPersistRestoreExportAndRejectInvalidImport(t *testing.T
 		{ID: domain.ID(), Type: "ema", Parameters: map[string]int{"period": 50}},
 		{ID: domain.ID(), Type: "ichimoku", Parameters: map[string]int{"conversion": 9, "base": 26, "spanB": 52, "displacement": 26}},
 		{ID: domain.ID(), Type: "macd", Parameters: map[string]int{"fast": 12, "slow": 26, "signal": 9}},
+		{ID: domain.ID(), Type: "low", Parameters: map[string]int{"period": 10}},
+		{ID: domain.ID(), Type: "high", Parameters: map[string]int{"period": 2000}, Color: &color},
 	}
 	ack, err := s.Save(loaded.Revision, "indicator-test", 1, w)
 	if err != nil {

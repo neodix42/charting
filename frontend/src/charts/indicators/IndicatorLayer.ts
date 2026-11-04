@@ -1,11 +1,11 @@
 import {HistogramSeries,LineSeries,LineStyle,type IChartApi,type IPaneApi,type ISeriesApi,type LineWidth,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
 import {CloudPrimitive} from './CloudPrimitive';
-import {ema,ichimoku,macd,sma,type IndicatorPoint,type MACDValues} from './math';
+import {ema,ichimoku,macd,sma,rollingExtrema,type IndicatorPoint,type MACDValues} from './math';
 
 interface Layer {type:IndicatorConfig['type'];lines:ISeriesApi<'Line'>[];histogram?:ISeriesApi<'Histogram'>;cloud?:CloudPrimitive;pane?:IPaneApi<Time>}
 const defaultPaneRatio=.15; // LWC starts the main pane at factor 2; the original MACD factor was .3.
-const colors={sma:'#e9af55',ema:'#48a9f8',ichimoku:'#4387ef',macd:'#48a9f8'};
+const colors={sma:'#e9af55',ema:'#48a9f8',low:'#26a69a',high:'#ef5350',ichimoku:'#4387ef',macd:'#48a9f8'};
 const lineData=(points:readonly IndicatorPoint[])=>points.map(point=>({time:point.time as UTCTimestamp,value:point.value}));
 function macdFormat(values:MACDValues):PriceFormatCustom{
  let magnitude=0;for(const points of [values.macd,values.signal,values.histogram])for(const point of points)magnitude=Math.max(magnitude,Math.abs(point.value));
@@ -56,6 +56,7 @@ export class IndicatorLayer {
  private create(config:IndicatorConfig):Layer{
   const color=config.color||colors[config.type];
   if(config.type==='sma'||config.type==='ema')return {type:config.type,lines:[this.addLine(color,config.type.toUpperCase(),0,config.lineWidth??2)]};
+  if(config.type==='low'||config.type==='high')return {type:config.type,lines:[this.addLine(color,config.type==='low'?'Low':'High',0,2)]};
   if(config.type==='ichimoku'){
    const lines=[this.addLine(color,'Ichimoku conversion'),this.addLine('#d85f68','Ichimoku base'),this.addLine('#26a69a','Ichimoku span A'),this.addLine('#ef5350','Ichimoku span B'),this.addLine('#ab78d2','Ichimoku lagging')];
    const cloud=new CloudPrimitive();lines[2].attachPrimitive(cloud);return {type:config.type,lines,cloud};
@@ -91,6 +92,10 @@ export class IndicatorLayer {
      const values=(config.type==='sma'?sma:ema)(bars,params.period??20);
      // At exactly one complete window there is one valid average, so no line segment exists yet.
      layer.lines[0].applyOptions({pointMarkersVisible:values.length===1,pointMarkersRadius:3,lineWidth:config.lineWidth??2});layer.lines[0].setData(lineData(values));break;
+    }
+    case 'low':case 'high':{
+     const values=rollingExtrema(bars,params.period??10,config.type);
+     layer.lines[0].applyOptions({pointMarkersVisible:values.length===1,pointMarkersRadius:3});layer.lines[0].setData(lineData(values));break;
     }
     case 'ichimoku':{
      const values=ichimoku(bars,params.conversion??9,params.base??26,params.spanB??52,params.displacement??26,intervalSeconds[timeframe]);

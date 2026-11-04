@@ -28,7 +28,7 @@ test('Enrichment loads CSV periods and comma separated headers only when opened,
  await expect(panel(page).locator('tbody tr')).toContainText('Available bar open times');
  await expect(panel(page).locator('tbody tr code')).toHaveText(fields.join(', '));
  await expect(panel(page).getByText('/explicit-test/screener',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(42);
+ await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(44);
  await expect(page.getByLabel('Period',{exact:true})).toHaveValue('200');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);
 });
@@ -85,7 +85,7 @@ test('UTC Weekday and Hour use timestamps without price parameters and become An
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles([value]),{...file(0),fields:['timestamp']});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['Weekday','Hour']);
- await expect(panel(page)).toContainText('40 indicators + 2 UTC calendar fields');
+ await expect(panel(page)).toContainText('42 indicators + 2 UTC calendar fields');
  await page.getByLabel('Enrichment price source',{exact:true}).selectOption('askprice');
  for(const indicator of ['weekday','hour']){
   await page.getByLabel('Enrichment indicator',{exact:true}).selectOption(indicator);
@@ -266,4 +266,10 @@ test('parallel enrichment reports aggregate progress for files beyond the visibl
  await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(5);
  await expect(page.getByRole('progressbar',{name:'Overall enrichment progress',exact:true})).toHaveAttribute('value','40');
  await expect(page.getByRole('spinbutton',{name:/parallel|threads|workers/i})).toHaveCount(0);
+});
+
+for(const [indicator,name] of [['low','Lowest low (Low)'],['high','Highest high (High)']])test(`${name} enrichment uses its wick field and chosen period`,async({page})=>{
+ await open(page);await page.getByLabel('Enrichment indicator',{exact:true}).selectOption(indicator);await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option:checked')).toHaveText(name);
+ await expect(page.getByLabel('Period',{exact:true})).toHaveValue('10');await expect(panel(page)).toContainText(`Requires: ${indicator}.`);await expect(page.getByLabel('Price source',{exact:true})).toHaveCount(0);await page.getByLabel('Period',{exact:true}).fill('3');
+ await page.getByRole('button',{name:'Enrich 2 files',exact:true}).click();expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toEqual({indicator,parameters:{period:3},source:'auto'});
 });

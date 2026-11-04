@@ -11,6 +11,7 @@ export function indicatorWarmupBars(config:IndicatorConfig):number{
  const p=config.parameters;
  switch(config.type){
   case 'sma':case 'ema':return p.period??20;
+  case 'low':case 'high':return p.period??10;
   case 'ichimoku':return Math.max(p.conversion??9,p.base??26,p.spanB??52);
   case 'macd':return (p.slow??26)+(p.signal??9)-1;
  }
@@ -21,6 +22,20 @@ export function sma(bars:readonly Candle[],period:number):IndicatorPoint[]{
  if(!validPeriod(period))return [];
  let sum=0;const result:IndicatorPoint[]=[];
  for(let i=0;i<bars.length;i++){sum+=Number(bars[i].close);if(i>=period)sum-=Number(bars[i-period].close);if(i>=period-1)result.push({time:bars[i].time,value:sum/period});}
+ return result;
+}
+
+/** Extrema include this bar's wick and wait for a full window of observed bars (gaps add no bars). */
+export function rollingExtrema(bars:readonly Candle[],period:number,field:'low'|'high'):IndicatorPoint[]{
+ if(!validPeriod(period))return [];
+ const queue:number[]=[],result:IndicatorPoint[]=[];let head=0;
+ for(let i=0;i<bars.length;i++){
+  const value=Number(bars[i][field]);
+  while(queue.length>head&&(field==='low'?Number(bars[queue.at(-1)!][field])>=value:Number(bars[queue.at(-1)!][field])<=value))queue.pop();
+  queue.push(i);
+  while(queue[head]<=i-period)head++;
+  if(i>=period-1)result.push({time:bars[i].time,value:Number(bars[queue[head]][field])});
+ }
  return result;
 }
 

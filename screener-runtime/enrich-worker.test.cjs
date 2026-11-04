@@ -24,9 +24,9 @@ async function fixture(t, csv) {
 }
 const request=(indicator,parameters={})=>({indicator,parameters,source:'auto'});
 
-test('all 40 reviewed indicators and 2 UTC time fields produce finite, aligned values',async()=>{
+test('all 42 reviewed indicators and 2 UTC time fields produce finite, aligned values',async()=>{
   assert.equal(catalog.version,'8.3.0');
-  assert.equal(catalog.indicators.length,42);
+  assert.equal(catalog.indicators.length,44);
   assert.equal(catalog.indicators.filter(item=>item.input==='timestamp').length,2);
   const rows=candles(500);
   for (const item of catalog.indicators) {
@@ -239,4 +239,32 @@ test('large files stream through bounded batches instead of loading the CSV into
   const output=await fs.readFile(paths.output,'utf8');
   assert.equal(output.split('\n').length,count+2);
   assert.ok(output.endsWith(`${count-1},1,2,0,1,3,1\n`));
+});
+
+test('Low/High use only their own wick field, exact trailing windows, bounded warmup and no future rows',async()=>{
+  const values=Array.from({length:6200},(_,i)=>10+(i%17)*3-(i%5));
+  for(const field of ['low','high'])for(const period of [1,2,10,2000]){
+    const calculate=await calculator(request(field,{period}),['timestamp',field]);
+    assert.deepEqual(calculate.columns,[`${field}_${period}`]);
+    for(const [i,value] of values.entries()){
+      const actual=calculate.next([String(i*60000),String(value)],i+2);
+      const expected=i<period-1?'':String((field==='low'?Math.min:Math.max)(...values.slice(i-period+1,i+1)));
+      assert.deepEqual(actual,[expected],`${field}(${period}) row ${i}`);
+    }
+    assert.equal(validate({...request(field,{period}),source:'close'}).source,'auto');
+    await assert.rejects(calculator(request(field,{period}),['timestamp','close']),/Requires .* fields/);
+    assert.throws(()=>calculate.next(['0','NaN'],2),/finite number/);
+  }
+});
+
+test('Low/High enrichment preserves input, leaves warmup blank and replaces existing columns',async t=>{
+  const csv='timestamp,open,high,low,close,low_3,high_3\n0,10,14,3,12,999,999\n60000,10,18,2,12,999,999\n120000,10,16,4,12,999,999\n180000,10,13,5,12,999,999\n240000,10,12,6,12,999,999\n';
+  const f=await fixture(t,csv);
+  await enrich({...f,...request('low',{period:3})},{emit:()=>{}});
+  const second=path.join(path.dirname(f.input),'both.csv');
+  await enrich({input:f.output,output:second,...request('high',{period:3})},{emit:()=>{}});
+  assert.equal(await fs.readFile(f.input,'utf8'),csv);
+  const rows=parse(await fs.readFile(second,'utf8'),{columns:true});
+  assert.deepEqual(rows.map(row=>row.low_3),['','','2','2','4']);assert.deepEqual(rows.map(row=>row.high_3),['','','18','18','16']);
+  assert.deepEqual(Object.keys(rows[0]),header.concat(['low_3','high_3']).filter(name=>name!=='volume'));
 });

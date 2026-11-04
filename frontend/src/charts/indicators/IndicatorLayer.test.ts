@@ -19,6 +19,15 @@ const candles:Candle[]=Array.from({length:80},(_,i)=>({time:1000+i*60,open:i+10,
 const config=(id:string,type:IndicatorConfig['type'],parameters:IndicatorConfig['parameters']={}):IndicatorConfig=>({id,type,parameters});
 
 describe('indicator series ownership',()=>{
+ it.each(['low','high'] as const)('renders %s on the price pane and reuses/removes its series after corrections and edits',type=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('range',type,{period:3})];
+  layer.update(candles.slice(0,2),configs,'1m');const line=[...h.panes[0].series][1];expect(line.data).toEqual([]);
+  layer.update(candles.slice(0,3),configs,'1m');expect(line.data).toEqual([{time:candles[2].time,value:type==='low'?9:14}]);expect(line.applyOptions).toHaveBeenLastCalledWith({pointMarkersVisible:true,pointMarkersRadius:3});
+  const corrected=[...candles.slice(0,3),{...candles[3],low:0,high:100}];layer.update(corrected,configs,'1m');expect(line.data.at(-1)!.value).toBe(type==='low'?0:100);
+  layer.update(corrected,[{...configs[0],parameters:{period:1},color:'#123456'}],'1m');expect(line.data).toHaveLength(4);expect(h.chart.addSeries).toHaveBeenCalledTimes(1);expect(h.panes).toHaveLength(1);
+  layer.dispose();expect(h.removed).toEqual([line]);expect(h.panes[0].series.size).toBe(1);
+ });
+
  it.each(['sma','ema'] as const)('defaults legacy %s to width 2 and applies all supported widths to the same series',type=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),legacy=config('average',type,{period:3});
   layer.update(candles,[legacy],'1m');const average=[...h.panes[0].series][1];

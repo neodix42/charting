@@ -369,10 +369,10 @@ const desktopSmokeJavaScript = `async function(phase) {
    await click('[aria-label="Close settings"]');await flush();
    check((await api.LoadWorkspace()).workspace.theme==='red-sands','Red Sands is acknowledged in the persisted workspace');
    await click('[role="tab"][aria-controls="screener-panel"]');await click('#screener-enrichment-tab');
-   await wait(()=>q('[aria-label="Enrichment indicator"]').options.length===42,'full enrichment indicator selector');
+   await wait(()=>q('[aria-label="Enrichment indicator"]').options.length===44,'full enrichment indicator selector');
    const menu=await open('[aria-label="Enrichment indicator"]'),options=Array.from(menu.querySelectorAll('[role="option"]')),groups=Array.from(menu.querySelectorAll('[role="group"],.themed-select-group'));
    report.enrichmentMenu={theme:theme(),background:getComputedStyle(menu).backgroundColor,color:getComputedStyle(menu).color,options:options.length,groups:groups.map(group=>group.getAttribute('aria-label')||group.textContent.trim().slice(0,80)),bounds:bounds(menu)};
-   check(options.length===42&&groups.length>=2,'opened Enrichment menu preserves all indicator options and category groups',report.enrichmentMenu);
+   check(options.length===44&&groups.length>=2,'opened Enrichment menu preserves all indicator options and category groups',report.enrichmentMenu);
    check(getComputedStyle(menu).backgroundColor===rootColor('--elevated')||getComputedStyle(menu).backgroundColor===rootColor('--panel'),'opened Enrichment menu uses Red Sands surface',report.enrichmentMenu);
    if(phase==='themes'){await sleep(250);report.enrichmentMenu.screenshot=await api.DesktopSmokeThemeScreenshot('enrichment');}
    key(menu,'Escape');await wait(()=>!opened(),'Escape dismisses grouped Enrichment dropdown');
@@ -481,7 +481,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     const downloaded=await wait(async()=>{const value=await api.GetScreener();if(value.jobs.some(job=>job.status==='failed'))throw Error(JSON.stringify(value));return value.jobs.length===2&&value.jobs.every(job=>job.status==='completed')?value:false;},'two real daily downloads',90000);
     const originals={};for(const symbol of ['btcusd','ethusd'])originals[symbol]=await api.DesktopSmokeScreenerCSV(symbol);
     await click('#screener-enrichment-tab');
-    await wait(()=>qa('#screener-enrichment tbody tr').length===2&&q('[aria-label="Enrichment indicator"]').options.length===42,'native file list and indicator catalog');
+    await wait(()=>qa('#screener-enrichment tbody tr').length===2&&q('[aria-label="Enrichment indicator"]').options.length===44,'native file list and indicator catalog');
     const page=await api.GetScreenerFiles(0,50),ids=page.files.map(file=>file.id),runtime=await api.GetScreenerEnrichment(ids);
     check(runtime.runtimeAvailable&&page.files.every(file=>file.from==='2024-01-01'&&file.to==='2024-01-10'&&file.timeframe==='d1'&&file.fields.join(',')==='timestamp,open,high,low,close,volume'),'native Enrichment lists genuine files, periods and CSV headers with preinstalled trading-signals',{runtime,page});
     await input('[aria-label="Period"]','3');await click('[aria-label="Enrich downloaded data"] button[type="submit"]');

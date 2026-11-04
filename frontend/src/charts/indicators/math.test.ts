@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import type {Candle} from '../../types';
-import {ema,ichimoku,indicatorWarmupBars,macd,sma} from './math';
+import {ema,ichimoku,indicatorWarmupBars,macd,sma,rollingExtrema} from './math';
 const bars=(values:number[]):Candle[]=>values.map((close,i)=>({time:1000+i*60,open:String(close),high:String(close+3),low:String(close-1),close:String(close),volume:'10',closed:i<values.length-1,quality:'authoritative',sourceRevision:1}));
 
 describe('indicator history requirements',()=>{
@@ -82,5 +82,29 @@ describe('MACD',()=>{
   input[39]={...input[39],close:'10'};const correction=macd(input);
   expect(correction.histogram.slice(0,-1)).toEqual(values.histogram.slice(0,-1));expect(correction.histogram.at(-1)!.value).toBeGreaterThan(0);
   expect(macd(input,26,12,9)).toEqual({macd:[],signal:[],histogram:[]});
+ });
+});
+
+describe('rolling low/high',()=>{
+ it('matches wick windows across gaps, duplicate extrema and expiring extrema without future data',()=>{
+  const input=bars(Array.from({length:2200},(_,i)=>10+(i%17)*3-(i%5)));input[20].time+=30;
+  const copy=structuredClone(input);
+  for(const field of ['low','high'] as const)for(const period of [1,2,10,2000]){
+   const values=rollingExtrema(input,period,field);
+   expect(values).toEqual(input.slice(period-1).map((bar,index)=>({time:bar.time,value:(field==='low'?Math.min:Math.max)(...input.slice(index,index+period).map(value=>Number(value[field])))})));
+   const prefix=rollingExtrema(input.slice(0,100),period,field);expect(values.slice(0,prefix.length)).toEqual(prefix);
+  }
+  expect(input).toEqual(copy);
+ });
+ it('waits for warmup and recomputes current and historical wick corrections',()=>{
+  const input=bars([5,2,2,8,7]);
+  expect(rollingExtrema(input,10,'low')).toEqual([]);
+  for(const period of [0,-1,1.5,2001,NaN])expect(rollingExtrema(input,period,'high')).toEqual([]);
+  expect(indicatorWarmupBars({id:'l',type:'low',parameters:{}})).toBe(10);
+  expect(indicatorWarmupBars({id:'h',type:'high',parameters:{period:2000}})).toBe(2000);
+  const before=rollingExtrema(input,3,'low');input[4]={...input[4],low:'0',high:'100',closed:false};
+  expect(rollingExtrema(input,3,'low').slice(0,-1)).toEqual(before.slice(0,-1));
+  expect(rollingExtrema(input,3,'low').at(-1)!.value).toBe(0);expect(rollingExtrema(input,3,'high').at(-1)!.value).toBe(100);
+  input[2]={...input[2],low:'-1'};expect(rollingExtrema(input,3,'low').map(point=>point.value)).toEqual([-1,-1,-1]);
  });
 });

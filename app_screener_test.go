@@ -27,7 +27,7 @@ func TestScreenerFolderIsIndependentOfWorkspaceAndRestores(t *testing.T) {
 	manager := screener.New(profile)
 	t.Cleanup(manager.Close)
 	app := &App{store: store, screener: manager}
-	if catalog := app.GetScreenerIndicators(); catalog.Version != "8.3.0" || len(catalog.Indicators) != 42 {
+	if catalog := app.GetScreenerIndicators(); catalog.Version != "8.3.0" || len(catalog.Indicators) != 44 {
 		t.Fatalf("unexpected enrichment catalog: %+v", catalog)
 	}
 	if files, err := app.GetScreenerFiles(0, 50); err != nil || files.Total != 0 || files.Directory != filepath.Join(profile, "screener") {

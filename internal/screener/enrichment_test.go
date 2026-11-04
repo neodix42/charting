@@ -280,7 +280,7 @@ func TestCSVInventoryBoundsPagesAndExcludesNonPublishedData(t *testing.T) {
 func TestIndicatorValidationUsesReviewedBoundsAndCopiesCallerParameters(t *testing.T) {
 	m := &Manager{}
 	catalog := m.Indicators()
-	if catalog.Version != "8.3.0" || len(catalog.Indicators) != 42 {
+	if catalog.Version != "8.3.0" || len(catalog.Indicators) != 44 {
 		t.Fatal("incorrect catalog")
 	}
 	for _, indicator := range catalog.Indicators {
@@ -338,8 +338,8 @@ func TestCalendarFieldCatalogValidationUsesTimestampOnlyAndCanonicalSource(t *te
 			t.Fatal("parameterless calendar field accepted period")
 		}
 	}
-	if technical != 40 || calendar != 2 {
-		t.Fatalf("catalog must retain 40 technical indicators plus 2 time fields: %d/%d", technical, calendar)
+	if technical != 42 || calendar != 2 {
+		t.Fatalf("catalog must retain 42 technical indicators plus 2 time fields: %d/%d", technical, calendar)
 	}
 }
 
@@ -370,5 +370,22 @@ func TestCalendarEnrichmentUsesRealUTCValuesWithoutPricesAndPersistsRecipes(t *t
 	metadata, err := readFileMetadata(m.directory, name)
 	if err != nil || len(metadata.Recipes) != 2 || metadata.Recipes[0].Indicator != "weekday" || metadata.Recipes[1].Indicator != "hour" || metadata.Recipes[0].Source != "auto" || metadata.Recipes[1].Source != "auto" {
 		t.Fatalf("calendar recipes were lost or duplicated: %+v %v", metadata, err)
+	}
+}
+
+func TestRollingExtremaEnrichmentUsesCanonicalWickSource(t *testing.T) {
+	m := &Manager{}
+	for _, kind := range []string{"low", "high"} {
+		for _, source := range []string{"", "auto", "close", "bidprice"} {
+			request, err := m.validateEnrichment(EnrichmentRequest{Indicator: kind, Source: source})
+			if err != nil || request.Source != "auto" || request.Parameters["period"] != 10 {
+				t.Fatalf("invalid extrema default/source: %+v %v", request, err)
+			}
+		}
+		for _, period := range []float64{0, 1.5, 2001, math.NaN()} {
+			if _, err := m.validateEnrichment(EnrichmentRequest{Indicator: kind, Parameters: map[string]float64{"period": period}}); err == nil {
+				t.Fatalf("accepted %s period %g", kind, period)
+			}
+		}
 	}
 }

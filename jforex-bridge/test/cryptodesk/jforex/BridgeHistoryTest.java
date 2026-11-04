@@ -62,7 +62,7 @@ public final class BridgeHistoryTest {
                     "merged current quote has a newer source revision than closed seed history");
                 check(f.blockingCacheReads.get() == 0, "daily/weekly seeds do not use synchronous candle or tick getters");
             }
-            try (Fixture f = new Fixture(5_000, () -> NOW)) {
+            try (Fixture f = new Fixture(5_000, () -> NOW, 100)) {
                 JsonObject request = f.subscription("warm-long-period", interval);
                 request.addProperty("historyFrom", (current - 2 * step) / 1000);
                 good(f.bridge, request); Load closed = f.load();
@@ -72,15 +72,15 @@ public final class BridgeHistoryTest {
                 check(barEvents(f).get(0).get("coverageTo").getAsLong() == current / 1000,
                     "warm completed historical range is durable before current snapshot finishes");
                 active.finish(false);
-                await(() -> state(f, "error"), "current snapshot failure stays visible");
+                await(() -> retrying(f), "current snapshot failure stays visible");
                 check(!state(f, "live") && barEvents(f).size() == 1,
                     "failed current snapshot cannot mark the chart live or discard its completed history");
                 f.strategy.get().onTick(Instrument.EURUSD, tick(NOW, 1.24));
-                check(f.events.get(f.events.size() - 1).getAsJsonObject("health").get("state").getAsString().equals("error"),
+                check(f.events.get(f.events.size() - 1).getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically"),
                     "quotes preserve a current-snapshot failure");
-                f.listener.get().onConnect(); Load retry = f.load();
+                Load retry = f.load();
                 check(retry.range() && retry.from() == current - step && retry.end() == current - step,
-                    "reconnect reuses the proven historical checkpoint after a failed current snapshot");
+                    "automatic retry reuses the proven historical checkpoint after a failed current snapshot");
                 retry.finish(true); Load canceled = f.load(); f.unsubscribe("warm-long-period");
                 await(() -> canceled.progress().stopJob(), "detach cancels pending current native history");
                 int before = f.events.size(); canceled.complete(true);
@@ -196,7 +196,7 @@ public final class BridgeHistoryTest {
             long current = current("1d");
             good(f.bridge, f.subscription("current-timeout", "1d")); Load closed = f.load();
             closed.complete(true); Load active = f.load();
-            await(() -> state(f, "error"), "a stalled native current snapshot hits the bounded history deadline");
+            await(() -> retrying(f), "a stalled native current snapshot hits the bounded history deadline");
             await(() -> active.progress().stopJob(), "current-snapshot timeout cancels the native loader");
             check(barEvents(f).size() == 1 && barEvents(f).get(0).get("coverageTo").getAsLong() == current / 1000 && !state(f, "live"),
                 "current timeout preserves published closed history and its checkpoint without claiming live reconciliation");

@@ -35,7 +35,8 @@ public final class BridgeResponsivenessTest {
         final AtomicInteger blockingCacheReads = new AtomicInteger();
         final Bridge bridge;
         Fixture(long timeout) throws Exception { this(timeout, System::currentTimeMillis); }
-        Fixture(long timeout, LongSupplier clock) throws Exception {
+        Fixture(long timeout, LongSupplier clock) throws Exception { this(timeout, clock, 2_000); }
+        Fixture(long timeout, LongSupplier clock, long retryMillis) throws Exception {
             IHistory history = fake(IHistory.class, (method, args) -> switch (method) {
                 case "getBarStart" -> {
                     Period period = (Period) args[0]; long time = (Long) args[1], step = period.getInterval();
@@ -71,7 +72,7 @@ public final class BridgeResponsivenessTest {
                 case "disconnect" -> { connected.set(false); yield null; }
                 default -> null;
             });
-            bridge = new Bridge(() -> client, events::add, timeout, clock);
+            bridge = new Bridge(() -> client, events::add, timeout, clock, retryMillis);
             login();
         }
         void login() {
@@ -92,7 +93,32 @@ public final class BridgeResponsivenessTest {
         public void close() throws Exception { bridge.close(); Files.delete(cache); }
     }
 
+    static boolean retrying(Fixture f) {
+        return f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically"));
+    }
+
     public static void main(String[] args) throws Exception {
+        try (Fixture f = new Fixture(300, System::currentTimeMillis, 25)) {
+            good(f.bridge, f.subscription("auto-retry", "1h")); Load timedOut = f.load();
+            await(() -> timedOut.progress().stopJob(), "timed out seed cancels its SDK loader");
+            Load failed = f.load();
+            check(retrying(f), "history timeout announces automatic retry while keeping the chart subscribed");
+            int before = f.events.size(); timedOut.complete(true);
+            check(f.events.size() == before, "old timeout callbacks cannot enter the next attempt");
+            f.strategy.get().onTick(Instrument.EURUSD, tick(System.currentTimeMillis(), 1.25));
+            failed.finish(false); Load empty = f.load(); empty.finish(true);
+            Load successful = f.load();
+            check(!successful.range(), "empty initial history retries the full bootstrap instead of advancing its checkpoint");
+            successful.complete(true);
+            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("state").getAsString().equals("live")), "repeated failures recover automatically when bars arrive");
+            check(f.loads.poll(150, TimeUnit.MILLISECONDS) == null, "successful history stops retries");
+            f.unsubscribe("auto-retry");
+            good(f.bridge, f.subscription("cancel-retry", "1h")); Load canceled = f.load(); canceled.finish(false);
+            await(() -> f.events.get(f.events.size()-1).has("health") && f.events.get(f.events.size()-1).getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically"), "retry scheduled before detach");
+            f.unsubscribe("cancel-retry");
+            before = f.events.size(); canceled.complete(true);
+            check(f.loads.poll(100, TimeUnit.MILLISECONDS) == null && f.events.size() == before, "unsubscribe cancels pending retries and rejects late results");
+        }
         try (Fixture f = new Fixture(5_000)) {
             CompletableFuture<JsonObject> first = new CompletableFuture<>(), second = new CompletableFuture<>();
             f.bridge.dispatch(f.history("one"), first::complete); Load one = f.load();
@@ -130,11 +156,11 @@ public final class BridgeResponsivenessTest {
             await(() -> load.progress().stopJob(), "timed-out SDK loader receives stopJob");
             load.complete(true); check(replies.size() == 1, "late callbacks cannot duplicate a response"); f.login();
             good(f.bridge, f.subscription("seed", "1m")); Load seed = f.load();
-            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("state").getAsString().equals("error")), "stalled seed reports a visible history error");
+            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically")), "stalled seed reports a visible history error");
             await(() -> seed.progress().stopJob(), "seed timeout stops the SDK loader");
             int before = f.events.size(); seed.complete(true); check(f.events.size() == before, "late seed never publishes stale bars");
             f.strategy.get().onTick(Instrument.EURUSD, tick(System.currentTimeMillis(), 1.12));
-            check(f.events.get(f.events.size()-1).getAsJsonObject("health").get("state").getAsString().equals("error"), "live ticks do not hide a history failure");
+            check(f.events.get(f.events.size()-1).getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically"), "live ticks do not hide a history failure");
             f.unsubscribe("seed"); check(f.subscribed.isEmpty(), "timed-out seed detaches cleanly");
         }
         try (Fixture f = new Fixture(5_000)) {
@@ -161,7 +187,7 @@ public final class BridgeResponsivenessTest {
             await(() -> load.progress().stopJob(), "unsubscribe cancels an active asynchronous load");
             int before = f.events.size(); load.complete(true); check(f.events.size() == before, "unsubscribed callback cannot publish bars or health");
             good(f.bridge, f.subscription("failed", "1d")); Load failed = f.load(); failed.complete(false);
-            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("state").getAsString().equals("error")), "partial history failure is visible, never treated as complete");
+            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically")), "partial history failure is visible, never treated as complete");
         }
         try (Fixture f = new Fixture(5_000)) {
             long step = Period.ONE_HOUR.getInterval(), current = Math.floorDiv(System.currentTimeMillis(), step) * step, anchor = current - 2 * step;
@@ -212,7 +238,7 @@ public final class BridgeResponsivenessTest {
             check(completed.get("coverageTo").getAsLong() == (first.end() + step) / 1000 && completed.get("coverageTo").getAsLong() < current / 1000, "a later merged quote or closed-bar event cannot falsely mark an unfilled suffix covered");
             check(completed.getAsJsonArray("bars").get(completed.getAsJsonArray("bars").size() - 1).getAsJsonObject().get("time").getAsLong() == current / 1000, "live quote stays visible while earlier catch-up chunks publish");
             failed.finish(false);
-            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("state").getAsString().equals("error")), "a failed later chunk remains visibly incomplete");
+            await(() -> f.events.stream().anyMatch(event -> event.has("health") && event.getAsJsonObject("health").get("reason").getAsString().contains("Retrying automatically")), "a failed later chunk remains visibly incomplete");
             f.strategy.get().onBar(Instrument.EURUSD, Period.ONE_MIN, null, bar(current - step, 1.1, 1.2, 1.09, 1.15));
             check(f.events.stream().filter(event -> event.has("coverageFrom")).count() == 1, "failed range and later native close do not publish success coverage");
             f.listener.get().onConnect(); Load retried = f.load();
