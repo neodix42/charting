@@ -2,6 +2,13 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Per-alert assets window — 2026-11-05
+
+- [x] Alerts table has an Assets column for enabled and disabled rows; the standalone Monitored assets section is removed.
+- [x] Dukascopy preserves analyzed targets/profitability/scope failures; explicit public catalog discovery preserves active Spot/Perpetual identities, warnings and retry without downloading candles or saving configuration.
+- [x] Typecheck/lint, 224 unit tests, 25 related browser cases, production Linux build/archive/checksums and whitespace checks pass. Hosted jobs are monitored after submission.
+- [ ] Native desktop and Windows interaction remain separate checks; catalog tests use explicit browser fixtures, with no real provider request or Telegram delivery.
+
 ## Named alerts and responsive Stop — 2026-11-05
 
 - [x] Named Add/Edit/Remove entries reuse a condition independently across source/period; row and header checkboxes preserve master delivery state.
