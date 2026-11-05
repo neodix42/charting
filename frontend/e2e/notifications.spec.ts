@@ -66,6 +66,10 @@ test('shutdown save choices float without moving charts and remain until resolve
  await expect(page.getByRole('button',{name:'Retry save and close',exact:true})).toBeVisible();expect(await chartGeometry(page)).toEqual(baseline);
  await page.clock.runFor(7000);await expect(page.getByRole('status')).toHaveCount(0);await expect(page.getByRole('alert')).toBeVisible();expect(await chartGeometry(page)).toEqual(baseline);
  await page.evaluate(()=>(window as any).__testFailSave(false));await page.getByRole('button',{name:'Retry save and close',exact:true}).click();
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();await expect(page.getByRole('status')).toHaveText('Closing gracefully...');expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();expect(await chartGeometry(page)).toEqual(baseline);
+ // The paused clock also pauses the bounded paint turn before native quit.
+ // Advance it only after the final save has finished and progress is visible.
+ await page.clock.runFor(100);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'floating-close',discard:false});
- await expect(page.getByRole('alert')).toHaveCount(0);expect(await chartGeometry(page)).toEqual(baseline);
+ await expect(page.getByRole('alert')).toHaveCount(0);expect(await chartGeometry(page)).toEqual(baseline);expect(await page.evaluate(()=>(window as any).__testWorkspace().tabs[0].charts[0].showVolume)).toBe(!intermediate.tabs[0].charts[0].showVolume);
 });
