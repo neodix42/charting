@@ -13,16 +13,18 @@ import (
 // SentAlerts counts alerts confirmed for at least one recipient since
 // condition-level tracking began, including incomplete recipient batches.
 type LiveAlertCheck struct {
-	ConditionID   string `json:"conditionId"`
-	Name          string `json:"name"`
-	AssetsScanned int    `json:"assetsScanned"`
-	LastChecked   int64  `json:"lastChecked"`
-	NextCheck     int64  `json:"nextCheck"`
-	SentAlerts    int64  `json:"sentAlerts"`
-	Status        string `json:"status"`
-	Manual        bool   `json:"manual"`
-	Error         string `json:"error"`
-	TimingHint    string `json:"timingHint,omitempty"`
+	AlertID          string `json:"alertId,omitempty"`
+	SavedConditionID string `json:"savedConditionId,omitempty"`
+	ConditionID      string `json:"conditionId"`
+	Name             string `json:"name"`
+	AssetsScanned    int    `json:"assetsScanned"`
+	LastChecked      int64  `json:"lastChecked"`
+	NextCheck        int64  `json:"nextCheck"`
+	SentAlerts       int64  `json:"sentAlerts"`
+	Status           string `json:"status"`
+	Manual           bool   `json:"manual"`
+	Error            string `json:"error"`
+	TimingHint       string `json:"timingHint,omitempty"`
 }
 
 type liveAlertCheckState struct {
@@ -279,15 +281,19 @@ func (l *LiveAlerts) recordConfirmedAlertLocked(conditionID string) {
 func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertConditionScope, config LiveAlertsConfig, states map[string]liveAlertCheckState, now time.Time, retry *LiveAlertsConfig, retryAt, retryAsOf int64, retryManual bool) []LiveAlertCheck {
 	rows := []LiveAlertCheck{}
 	for _, condition := range saved {
-		if !containsLiveValue(config.ConditionIDs, condition.ID) {
+		entry, named := liveAlertEntry(config, condition.ID)
+		if !containsLiveValue(config.ConditionIDs, condition.ID) && !named {
 			continue
 		}
 		state, checked := states[condition.ID]
 		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		if named {
+			row.AlertID, row.SavedConditionID = entry.ID, entry.ConditionID
+		}
 		if !checked {
 			row.Status = "never"
 		}
-		if config.Enabled {
+		if config.Enabled && (!named || entry.Enabled) {
 			periods := []string{}
 			for _, scope := range scopes {
 				if scope.ConditionID == condition.ID {

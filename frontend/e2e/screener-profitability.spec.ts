@@ -18,6 +18,10 @@ async function saveCondition(page:Page,name:string){
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);
 }
 
+async function addLiveAlert(page:Page,name:string,condition:string){
+ await page.getByRole('button',{name:'Add alert',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Add alert',exact:true});await dialog.getByRole('textbox',{name:'Alert name',exact:true}).fill(name);await dialog.getByRole('combobox',{name:'Saved condition',exact:true}).selectOption({label:condition});await dialog.getByRole('button',{name:'Add alert',exact:true}).click();await expect(dialog).toHaveCount(0);
+}
+
 test('fresh profitability defaults to 85 and filters the sorted full result set before pagination',async({page})=>{
  const percentages=[80,85,90,100,95,85,90,95,100,85,90,95,100,75];
  await openAnalysis(page,percentages.map((_,index)=>file(index)));
@@ -94,18 +98,19 @@ test('Live Alerts inherits recorded periods and profitability without editable a
   (window as any).__testSetEnrichmentFiles(files);
   const api=window.go!.main!.App!,view={...await api.GetScreenerAnalysisView(),period:'all',tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:20}};
   await api.StartScreenerAnalysis(view);(window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results});
-  await api.SaveScreenerAnalysisCondition('Recorded 85',view);
+  const recorded=await api.SaveScreenerAnalysisCondition('Recorded 85',view);
   await api.SaveScreenerAnalysisCondition('Needs analysis',{...view,conditions:view.conditions.map(row=>({...row,right:{kind:'number',value:2}}))});
+  await api.ConfigureScreenerLiveAlerts({enabled:false,conditionIds:[recorded.id]});
  },{files,results});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
- await page.getByRole('checkbox',{name:'Alert condition Recorded 85',exact:true}).check();
+ await expect(page.getByRole('checkbox',{name:'Enable alert Recorded 85',exact:true})).toBeChecked();
  const assets=page.getByRole('region',{name:'Monitored assets for Recorded 85',exact:true});
  await expect(assets).toContainText('All analyzed periods');await expect(assets.locator('li')).toHaveCount(3);
  await expect(assets).toContainText('BTCUSD');await expect(assets).toContainText('EURUSD');await expect(assets).toContainText('ETHUSD');await expect(assets).not.toContainText('80.00%');
  await expect(assets).toContainText('Profitability: 90.91%, 10 / 11 hit TP');await expect(assets).toContainText('Profitability: 85.00%, 17 / 20 hit TP');await expect(assets.getByRole('checkbox')).toHaveCount(0);
  await expect(page.getByRole('combobox',{name:/Alert period/})).toHaveCount(0);await expect(page.getByRole('button',{name:'Select all assets',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
- await page.getByRole('checkbox',{name:'Alert condition Needs analysis',exact:true}).check();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
- await expect(page.getByRole('region',{name:'Monitored assets for Needs analysis',exact:true})).toContainText('no recorded Analysis matching assets');
+ await addLiveAlert(page,'Unanalyzed alert','Needs analysis');await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
+ await page.getByRole('region',{name:'Monitored assets for Unanalyzed alert',exact:true}).getByLabel('Show error: Monitored assets for Unanalyzed alert',{exact:true}).click();await expect(page.getByRole('region',{name:'Monitored assets for Unanalyzed alert',exact:true})).toContainText('no recorded Analysis matching assets');
  await page.evaluate(()=>(window as any).__testSetLiveAlertsInfo({recent:[{assetName:'Bitcoin vs US Dollar',symbol:'btcusd',timeframe:'h1',time:Date.UTC(2026,9,28,11),conditionName:'Recorded 85',status:'sent',profitability:{symbol:'btcusd',timeframe:'h1',fileName:'recorded.csv',matches:11,takeProfitHits:10,profitablePercent:1000/11}}]}));
  await expect(page.getByRole('region',{name:'Live alert status',exact:true})).toContainText('Profitability: 90.91%, 10 / 11 hit TP');
 });
@@ -117,5 +122,5 @@ test('partial completed Analysis retains valid monitored matches and distinguish
  await page.evaluate(results=>(window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:1,completed:3,total:3,progress:100,totalMatches:40,matchedFiles:2,results}),results);
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();await expect(page.getByRole('region',{name:'Analysis results',exact:true})).toContainText('2 result rows shown (matching files and file errors)');await saveCondition(page,'Partial Analysis');
  const saved=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]);expect(saved.analysis.failedFiles).toBe(1);expect(saved.analysis.assets).toHaveLength(2);
- await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await page.getByRole('checkbox',{name:'Alert condition Partial Analysis',exact:true}).check();const monitored=page.getByRole('region',{name:'Monitored assets for Partial Analysis',exact:true});await expect(monitored.locator('li')).toHaveCount(1);await expect(monitored).toContainText('BTCUSD');await expect(monitored).toContainText('1 failed files');await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await addLiveAlert(page,'Partial match watcher','Partial Analysis');const monitored=page.getByRole('region',{name:'Monitored assets for Partial match watcher',exact:true});await expect(monitored.locator('li')).toHaveCount(1);await expect(monitored).toContainText('BTCUSD');await expect(monitored).toContainText('1 failed files');await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
 });

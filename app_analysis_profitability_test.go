@@ -98,7 +98,13 @@ func TestAnalysisProfitabilitySurvivesFacadeSaveScanRestartAndAlertFormatting(t 
 	defer alerts.Close()
 	app.liveAlerts = alerts
 	info, err := app.ConfigureScreenerLiveAlerts(screener.LiveAlertsConfig{ConditionIDs: []string{named.ID, copyRule.ID}})
-	if err != nil || len(info.ConditionScopes) != 2 {
+	if err != nil || info.Config.Enabled {
+		t.Fatalf("disabled configuration did not acknowledge its saved draft: %+v %v", info, err)
+	}
+	// Stop acknowledges durable cancellation without blocking on saved evidence;
+	// ordinary polling supplies the full inherited scope and check presentation.
+	info = app.GetScreenerLiveAlerts()
+	if len(info.ConditionScopes) != 2 {
 		t.Fatalf("condition-only configuration did not inherit scope: %+v %v", info, err)
 	}
 	if len(info.Checks) != 2 {

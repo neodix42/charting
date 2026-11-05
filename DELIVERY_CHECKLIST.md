@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Named alerts and responsive Stop — 2026-11-05
+
+- [x] Named Add/Edit/Remove entries reuse a condition independently across source/period; row and header checkboxes preserve master delivery state.
+- [x] Migration preserves active/paused rows, original identities/claims/counters, and readable alert/rule attribution; isolated actual-profile verification leaves original files unchanged.
+- [x] Stop cancels/saves without waiting for Manager.mu or full Info; Stopping... covers pending operations and worker cleanup with failure/stale-response recovery.
+- [x] Full Screener race suite, other Go/cmd race tests, bindings/vet, 221 frontend tests, 21 combined browser cases and final Stop regressions pass.
+- [x] Production Linux build/archive/checksums and documentation pass; hosted jobs are monitored for the submitted commit.
+- [ ] Native desktop timing and Windows execution remain separate checks; hosted build verification is reported independently.
+
 ## Live Alerts sources, partial delivery counts and graceful shutdown — 2026-11-05
 
 - [x] Data source per condition defaults to existing Dukascopy; public overrides cover all tradable spot/perpetual markets with inherited periods and separate history/claim identities.

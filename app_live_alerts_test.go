@@ -72,3 +72,11 @@ func TestLiveAlertMessageIdentifiesPublicMarketAndWeeklyClose(t *testing.T) {
 		t.Fatal("legacy Dukascopy formatting changed")
 	}
 }
+
+func TestLiveAlertMessageSeparatesNamedAlertFromReusableSavedCondition(t *testing.T) {
+	alert := screener.LiveAlert{Symbol: "BTCUSDT", AssetName: "Bitcoin", DataSource: "binance", Market: "spot", Timeframe: "h1", AlertName: "My Binance hourly", ConditionName: "My Binance hourly", SavedConditionName: "Reusable bullish rule", EntryPrice: 100}
+	message := formatScreenerLiveAlert(alert)
+	if !strings.Contains(message, "Alert: My Binance hourly\nCondition: Reusable bullish rule") || strings.Contains(message, "Condition: My Binance hourly") {
+		t.Fatal("named alert obscured its original saved condition", message)
+	}
+}

@@ -390,7 +390,7 @@ func TestLiveAlertsRestartInterruptedClaimShowsUncertain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer copy.Close()
-	if copy.Info().Recent[0].Status != "uncertain" || !copy.Info().Config.Enabled || !reflect.DeepEqual(copy.Info().Config, config) {
+	if copy.Info().Recent[0].Status != "uncertain" || !copy.Info().Config.Enabled || !reflect.DeepEqual(copy.Info().Config.ConditionIDs, config.ConditionIDs) || len(copy.Info().Config.Alerts) != 1 || copy.Info().Config.Alerts[0].ID != config.ConditionIDs[0] {
 		t.Fatal("restart did not preserve claim/config")
 	}
 	encoded, err := json.Marshal(copy.Info())

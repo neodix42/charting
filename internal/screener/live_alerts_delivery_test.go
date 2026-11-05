@@ -65,6 +65,13 @@ func TestLiveAlertsLegacyPartialRecoveryPreservesClaimsAndIsIdempotent(t *testin
 	l.state.Checks = map[string]liveAlertCheckState{id: {LastChecked: 1793752781528, SentAlerts: 0, Status: "failed", AssetsScanned: 53, Error: "Retain partial failure"}}
 	l.state.Recent = []LiveAlertOutcome{{ConditionName: "Latest close positive", Symbol: "eurusd", Timeframe: "d1", Time: 1793664000000, Status: "failed", Message: "Telegram alert delivery: 1 of 2 recipients confirmed; no automatic resend: Telegram operation failed (recipientNotFound). This bar will not be resent automatically; check Telegram before any manual action."}}
 	l.state.Watermarks = map[string]int64{id + "/eurusd/d1": 1793664000000}
+	m.mu.Lock()
+	savedConditions, savedErr := m.readSavedConditions()
+	m.mu.Unlock()
+	if savedErr != nil {
+		t.Fatal(savedErr)
+	}
+	l.state.Config = migrateLiveAlertEntries(l.state.Config, savedConditions, l.state.Watermarks, l.state.Checks)
 	beforeConfig, beforeMarks, beforeCheck := copyLiveAlertsConfig(l.state.Config), copyWatermarksForDeliveryTest(l.state.Watermarks), l.state.Checks[id]
 	if err := writeState(l.path, l.state); err != nil {
 		t.Fatal(err)
@@ -79,7 +86,7 @@ func TestLiveAlertsLegacyPartialRecoveryPreservesClaimsAndIsIdempotent(t *testin
 	}
 	check := restored.state.Checks[id]
 	check.SentAlerts = beforeCheck.SentAlerts
-	if !reflect.DeepEqual(restored.state.Config, beforeConfig) || !reflect.DeepEqual(restored.state.Watermarks, beforeMarks) || check != beforeCheck {
+	if restored.state.Config.Enabled != beforeConfig.Enabled || !reflect.DeepEqual(restored.state.Config.ConditionIDs, beforeConfig.ConditionIDs) || !reflect.DeepEqual(restored.state.Config.ConditionSources, beforeConfig.ConditionSources) || !reflect.DeepEqual(restored.state.Watermarks, beforeMarks) || check != beforeCheck {
 		t.Fatal("recovery changed active config, claims or check failure")
 	}
 	encodedBefore, err := os.ReadFile(l.path)

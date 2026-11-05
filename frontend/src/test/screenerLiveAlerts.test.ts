@@ -1,17 +1,17 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,configWithLiveAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
-it('serializes disabled alert drafts, keeps latest selections and never starts delivery through autosave',async()=>{
+it('serializes explicit alert drafts and preserves their chosen master state',async()=>{
  let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
  const persist=vi.fn(async config=>{if(persist.mock.calls.length===1)await held;return result(config);});
  const writer=new LiveAlertsConfigWriter(persist,()=>{}),config=initialLiveAlertsConfig();
  writer.edit({...config,conditionIds:['first']});writer.edit({...config,enabled:true,conditionIds:['first','second']});
  expect(persist).toHaveBeenCalledTimes(1);expect(writer.busy).toBe(true);
  const flush=writer.flush();release();await flush;
- expect(persist).toHaveBeenCalledTimes(2);expect(persist.mock.calls[1][0]).toEqual({enabled:false,conditionIds:['first','second']});expect(writer.busy).toBe(false);
+ expect(persist).toHaveBeenCalledTimes(2);expect(persist.mock.calls[1][0]).toEqual({...config,enabled:true,conditionIds:['first','second']});expect(writer.busy).toBe(false);
 });
 
 it('retains failed alert selections for close retry and copies caller data',async()=>{
@@ -60,4 +60,18 @@ it('queued autosave keeps the latest per-condition source choices and copies sou
  const second=withLiveAlertSource(first,'hourly','bybit');writer.edit(second);second.conditionSources![0].source='binance';
  const flush=writer.flush();release();await flush;
  expect(persist.mock.calls[1][0]).toEqual({...config,conditionSources:[{conditionId:'daily',source:'hyperliquid'},{conditionId:'hourly',source:'bybit'}]});
+});
+
+
+it('migrates legacy selections to independent entries without changing caller master state or identifiers',()=>{
+ const condition={id:'old-id',name:'Original saved rule',request:{period:'all'}} as any;
+ const legacy={enabled:true,conditionIds:['old-id'],conditionSources:[{conditionId:'old-id',source:'hyperliquid' as const}]};
+ const entries=liveAlertDefinitions(legacy,[condition]);expect(entries).toEqual([{id:'old-id',name:'Original saved rule',conditionId:'old-id',period:'all',dataSource:'hyperliquid',enabled:true}]);expect(legacy).not.toHaveProperty('alerts');
+ const explicit=configWithLiveAlerts(legacy,entries);expect(explicit).toEqual({enabled:true,alerts:entries});expect(liveAlertDefinitions(explicit,[{...condition,name:'Renamed saved rule'}])[0].name).toBe('Original saved rule');
+});
+it('queued edits preserve distinct alert entries sharing a rule and the active master switch',async()=>{
+ let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;}),persist=vi.fn(async value=>{if(persist.mock.calls.length===1)await held;return result(value);});
+ const writer=new LiveAlertsConfigWriter(persist,()=>{}),base={id:'one',name:'Spot hourly',conditionId:'same-rule',period:'h1' as const,dataSource:'binance' as const,enabled:true};
+ writer.edit({enabled:true,alerts:[base]});const entries=[{...base,enabled:false},{...base,id:'two',name:'Perp daily',period:'d1' as const,dataSource:'hyperliquid' as const}];writer.edit({enabled:true,alerts:entries});entries[0].name='Mutated caller';const flushed=writer.flush();release();await flushed;
+ expect(persist.mock.calls[1][0]).toMatchObject({enabled:true,alerts:[{id:'one',name:'Spot hourly',enabled:false},{id:'two',name:'Perp daily',enabled:true,period:'d1',dataSource:'hyperliquid'}]});
 });

@@ -8,6 +8,9 @@ import (
 )
 
 func liveAlertSource(config LiveAlertsConfig, id string) string {
+	if entry, found := liveAlertEntry(config, id); found {
+		return entry.DataSource
+	}
 	for _, choice := range config.ConditionSources {
 		if choice.ConditionID == id {
 			return choice.Source

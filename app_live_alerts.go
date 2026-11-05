@@ -70,7 +70,15 @@ func formatScreenerLiveAlert(alert screener.LiveAlert) string {
 		source = fmt.Sprintf("\nSource: %s\nMarket: %s", alert.DataSource, alert.Market)
 		symbol = alert.Symbol
 	}
-	return fmt.Sprintf("CryptoDesk Live Alert\nAsset: %s — %s%s\nPeriod: %s\nTime (UTC, bar close): %s\nCondition: %s%s\nEntry (signal close): %s\nSL: %s\nTP: %s",
-		symbol, alert.AssetName, source, alert.Timeframe, closed.Format("2006-01-02 15:04:05"), alert.ConditionName,
+	conditionName := alert.ConditionName
+	alertName := ""
+	if alert.AlertName != "" {
+		alertName = "\nAlert: " + alert.AlertName
+	}
+	if alert.SavedConditionName != "" {
+		conditionName = alert.SavedConditionName
+	}
+	return fmt.Sprintf("CryptoDesk Live Alert\nAsset: %s — %s%s\nPeriod: %s\nTime (UTC, bar close): %s%s\nCondition: %s%s\nEntry (signal close): %s\nSL: %s\nTP: %s",
+		symbol, alert.AssetName, source, alert.Timeframe, closed.Format("2006-01-02 15:04:05"), alertName, conditionName,
 		profitability, strconv.FormatFloat(alert.EntryPrice, 'g', -1, 64), level(alert.StopLoss), level(alert.TakeProfit))
 }

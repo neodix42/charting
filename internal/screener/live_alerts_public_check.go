@@ -243,12 +243,16 @@ func (l *LiveAlerts) claimCurrentPublicCondition(ctx context.Context, evaluated 
 	if err != nil {
 		return false, err
 	}
-	for _, current := range saved {
+	currentConditions, revision, valid := l.currentLiveAlertConditions(saved, evaluated)
+	if !valid {
+		return false, nil
+	}
+	for _, current := range currentConditions {
 		if current.ID == evaluated.ID {
 			if !sameAnalysisProfitabilityRequest(current.Request, evaluated.Request) {
 				return false, nil
 			}
-			return true, l.claimSource(ctx, source, evaluated.ID, key, timestamp, alert)
+			return true, l.claimSourceRevision(ctx, source, evaluated.ID, key, timestamp, alert, &revision)
 		}
 	}
 	return false, nil

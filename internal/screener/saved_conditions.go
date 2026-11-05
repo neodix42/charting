@@ -20,10 +20,12 @@ const savedConditionsBytes = 128 * 1024 * 1024
 // SavedAnalysisCondition is a named snapshot of all visual AND rows, separate
 // from the editable draft, downloaded data and chart workspace exports.
 type SavedAnalysisCondition struct {
-	ID       string                  `json:"id"`
-	Name     string                  `json:"name"`
-	Request  AnalysisRequest         `json:"request"`
-	Analysis *SavedConditionAnalysis `json:"analysis,omitempty"`
+	liveAlertDefinition    *LiveAlertDefinition
+	liveSavedConditionName string
+	ID                     string                  `json:"id"`
+	Name                   string                  `json:"name"`
+	Request                AnalysisRequest         `json:"request"`
+	Analysis               *SavedConditionAnalysis `json:"analysis,omitempty"`
 }
 
 type savedAnalysisConditions struct {

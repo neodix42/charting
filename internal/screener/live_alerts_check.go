@@ -22,6 +22,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if err := validateLiveAlertsConfig(config); err != nil {
 		return err
 	}
+	config = canonicalLiveAlertsConfig(config)
 	hasPublic := false
 	for _, id := range canonicalLiveAlertsConfig(config).ConditionIDs {
 		hasPublic = hasPublic || supportedPublicAlertSource(liveAlertSource(config, id))
@@ -376,7 +377,11 @@ func (l *LiveAlerts) claimCurrentCondition(ctx context.Context, evaluated SavedA
 	if err != nil {
 		return false, err
 	}
-	for _, current := range saved {
+	currentConditions, revision, valid := l.currentLiveAlertConditions(saved, evaluated)
+	if !valid {
+		return false, nil
+	}
+	for _, current := range currentConditions {
 		if current.ID != evaluated.ID {
 			continue
 		}
@@ -388,7 +393,7 @@ func (l *LiveAlerts) claimCurrentCondition(ctx context.Context, evaluated SavedA
 		if !allowed || !previouslyAllowed || !reflect.DeepEqual(stats, previousStats) {
 			return false, nil
 		}
-		return true, l.claimSource(ctx, "dukascopy", evaluated.ID, key, timestamp, alert)
+		return true, l.claimSourceRevision(ctx, "dukascopy", evaluated.ID, key, timestamp, alert, &revision)
 	}
 	return false, nil
 }
@@ -598,6 +603,7 @@ func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index i
 		return LiveAlert{}, errors.New("Live Alerts requires a finite closing price")
 	}
 	alert := LiveAlert{ConditionID: saved.ID, ConditionName: saved.Name, Symbol: s.metadata.Symbol, AssetName: s.metadata.Description, Timeframe: s.metadata.Timeframe, Time: row.timestamp, EntryPrice: row.values[position]}
+	liveAlertAttribution(&alert, saved)
 	alert.Profitability, _ = SavedConditionProfitabilityFor(saved, s.metadata.Symbol, s.metadata.Timeframe)
 	config := saved.Request.TradeSimulation
 	if config == nil {
@@ -636,12 +642,16 @@ func (l *LiveAlerts) claim(ctx context.Context, key string, timestamp int64, ale
 }
 
 func (l *LiveAlerts) claimSource(ctx context.Context, source, conditionID, key string, timestamp int64, alert *LiveAlert) error {
+	return l.claimSourceRevision(ctx, source, conditionID, key, timestamp, alert, nil)
+}
+
+func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionID, key string, timestamp int64, alert *LiveAlert, expectedRevision *uint64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.closed || !l.state.Config.Enabled {
+	if l.closed || !l.state.Config.Enabled || expectedRevision != nil && *expectedRevision != l.configRevision {
 		return context.Canceled
 	}
 	if source != "" && (liveAlertSource(l.state.Config, conditionID) != source || !containsLiveValue(l.state.Config.ConditionIDs, conditionID)) {
@@ -657,7 +667,7 @@ func (l *LiveAlerts) claimSource(ctx context.Context, source, conditionID, key s
 		return nil
 	}
 	priorRecent := append([]LiveAlertOutcome{}, l.state.Recent...)
-	l.state.Recent = append([]LiveAlertOutcome{{ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
+	l.state.Recent = append([]LiveAlertOutcome{{AlertID: alert.AlertID, AlertName: alert.AlertName, SavedConditionID: alert.SavedConditionID, SavedConditionName: alert.SavedConditionName, ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
 	if len(l.state.Recent) > 50 {
 		l.state.Recent = l.state.Recent[:50]
 	}

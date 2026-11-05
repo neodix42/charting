@@ -908,6 +908,29 @@ export namespace predictions {
 
 export namespace screener {
 
+	export class LiveAlertDefinition {
+	    id: string;
+	    name: string;
+	    conditionId: string;
+	    period: string;
+	    dataSource: string;
+	    enabled: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new LiveAlertDefinition(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.conditionId = source["conditionId"];
+	        this.period = source["period"];
+	        this.dataSource = source["dataSource"];
+	        this.enabled = source["enabled"];
+	    }
+	}
+
 	export class LiveAlertConditionSource {
 	    conditionId: string;
 	    source: string;
@@ -2096,6 +2119,8 @@ export namespace screener {
 		}
 	}
 	export class LiveAlertConditionScope {
+	    alertId?: string;
+	    savedConditionId?: string;
 	    conditionId: string;
 	    period: string;
 	    targets: LiveAlertTarget[];
@@ -2109,6 +2134,8 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alertId = source["alertId"];
+	        this.savedConditionId = source["savedConditionId"];
 	        this.conditionId = source["conditionId"];
 	        this.period = source["period"];
 	        this.targets = this.convertValues(source["targets"], LiveAlertTarget);
@@ -2136,6 +2163,10 @@ export namespace screener {
 		}
 	}
 	export class LiveAlertOutcome {
+	    alertId?: string;
+	    alertName?: string;
+	    savedConditionId?: string;
+	    savedConditionName?: string;
 	    conditionId?: string;
 	    dataSource?: string;
 	    market?: string;
@@ -2155,6 +2186,10 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alertId = source["alertId"];
+	        this.alertName = source["alertName"];
+	        this.savedConditionId = source["savedConditionId"];
+	        this.savedConditionName = source["savedConditionName"];
 	        this.conditionId = source["conditionId"];
 	        this.dataSource = source["dataSource"];
 	        this.market = source["market"];
@@ -2204,6 +2239,7 @@ export namespace screener {
 	}
 
 	export class LiveAlertsConfig {
+	    alerts: LiveAlertDefinition[];
 	    enabled: boolean;
 	    conditionIds: string[];
 	    conditionSources?: LiveAlertConditionSource[];
@@ -2217,6 +2253,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alerts = this.convertValues(source["alerts"], LiveAlertDefinition);
 	        this.enabled = source["enabled"];
 	        this.conditionIds = source["conditionIds"];
 	        this.conditionSources = this.convertValues(source["conditionSources"], LiveAlertConditionSource);
@@ -2244,6 +2281,8 @@ export namespace screener {
 		}
 	}
 	export class LiveAlertCheck {
+	    alertId?: string;
+	    savedConditionId?: string;
 	    conditionId: string;
 	    name: string;
 	    assetsScanned: number;
@@ -2261,6 +2300,8 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alertId = source["alertId"];
+	        this.savedConditionId = source["savedConditionId"];
 	        this.conditionId = source["conditionId"];
 	        this.name = source["name"];
 	        this.assetsScanned = source["assetsScanned"];
