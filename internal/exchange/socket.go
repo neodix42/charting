@@ -32,10 +32,11 @@ type socketHub struct {
 	reconnects    int64
 	attemptCancel context.CancelFunc
 	active        map[string]bool
+	latestBooks   map[string][]byte
 }
 
 func newSocketHub(a *publicAdapter) *socketHub {
-	return &socketHub{a: a, category: "spot", subs: map[string]map[uint64]chan wireEvent{}, wake: make(chan struct{}, 1), active: map[string]bool{}}
+	return &socketHub{a: a, category: "spot", subs: map[string]map[uint64]chan wireEvent{}, wake: make(chan struct{}, 1), active: map[string]bool{}, latestBooks: map[string][]byte{}}
 }
 func (h *socketHub) endpoint() string {
 	switch h.category {
@@ -64,6 +65,9 @@ func (h *socketHub) subscribe(topic string) (<-chan wireEvent, func()) {
 	h.subs[topic][id] = ch
 	if h.active[topic] {
 		ch <- wireEvent{state: "subscribed", reason: "Attached to shared public subscription"}
+		if book := h.latestBooks[topic]; len(book) > 0 {
+			ch <- wireEvent{data: book}
+		}
 	}
 	if !h.running {
 		h.running = true
@@ -76,6 +80,7 @@ func (h *socketHub) subscribe(topic string) (<-chan wireEvent, func()) {
 		delete(h.subs[topic], id)
 		if len(h.subs[topic]) == 0 {
 			delete(h.subs, topic)
+			delete(h.latestBooks, topic)
 		}
 		if len(h.subs) == 0 && h.attemptCancel != nil {
 			h.attemptCancel()
@@ -132,6 +137,7 @@ func (h *socketHub) run() {
 		h.running = false
 		h.sockets = 0
 		h.active = map[string]bool{}
+		h.latestBooks = map[string][]byte{}
 		if !permanent && len(h.subs) > 0 {
 			h.running = true
 			go h.run()
@@ -203,6 +209,7 @@ func (h *socketHub) run() {
 		h.mu.Lock()
 		h.sockets = 0
 		h.active = map[string]bool{}
+		h.latestBooks = map[string][]byte{}
 		h.mu.Unlock()
 		if len(h.topics()) == 0 {
 			return
@@ -278,6 +285,10 @@ func (h *socketHub) connected(conn *websocket.Conn, active map[string]bool) erro
 				if err := conn.WriteJSON(map[string]any{"op": "ping"}); err != nil {
 					return err
 				}
+			} else if h.a.provider == "hyperliquid" {
+				if err := conn.WriteJSON(map[string]any{"method": "ping"}); err != nil {
+					return err
+				}
 			}
 		case result := <-messages:
 			if result.err != nil {
@@ -332,6 +343,20 @@ func (h *socketHub) syncSubscriptions(conn *websocket.Conn, active map[string]bo
 				return err
 			}
 			return conn.WriteJSON(map[string]any{"type": kind, "product_ids": topics, "channel": "heartbeats"})
+		case "hyperliquid":
+			method := "unsubscribe"
+			if subscribe {
+				method = "subscribe"
+			}
+			for _, topic := range topics {
+				subscription, err := hyperliquidSubscription(topic)
+				if err != nil {
+					return err
+				}
+				if err := conn.WriteJSON(map[string]any{"method": method, "subscription": subscription}); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	}
@@ -349,12 +374,16 @@ func (h *socketHub) syncSubscriptions(conn *websocket.Conn, active map[string]bo
 		delete(h.active, t)
 	}
 	for _, t := range add {
-		h.active[t] = true
+		if h.a.provider != "hyperliquid" {
+			h.active[t] = true
+		}
 	}
 	h.mu.Unlock()
 	for _, t := range add {
 		active[t] = true
-		h.publish(t, wireEvent{state: "subscribed", reason: "Public stream subscribed"})
+		if h.a.provider != "hyperliquid" {
+			h.publish(t, wireEvent{state: "subscribed", reason: "Public stream subscribed"})
+		}
 	}
 	return nil
 }
@@ -413,6 +442,8 @@ func (h *socketHub) route(data []byte) {
 		h.hasSequence = true
 	}
 	switch h.a.provider {
+	case "hyperliquid":
+		h.routeHyperliquid(e.Channel, e.Data, data)
 	case "binance":
 		if e.Event == "kline" {
 			h.publish(strings.ToLower(e.Symbol)+"@kline_"+e.K.Interval, wireEvent{data: data})

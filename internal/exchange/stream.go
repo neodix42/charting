@@ -106,6 +106,8 @@ func ParseNative(provider string, data []byte, k domain.FeedKey) ([]domain.Candl
 			}
 			out = append(out, rendered)
 		}
+	case "hyperliquid":
+		return parseHyperliquidCandle(data, k, time.Now())
 	default:
 		return nil, fmt.Errorf("provider does not expose arbitrary native intervals")
 	}
@@ -169,9 +171,21 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 		topic = lower(k.Instrument) + "@kline_" + k.Timeframe
 	} else if a.provider == "bybit" {
 		topic = "kline." + bybitIntervals[k.Timeframe] + "." + k.Instrument
+	} else if a.provider == "hyperliquid" {
+		interval := k.Timeframe
+		if interval == "1w" {
+			interval = "1d" // Native Hyperliquid weeks begin on Thursday, not Monday UTC.
+		}
+		topic = hyperliquidCandleTopic(k.Instrument, interval)
 	}
 	messages, unsubscribe := a.socketFor(k).subscribe(topic)
 	defer unsubscribe()
+	var quoteMessages <-chan wireEvent
+	if a.provider == "hyperliquid" {
+		var unsubscribeQuotes func()
+		quoteMessages, unsubscribeQuotes = a.socketFor(k).subscribe(hyperliquidBookTopic(k.Instrument))
+		defer unsubscribeQuotes()
+	}
 	duration := TimeframeSeconds(k.Timeframe)
 	localRevision := time.Now().UnixMilli()
 	send := func(bars []domain.Candle, h domain.Health) {
@@ -229,6 +243,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 	ready := false
 	connected := false
 	lastHealthEmit := time.Time{}
+	var lastWeeklyDay domain.Candle
 	for {
 		select {
 		case <-ctx.Done():
@@ -236,6 +251,27 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 		case <-timer.C:
 			if connected {
 				fetch()
+			}
+		case message := <-quoteMessages:
+			if message.err != nil || message.state == "disconnected" || message.state == "offline" || message.state == "connecting" || message.state == "reconciling" {
+				health.Quote = nil
+				send(nil, health)
+				continue
+			}
+			if len(message.data) == 0 {
+				continue
+			}
+			quote, err := parseHyperliquidBook(message.data, k.Instrument)
+			if err != nil {
+				health.Quote = nil
+				health.Reason = "Invalid Hyperliquid order book; waiting for the next snapshot"
+				send(nil, health)
+				continue
+			}
+			if health.Quote == nil || quote.Time >= health.Quote.Time {
+				health.Quote = quote
+				health.LastMessageAt = time.Now().Unix()
+				send(nil, health)
 			}
 		case result := <-history:
 			fetching = false
@@ -257,8 +293,20 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 					// REST has no exchange event watermark. Never let an old buffered open-bar
 					// snapshot overwrite it. Later received native snapshots replace cumulatively.
 					c.SourceRevision = result.started
+					if a.provider == "hyperliquid" && k.Timeframe == "1w" && !c.Closed && lastWeeklyDay.SourceRevision >= result.started && BucketStart(lastWeeklyDay.Time, duration) == c.Time {
+						c = mergeHyperliquidWeek(c, lastWeeklyDay)
+						c.SourceRevision = lastWeeklyDay.SourceRevision
+					}
 					if old, ok := native.values[c.Time]; ok && old.SourceRevision >= result.started {
-						continue
+						if a.provider != "hyperliquid" || k.Timeframe != "1w" {
+							continue
+						}
+						// Daily live updates preserve the previous weekly volume. Refresh
+						// that total even when another price arrived during the request.
+						if !c.Closed {
+							c = mergeHyperliquidWeek(c, old)
+						}
+						c.SourceRevision = old.SourceRevision
 					}
 					native.Apply(c)
 				}
@@ -279,8 +327,14 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 			if a.provider == "coinbase" {
 				health.Reason = "Live trades; partial bucket volume is the last REST snapshot or observed-only"
 			}
+			if a.provider == "hyperliquid" && k.Timeframe == "1w" {
+				health.Reason = "Monday UTC weeks from daily candles; live prices with provisional volume until REST reconciliation"
+			}
 			if result.clipped {
 				health.Reason = "Recent outage repaired; older data outside 10,000-bar repair window must be loaded with chart history"
+				if a.provider == "hyperliquid" {
+					health.Reason = "Recent outage repaired; Hyperliquid serves only the latest 5,000 candles per interval"
+				}
 			}
 			if !connected {
 				health.State = "offline"
@@ -294,6 +348,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 		case message := <-messages:
 			now := time.Now()
 			if message.err != nil {
+				health.Quote = nil
 				health.State = ErrorKind(message.err)
 				health.Reason = message.err.Error()
 				send(nil, health)
@@ -317,6 +372,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 					health.State = message.state
 					if message.state == "connecting" || message.state == "offline" || message.state == "disconnected" {
 						connected = false
+						health.Quote = nil
 					}
 					if message.state == "disconnected" {
 						health.State = "reconciling"
@@ -364,7 +420,11 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 					}
 				}
 			} else {
-				candles, err := ParseNative(a.provider, message.data, k)
+				streamKey := k
+				if a.provider == "hyperliquid" && k.Timeframe == "1w" {
+					streamKey.Timeframe = "1d"
+				}
+				candles, err := ParseNative(a.provider, message.data, streamKey)
 				if err != nil {
 					health.State = "reconciling"
 					health.Reason = "Invalid stream candle; requesting overlap"
@@ -373,6 +433,30 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 					continue
 				}
 				for _, c := range candles {
+					if a.provider == "hyperliquid" {
+						// Hyperliquid candles have no event timestamp or sequence. The
+						// ordered socket's receive revision is local, never a provider watermark.
+						localRevision = max(localRevision+1, now.UnixMilli())
+						c.SourceRevision = localRevision
+					}
+					if a.provider == "hyperliquid" && k.Timeframe == "1w" {
+						if lastWeeklyDay.Time > c.Time {
+							continue
+						}
+						if c.Volume > 0 && (c.Time != lastWeeklyDay.Time || c.Volume != lastWeeklyDay.Volume) {
+							health.LastTradeAt = now.Unix()
+						}
+						lastWeeklyDay = c
+						baseline, ok := native.values[BucketStart(c.Time, duration)]
+						if !ready || !ok {
+							if now.Sub(lastFetch) > 2*time.Second {
+								fetch()
+							}
+							continue // History establishes the week's real open and cumulative volume.
+						}
+						c = mergeHyperliquidWeek(baseline, c)
+						c.SourceRevision = lastWeeklyDay.SourceRevision
+					}
 					previous, known := native.values[c.Time]
 					if c.Volume > 0 && (!known || previous.Volume != c.Volume) {
 						health.LastTradeAt = now.Unix()

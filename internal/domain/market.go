@@ -8,6 +8,8 @@ import (
 )
 
 var Intervals = []string{"1m", "5m", "15m", "1h", "4h", "1d", "1w"}
+var hyperliquidSpot = regexp.MustCompile(`^(?:@[0-9]+|[\p{L}\p{N}][\p{L}\p{N}._-]{0,79}/[\p{L}\p{N}][\p{L}\p{N}._-]{0,39})$`)
+var hyperliquidPerp = regexp.MustCompile(`^(?:[a-zA-Z0-9_-]{1,30}:)?[\p{L}\p{N}][\p{L}\p{N}._-]{0,79}$`)
 var nativeSymbol = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N}._-]{0,79}$`)
 
 type FeedKey struct {
@@ -21,13 +23,13 @@ func (k FeedKey) String() string {
 	return strings.Join([]string{k.Exchange, k.Market, k.Instrument, k.Timeframe}, ":")
 }
 func (k FeedKey) Validate() error {
-	if k.Exchange != "binance" && k.Exchange != "bybit" && k.Exchange != "coinbase" && k.Exchange != "dukascopy" {
+	if k.Exchange != "binance" && k.Exchange != "bybit" && k.Exchange != "coinbase" && k.Exchange != "dukascopy" && k.Exchange != "hyperliquid" {
 		return fmt.Errorf("unsupported exchange")
 	}
 	if !supportedMarket(k.Exchange, k.Market) {
 		return fmt.Errorf("unsupported market for exchange")
 	}
-	if len(k.Instrument) > 128 || !nativeSymbol.MatchString(k.Instrument) {
+	if len(k.Instrument) > 128 || !validNativeInstrument(k.Exchange, k.Market, k.Instrument) {
 		return fmt.Errorf("invalid native instrument")
 	}
 	for _, v := range Intervals {
@@ -42,12 +44,24 @@ func supportedMarket(exchange, market string) bool {
 	switch exchange {
 	case "dukascopy":
 		return market == "forex" || market == "metal" || market == "cfd"
-	case "binance", "bybit":
+	case "binance", "bybit", "hyperliquid":
 		return market == "spot" || market == "perpetual"
 	case "coinbase":
 		return market == "spot"
 	}
 	return false
+}
+
+// Hyperliquid uses spot pair IDs and dex-qualified perpetual names verbatim.
+// Other providers retain their existing native symbol rules.
+func validNativeInstrument(exchange, market, instrument string) bool {
+	if exchange == "hyperliquid" {
+		if market == "spot" {
+			return hyperliquidSpot.MatchString(instrument)
+		}
+		return hyperliquidPerp.MatchString(instrument)
+	}
+	return nativeSymbol.MatchString(instrument)
 }
 
 type Candle struct {
@@ -79,7 +93,16 @@ func (c Candle) Validate() error {
 	return nil
 }
 
+// Quote is the current top of book, separate from trade-based candles.
+// A nil side means that side of the order book is empty. Time is Unix milliseconds.
+type Quote struct {
+	Bid  *float64 `json:"bid"`
+	Ask  *float64 `json:"ask"`
+	Time int64    `json:"time"`
+}
+
 type Health struct {
+	Quote         *Quote `json:"quote,omitempty"`
 	State         string `json:"state"`
 	Reason        string `json:"reason"`
 	LastMessageAt int64  `json:"lastMessageAt"`

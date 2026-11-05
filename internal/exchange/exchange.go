@@ -114,6 +114,9 @@ func New(provider string) (Adapter, error) {
 	case "coinbase":
 		a.base = "https://api.coinbase.com"
 		a.ws = "wss://advanced-trade-ws.coinbase.com"
+	case "hyperliquid":
+		a.base = "https://api.hyperliquid.xyz"
+		a.ws = "wss://api.hyperliquid.xyz/ws"
 	default:
 		return nil, &Error{Kind: "unknownInstrument", Message: "Unknown exchange"}
 	}
@@ -302,6 +305,9 @@ func marketCategory(k domain.FeedKey) string {
 }
 
 func (a *publicAdapter) socketFor(k domain.FeedKey) *socketHub {
+	if a.provider == "hyperliquid" {
+		return a.hub
+	}
 	category := marketCategory(k)
 	a.mu.Lock()
 	defer a.mu.Unlock()

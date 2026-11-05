@@ -45,12 +45,18 @@ func selectInstrument(items []domain.Instrument, provider, market, requested str
 	if provider == "coinbase" {
 		preferred = "BTC-USD"
 	}
+	if provider == "hyperliquid" {
+		preferred = "BTC"
+		if market == "spot" {
+			preferred = "@107" // HYPE/USDC; the exact ID remains discoverable/overrideable.
+		}
+	}
 	if requested != "" {
 		preferred = requested
 	}
 	var selected domain.Instrument
 	for _, item := range items {
-		available := item.Availability == "TRADING" || item.Availability == "Trading" || item.Availability == "online" || item.Availability == ""
+		available := item.Availability == "TRADING" || item.Availability == "Trading" || item.Availability == "online" || item.Availability == "available" || item.Availability == ""
 		if item.Market != market || !available || (requested != "" && item.NativeID != requested) {
 			continue
 		}
@@ -68,7 +74,7 @@ func selectInstrument(items []domain.Instrument, provider, market, requested str
 }
 
 func main() {
-	providers := flag.String("providers", "binance,bybit,coinbase", "comma-separated public providers")
+	providers := flag.String("providers", "binance,bybit,coinbase,hyperliquid", "comma-separated public providers")
 	market := flag.String("market", "spot", "market to probe: spot or perpetual")
 	instrumentID := flag.String("instrument", "", "exact discovered native instrument ID (default: prefer BTC quote in the selected market)")
 	duration := flag.Duration("duration", 15*time.Second, "live observation duration per reachable provider")
@@ -114,7 +120,18 @@ func main() {
 			counts := map[string]int{}
 			warningSet := map[string]bool{}
 			for _, i := range items {
-				counts[i.Market+"/"+i.ProviderMetadata["category"]]++
+				category := i.ProviderMetadata["category"]
+				if provider == "hyperliquid" && i.Market == "perpetual" {
+					category = i.ProviderMetadata["dex"]
+					if category == "" {
+						category = "native"
+					}
+				}
+				counts[i.Market+"/"+category]++
+				if err := (domain.FeedKey{Exchange: provider, Market: i.Market, Instrument: i.NativeID, Timeframe: *streamInterval}).Validate(); err != nil {
+					log("discovery/validation", map[string]any{"status": "blocked", "instrument": i.NativeID, "error": err.Error()})
+					failed = true
+				}
 				if warning := i.ProviderMetadata["catalogWarning"]; warning != "" {
 					warningSet[warning] = true
 				}
@@ -152,12 +169,18 @@ func main() {
 			liveCtx, stop := context.WithTimeout(ctx, *duration)
 			defer stop()
 			count := 0
+			quoteCount := 0
+			var lastQuote *domain.Quote
 			transitions := 0
 			first, last := int64(0), int64(0)
 			var firstUpdate, lastUpdate *domain.Candle
 			lastHealth := ""
 			startBucket := exchange.BucketStart(time.Now().Unix(), liveStep)
 			err = a.Stream(liveCtx, domain.FeedKey{Exchange: provider, Market: *market, Instrument: instrument, Timeframe: *streamInterval}, func(b []domain.Candle, h domain.Health) {
+				if h.Quote != nil && (lastQuote == nil || h.Quote.Time != lastQuote.Time) {
+					quoteCount++
+					lastQuote = h.Quote
+				}
 				if h.State != lastHealth {
 					log("health", h)
 					lastHealth = h.State
@@ -178,7 +201,7 @@ func main() {
 				}
 			})
 			status := "pass"
-			if count == 0 {
+			if count == 0 || (provider == "hyperliquid" && quoteCount == 0) {
 				status = "unverified"
 				failed = true
 			}
@@ -186,7 +209,7 @@ func main() {
 				status = "blocked"
 				failed = true
 			}
-			log("stream", map[string]any{"status": status, "instrument": instrument, "category": selected.ProviderMetadata["category"], "interval": *streamInterval, "liveOrProvisionalUpdates": count, "observedBucketTransitions": transitions, "firstUpdate": firstUpdate, "lastUpdate": lastUpdate, "duration": duration.String(), "stop": fmt.Sprint(err)})
+			log("stream", map[string]any{"status": status, "instrument": instrument, "category": selected.ProviderMetadata["category"], "interval": *streamInterval, "liveOrProvisionalUpdates": count, "quoteUpdates": quoteCount, "lastQuote": lastQuote, "observedBucketTransitions": transitions, "firstUpdate": firstUpdate, "lastUpdate": lastUpdate, "duration": duration.String(), "stop": fmt.Sprint(err)})
 		}()
 	}
 	if failed {

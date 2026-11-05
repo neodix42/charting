@@ -34,6 +34,9 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 	if to-from > d*int64(limit) {
 		from = to - d*int64(limit)
 	}
+	if a.provider == "hyperliquid" {
+		return a.hyperliquidHistory(ctx, k, from, to, limit)
+	}
 	if a.provider == "coinbase" && k.Timeframe == "1w" {
 		return a.coinbaseWeeklyHistory(ctx, k, from, to, time.Now().Unix())
 	}
@@ -200,6 +203,11 @@ func (a *publicAdapter) Instruments(ctx context.Context) ([]domain.Instrument, e
 	}
 	var catalogErr error
 	switch a.provider {
+	case "hyperliquid":
+		result, catalogErr = a.hyperliquidInstruments(ctx)
+		if len(result) == 0 && catalogErr != nil {
+			return nil, catalogErr
+		}
 	case "binance", "bybit":
 		result, catalogErr = a.allInstruments(ctx)
 		if len(result) == 0 && catalogErr != nil {
@@ -329,8 +337,15 @@ func (a *publicAdapter) reconcileHistory(ctx context.Context, k domain.FeedKey, 
 		pageSize = 350
 	}
 	clipped := false
-	if to-from > 10000*d {
-		from = BucketStart(to, d) - 9999*d
+	repairLimit := int64(10000)
+	if a.provider == "hyperliquid" {
+		repairLimit = 5000 // Hyperliquid retains only the latest 5,000 candles per interval.
+		if k.Timeframe == "1w" {
+			repairLimit = 715 // Monday weeks derive from at most 5,000 retained daily bars.
+		}
+	}
+	if to-from > repairLimit*d {
+		from = BucketStart(to, d) - (repairLimit-1)*d
 		clipped = true
 	}
 	var out []domain.Candle

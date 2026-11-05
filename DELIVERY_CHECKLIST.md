@@ -2,6 +2,16 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Hyperliquid chart source — 2026-11-05
+
+- [x] Public dynamic spot/native-perpetual/HIP-3 discovery, exact market identities and partial-catalog warnings/retry.
+- [x] Native trade history/live candles and Monday weekly derivation; cumulative volume, delayed seeds, gaps and retention limits covered.
+- [x] Separate live Bid/Ask, nullable empty sides, timestamp ordering, shared subscriptions and disconnect cleanup.
+- [x] Workspace/drawing/import/cache persistence, active-feed isolation and cancellation pass production Go/race/browser tests; existing provider browser cases remain passing.
+- [x] Real discovery, all seven interval histories and candle/quote delivery verified for BTC and xyz:NVDA; HYPE spot also passes every history interval and live weekly price/quote delivery; counts are recorded in STATUS.md.
+- [x] Production Linux executable/archive builds and checksums pass; original specification bundle and user data are preserved.
+- [ ] Native desktop Hyperliquid interaction, Windows build/execution and exhaustive live checks of every discovered market remain unrun.
+
 ## Live Alerts error details — 2026-11-04
 
 - [x] Status/settings, scope, failed checks and failed/uncertain deliveries use keyboard-accessible expandable error icons with full stored details.

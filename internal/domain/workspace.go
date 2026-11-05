@@ -240,11 +240,14 @@ func Validate(w Workspace) error {
 					return bad("%s", err)
 				}
 			}
-			if !member(chart.Exchange, "binance", "bybit", "coinbase", "dukascopy") || !supportedMarket(chart.Exchange, chart.Market) {
+			if !member(chart.Exchange, "binance", "bybit", "coinbase", "dukascopy", "hyperliquid") || !supportedMarket(chart.Exchange, chart.Market) {
 				return bad("unsupported exchange or market")
 			}
 			if !text(chart.Instrument, 128) {
 				return bad("instrument must be nonblank and at most 128 characters")
+			}
+			if chart.Exchange == "hyperliquid" && !validNativeInstrument(chart.Exchange, chart.Market, chart.Instrument) {
+				return bad("invalid Hyperliquid native instrument")
 			}
 			if strings.Contains(chart.Instrument, "://") {
 				return bad("instrument cannot be an endpoint URL")

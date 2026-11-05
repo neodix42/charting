@@ -21,8 +21,8 @@ func TestMixedMarketsSaveRestartExportImportAndInvalidPreservation(t *testing.T)
 	})
 	first := loadTest(t, s)
 	w := first.Workspace
-	w.Tabs[0].Grid = domain.Grid{Rows: 2, Columns: 3, RowFractions: []float64{.5, .5}, ColumnFractions: []float64{1.0 / 3, 1.0 / 3, 1.0 / 3}}
-	for len(w.Tabs[0].Charts) < 5 {
+	w.Tabs[0].Grid = domain.Grid{Rows: 3, Columns: 3, RowFractions: []float64{1.0 / 3, 1.0 / 3, 1.0 / 3}, ColumnFractions: []float64{1.0 / 3, 1.0 / 3, 1.0 / 3}}
+	for len(w.Tabs[0].Charts) < 8 {
 		w.Tabs[0].Charts = append(w.Tabs[0].Charts, domain.NewChart())
 	}
 	w.Tabs[0].Charts[1].Market = "perpetual" // Same Binance native symbol as spot.
@@ -31,6 +31,15 @@ func TestMixedMarketsSaveRestartExportImportAndInvalidPreservation(t *testing.T)
 	forex := &w.Tabs[0].Charts[4]
 	forex.Exchange, forex.Market, forex.Instrument = "dukascopy", "forex", "EURUSD"
 	forex.Drawings = []domain.Drawing{{ID: domain.ID(), Type: "horizontal", Exchange: forex.Exchange, Market: forex.Market, Instrument: forex.Instrument, Points: []domain.DrawingPoint{{Time: 1700000000, Price: 1.05}}}}
+
+	for i, native := range []string{"@107", "PURR/USDC", "xyz:XYZ100"} {
+		c := &w.Tabs[0].Charts[i+5]
+		c.Exchange, c.Market, c.Instrument = "hyperliquid", "spot", native
+		if i == 2 {
+			c.Market = "perpetual"
+		}
+		c.Drawings = []domain.Drawing{{ID: domain.ID(), Type: "horizontal", Exchange: c.Exchange, Market: c.Market, Instrument: native, Points: []domain.DrawingPoint{{Time: 1700000000, Price: 23.5}}}}
+	}
 	ack, err := s.Save(first.Revision, "mixed-markets", 1, w)
 	if err != nil {
 		t.Fatal(err)

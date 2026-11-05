@@ -3,7 +3,7 @@ import type {ScreenerLiveAlertsBackend} from './workspace/screenerLiveAlerts';
 import type {PredictionsBackend} from './workspace/predictions';
 import type {ThemeName} from './workspace/themes';
 
-export type Exchange = 'binance'|'bybit'|'coinbase'|'dukascopy';
+export type Exchange = 'binance'|'bybit'|'coinbase'|'dukascopy'|'hyperliquid';
 export type Market = 'spot'|'perpetual'|'forex'|'metal'|'cfd';
 export type Interval = '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'1w';
 export const intervals: Interval[] = ['1m','5m','15m','1h','4h','1d','1w'];
@@ -23,7 +23,8 @@ export interface Tab {id:string;name:string;grid:Grid;charts:ChartConfig[]}
 export interface ChartRightGap {unit:'bars'|'pixels';value:number}
 export interface Workspace {schemaVersion:1;app:'cryptodesk';id:string;theme:ThemeName;fontSize?:number;displayTimezone:string;chartRightGap?:ChartRightGap;activeTabId:string;window:{width:number;height:number;maximized:boolean};tabs:Tab[]}
 export interface Candle {time:number;open:number|string;high:number|string;low:number|string;close:number|string;volume:number|string;closed:boolean;quality:string;sourceRevision:number}
-export interface Health {state:string;reason?:string;lastMessageAt?:number|string;lastTradeAt?:number|string}
+export interface Quote {bid:number|null;ask:number|null;time:number}
+export interface Health {quote?:Quote;state:string;reason?:string;lastMessageAt?:number|string;lastTradeAt?:number|string}
 export interface Snapshot {leaseId:string;revision:number;bars:Candle[];health:Health}
 export interface MarketEvent extends Snapshot {chartId:string;generation:number;feedKey:FeedKey;kind:'bars'|'health'|'resyncRequired'}
 export interface Instrument {nativeId:string;market:Market;baseAsset:string;quoteAsset:string;priceIncrement:string;sizeIncrement:string;availability:string;supportedIntervals:Interval[];providerMetadata?:Record<string,string>}

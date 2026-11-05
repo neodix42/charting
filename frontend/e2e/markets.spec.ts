@@ -81,3 +81,33 @@ test('a delayed perpetual history result cannot replace candles after switching 
  await select(page,'BTCUSDT','Spot');await page.evaluate(()=>(window as any).__releasePerpetualHistory());
  await page.waitForTimeout(150);await expect(page.getByLabel('OHLCV')).toContainText('61,000.00');await expect.poll(()=>subscriptions(page)).toMatchObject([{feedKey:{market:'spot'}}]);
 });
+
+test('Hyperliquid spot pair labels and builder perpetuals keep native IDs, show bid ask and restore',async({page})=>{
+ await openTestApp(page);
+ await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('hyperliquid');
+ await expect.poll(()=>subscriptions(page)).toMatchObject([{feedKey:{exchange:'hyperliquid',market:'perpetual',instrument:'BTC'}}]);
+ await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('60,999.0');
+ await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('61,001.0');
+ await openPicker(page);await expect(picker(page)).toContainText('Native history: latest 5,000 bars');
+ await expect(picker(page).getByRole('button',{name:'HYPE/USDC Spot',exact:true})).toContainText('@107');
+ await picker(page).getByRole('button',{name:'HYPE/USDC Spot',exact:true}).click();
+ await expect.poll(()=>subscriptions(page)).toMatchObject([{feedKey:{exchange:'hyperliquid',market:'spot',instrument:'@107'}}]);
+ await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toHaveText('HYPE/USDC⌄');
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();await page.reload();
+ await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toHaveText('HYPE/USDC⌄');
+ expect(await savedChart(page)).toMatchObject({exchange:'hyperliquid',market:'spot',instrument:'@107'});
+ await openPicker(page);await page.getByRole('textbox',{name:'Search instruments',exact:true}).fill('xyz:');
+ await expect(picker(page).locator('.product-list button')).toHaveCount(1);
+ await picker(page).getByRole('button',{name:'xyz:XYZ100 Perpetual',exact:true}).click();
+ await expect.poll(()=>subscriptions(page)).toMatchObject([{feedKey:{exchange:'hyperliquid',market:'perpetual',instrument:'xyz:XYZ100'}}]);
+ await page.getByRole('button',{name:'Return to live',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testHistoryKeys())).toContainEqual({exchange:'hyperliquid',market:'perpetual',instrument:'xyz:XYZ100',timeframe:'1h'});
+ const active=(await subscriptions(page))[0];
+ await page.evaluate(subscription=>{(window as any).__testPublish({...subscription,revision:subscription.revision+1,kind:'health',bars:[],health:{state:'live',quote:{bid:null,ask:24.5,time:Date.now()}}} satisfies MarketEvent);},active);
+ await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('Bid —');
+ await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('Ask 24.50');
+ await page.evaluate(subscription=>{(window as any).__testPublish({...subscription,revision:subscription.revision+2,kind:'health',bars:[],health:{state:'disconnected'}} satisfies MarketEvent);},active);
+ await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('Awaiting quotes');
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();await page.reload();
+ expect(await savedChart(page)).toMatchObject({exchange:'hyperliquid',market:'perpetual',instrument:'xyz:XYZ100'});
+});

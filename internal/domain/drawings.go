@@ -40,8 +40,11 @@ func validateDrawing(d Drawing) error {
 	default:
 		return fmt.Errorf("unsupported drawing type %q", d.Type)
 	}
-	if !member(d.Exchange, "binance", "bybit", "coinbase", "dukascopy") || !supportedMarket(d.Exchange, d.Market) {
+	if !member(d.Exchange, "binance", "bybit", "coinbase", "dukascopy", "hyperliquid") || !supportedMarket(d.Exchange, d.Market) {
 		return fmt.Errorf("unsupported drawing exchange or market")
+	}
+	if d.Exchange == "hyperliquid" && !validNativeInstrument(d.Exchange, d.Market, d.Instrument) {
+		return fmt.Errorf("invalid Hyperliquid drawing native instrument")
 	}
 	if !text(d.Instrument, 128) || strings.Contains(d.Instrument, "://") {
 		return fmt.Errorf("drawing instrument must be nonblank, safe and at most 128 characters")

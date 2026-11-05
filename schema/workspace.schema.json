@@ -322,7 +322,8 @@
             "binance",
             "bybit",
             "coinbase",
-            "dukascopy"
+            "dukascopy",
+            "hyperliquid"
           ]
         },
         "market": {
@@ -449,7 +450,8 @@
               "exchange": {
                 "enum": [
                   "binance",
-                  "bybit"
+                  "bybit",
+                  "hyperliquid"
                 ]
               }
             },
@@ -553,7 +555,8 @@
             "binance",
             "bybit",
             "coinbase",
-            "dukascopy"
+            "dukascopy",
+            "hyperliquid"
           ]
         },
         "market": {
@@ -669,7 +672,8 @@
               "exchange": {
                 "enum": [
                   "binance",
-                  "bybit"
+                  "bybit",
+                  "hyperliquid"
                 ]
               }
             },

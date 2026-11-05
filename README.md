@@ -11,7 +11,7 @@
 *Independent 1-hour and 4-hour charts with SMA, EMA and resizable MACD panes. All screenshots use the light theme. They show the current UI in explicit documentation demo mode: chart candles were recorded from public Binance data, and Screener calculations use genuine Dukascopy histories. Downloader progress is illustrative. See [screenshot sources](docs/screenshots/README.md).*
 
 - **A workspace that remembers your layout.** Up to 20 chart tabs and 9 charts per tab, with independent instruments, periods, indicators and drawings.
-- **Public market data without an account.** Binance and Bybit spot/perpetual markets, plus Coinbase spot. No API keys required.
+- **Public market data without an account.** Binance, Bybit and Hyperliquid spot/perpetual markets, plus Coinbase spot. Hyperliquid includes dynamically discovered builder (HIP-3) markets and separate live Bid/Ask. No API keys required.
 - **Authenticated Dukascopy charts.** JForex forex, metals and CFDs (indices, commodities, stocks, ETFs and crypto) available to your Demo or Live account, with historical Bid candles and realtime quotes through the included bridge.
 - **Historical downloads across asset classes.** Browse 1,499 Dukascopy instruments in 39 categories and download multiple symbols in parallel with shared request pacing.
 - **Reusable indicator data.** Enrich CSVs with 40 technical indicators plus UTC Weekday and Hour fields; refresh histories and recalculate applied indicators together.
@@ -61,7 +61,7 @@ sudo apt install -y openjdk-17-jre-headless
 
 First launch opens **one tab with one chart**. New tabs also start with one chart; larger grids add empty slots for you to fill. Later launches restore your actual saved workspace.
 
-- **Independent charts:** choose source, instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Coinbase supplies spot markets; Dukascopy supplies all instruments available to the connected JForex account, including forex, metals and CFDs.
+- **Independent charts:** choose source, instrument and period per chart. Chart intervals are **1m, 5m, 15m, 1h, 4h, 1d and 1w**. Binance USD-M/COIN-M and Bybit linear/inverse perpetuals are supported; Hyperliquid supplies spot and native/builder perpetuals with live Bid/Ask (latest 5,000 native history bars; Monday weeks derived from daily candles); Coinbase supplies spot markets; Dukascopy supplies all instruments available to the connected JForex account, including forex, metals and CFDs.
 - **Indicators and drawings:** SMA, EMA, Ichimoku Cloud and MACD, with editable parameters, colors and multiple instances. Adjust moving-average widths and resize MACD panes. Add arrows, horizontal levels and trend lines; select, move or remove drawings.
 - **Flexible layouts:** drag tabs/charts, resize grid tracks, maximize a chart, rename tabs and duplicate layouts. Shared period and indicator controls apply to the current tab's charts.
 - **Display controls:** Dark, Light, Matrix (black/lime), Cyberpunk and Red Sands themes, global font size, display timezone, candlestick/line rendering, volume, linear/log scales, saved viewports and configurable right-side chart space. **Settings → Appearance → Theme** updates the interface, opened dropdown menus and chart colors immediately and remembers your choice. **Font size** scales interface text and chart labels from **10–24 px** (default **15**).
@@ -99,7 +99,7 @@ The fixed **Screener** tab sits beside **Predictions**, to the right of the char
 | **Analysis** | Build visual conditions and optionally simulate trades | Matching assets, occurrence counts, TP hit rates and match charts |
 | **Live Alerts** | Monitor saved conditions on newly closed d1/h1 candles | Telegram notifications with asset, condition, UTC time and indicative Entry/SL/TP |
 
-Chart feeds come from Binance, Bybit, Coinbase and the authenticated Dukascopy JForex bridge. Screener histories use **dukascopy-node** independently and retain its instrument names, available history and provider-access restrictions. Once downloaded, enrichment and analysis run locally against those files.
+Chart feeds come from Binance, Bybit, Coinbase, Hyperliquid and the authenticated Dukascopy JForex bridge. Screener histories use **dukascopy-node** independently and retain its instrument names, available history and provider-access restrictions. Once downloaded, enrichment and analysis run locally against those files.
 
 ### Downloader: choose symbols and collect history
 

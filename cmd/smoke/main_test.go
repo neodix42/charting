@@ -35,3 +35,19 @@ func TestExactSelectionDoesNotFallbackFromUnavailableInstrument(t *testing.T) {
 		t.Fatalf("unavailable product silently selected %#v", selected)
 	}
 }
+
+func TestHyperliquidSelectionKeepsNativeAndBuilderMarketsDistinct(t *testing.T) {
+	items := []domain.Instrument{
+		{NativeID: "xyz:BTC", Market: "perpetual", Availability: "Trading"},
+		{NativeID: "BTC", Market: "perpetual", Availability: "available"},
+		{NativeID: "@107", Market: "spot", Availability: "available"},
+	}
+	for _, tc := range []struct{ market, requested, want string }{
+		{"perpetual", "", "BTC"}, {"perpetual", "xyz:BTC", "xyz:BTC"}, {"spot", "@107", "@107"},
+	} {
+		got, err := selectInstrument(items, "hyperliquid", tc.market, tc.requested)
+		if err != nil || got.NativeID != tc.want || got.Market != tc.market {
+			t.Fatalf("%+v: got %+v, %v", tc, got, err)
+		}
+	}
+}

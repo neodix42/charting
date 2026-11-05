@@ -125,7 +125,7 @@ func New(opts Options) *Service {
 		opts.MaxCandles = 250000
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{ctx: ctx, cancel: cancel, opts: opts, feeds: make(map[domain.FeedKey]*feed), leases: make(map[string]*lease), adapters: make(map[string]exchange.Adapter), instruments: make(map[string]instrumentCache), providerEpochs: make(map[string]uint64), catalogEpochs: make(map[string]uint64), restoreSlots: make(chan struct{}, 18), historySlots: make(chan struct{}, 18), semaphores: map[string]chan struct{}{"binance": make(chan struct{}, 2), "bybit": make(chan struct{}, 2), "coinbase": make(chan struct{}, 2), "dukascopy": make(chan struct{}, 2)}}
+	return &Service{ctx: ctx, cancel: cancel, opts: opts, feeds: make(map[domain.FeedKey]*feed), leases: make(map[string]*lease), adapters: make(map[string]exchange.Adapter), instruments: make(map[string]instrumentCache), providerEpochs: make(map[string]uint64), catalogEpochs: make(map[string]uint64), restoreSlots: make(chan struct{}, 18), historySlots: make(chan struct{}, 18), semaphores: map[string]chan struct{}{"binance": make(chan struct{}, 2), "bybit": make(chan struct{}, 2), "coinbase": make(chan struct{}, 2), "hyperliquid": make(chan struct{}, 2), "dukascopy": make(chan struct{}, 2)}}
 }
 func (s *Service) adapterLocked(provider string) (exchange.Adapter, error) {
 	if a := s.adapters[provider]; a != nil {
@@ -306,6 +306,7 @@ func (s *Service) Detach(id string) {
 			}
 			f.timer = nil
 			f.health.State = "paused"
+			f.health.Quote = nil
 			s.trimLocked()
 		})
 	}
@@ -378,7 +379,7 @@ func (s *Service) Instruments(ctx context.Context, provider string) ([]domain.In
 		return nil, err
 	}
 	timeout := 20 * time.Second
-	if provider == "dukascopy" {
+	if provider == "dukascopy" || provider == "hyperliquid" {
 		timeout = 5 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -472,7 +473,7 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 		}
 	}
 	timeout := 25 * time.Second
-	if key.Exchange == "dukascopy" {
+	if key.Exchange == "dukascopy" || key.Exchange == "hyperliquid" {
 		timeout = 5 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
