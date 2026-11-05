@@ -451,27 +451,3 @@ func (a *App) allowCloseLocked() {
 		a.cancel()
 	}
 }
-func (a *App) shutdown(ctx context.Context) {
-	if a.cancel != nil {
-		a.cancel()
-	}
-	if a.liveAlerts != nil {
-		a.liveAlerts.Close()
-	}
-	if a.predictions != nil {
-		a.predictions.Close()
-	}
-	a.market.Close()
-	if a.jforex != nil {
-		a.jforex.Close()
-	}
-	if a.screener != nil {
-		a.screener.Close()
-	}
-	if a.candles != nil {
-		if err := a.candles.Close(); err != nil {
-			fmt.Fprintln(os.Stderr, "Close candle storage:", err)
-		}
-	}
-	_ = a.store.Close()
-}

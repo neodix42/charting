@@ -1,15 +1,15 @@
 import type {SavedAnalysisCondition} from '../workspace/screenerAnalysis';
 import {savedConditionProfitability} from '../workspace/screenerAnalysis';
 import type {ScreenerCatalog} from '../types';
-import type {LiveAlertAsset,LiveAlertsConfig,LiveAlertsInfo,ScreenerLiveAlertsBackend} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig} from '../workspace/screenerLiveAlerts';
+import type {LiveAlertAsset,LiveAlertConditionScope,LiveAlertsConfig,LiveAlertsInfo,ScreenerLiveAlertsBackend} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertConditionSource} from '../workspace/screenerLiveAlerts';
 
 /** Deterministic fixture only. Never connects to Telegram or market providers. */
 export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLiveAlertsBackend{
  const key='cryptodesk-explicit-test-live-alerts';
  const stored=JSON.parse(sessionStorage.getItem(key)||'null');
  const historyKey=key+'-history',history=JSON.parse(sessionStorage.getItem(historyKey)||'null');
- const restored=stored?{enabled:stored.conditionIds?stored.enabled:false,conditionIds:stored.conditionIds??[...new Set((stored.conditionPeriods??[]).map((row:{conditionId:string})=>row.conditionId))]}:initialLiveAlertsConfig();
+ const restored=stored?{enabled:stored.conditionIds?stored.enabled:false,conditionIds:stored.conditionIds??[...new Set((stored.conditionPeriods??[]).map((row:{conditionId:string})=>row.conditionId))],...(stored.conditionSources?{conditionSources:stored.conditionSources}:{})}:initialLiveAlertsConfig();
  let info:LiveAlertsInfo={checks:history?.checks??[],savedConditionsRevision:0,conditionScopes:[],config:restored,running:false,lastRun:history?.lastRun??0,nextRun:0,sent:history?.sent??0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:history?.recent??[]};
  let reads=0,checks=0,statusDelay=0,gate:Promise<void>|undefined,release:(()=>void)|undefined;
  const writes:LiveAlertsConfig[]=[];let errors:Partial<Record<'read'|'save'|'check',string>>={};
@@ -26,22 +26,24 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
   }
   return [...grouped.values()];
  };
- const scopes=()=>{
+ const scopes=(config:LiveAlertsConfig=info.config):LiveAlertConditionScope[]=>{
   const saved=savedConditions(),inventory=assets();
   return saved.map(condition=>{
-   const period=condition.request.period||'all',targets=(condition.analysis?.assets??[]).filter(row=>row.matches>0&&['w1','d1','h1'].includes(row.timeframe)&&(period==='all'||row.timeframe===period)&&inventory.some(asset=>asset.symbol===row.symbol&&asset.periods.includes(row.timeframe))&&((condition.request.profitabilityFilter??0)===0||!!savedConditionProfitability(condition,row.symbol,row.timeframe))).map(row=>{const asset=inventory.find(asset=>asset.symbol===row.symbol)!,profitability=savedConditionProfitability(condition,row.symbol,row.timeframe);return{symbol:row.symbol,name:asset.name,category:asset.category,period:row.timeframe,...(profitability?{profitability}:{})};});
+   const period=condition.request.period||'all',dataSource=liveAlertConditionSource(config,condition.id);
+   if(dataSource!=='dukascopy')return{conditionId:condition.id,period,dataSource,allAssets:true,targets:[],error:''};
+   const targets=(condition.analysis?.assets??[]).filter(row=>row.matches>0&&['w1','d1','h1'].includes(row.timeframe)&&(period==='all'||row.timeframe===period)&&inventory.some(asset=>asset.symbol===row.symbol&&asset.periods.includes(row.timeframe))&&((condition.request.profitabilityFilter??0)===0||!!savedConditionProfitability(condition,row.symbol,row.timeframe))).map(row=>{const asset=inventory.find(asset=>asset.symbol===row.symbol)!,profitability=savedConditionProfitability(condition,row.symbol,row.timeframe);return{symbol:row.symbol,name:asset.name,category:asset.category,period:row.timeframe,...(profitability?{profitability}:{})};});
    const error=!condition.analysis?`${condition.name} has no recorded Analysis matching assets; apply this saved condition in Analysis before enabling its ${period.toUpperCase()} alerts`:!targets.length?(condition.request.profitabilityFilter??0)>0?`${condition.name} has no downloaded ${period.toUpperCase()} assets meeting its recorded ${condition.request.profitabilityFilter}% profitability filter; reapply its saved rules in Analysis`:`${condition.name} has no downloaded ${period.toUpperCase()} assets in its recorded Analysis matches; reapply its saved rules in Analysis`:'';
-   return{conditionId:condition.id,period,targets,error};
+   return{conditionId:condition.id,period,dataSource,targets,error};
   });
  };
  const nextClose=(period:string,now=Date.now())=>{
   const interval=period==='w1'?604800000:period==='d1'?86400000:3600000,origin=period==='w1'?4*86400000:0;
   return (Math.floor((now-origin)/interval)+1)*interval+origin;
  };
- const nextScopeClose=(scope:ReturnType<typeof scopes>[number]|undefined)=>Math.min(...(scope?.targets.length?scope.targets.map(target=>nextClose(target.period)):[nextClose(scope?.period==='w1'?'w1':scope?.period==='h1'?'h1':'d1')]));
+ const nextScopeClose=(scope:ReturnType<typeof scopes>[number]|undefined)=>Math.min(...(scope?.targets.length?scope.targets.map(target=>nextClose(target.period)):[nextClose(scope?.period==='w1'?'w1':scope?.period==='h1'||scope?.period==='all'?'h1':'d1')]));
  const snapshot=()=>{
   const saved=savedConditions(),available=new Set(saved.map(condition=>condition.id)),ids=info.config.conditionIds.filter(id=>available.has(id));
-  if(ids.length!==info.config.conditionIds.length||info.checks.some(check=>!available.has(check.conditionId))){info={...info,config:{enabled:info.config.enabled&&ids.length>0,conditionIds:ids},checks:info.checks.filter(check=>available.has(check.conditionId))};sessionStorage.setItem(key,JSON.stringify(info.config));persistHistory();}
+  if(ids.length!==info.config.conditionIds.length||info.checks.some(check=>!available.has(check.conditionId))){info={...info,config:{...info.config,enabled:info.config.enabled&&ids.length>0,conditionIds:ids,...(info.config.conditionSources?{conditionSources:info.config.conditionSources.filter(row=>available.has(row.conditionId))}:{})},checks:info.checks.filter(check=>available.has(check.conditionId))};sessionStorage.setItem(key,JSON.stringify(info.config));persistHistory();}
   const conditionScopes=scopes(),checks=ids.map(conditionId=>{
    const previous=info.checks.find(check=>check.conditionId===conditionId),scope=conditionScopes.find(scope=>scope.conditionId===conditionId);
    return{conditionId,name:saved.find(condition=>condition.id===conditionId)!.name,assetsScanned:previous?.assetsScanned??0,lastChecked:previous?.lastChecked??0,nextCheck:info.config.enabled?(previous?.nextCheck||nextScopeClose(scope)):0,sentAlerts:previous?.sentAlerts??0,status:previous?.status??'never' as const,manual:previous?.manual??false,error:previous?.error??'',...(previous?.timingHint?{timingHint:previous.timingHint}:{})};
@@ -52,8 +54,8 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
   async GetScreenerLiveAlerts(){reads++;const response=snapshot();if(statusDelay)await new Promise(resolve=>setTimeout(resolve,statusDelay));if(errors.read)throw Error(errors.read);return response;},
   async ConfigureScreenerLiveAlerts(value){
    writes.push(structuredClone(value));if(gate)await gate;if(errors.save)throw Error(errors.save);
-   const selected=scopes().filter(scope=>value.conditionIds.includes(scope.conditionId));
-   if(value.enabled&&(!value.conditionIds.length||selected.length!==value.conditionIds.length||selected.some(scope=>scope.error||!scope.targets.length)))throw Error('Select saved conditions with analyzed matching assets.');
+   const selected=scopes(value).filter(scope=>value.conditionIds.includes(scope.conditionId));
+   if(value.enabled&&(!value.conditionIds.length||selected.length!==value.conditionIds.length||selected.some(scope=>scope.error||(!scope.allAssets&&!scope.targets.length))))throw Error('Select saved conditions with analyzed matching assets.');
    const nextRun=selected.length?Math.min(...selected.map(nextScopeClose)):0;
    info={...info,config:structuredClone(value),error:'',running:false,status:value.enabled?'Waiting for next closed bar':'Disabled',nextRun:value.enabled?nextRun:0};
    sessionStorage.setItem(key,JSON.stringify(info.config));return snapshot();

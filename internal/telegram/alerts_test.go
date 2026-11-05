@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -145,5 +146,69 @@ func TestAlertWaitingForAnotherSendHonorsCancellation(t *testing.T) {
 	cancel()
 	if err := store.SendAlert(ctx, "Cancelled queued signal"); err == nil {
 		t.Fatal("cancelled alert acquired an occupied send slot")
+	}
+}
+
+func TestAlertPartialDeliveryRetainsConfirmedCountAndSanitizedFailure(t *testing.T) {
+	for _, failedFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failedFirst=%v", failedFirst), func(t *testing.T) {
+			sends := 0
+			var store *Store
+			store = setupClient(t, func(method string, input map[string]any) (*http.Response, error) {
+				switch method {
+				case "getMe":
+					return response(200, botResponse())
+				case "getChat":
+					id := int64(input["chat_id"].(float64))
+					if id == 43 {
+						return response(400, nil)
+					}
+					return response(200, privateChat(id, "neodix"))
+				case "sendMessage":
+					sends++
+					store.nextSend = time.Time{}
+					return response(200, map[string]any{"message_id": 9, "chat": privateChat(42, "neodix")})
+				}
+				t.Fatalf("unexpected method %s", method)
+				return nil, nil
+			})
+			recipients := "42, 43"
+			if failedFirst {
+				recipients = "43, 42"
+			}
+			_, _ = store.Configure("123:test", recipients)
+			err := store.SendAlert(context.Background(), "One alert")
+			var result *DeliveryError
+			if !errors.As(err, &result) || result.ConfirmedRecipients() != 1 || result.TotalRecipients != 2 || result.Code != "recipientNotFound" || sends != 1 {
+				t.Fatalf("partial confirmation lost: %v sends%d", err, sends)
+			}
+			if strings.Contains(err.Error(), "123:test") || !strings.Contains(err.Error(), "1 of 2 recipients confirmed") || !strings.Contains(err.Error(), "no automatic resend") {
+				t.Fatalf("unsafe or misleading error %v", err)
+			}
+			wrapped := fmt.Errorf("outer context: %w", err)
+			var counted interface{ ConfirmedRecipients() int }
+			if !errors.As(wrapped, &counted) || counted.ConfirmedRecipients() != 1 {
+				t.Fatal("wrapping discarded confirmation")
+			}
+		})
+	}
+}
+
+func TestAlertUnconfirmedRecipientBatchDoesNotClaimDelivery(t *testing.T) {
+	store := setupClient(t, func(method string, _ map[string]any) (*http.Response, error) {
+		if method == "getMe" {
+			return response(200, botResponse())
+		}
+		if method == "getChat" {
+			return response(403, nil)
+		}
+		t.Fatalf("failed recipients sent a notification: %s", method)
+		return nil, nil
+	})
+	_, _ = store.Configure("123:test", "42, 43")
+	err := store.SendAlert(context.Background(), "One alert")
+	var result *DeliveryError
+	if !errors.As(err, &result) || result.ConfirmedRecipients() != 0 || result.TotalRecipients != 2 {
+		t.Fatalf("unconfirmed batch counted: %v", err)
 	}
 }

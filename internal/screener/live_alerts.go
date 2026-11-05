@@ -16,17 +16,22 @@ import (
 	"time"
 )
 
-// Live Alerts deliberately operate on existing enriched histories. They do not
-// create a second source, bootstrap a short indicator history, or bypass the
-// downloader's shared request pacing and provider cooldown.
+// Existing alerts retain their analyzed Dukascopy histories. Explicit public
+// source overrides fetch and retain their own venue-separated history on demand.
+type LiveAlertConditionSource struct {
+	ConditionID string `json:"conditionId"`
+	Source      string `json:"source"`
+}
+
 type LiveAlertConditionPeriod struct {
 	ConditionID string `json:"conditionId"`
 	Period      string `json:"period"`
 }
 
 type LiveAlertsConfig struct {
-	Enabled      bool     `json:"enabled"`
-	ConditionIDs []string `json:"conditionIds"`
+	Enabled          bool                       `json:"enabled"`
+	ConditionIDs     []string                   `json:"conditionIds"`
+	ConditionSources []LiveAlertConditionSource `json:"conditionSources,omitempty"`
 	// Deprecated v1/v2 fields are accepted only to restore saved selections.
 	ConditionPeriods []LiveAlertConditionPeriod `json:"conditionPeriods,omitempty"`
 	Symbols          []string                   `json:"symbols,omitempty"`
@@ -49,6 +54,8 @@ type LiveAlertConditionScope struct {
 	Period      string            `json:"period"`
 	Targets     []LiveAlertTarget `json:"targets"`
 	Error       string            `json:"error"`
+	DataSource  string            `json:"dataSource,omitempty"`
+	AllAssets   bool              `json:"allAssets,omitempty"`
 }
 
 type LiveAlertAsset struct {
@@ -62,6 +69,8 @@ type LiveAlertAsset struct {
 // its close, an indicative entry available at signal time. A future next-open
 // execution price cannot be known by a closed-bar alert.
 type LiveAlert struct {
+	DataSource    string                       `json:"dataSource,omitempty"`
+	Market        string                       `json:"market,omitempty"`
 	ConditionID   string                       `json:"conditionId"`
 	ConditionName string                       `json:"conditionName"`
 	Symbol        string                       `json:"symbol"`
@@ -75,14 +84,18 @@ type LiveAlert struct {
 }
 
 type LiveAlertOutcome struct {
-	ConditionName string                       `json:"conditionName"`
-	Symbol        string                       `json:"symbol"`
-	AssetName     string                       `json:"assetName"`
-	Timeframe     string                       `json:"timeframe"`
-	Time          int64                        `json:"time"`
-	Status        string                       `json:"status"`
-	Message       string                       `json:"message"`
-	Profitability *SavedConditionProfitability `json:"profitability,omitempty"`
+	ConditionID         string                       `json:"conditionId,omitempty"`
+	DataSource          string                       `json:"dataSource,omitempty"`
+	Market              string                       `json:"market,omitempty"`
+	ConfirmedRecipients int                          `json:"confirmedRecipients,omitempty"`
+	ConditionName       string                       `json:"conditionName"`
+	Symbol              string                       `json:"symbol"`
+	AssetName           string                       `json:"assetName"`
+	Timeframe           string                       `json:"timeframe"`
+	Time                int64                        `json:"time"`
+	Status              string                       `json:"status"`
+	Message             string                       `json:"message"`
+	Profitability       *SavedConditionProfitability `json:"profitability,omitempty"`
 }
 
 type LiveAlertsInfo struct {
@@ -146,11 +159,12 @@ type LiveAlerts struct {
 	send                            func(context.Context, LiveAlert) error
 	// Tests replace the transport only. Indexing, rule evaluation, claims and
 	// scheduling still use production code and real on-disk CSVs.
-	refresh func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
+	refresh    func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
+	publicData *publicAlertData
 }
 
 func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error) (*LiveAlerts, error) {
-	l := &LiveAlerts{manager: manager, path: filepath.Join(manager.profile, "screener-live-alerts.json"), send: send, wake: make(chan struct{}, 1), status: "Disabled", now: time.Now, state: liveAlertsState{Version: 4, Config: LiveAlertsConfig{ConditionIDs: []string{}}, Watermarks: map[string]int64{}, Recent: []LiveAlertOutcome{}}}
+	l := &LiveAlerts{manager: manager, path: filepath.Join(manager.profile, "screener-live-alerts.json"), send: send, wake: make(chan struct{}, 1), status: "Disabled", now: time.Now, state: liveAlertsState{Version: 5, Config: LiveAlertsConfig{ConditionIDs: []string{}}, Watermarks: map[string]int64{}, Recent: []LiveAlertOutcome{}}}
 	st, err := os.Lstat(l.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return l, nil
@@ -170,7 +184,7 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 	}
 	legacyEnabled := l.state.Version < 3 && l.state.Config.Enabled
 	l.state.Config = canonicalLiveAlertsConfig(l.state.Config)
-	l.state.Version = 4
+	l.state.Version = 5
 	if legacyEnabled {
 		l.state.Config.Enabled = false
 		l.errorText = "Live Alerts now inherits each saved condition's analyzed assets and periods. Review the inherited scope and start alerts again. Previous delivery history is preserved."
@@ -195,11 +209,16 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 	if l.state.Watermarks == nil {
 		l.state.Watermarks = map[string]int64{}
 	}
+	if err := l.recoverLegacyPartialDeliveries(); err != nil {
+		l.blocked, l.errorText = true, "Restore confirmed Live Alerts deliveries: "+cleanMessage(err.Error())+"; original state preserved"
+		return l, errors.New(l.errorText)
+	}
 	return l, nil
 }
 
 func copyLiveAlertsConfig(config LiveAlertsConfig) LiveAlertsConfig {
 	config.ConditionIDs = append([]string{}, config.ConditionIDs...)
+	config.ConditionSources = append([]LiveAlertConditionSource(nil), config.ConditionSources...)
 	config.calendar = append([]SavedAnalysisCondition(nil), config.calendar...)
 	config.ConditionPeriods = append([]LiveAlertConditionPeriod(nil), config.ConditionPeriods...)
 	config.Periods = append([]string(nil), config.Periods...)
@@ -245,6 +264,9 @@ func liveAlertsScopeAllows(config LiveAlertsConfig, id, period string) bool {
 }
 
 func validateLiveAlertsConfig(config LiveAlertsConfig) error {
+	if err := validateLiveAlertSources(config.ConditionSources); err != nil {
+		return err
+	}
 	if len(config.ConditionIDs) > savedConditionsLimit || len(config.Periods) > 3 || len(config.ConditionPeriods) > savedConditionsLimit || len(config.Symbols) > len(catalogAssets) {
 		return errors.New("too many selected Live Alerts conditions, symbols or periods")
 	}
@@ -285,7 +307,7 @@ func validateLiveAlertsConfig(config LiveAlertsConfig) error {
 }
 
 func validateLiveAlertsState(state liveAlertsState) error {
-	if (state.Version != 1 && state.Version != 2 && state.Version != 3 && state.Version != 4) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*len(catalogAssets)*3 {
+	if (state.Version < 1 || state.Version > 5) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*max(len(catalogAssets), 20000)*3 {
 		return errors.New("invalid Live Alerts state version or count")
 	}
 	validationConfig := state.Config
@@ -309,6 +331,18 @@ func validateLiveAlertsState(state liveAlertsState) error {
 		if len(parts) != 3 || timestamp < 0 || timestamp > 253_402_300_799_999 {
 			return errors.New("invalid Live Alerts processed-bar state")
 		}
+		if strings.HasPrefix(parts[1], "public:") {
+			if !validPublicLiveAlertClaim(parts[1]) {
+				return errors.New("invalid public Live Alerts identity")
+			}
+			if err := validateLiveAlertsConfig(LiveAlertsConfig{ConditionIDs: []string{parts[0]}}); err != nil {
+				return err
+			}
+			if !supportedLiveAlertPeriod(parts[2]) {
+				return errors.New("invalid public Live Alerts period")
+			}
+			continue
+		}
 		if err := validateLiveAlertsConfig(LiveAlertsConfig{ConditionIDs: []string{parts[0]}, Symbols: []string{parts[1]}, Periods: []string{parts[2]}}); err != nil {
 			return err
 		}
@@ -317,7 +351,7 @@ func validateLiveAlertsState(state liveAlertsState) error {
 		return err
 	}
 	for _, outcome := range state.Recent {
-		if outcome.Time < 0 || len(outcome.Message) > 5000 || (outcome.Status != "sent" && outcome.Status != "failed" && outcome.Status != "claimed" && outcome.Status != "uncertain") {
+		if outcome.Time < 0 || outcome.ConfirmedRecipients < 0 || outcome.ConfirmedRecipients > 20 || len(outcome.Message) > 5000 || (outcome.Status != "sent" && outcome.Status != "failed" && outcome.Status != "claimed" && outcome.Status != "uncertain") {
 			return errors.New("invalid Live Alerts delivery history")
 		}
 		if outcome.Profitability != nil && (!validLiveProfitability(*outcome.Profitability) || outcome.Profitability.Symbol != outcome.Symbol || outcome.Profitability.Timeframe != outcome.Timeframe) {
@@ -397,13 +431,18 @@ func (l *LiveAlerts) Info() LiveAlertsInfo {
 	l.mu.Unlock()
 	if savedErr == nil {
 		for _, condition := range saved {
-			info.ConditionScopes = append(info.ConditionScopes, liveConditionScope(condition, assets))
+			scope := liveConditionScopeForConfig(condition, assets, info.Config)
+			info.ConditionScopes = append(info.ConditionScopes, scope)
 		}
 		info.Checks = liveAlertCheckRows(saved, info.ConditionScopes, info.Config, states, now, retry, retryAt, retryAsOf, retryManual)
 	} else if info.Error == "" {
 		info.Error = cleanMessage(savedErr.Error())
 	}
-	if assetErr != nil && info.Error == "" {
+	needsDownloadedAssets := len(info.Config.ConditionIDs) == 0
+	for _, id := range info.Config.ConditionIDs {
+		needsDownloadedAssets = needsDownloadedAssets || liveAlertSource(info.Config, id) == "dukascopy"
+	}
+	if assetErr != nil && needsDownloadedAssets && info.Error == "" {
 		info.Error = cleanMessage(assetErr.Error())
 	}
 	return info
@@ -453,6 +492,7 @@ func (l *LiveAlerts) pruneDeletedConditions(saved []SavedAnalysisCondition) erro
 			hasDeleted = true
 		}
 	}
+	for _, choice := range l.state.Config.ConditionSources { if !known[choice.ConditionID] { hasDeleted=true } }
 	for id := range l.state.Checks {
 		if !known[id] {
 			hasDeleted = true
@@ -479,6 +519,12 @@ func (l *LiveAlerts) pruneDeletedConditions(saved []SavedAnalysisCondition) erro
 		}
 	}
 	l.state.Config.ConditionIDs = ids
+	l.state.Config.ConditionSources = nil
+	for _, choice := range previousConfig.ConditionSources {
+		if known[choice.ConditionID] {
+			l.state.Config.ConditionSources = append(l.state.Config.ConditionSources, choice)
+		}
+	}
 	if len(ids) == 0 {
 		l.state.Config.Enabled = false
 	}
@@ -524,12 +570,18 @@ func (l *LiveAlerts) validateSelection(config LiveAlertsConfig) error {
 	if err != nil {
 		return err
 	}
-	assets, err := l.assets()
-	if err != nil {
-		return err
+	var assets []LiveAlertAsset
+	for _, saved := range conditions {
+		if liveAlertSource(config, saved.ID) == "dukascopy" {
+			assets, err = l.assets()
+			if err != nil {
+				return err
+			}
+			break
+		}
 	}
 	for _, saved := range conditions {
-		scope := liveConditionScope(saved, assets)
+		scope := liveConditionScopeForConfig(saved, assets, config)
 		if scope.Error != "" {
 			return errors.New(scope.Error)
 		}

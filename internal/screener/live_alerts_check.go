@@ -22,6 +22,45 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if err := validateLiveAlertsConfig(config); err != nil {
 		return err
 	}
+	hasPublic := false
+	for _, id := range canonicalLiveAlertsConfig(config).ConditionIDs {
+		hasPublic = hasPublic || supportedPublicAlertSource(liveAlertSource(config, id))
+	}
+	if !hasPublic {
+		return l.checkDukascopyCycle(ctx, config, asOf, scheduled)
+	}
+	var failures []error
+	for _, source := range []string{"dukascopy", "hyperliquid", "binance", "bybit"} {
+		subset := copyLiveAlertsConfig(config)
+		subset.ConditionIDs = nil
+		for _, id := range canonicalLiveAlertsConfig(config).ConditionIDs {
+			if liveAlertSource(config, id) == source {
+				subset.ConditionIDs = append(subset.ConditionIDs, id)
+			}
+		}
+		if len(subset.ConditionIDs) == 0 {
+			continue
+		}
+		var err error
+		if source == "dukascopy" {
+			err = l.checkDukascopyCycle(ctx, subset, asOf, scheduled)
+		} else {
+			err = l.checkPublicCycle(ctx, subset, source, asOf, scheduled)
+		}
+		if err != nil {
+			failures = append(failures, err)
+			if ctx.Err() != nil || errors.Is(err, errLiveAlertsBusy) || strings.Contains(err.Error(), "Telegram alert for ") {
+				break
+			}
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsConfig, asOf int64, scheduled bool) (cycleErr error) {
+	if err := validateLiveAlertsConfig(config); err != nil {
+		return err
+	}
 	scope := config.scope
 	config = canonicalLiveAlertsConfig(config)
 	conditions, err := l.selectedConditions(config)
@@ -349,7 +388,7 @@ func (l *LiveAlerts) claimCurrentCondition(ctx context.Context, evaluated SavedA
 		if !allowed || !previouslyAllowed || !reflect.DeepEqual(stats, previousStats) {
 			return false, nil
 		}
-		return true, l.claim(ctx, key, timestamp, alert)
+		return true, l.claimSource(ctx, "dukascopy", evaluated.ID, key, timestamp, alert)
 	}
 	return false, nil
 }
@@ -593,12 +632,19 @@ func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index i
 }
 
 func (l *LiveAlerts) claim(ctx context.Context, key string, timestamp int64, alert *LiveAlert) error {
+	return l.claimSource(ctx, "", "", key, timestamp, alert)
+}
+
+func (l *LiveAlerts) claimSource(ctx context.Context, source, conditionID, key string, timestamp int64, alert *LiveAlert) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.closed || !l.state.Config.Enabled {
+		return context.Canceled
+	}
+	if source != "" && (liveAlertSource(l.state.Config, conditionID) != source || !containsLiveValue(l.state.Config.ConditionIDs, conditionID)) {
 		return context.Canceled
 	}
 	previous, existed := l.state.Watermarks[key]
@@ -611,7 +657,7 @@ func (l *LiveAlerts) claim(ctx context.Context, key string, timestamp int64, ale
 		return nil
 	}
 	priorRecent := append([]LiveAlertOutcome{}, l.state.Recent...)
-	l.state.Recent = append([]LiveAlertOutcome{{ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
+	l.state.Recent = append([]LiveAlertOutcome{{ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
 	if len(l.state.Recent) > 50 {
 		l.state.Recent = l.state.Recent[:50]
 	}
@@ -639,12 +685,13 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if err == nil {
+	if err == nil || confirmedAlertDelivery(err) {
 		l.state.Sent++
 		l.recordConfirmedAlertLocked(alert.ConditionID)
 	}
 	if len(l.state.Recent) > 0 {
 		outcome := &l.state.Recent[0]
+		outcome.ConfirmedRecipients = confirmedAlertRecipientCount(err)
 		outcome.Status, outcome.Message = "sent", "Telegram alert sent"
 		if err != nil {
 			outcome.Status, outcome.Message = "failed", liveAlertErrorText(err.Error()+". This bar will not be resent automatically; check Telegram before any manual action.")

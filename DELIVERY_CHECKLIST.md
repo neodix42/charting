@@ -2,6 +2,16 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Live Alerts sources, partial delivery counts and graceful shutdown — 2026-11-05
+
+- [x] Data source per condition defaults to existing Dukascopy; public overrides cover all tradable spot/perpetual markets with inherited periods and separate history/claim identities.
+- [x] On-demand required closed-bar fetch, pinned-runtime indicator/companion warm-up, durable cache reuse/journal recovery, publication retries and refusal cancellation pass production tests.
+- [x] Existing enabled configs/claims survive; partial confirmed sends count once, with conservative idempotent repair of provable old records and no automatic resend.
+- [x] Red failed-status popup, plain Recent errors and graceful-close message preserve focus/save/timeout recovery in browser checks; parallel shutdown preserves worker/storage ordering in race tests.
+- [x] Full independent Go race/vet, bindings race/vet, 219 frontend unit tests and real two-market Hyperliquid preparation/evaluation/cache-reuse smoke pass without Telegram or user-profile writes.
+- [x] Production Linux executable/archive and checksums pass; APP_README/STATUS/DECISIONS document behavior and limits.
+- [ ] Native desktop timing/full-venue alert delivery and Windows execution remain unrun; see STATUS.md.
+
 ## Hyperliquid chart source — 2026-11-05
 
 - [x] Public dynamic spot/native-perpetual/HIP-3 discovery, exact market identities and partial-catalog warnings/retry.

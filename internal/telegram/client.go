@@ -35,6 +35,23 @@ type operationError struct{ code string }
 func (e *operationError) Error() string { return "Telegram operation failed (" + e.code + ")" }
 func fail(code string) error            { return &operationError{code} }
 
+// DeliveryError retains Telegram's confirmed successes when another recipient
+// failed. It carries counts and a sanitized code, never tokens or chat identities.
+// A nonnil error still means the batch was incomplete and must not be retried
+// automatically: an uncertain recipient may already have received the message.
+type DeliveryError struct {
+	ConfirmedCount  int
+	TotalRecipients int
+	Code            string
+}
+
+func (e *DeliveryError) Error() string {
+	return fmt.Sprintf("Telegram alert delivery: %d of %d recipients confirmed; no automatic resend: %s", e.ConfirmedCount, e.TotalRecipients, fail(e.Code))
+}
+
+func (e *DeliveryError) Unwrap() error            { return fail(e.Code) }
+func (e *DeliveryError) ConfirmedRecipients() int { return e.ConfirmedCount }
+
 type client struct{ http *http.Client }
 
 func newClient(transport http.RoundTripper) *client {
@@ -230,7 +247,7 @@ func (s *Store) SendAlert(ctx context.Context, message string) error {
 	}
 	if !result.Sent {
 		if result.TotalRecipients > 0 {
-			return fmt.Errorf("Telegram alert delivery: %d of %d recipients confirmed; no automatic resend: %w", result.SentCount, result.TotalRecipients, fail(result.Code))
+			return &DeliveryError{ConfirmedCount: result.SentCount, TotalRecipients: result.TotalRecipients, Code: result.Code}
 		}
 		return fail(result.Code)
 	}

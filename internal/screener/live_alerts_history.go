@@ -10,7 +10,8 @@ import (
 
 // LiveAlertCheck summarizes the latest real attempt for one selected condition.
 // AssetsScanned counts distinct symbols, even when both saved periods are used.
-// SentAlerts counts confirmed deliveries since condition-level tracking began.
+// SentAlerts counts alerts confirmed for at least one recipient since
+// condition-level tracking began, including incomplete recipient batches.
 type LiveAlertCheck struct {
 	ConditionID   string `json:"conditionId"`
 	Name          string `json:"name"`
@@ -59,7 +60,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 		if err := validateLiveAlertsConfig(LiveAlertsConfig{ConditionIDs: []string{id}}); err != nil {
 			return err
 		}
-		if record.AssetsScanned < 0 || record.AssetsScanned > len(catalogAssets) || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
+		if record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
 			return errors.New("invalid Live Alerts condition check counts or timestamp")
 		}
 		switch record.Status {
@@ -264,8 +265,8 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 	return nil
 }
 
-// Called inside deliver's confirmed-success branch, with l.mu held, before its
-// existing atomic state write. Failed/uncertain sends never increment this.
+// Called when at least one recipient is confirmed, with l.mu held, before the
+// existing atomic state write. A partially successful batch counts one alert.
 func (l *LiveAlerts) recordConfirmedAlertLocked(conditionID string) {
 	state, exists := l.state.Checks[conditionID]
 	if !exists {
@@ -290,6 +291,10 @@ func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertCondit
 			periods := []string{}
 			for _, scope := range scopes {
 				if scope.ConditionID == condition.ID {
+					if scope.AllAssets {
+						periods = append(periods, savedLiveAlertPeriods(condition)...)
+						continue
+					}
 					for _, target := range scope.Targets {
 						if !containsLiveValue(periods, target.Period) {
 							periods = append(periods, target.Period)

@@ -127,6 +127,12 @@ func resolvedLiveAlertsConfig(config LiveAlertsConfig, conditions []SavedAnalysi
 	config.ConditionIDs = []string{}
 	for _, saved := range conditions {
 		config.ConditionIDs = append(config.ConditionIDs, saved.ID)
+		if supportedPublicAlertSource(liveAlertSource(config, saved.ID)) {
+			for _, period := range savedLiveAlertPeriods(saved) {
+				config.scope = append(config.scope, LiveAlertConditionPeriod{ConditionID: saved.ID, Period: period})
+			}
+			continue
+		}
 		for pair := range savedConditionEligiblePairs(saved) {
 			_, period, _ := strings.Cut(pair, "/")
 			if !liveAlertsScopeAllows(config, saved.ID, period) {

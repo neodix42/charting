@@ -1,16 +1,27 @@
 import type {SavedConditionProfitability} from './screenerAnalysis';
 export interface LiveAlertConditionPeriod {conditionId:string;period:string}
-export interface LiveAlertsConfig {enabled:boolean;conditionIds:string[]}
+export type LiveAlertDataSource='dukascopy'|'hyperliquid'|'binance'|'bybit';
+export interface LiveAlertConditionSource {conditionId:string;source:LiveAlertDataSource}
+export interface LiveAlertsConfig {enabled:boolean;conditionIds:string[];conditionSources?:LiveAlertConditionSource[]}
 export interface LiveAlertAsset {symbol:string;name:string;category:string;periods:string[]}
-export interface LiveAlertOutcome {assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message:string;profitability?:SavedConditionProfitability|null}
+export interface LiveAlertOutcome {conditionId?:string;dataSource?:LiveAlertDataSource;market?:string;confirmedRecipients?:number;assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
-export interface LiveAlertConditionScope {conditionId:string;period:string;targets:LiveAlertTarget[];error:string}
+export interface LiveAlertConditionScope {conditionId:string;period:string;dataSource?:LiveAlertDataSource;allAssets?:boolean;targets:LiveAlertTarget[];error:string}
 export interface LiveAlertCheck {conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
 export interface LiveAlertsInfo {checks:LiveAlertCheck[];savedConditionsRevision:number;conditionScopes:LiveAlertConditionScope[];config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
 export interface ScreenerLiveAlertsBackend {
  GetScreenerLiveAlerts():Promise<LiveAlertsInfo>;
  ConfigureScreenerLiveAlerts(config:LiveAlertsConfig):Promise<LiveAlertsInfo>;
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
+}
+export const liveAlertDataSources:ReadonlyArray<{source:LiveAlertDataSource;label:string}>=[{source:'dukascopy',label:'Dukascopy'},{source:'hyperliquid',label:'Hyperliquid'},{source:'binance',label:'Binance'},{source:'bybit',label:'Bybit'}];
+export function liveAlertConditionSource(config:LiveAlertsConfig,id:string):LiveAlertDataSource{return config.conditionSources?.find(row=>row.conditionId===id)?.source??'dukascopy';}
+export function liveAlertSourceLabel(source:LiveAlertDataSource):string{return liveAlertDataSources.find(row=>row.source===source)?.label??source;}
+export function withLiveAlertSource(config:LiveAlertsConfig,id:string,source:LiveAlertDataSource):LiveAlertsConfig {
+ const conditionSources=(config.conditionSources??[]).filter(row=>row.conditionId!==id);
+ if(source!=='dukascopy')conditionSources.push({conditionId:id,source});
+ const {conditionSources:_,...base}=config;
+ return conditionSources.length?{...base,conditionSources}:base;
 }
 export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,conditionIds:[]});
 export function liveAlertPeriodLabel(period:string):string {

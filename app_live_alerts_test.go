@@ -58,3 +58,17 @@ func TestLiveAlertMessageIncludesRecordedAnalysisProfitability(t *testing.T) {
 		t.Fatal("unrecorded profitability was invented")
 	}
 }
+
+func TestLiveAlertMessageIdentifiesPublicMarketAndWeeklyClose(t *testing.T) {
+	alert := screener.LiveAlert{Symbol: "xyz:TSLA", AssetName: "Tesla", DataSource: "hyperliquid", Market: "perpetual", Timeframe: "w1", Time: time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), EntryPrice: 100}
+	message := formatScreenerLiveAlert(alert)
+	for _, part := range []string{"Asset: xyz:TSLA — Tesla", "Source: hyperliquid", "Market: perpetual", "2026-11-09 00:00:00"} {
+		if !strings.Contains(message, part) {
+			t.Fatalf("public weekly alert omitted %q: %s", part, message)
+		}
+	}
+	alert.DataSource = "dukascopy"
+	if strings.Contains(formatScreenerLiveAlert(alert), "Source:") {
+		t.Fatal("legacy Dukascopy formatting changed")
+	}
+}

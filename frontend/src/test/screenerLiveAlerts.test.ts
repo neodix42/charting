@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -39,4 +39,25 @@ it('cleans repeated joined and legacy publication errors without dropping delive
  expect(liveAlertErrorText(`${pending} `.repeat(5)+delivery)).toBe(`${pending} ${delivery}`);
  expect(liveAlertErrorText(`EURUSD: ${pending}\nGBPUSD: ${pending}`)).toBe(`EURUSD: ${pending}\nGBPUSD: ${pending}`);
  expect(liveAlertErrorText('   \n')).toBe('');
+});
+
+
+it('treats omitted sources as Dukascopy without changing legacy enabled configuration',()=>{
+ const config={enabled:true,conditionIds:['daily','hourly']},before=structuredClone(config);
+ expect(liveAlertConditionSource(config,'daily')).toBe('dukascopy');expect(liveAlertConditionSource(config,'hourly')).toBe('dukascopy');expect(config).toEqual(before);expect('conditionSources' in config).toBe(false);
+ expect(liveAlertSourceLabel('hyperliquid')).toBe('Hyperliquid');
+});
+it('updates one condition source independently and restores omitted default without mutating selected conditions',()=>{
+ const config={enabled:false,conditionIds:['daily']};
+ const hyper=withLiveAlertSource(config,'daily','hyperliquid'),both=withLiveAlertSource(hyper,'unselected','bybit');
+ expect(liveAlertConditionSource(both,'daily')).toBe('hyperliquid');expect(liveAlertConditionSource(both,'unselected')).toBe('bybit');expect(both.conditionIds).toEqual(['daily']);expect(config).toEqual({enabled:false,conditionIds:['daily']});
+ const reset=withLiveAlertSource(both,'daily','dukascopy');expect(reset.conditionSources).toEqual([{conditionId:'unselected',source:'bybit'}]);expect(withLiveAlertSource(reset,'unselected','dukascopy')).toEqual(config);
+});
+it('queued autosave keeps the latest per-condition source choices and copies source arrays',async()=>{
+ let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
+ const persist=vi.fn(async config=>{if(persist.mock.calls.length===1)await held;return result(config);}),writer=new LiveAlertsConfigWriter(persist,()=>{});
+ const config={...initialLiveAlertsConfig(),conditionIds:['daily','hourly']},first=withLiveAlertSource(config,'daily','hyperliquid');writer.edit(first);
+ const second=withLiveAlertSource(first,'hourly','bybit');writer.edit(second);second.conditionSources![0].source='binance';
+ const flush=writer.flush();release();await flush;
+ expect(persist.mock.calls[1][0]).toEqual({...config,conditionSources:[{conditionId:'daily',source:'hyperliquid'},{conditionId:'hourly',source:'bybit'}]});
 });
