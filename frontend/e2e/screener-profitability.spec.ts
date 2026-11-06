@@ -90,7 +90,7 @@ test('saved highlight waits for the restored Analysis draft instead of selecting
  await expect(page.getByLabel('Condition 1 right constant',{exact:true})).toHaveValue('2');await expect(restored).toHaveAttribute('aria-pressed','true');await expect(initial).toHaveAttribute('aria-pressed','false');
 });
 
-test('Live Alerts inherits recorded periods and profitability without editable asset controls',async({page})=>{
+test('Live Alerts inherits recorded periods and profitability and can narrow its eligible assets',async({page})=>{
  await openTestApp(page);
  const files=[file(0,'btcusd','h1'),file(1,'btcusd','d1'),file(2,'eurusd','h1'),file(3,'ethusd','d1'),file(4,'ethusd','h1')];
  const results=[result(0,10,11,'btcusd','h1'),result(1,16,20,'btcusd','d1'),result(2,17,20,'eurusd','h1'),result(3,20,20,'ethusd','d1')];
@@ -107,8 +107,11 @@ test('Live Alerts inherits recorded periods and profitability without editable a
  await page.getByRole('button',{name:'View assets for Recorded 85',exact:true}).click();const assets=page.getByRole('region',{name:'Monitored assets for Recorded 85',exact:true});
  await expect(assets).toContainText('All analyzed periods');await expect(assets.locator('li')).toHaveCount(3);
  await expect(assets).toContainText('BTCUSD');await expect(assets).toContainText('EURUSD');await expect(assets).toContainText('ETHUSD');await expect(assets).not.toContainText('80.00%');
- await expect(assets).toContainText('Profitability: 90.91%, 10 / 11 hit TP');await expect(assets).toContainText('Profitability: 85.00%, 17 / 20 hit TP');await expect(assets.getByRole('checkbox')).toHaveCount(0);
- await expect(page.getByRole('combobox',{name:/Alert period/})).toHaveCount(0);await expect(page.getByRole('button',{name:'Select all assets',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await expect(assets).toContainText('Profitability: 90.91%, 10 / 11 hit TP');await expect(assets).toContainText('Profitability: 85.00%, 17 / 20 hit TP');await expect(assets.getByRole('checkbox')).toHaveCount(3);for(const checkbox of await assets.getByRole('checkbox').all())await expect(checkbox).toBeChecked();
+ await expect(page.getByRole('combobox',{name:/Alert period/})).toHaveCount(0);await expect(assets.getByRole('button',{name:'Select all',exact:true})).toBeEnabled();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeEnabled();
+ await assets.getByRole('checkbox',{name:'Monitor eurusd',exact:true}).uncheck();await assets.getByRole('button',{name:'Save assets',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().conditionScopes[0].targets.map((target:any)=>target.symbol).sort())).toEqual(['btcusd','ethusd']);
+ await page.getByRole('button',{name:'View assets for Recorded 85',exact:true}).click();await expect(assets.locator('li')).toHaveCount(3);await expect(assets.getByRole('checkbox',{name:'Monitor eurusd',exact:true})).not.toBeChecked();
  await page.getByRole('button',{name:'Close monitored assets',exact:true}).click();await addLiveAlert(page,'Unanalyzed alert','Needs analysis');await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'View assets for Unanalyzed alert',exact:true}).click();await page.getByRole('region',{name:'Monitored assets for Unanalyzed alert',exact:true}).getByLabel('Show error: Monitored assets for Unanalyzed alert',{exact:true}).click();await expect(page.getByRole('region',{name:'Monitored assets for Unanalyzed alert',exact:true})).toContainText('no recorded Analysis matching assets');
  await page.evaluate(()=>(window as any).__testSetLiveAlertsInfo({recent:[{assetName:'Bitcoin vs US Dollar',symbol:'btcusd',timeframe:'h1',time:Date.UTC(2026,9,28,11),conditionName:'Recorded 85',status:'sent',profitability:{symbol:'btcusd',timeframe:'h1',fileName:'recorded.csv',matches:11,takeProfitHits:10,profitablePercent:1000/11}}]}));
