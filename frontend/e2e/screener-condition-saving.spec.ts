@@ -91,3 +91,42 @@ test('Analysis rename refreshes Live Alerts immediately while metadata reads are
  await page.evaluate(()=>(window as any).__releaseRenameMetadata());
  await expect(row.locator('td').nth(1)).toHaveText('After immediate rename');
 });
+
+test('Analysis rename follows copied alert names before Live Alerts is opened and preserves custom names and history',async({page})=>{
+ await open(page);await create(page,'Copied condition');
+ const before=await page.evaluate(async()=>{
+  const api=window.go!.main!.App!,condition=(window as any).__testSavedAnalysisConditions()[0];
+  const entry={id:condition.id,conditionId:condition.id,name:condition.name,period:'h1' as const,dataSource:'hyperliquid' as const,enabled:true};
+  const config={enabled:true,alerts:[entry,{...entry,id:crypto.randomUUID().replaceAll('-',''),dataSource:'bybit' as const,enabled:false},{...entry,id:crypto.randomUUID().replaceAll('-',''),name:'Custom signal',dataSource:'binance' as const}]};
+  await api.ConfigureScreenerLiveAlerts(config);
+  (window as any).__testSetLiveAlertsInfo({sent:9,checks:config.alerts.map((entry,index)=>({alertId:entry.id,savedConditionId:entry.conditionId,conditionId:entry.id,name:entry.name,status:'completed',manual:false,error:'',assetsScanned:index+5,lastChecked:1704067200000,sentAlerts:index+2,nextCheck:0}))});
+  return{config,writes:(window as any).__testLiveAlertsWrites().length};
+ });
+ await page.getByRole('button',{name:'Load condition Copied condition',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Rename condition',exact:true});await dialog.getByRole('textbox',{name:'Condition name',exact:true}).fill('Renamed condition');
+ await page.evaluate(()=>(window as any).__testAnalysisErrors({savedRename:'Rename failed explicitly'}));await dialog.getByRole('button',{name:'Rename',exact:true}).click();await expect(dialog).toContainText('Rename failed explicitly');
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites().length)).toBe(before.writes);
+ await page.evaluate(()=>{(window as any).__testAnalysisErrors({});(window as any).__testLiveAlertsErrors({save:'Alert name save failed explicitly'});});await dialog.getByRole('button',{name:'Rename',exact:true}).click();await expect(dialog).toContainText('Condition was renamed, but Live Alerts could not be updated');
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0].name)).toBe('Renamed condition');expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).toEqual(before.config);
+ await page.evaluate(()=>(window as any).__testLiveAlertsErrors({}));await dialog.getByRole('button',{name:'Rename',exact:true}).click();await expect(dialog).toHaveCount(0);
+ const expected={...before.config,alerts:before.config.alerts.map(entry=>entry.name==='Copied condition'?{...entry,name:'Renamed condition'}:entry)};
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).toEqual(expected);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites().length)).toBe(before.writes+2);
+ await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ const table=page.getByRole('table',{name:'Configured alerts',exact:true});await expect(table.locator('tbody th')).toHaveText(['Renamed condition','Renamed condition','Custom signal']);await expect(table.locator('tbody tr td:nth-child(3)')).toHaveText(['Renamed condition','Renamed condition','Renamed condition']);
+ await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toBeVisible();
+ await expect(page.getByRole('table',{name:'Alert check history',exact:true}).locator('tbody tr td:last-child')).toHaveText(['2','3','4']);
+ await reloadTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await expect(table.locator('tbody th')).toHaveText(['Renamed condition','Renamed condition','Custom signal']);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).toEqual(expected);
+});
+
+test('normal close waits for copied alert names to finish saving after an Analysis rename',async({page})=>{
+ await open(page);await create(page,'Await copied name');
+ await page.evaluate(async()=>{const id=(window as any).__testSavedAnalysisConditions()[0].id;await window.go!.main!.App!.ConfigureScreenerLiveAlerts({enabled:false,alerts:[{id,conditionId:id,name:'Await copied name',period:'h1',dataSource:'hyperliquid',enabled:true}]});(window as any).__testHoldLiveAlertsSaves();});
+ await page.getByRole('button',{name:'Load condition Await copied name',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Rename condition',exact:true});await dialog.getByRole('textbox',{name:'Condition name',exact:true}).fill('Copied name saved');await dialog.getByRole('button',{name:'Rename',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsWrites().at(-1)?.alerts?.[0]?.name)).toBe('Copied name saved');
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'copied-condition-rename'}));expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__testReleaseLiveAlertsSaves());await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'copied-condition-rename',discard:false});
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).toMatchObject({enabled:false,alerts:[{name:'Copied name saved',enabled:true}]});
+});

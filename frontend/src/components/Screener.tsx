@@ -5,7 +5,7 @@ import {initialScreenerView,normalizeScreenerView,ScreenerViewWriter} from '../w
 import {ScreenerEnrichment} from './ScreenerEnrichment';
 import {ScreenerAnalysis,type ScreenerAnalysisHandle} from './ScreenerAnalysis';
 import {ScreenerLiveAlerts,type ScreenerLiveAlertsHandle} from './ScreenerLiveAlerts';
-import type {SavedAnalysisCondition} from '../workspace/screenerAnalysis';
+import type {SavedConditionRename} from '../workspace/screenerAnalysis';
 import './ScreenerDownloads.css';
 
 const downloadPageSize=10;
@@ -24,7 +24,11 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const draft=useRef(view),writer=useRef<ScreenerViewWriter|null>(null);
  const analysis=useRef<ScreenerAnalysisHandle>(null);
  const liveAlerts=useRef<ScreenerLiveAlertsHandle>(null);
- const [renamedCondition,setRenamedCondition]=useState<SavedAnalysisCondition>();
+ const [renamedCondition,setRenamedCondition]=useState<SavedConditionRename>();
+ const conditionRenamed=async(rename:SavedConditionRename)=>{
+  setRenamedCondition(rename);
+  try{await liveAlerts.current?.conditionRenamed(rename);}catch(error){throw Error(`Condition was renamed, but Live Alerts could not be updated: ${errorText(error)}`);}
+ };
  const selected=new Set(view.symbols),collapsed=new Set(view.collapsedCategories),{timeframe,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
  const [downloadFilter,setDownloadFilter]=useState<DownloadFilter>('all'),[downloadPage,setDownloadPage]=useState(0);
@@ -70,7 +74,7 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const invalidDates=!from||!to||from>=to;
  return <section id="screener-panel" className="screener" role="tabpanel" aria-label="Screener" hidden={!visible}>
   <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>setTab('enrichment')}>Enrichment</button><button id="screener-live-alerts-tab" role="tab" aria-controls="screener-live-alerts" aria-selected={tab==='live-alerts'} onClick={()=>setTab('live-alerts')}>Live Alerts</button></div></div>
-  <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"><ScreenerAnalysis ref={analysis} api={api} visible={visible&&tab==='analysis'} onConditionRenamed={setRenamedCondition}/></div>
+  <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"><ScreenerAnalysis ref={analysis} api={api} visible={visible&&tab==='analysis'} onConditionRenamed={conditionRenamed}/></div>
   <div id="screener-enrichment" role="tabpanel" aria-labelledby="screener-enrichment-tab" hidden={tab!=='enrichment'}><ScreenerEnrichment api={api} visible={visible&&tab==='enrichment'} timeframes={catalog?.timeframes??[]}/></div>
   <div id="screener-live-alerts" role="tabpanel" aria-labelledby="screener-live-alerts-tab" hidden={tab!=='live-alerts'}><ScreenerLiveAlerts ref={liveAlerts} api={api} visible={visible&&tab==='live-alerts'} renamedCondition={renamedCondition}/></div>
   <div id="screener-downloader" role="tabpanel" aria-labelledby="screener-downloader-tab" hidden={tab!=='downloader'}>

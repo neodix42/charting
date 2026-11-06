@@ -1,6 +1,6 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import {errorText} from '../types';
-import type {AnalysisCatalog,AnalysisInfo,AnalysisPeriod,AnalysisRequest,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {AnalysisCatalog,AnalysisInfo,AnalysisPeriod,AnalysisRequest,SavedConditionRename,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisDate,analysisInputError,initialAnalysisView,newAnalysisCondition} from '../workspace/screenerAnalysis';
 import {ScreenerAnalysisCondition} from './ScreenerAnalysisCondition';
 import {ScreenerAnalysisChart,type AnalysisSelection} from './ScreenerAnalysisChart';
@@ -10,7 +10,7 @@ import './ScreenerAnalysis.css';
 
 const pageSize=10;
 export interface ScreenerAnalysisHandle {flush():Promise<void>}
-export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAnalysisBackend;visible:boolean;onConditionRenamed?(condition:SavedAnalysisCondition):void}>(function ScreenerAnalysis({api,visible,onConditionRenamed},ref){
+export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAnalysisBackend;visible:boolean;onConditionRenamed?(rename:SavedConditionRename):void|Promise<void>}>(function ScreenerAnalysis({api,visible,onConditionRenamed},ref){
  const [catalog,setCatalog]=useState<AnalysisCatalog|null>(null),[view,setView]=useState<AnalysisRequest>(initialAnalysisView),[ready,setReady]=useState(false),[info,setInfo]=useState<AnalysisInfo|null>(null);
  const [loadError,setLoadError]=useState(''),[catalogError,setCatalogError]=useState(''),[saveError,setSaveError]=useState(''),[scanError,setScanError]=useState(''),[actionError,setActionError]=useState('');
  const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[resultCategory,setResultCategory]=useState(''),[selection,setSelection]=useState<AnalysisSelection|null>(null);

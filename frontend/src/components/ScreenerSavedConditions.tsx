@@ -1,13 +1,13 @@
 import {forwardRef,useEffect,useImperativeHandle,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import type {AnalysisRequest,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {AnalysisRequest,SavedAnalysisCondition,SavedConditionRename,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {analysisRequestIdentity} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
 
 export interface ScreenerSavedConditionsHandle {flush():Promise<void>}
 
 export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
- api:ScreenerAnalysisBackend;visible:boolean;disabled:boolean;canSave:boolean;request:AnalysisRequest;onLoad(request:AnalysisRequest):void;onRenamed?(condition:SavedAnalysisCondition):void;
+ api:ScreenerAnalysisBackend;visible:boolean;disabled:boolean;canSave:boolean;request:AnalysisRequest;onLoad(request:AnalysisRequest):void;onRenamed?(rename:SavedConditionRename):void|Promise<void>;
 }>(function ScreenerSavedConditions({api,visible,disabled,canSave,request,onLoad,onRenamed},ref){
  const [conditions,setConditions]=useState<SavedAnalysisCondition[]>([]),[ready,setReady]=useState(false),[listError,setListError]=useState(''),[retry,setRetry]=useState(0);
  const [open,setOpen]=useState(false),[name,setName]=useState(''),[saveError,setSaveError]=useState(''),[updateError,setUpdateError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -98,7 +98,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
    try{
     const saved=renaming?await api.RenameScreenerAnalysisCondition(renaming.id,title):await api.SaveScreenerAnalysisCondition(title,structuredClone(request));
     listEpoch.current++;
-    if(mounted.current&&renaming)onRenamed?.(saved);
+    if(mounted.current&&renaming){setConditions(current=>current.map(item=>item.id===saved.id?saved:item));await onRenamed?.({previousName:renaming.name,condition:saved});}
     if(mounted.current){if(!renaming){selectedOnce.current=true;setLoadedId(saved.id);}setConditions(current=>renaming?current.map(item=>item.id===saved.id?saved:item):[...current.filter(item=>item.id!==saved.id),saved]);setUpdateError('');setOpen(false);setNotice(`${renaming?'Renamed':'Saved'} “${saved.name}”.`);}
    }catch(error){if(mounted.current)setSaveError(errorText(error));throw error;}
    finally{flight.current=null;if(mounted.current)setBusy(false);}

@@ -45,6 +45,11 @@ export function liveAlertDefinitions(config:LiveAlertsConfig,conditions:SavedAna
  return (config.conditionIds??[]).map(id=>{const saved=conditions.find(condition=>condition.id===id),period=saved?.request.period;return{id,name:saved?.name??'Unavailable saved condition',conditionId:id,period:period==='h1'||period==='d1'||period==='w1'?period:'all',dataSource:liveAlertConditionSource(config,id),enabled:true};});
 }
 export const configWithLiveAlerts=(config:LiveAlertsConfig,alerts:LiveAlertDefinition[]):LiveAlertsConfig=>({enabled:config.enabled,alerts});
+/** Follow copied condition names while retaining independently named alerts. */
+export function renameConditionAlerts(config:LiveAlertsConfig,conditionId:string,previousName:string,name:string):LiveAlertsConfig{
+ if(previousName===name||!config.alerts?.some(entry=>entry.conditionId===conditionId&&entry.name===previousName))return config;
+ return{...config,alerts:config.alerts.map(entry=>entry.conditionId===conditionId&&entry.name===previousName?{...entry,name}:entry)};
+}
 export function defaultLiveAlertPeriod(condition:SavedAnalysisCondition|undefined):LiveAlertPeriod{const period=condition?.request.period;return period==='h1'||period==='d1'||period==='w1'?period:'h1';}
 export function liveAlertPeriodLabel(period:string):string {
  switch(period){case 'w1':return 'Weekly (W1)';case 'd1':return 'Daily (D1)';case 'h1':return 'Hourly (H1)';case '':case 'all':return 'All analyzed periods (W1 / D1 / H1)';default:return period.toUpperCase();}

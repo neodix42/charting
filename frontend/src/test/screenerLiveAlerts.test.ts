@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -86,4 +86,15 @@ it('keeps queue progress separate from previous check outcome and clamps only fi
  const previous={conditionId:'one',name:'First',assetsScanned:8,lastChecked:123,nextCheck:0,sentAlerts:2,status:'failed' as const,manual:false,error:'Previous attempt failed'};
  expect(liveAlertCheckProgress({...previous,progressState:'queued',progressMode:'manual',phase:'Waiting for turn',progress:0})).toEqual({state:'queued',phase:'Waiting for turn',value:0});expect(previous.status).toBe('failed');
  expect(liveAlertCheckProgress({...previous,progressState:'running',progress:180}).value).toBe(100);expect(liveAlertCheckProgress({...previous,progressState:'running',progress:-4}).value).toBe(0);expect(liveAlertCheckProgress({...previous,progress:NaN}).value).toBeUndefined();expect(liveAlertCheckProgress(previous)).toEqual({state:'failed',phase:'Failed',value:undefined});expect(liveAlertCheckProgress({...previous,progressState:'running',phase:'Preparing alert'})).toEqual({state:'running',phase:'Preparing alert',value:0});
+});
+
+
+it('follows renamed conditions only for exact copied alert names while preserving scope, identity and enabled state',()=>{
+ const base={id:'a',name:'Before',conditionId:'condition',period:'d1' as const,dataSource:'hyperliquid' as const,enabled:true};
+ const config={enabled:true,alerts:[base,{...base,id:'b',dataSource:'bybit' as const,enabled:false},{...base,id:'c',name:'Custom signal'},{...base,id:'d',conditionId:'other'},{...base,id:'e',name:'before'}]};
+ const next=renameConditionAlerts(config,'condition','Before','After');
+ expect(next).toEqual({...config,alerts:[{...base,name:'After'},{...config.alerts[1],name:'After'},...config.alerts.slice(2)]});
+ expect(config.alerts.map(entry=>entry.name)).toEqual(['Before','Before','Custom signal','Before','before']);
+ expect(renameConditionAlerts(next,'condition','Before','After')).toBe(next);
+ expect(renameConditionAlerts(config,'condition','Before','Before')).toBe(config);
 });

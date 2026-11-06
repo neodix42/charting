@@ -10,6 +10,7 @@ export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:bo
 export interface SavedConditionProfitability {profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
 export interface SavedConditionAnalysis {analyzedAt:number;failedFiles?:number;assets:SavedConditionProfitability[]}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest;analysis?:SavedConditionAnalysis|null}
+export interface SavedConditionRename {previousName:string;condition:SavedAnalysisCondition}
 export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
 export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
 export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}

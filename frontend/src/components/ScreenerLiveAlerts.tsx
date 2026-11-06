@@ -1,10 +1,10 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import type {Backend} from '../types';
 import {errorText} from '../types';
-import type {SavedAnalysisCondition} from '../workspace/screenerAnalysis';
+import type {SavedAnalysisCondition,SavedConditionRename} from '../workspace/screenerAnalysis';
 import {analysisDate,profitabilityLabel} from '../workspace/screenerAnalysis';
 import type {LiveAlertDefinition,LiveAlertsConfig,LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertBarClose,liveAlertPeriodLabel,liveAlertDefinitions,orderedLiveAlertChecks,configWithLiveAlerts,liveAlertSourceLabel,liveAlertErrorText,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertBarClose,liveAlertPeriodLabel,liveAlertDefinitions,orderedLiveAlertChecks,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 import './ScreenerLiveAlerts.css';
 import {LiveAlertError} from './LiveAlertError';
 import {LiveAlertCheckError} from './LiveAlertCheckError';
@@ -12,11 +12,11 @@ import {LiveAlertEditor} from './LiveAlertEditor';
 import {LiveAlertAssets} from './LiveAlertAssets';
 import {LiveAlertProgress} from './LiveAlertProgress';
 
-export interface ScreenerLiveAlertsHandle {flush():Promise<void>}
+export interface ScreenerLiveAlertsHandle {flush():Promise<void>;conditionRenamed(rename:SavedConditionRename):Promise<void>}
 const outcomeLabels={sent:'Sent',failed:'Failed',claimed:'Delivery pending',uncertain:'Delivery uncertain — it may have arrived; no automatic retry'};
 const checkLabels={never:'Not checked yet',running:'Running',completed:'Completed',failed:'Failed',cancelled:'Cancelled'};
 const preserveStopInfo=(next:LiveAlertsInfo,previous:LiveAlertsInfo|null)=>next.savedConditionsRevision===0&&!next.conditionScopes.length&&previous?{...next,conditionScopes:previous.conditionScopes,assets:previous.assets,savedConditionsRevision:previous.savedConditionsRevision}:next;
-export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend;visible:boolean;renamedCondition?:SavedAnalysisCondition}>(function ScreenerLiveAlerts({api,visible,renamedCondition},ref){
+export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend;visible:boolean;renamedCondition?:SavedConditionRename}>(function ScreenerLiveAlerts({api,visible,renamedCondition},ref){
  const [info,setInfo]=useState<LiveAlertsInfo|null>(null),[config,setConfig]=useState(initialLiveAlertsConfig),[conditions,setConditions]=useState<SavedAnalysisCondition[]>([]);
  const [editor,setEditor]=useState<{entry:LiveAlertDefinition|null}|null>(null),[stopping,setStopping]=useState(false),[checkPending,setCheckPending]=useState(false),[assets,setAssets]=useState<{id:string;origin:HTMLElement}|null>(null);
  useEffect(()=>{if(!visible)setAssets(null);},[visible]);
@@ -29,12 +29,23 @@ export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend
   if(alive.current&&session===lifetime.current){setInfo(previous=>preserveStopInfo(next,previous));setWriteError('');}
   return next;
  },error=>{if(alive.current)setWriteError(errorText(error));});
- useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();if(action.current)await action.current;}}),[]);
+ useImperativeHandle(ref,()=>({
+  flush:async()=>{await writer.current!.flush();if(action.current)await action.current;},
+  conditionRenamed:async rename=>{
+   await writer.current!.flush();if(action.current)await action.current;
+   const session=lifetime.current,loaded=initialized.current?null:await api.GetScreenerLiveAlerts();
+   if(action.current)await action.current;
+   if(!alive.current||session!==lifetime.current)return;
+   const current=initialized.current?draft.current:loaded!.config,next=renameConditionAlerts(current,rename.condition.id,rename.previousName,rename.condition.name);
+   if(next===current)return;
+   draft.current=next;setConfig(next);setNotice('');setWriteError('');writer.current!.edit(next);await writer.current!.flush();
+  },
+ }),[]);
  useEffect(()=>{alive.current=true;lifetime.current++;return()=>{alive.current=false;lifetime.current++;};},[]);
  useEffect(()=>{
   if(!renamedCondition)return;
   epoch.current++;
-  setConditions(current=>current.map(condition=>condition.id===renamedCondition.id?renamedCondition:condition));
+  setConditions(current=>current.map(condition=>condition.id===renamedCondition.condition.id?renamedCondition.condition:condition));
  },[renamedCondition]);
  useEffect(()=>{
   if(!visible)return;
