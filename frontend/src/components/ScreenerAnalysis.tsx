@@ -1,6 +1,6 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import {errorText} from '../types';
-import type {AnalysisCatalog,AnalysisInfo,AnalysisPeriod,AnalysisRequest,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
+import type {AnalysisCatalog,AnalysisInfo,AnalysisPeriod,AnalysisRequest,SavedAnalysisCondition,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisDate,analysisInputError,initialAnalysisView,newAnalysisCondition} from '../workspace/screenerAnalysis';
 import {ScreenerAnalysisCondition} from './ScreenerAnalysisCondition';
 import {ScreenerAnalysisChart,type AnalysisSelection} from './ScreenerAnalysisChart';
@@ -10,7 +10,7 @@ import './ScreenerAnalysis.css';
 
 const pageSize=10;
 export interface ScreenerAnalysisHandle {flush():Promise<void>}
-export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAnalysisBackend;visible:boolean}>(function ScreenerAnalysis({api,visible},ref){
+export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAnalysisBackend;visible:boolean;onConditionRenamed?(condition:SavedAnalysisCondition):void}>(function ScreenerAnalysis({api,visible,onConditionRenamed},ref){
  const [catalog,setCatalog]=useState<AnalysisCatalog|null>(null),[view,setView]=useState<AnalysisRequest>(initialAnalysisView),[ready,setReady]=useState(false),[info,setInfo]=useState<AnalysisInfo|null>(null);
  const [loadError,setLoadError]=useState(''),[catalogError,setCatalogError]=useState(''),[saveError,setSaveError]=useState(''),[scanError,setScanError]=useState(''),[actionError,setActionError]=useState('');
  const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[resultCategory,setResultCategory]=useState(''),[selection,setSelection]=useState<AnalysisSelection|null>(null);
@@ -118,7 +118,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
    {!!info?.totalResults&&<nav className="analysis-pagination" aria-label="Analysis file pages"><button type="button" disabled={page===0} onClick={()=>setPage(value=>value-1)}>Previous files</button><span>Files {page*pageSize+1}–{Math.min((page+1)*pageSize,info.totalResults)} of {info.totalResults}</span><button type="button" disabled={(page+1)*pageSize>=info.totalResults} onClick={()=>setPage(value=>value+1)}>Next files</button></nav>}
   </section>
   </div>
-  <ScreenerSavedConditions ref={savedConditions} api={api} visible={visible} disabled={!ready||working||busy} canSave={!invalid} request={view} onLoad={request=>{closeChart();change(request);setActionError('');}}/>
+  <ScreenerSavedConditions ref={savedConditions} api={api} visible={visible} disabled={!ready||working||busy} canSave={!invalid} request={view} onRenamed={onConditionRenamed} onLoad={request=>{closeChart();change(request);setActionError('');}}/>
   {visible&&selection&&<ScreenerAnalysisChart api={api} selection={selection} onClose={closeChart} onNavigate={navigate}/>}
  </div>;
 });

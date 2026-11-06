@@ -7,8 +7,8 @@ import {errorText} from '../types';
 export interface ScreenerSavedConditionsHandle {flush():Promise<void>}
 
 export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
- api:ScreenerAnalysisBackend;visible:boolean;disabled:boolean;canSave:boolean;request:AnalysisRequest;onLoad(request:AnalysisRequest):void;
-}>(function ScreenerSavedConditions({api,visible,disabled,canSave,request,onLoad},ref){
+ api:ScreenerAnalysisBackend;visible:boolean;disabled:boolean;canSave:boolean;request:AnalysisRequest;onLoad(request:AnalysisRequest):void;onRenamed?(condition:SavedAnalysisCondition):void;
+}>(function ScreenerSavedConditions({api,visible,disabled,canSave,request,onLoad,onRenamed},ref){
  const [conditions,setConditions]=useState<SavedAnalysisCondition[]>([]),[ready,setReady]=useState(false),[listError,setListError]=useState(''),[retry,setRetry]=useState(0);
  const [open,setOpen]=useState(false),[name,setName]=useState(''),[saveError,setSaveError]=useState(''),[updateError,setUpdateError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const [loadedId,setLoadedId]=useState<string|null>(null),selectedOnce=useRef(false);
@@ -98,6 +98,7 @@ export const ScreenerSavedConditions=forwardRef<ScreenerSavedConditionsHandle,{
    try{
     const saved=renaming?await api.RenameScreenerAnalysisCondition(renaming.id,title):await api.SaveScreenerAnalysisCondition(title,structuredClone(request));
     listEpoch.current++;
+    if(mounted.current&&renaming)onRenamed?.(saved);
     if(mounted.current){if(!renaming){selectedOnce.current=true;setLoadedId(saved.id);}setConditions(current=>renaming?current.map(item=>item.id===saved.id?saved:item):[...current.filter(item=>item.id!==saved.id),saved]);setUpdateError('');setOpen(false);setNotice(`${renaming?'Renamed':'Saved'} “${saved.name}”.`);}
    }catch(error){if(mounted.current)setSaveError(errorText(error));throw error;}
    finally{flight.current=null;if(mounted.current)setBusy(false);}

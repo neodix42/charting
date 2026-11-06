@@ -16,7 +16,7 @@ export interface ScreenerLiveAlertsHandle {flush():Promise<void>}
 const outcomeLabels={sent:'Sent',failed:'Failed',claimed:'Delivery pending',uncertain:'Delivery uncertain — it may have arrived; no automatic retry'};
 const checkLabels={never:'Not checked yet',running:'Running',completed:'Completed',failed:'Failed',cancelled:'Cancelled'};
 const preserveStopInfo=(next:LiveAlertsInfo,previous:LiveAlertsInfo|null)=>next.savedConditionsRevision===0&&!next.conditionScopes.length&&previous?{...next,conditionScopes:previous.conditionScopes,assets:previous.assets,savedConditionsRevision:previous.savedConditionsRevision}:next;
-export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend;visible:boolean}>(function ScreenerLiveAlerts({api,visible},ref){
+export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend;visible:boolean;renamedCondition?:SavedAnalysisCondition}>(function ScreenerLiveAlerts({api,visible,renamedCondition},ref){
  const [info,setInfo]=useState<LiveAlertsInfo|null>(null),[config,setConfig]=useState(initialLiveAlertsConfig),[conditions,setConditions]=useState<SavedAnalysisCondition[]>([]);
  const [editor,setEditor]=useState<{entry:LiveAlertDefinition|null}|null>(null),[stopping,setStopping]=useState(false),[checkPending,setCheckPending]=useState(false),[assets,setAssets]=useState<{id:string;origin:HTMLElement}|null>(null);
  useEffect(()=>{if(!visible)setAssets(null);},[visible]);
@@ -31,6 +31,11 @@ export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend
  },error=>{if(alive.current)setWriteError(errorText(error));});
  useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();if(action.current)await action.current;}}),[]);
  useEffect(()=>{alive.current=true;lifetime.current++;return()=>{alive.current=false;lifetime.current++;};},[]);
+ useEffect(()=>{
+  if(!renamedCondition)return;
+  epoch.current++;
+  setConditions(current=>current.map(condition=>condition.id===renamedCondition.id?renamedCondition:condition));
+ },[renamedCondition]);
  useEffect(()=>{
   if(!visible)return;
   let active=true,needConditions=true,savedRevision:number|undefined,timer:ReturnType<typeof setTimeout>|undefined;
@@ -49,7 +54,7 @@ export const ScreenerLiveAlerts=forwardRef<ScreenerLiveAlertsHandle,{api:Backend
    finally{if(active)timer=setTimeout(()=>void read(),1500);}
   };
   void read();return()=>{active=false;if(timer)clearTimeout(timer);};
- },[api,visible,retry]);
+ },[api,visible,retry,renamedCondition]);
  const change=(patch:Partial<LiveAlertsConfig>)=>{
   if(!initialized.current||action.current)return;
   const next={...draft.current,...patch};draft.current=next;setConfig(next);setNotice('');setWriteError('');writer.current!.edit(next);

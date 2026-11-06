@@ -371,7 +371,7 @@ Live Alerts settings/status and scope errors retain red disclosure icons. Check 
 
 “Loading saved conditions…” includes rereading and validating the saved JSON and its recorded Analysis matching/profitability evidence under the shared Screener lock. “Loading saved alert settings…” additionally waits for downloaded-file inventory and inherited condition scopes, then an initial saved-condition request. Both start when their panels open and can wait behind other local Screener work using that lock; large saved evidence adds parsing, validation, copying and bridge-transfer work. These are local initialization paths, independent of provider history downloading or Telegram delivery. Exact time depends on saved data and concurrent work; no per-profile performance measurement is implied.
 
-Renaming a saved condition updates its current Live Alerts rows and labels. Deleting it removes the current selection, monitored assets and check row; unrelated conditions and historical Recent alerts remain intact. Metadata refresh also handles navigation while a save/rename/delete is pending.
+Renaming a saved condition in Analysis immediately refreshes its **Saved condition** label and Assets details in Live Alerts, including when the rename finishes after leaving Analysis. The independently configured **Alert name** stays unchanged. Failed renames retain the old label. Metadata polling remains a fallback for changes made outside the Analysis screen. Deleting a saved condition removes its current alert rows, monitored assets and check rows; unrelated conditions and historical Recent alerts remain intact. Metadata refresh also handles navigation while a save/rename/delete is pending.
 
 ## Predictions
 

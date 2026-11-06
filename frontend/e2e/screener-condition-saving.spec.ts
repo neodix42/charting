@@ -64,3 +64,30 @@ test('a delayed saved-rule rename updates its condition cell while preserving th
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseLiveRename)).toBe('function');
  await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();const enabled=page.getByRole('checkbox',{name:'Enable alert Custom signal',exact:true}),row=page.getByRole('table',{name:'Configured alerts',exact:true}).getByRole('row').filter({has:enabled});await expect(enabled).toBeChecked();await expect(row.locator('td').nth(1)).toHaveText('Before rename');await page.evaluate(()=>(window as any).__releaseLiveRename());await expect(row.locator('td').nth(1)).toHaveText('After rename');await expect(row.getByRole('rowheader')).toHaveText('Custom signal');await expect(enabled).toBeChecked();await expect(page.getByRole('checkbox',{name:'Enable alert After rename',exact:true})).toHaveCount(0);await row.getByRole('button',{name:'View assets for Custom signal',exact:true}).click();await expect(page.getByRole('region',{name:'Monitored assets for Custom signal',exact:true})).toContainText('After rename');await page.getByRole('button',{name:'Close monitored assets',exact:true}).click();await expect(page.getByRole('table',{name:'Alert check history',exact:true}).getByRole('rowheader')).toHaveText(['Custom signal']);
 });
+
+test('Analysis rename refreshes Live Alerts immediately while metadata reads are delayed',async({page})=>{
+ await open(page);await create(page,'Before immediate rename');
+ const id=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0].id);
+ await page.evaluate(async id=>{await window.go!.main!.App!.ConfigureScreenerLiveAlerts({enabled:false,alerts:[{id,conditionId:id,name:'Custom watcher',period:'h1',dataSource:'dukascopy',enabled:true}]});},id);
+ await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ const row=page.getByRole('table',{name:'Configured alerts',exact:true}).getByRole('row').filter({has:page.getByRole('checkbox',{name:'Enable alert Custom watcher',exact:true})});
+ await expect(row.locator('td').nth(1)).toHaveText('Before immediate rename');
+ const writes=await page.evaluate(()=>(window as any).__testLiveAlertsWrites());
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await page.getByRole('button',{name:'Load condition Before immediate rename',exact:true}).click({button:'right'});
+ await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Rename condition',exact:true});
+ await dialog.getByRole('textbox',{name:'Condition name',exact:true}).fill('After immediate rename');
+ await page.evaluate(()=>{const api=window.go!.main!.App!,read=api.GetScreenerSavedConditions;let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});(window as any).__releaseRenameMetadata=()=>{api.GetScreenerSavedConditions=read;release();};api.GetScreenerSavedConditions=async()=>{await gate;return read();};});
+ await dialog.getByRole('button',{name:'Rename',exact:true}).click();await expect(dialog).toHaveCount(0);
+ await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ await expect(row.locator('td').nth(1)).toHaveText('After immediate rename');
+ await expect(row.getByRole('rowheader')).toHaveText('Custom watcher');
+ await row.getByRole('button',{name:'View assets for Custom watcher',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Monitored assets for Custom watcher',exact:true})).toContainText('After immediate rename');
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites())).toEqual(writes);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.enabled)).toBe(false);
+ await page.getByRole('button',{name:'Close monitored assets',exact:true}).click();
+ await page.evaluate(()=>(window as any).__releaseRenameMetadata());
+ await expect(row.locator('td').nth(1)).toHaveText('After immediate rename');
+});
