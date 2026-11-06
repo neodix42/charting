@@ -94,6 +94,21 @@ cd frontend && npm run test:e2e
 
 Both Linux and Windows builds compile our JForex bridge with Java 17 bytecode, using checksum-pinned SDK **3.6.51 / API 2.13.99** artifacts from Dukascopy's official Maven repository and Maven Central. The approximately **43 MB** SDK build cache lives under `.tools/jforex-sdk/cache`; vendor SDK JARs are excluded from release archives. Each package contains only `cryptodesk-jforex.jar`, `SDK-ARTIFACTS.json`, `JFOREX-PROVENANCE.json`, `LICENSE` and `THIRD_PARTY_NOTICES.md` inside `jforex-runtime`. Package validation checks all five files, their hashes and matching `version.json` provenance.
 
+Release builds and Tests share a persistent **verified JForex SDK cache** keyed by the checked-in artifact manifest. They reuse the last downloaded client and dependencies without contacting the vendor when all pinned files are present. A newer vendor release is not required or selected automatically: the reviewed **3.6.51 / 2.13.99** versions remain in use until an explicit upgrade. Missing pinned files are downloaded atomically; a failed download never removes a working cached file. Only manifest-listed JARs enter the build/test classpath, so retaining older downloaded files cannot mix SDK versions. The complete verified cache is saved before subsequent build/test steps, including when those later steps fail. GitHub may evict inactive Actions caches; the retained local cache is independent.
+
+If the vendor repository is unavailable and CI has no cached copy, maintainers can seed it from an existing complete local cache. The **Seed verified JForex cache** workflow imports only the exact 51 manifest-pinned files after checking both the transfer checksum and every artifact checksum. Use a temporary **draft** release for this private transfer, then delete that draft after the workflow succeeds. Vendor SDK JARs stay out of product releases and source control:
+
+```bash
+SDK_CACHE_SHA256="$(python3 scripts/jforex_cache.py --export .tools/jforex-sdk-cache.tar.gz)"
+gh release create jforex-sdk-cache-seed .tools/jforex-sdk-cache.tar.gz --draft --target main --title 'Temporary verified SDK cache' --notes 'Private transfer into the CI dependency cache; delete after import.'
+gh workflow run jforex-cache.yml -f seed_release=jforex-sdk-cache-seed -f archive_sha256="$SDK_CACHE_SHA256"
+# After the seed workflow succeeds:
+gh release delete jforex-sdk-cache-seed --yes
+```
+
+The export refuses to overwrite an existing transfer file; keep or move aside the previous transfer before repeating these commands. Keep the working `.tools/jforex-sdk/cache` directory. Ordinary builds and Tests retain read-only repository permissions; only this manually dispatched maintenance job needs write permission to read unpublished draft assets. Existing user-profile SDK files and credentials are not involved.
+
+
 Chart history timeouts retry automatically while the chart is subscribed, using delays of 2, 4, 8, 16, then at most 30 seconds between failed attempts. Live Bid quotes continue and the status shows reconciliation/retry until history finishes. Successful closed-history chunks stay loaded; retries resume from their proven checkpoint. An empty initial response retries the initial history load. Closing the chart/tab or disconnecting cancels retries. A rebuilt bridge must be installed and the app restarted to use this behavior on Linux.
 
 For source-checkout development, build with `./build.sh` and run `./scripts/install-user.sh` to install the built release, or use an already installed bridge. `python3 scripts/jforex_bundle.py --test` verifies the bridge and actual SDK bootstrap without account credentials; initial SDK downloads still need network access. To deliberately test another build in isolation, run `python3 scripts/jforex_bundle.py --output jforex-runtime` and set `CRYPTODESK_JFOREX_RUNTIME` to that complete folder's absolute path. This explicit override is independent of the Screener runtime override; normal discovery never selects a checkout's JAR.

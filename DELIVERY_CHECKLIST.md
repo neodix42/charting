@@ -2,6 +2,12 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Retained JForex dependency cache — 2026-11-06
+
+- [x] Tests and release builds restore/verify/save the same manifest-pinned SDK cache before subsequent work; valid client/dependencies are reused without vendor requests.
+- [x] Failed downloads preserve previous files. Classpaths exclude older/unlisted cached JARs; cache-transfer inventory/checksum tests and real offline bridge/bootstrap checks pass.
+- [ ] Seed the empty hosted cache from the retained verified SDK, remove its temporary draft transfer, and monitor resumed release/Tests jobs.
+
 ## Resilient Live Alerts and editable asset sets — 2026-11-06
 
 - [x] Per-asset history/warm-up/timeouts and Telegram failures retain details and allow remaining assets and later alerts to run. Completed scans reach 100% with skipped counts; actual cancellation and persistence failures remain distinct.

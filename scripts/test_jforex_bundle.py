@@ -1,6 +1,7 @@
 """Offline regressions for reviewed SDK downloads and our release-only bridge JAR."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -50,6 +51,28 @@ class JForexBundleTests(unittest.TestCase):
             fetch = mock.Mock(side_effect=AssertionError('cached SDK must not use network'))
             bundle.materialize_sdk(root, [entry(data)], fetch)
             fetch.assert_not_called()
+
+    def test_unavailable_new_download_preserves_previously_verified_client(self):
+        data = b'explicit offline test artifact'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'offline-test.jar').write_bytes(data)
+            new = dict(entry(), name='new-unavailable.jar')
+            fetch = mock.Mock(side_effect=FileNotFoundError('upstream HTTP 404'))
+            with self.assertRaises(FileNotFoundError):
+                bundle.materialize_sdk(root, [entry(data), new], fetch)
+            self.assertEqual((root / 'offline-test.jar').read_bytes(), data)
+            self.assertEqual(list(root.iterdir()), [root / 'offline-test.jar'])
+            fetch.assert_called_once()
+
+    def test_classpath_uses_manifest_versions_without_loading_older_cached_jars(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'previous-version.jar').write_bytes(b'keep older downloads')
+            paths = bundle.sdk_classpath(root).split(os.pathsep)
+            self.assertEqual([Path(path).name for path in paths], [item['name'] for item in bundle.artifacts()])
+            self.assertNotIn(str(root / 'previous-version.jar'), paths)
+            self.assertTrue((root / 'previous-version.jar').exists())
 
     def test_corrupt_cached_artifact_is_never_accepted_or_executed(self):
         with tempfile.TemporaryDirectory() as temporary:

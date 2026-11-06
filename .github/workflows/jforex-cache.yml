@@ -1,0 +1,43 @@
+name: Seed verified JForex cache
+
+# Maintenance only: import a retained, verified SDK while its vendor is offline.
+# The temporary draft release is private and removed after the cache is saved.
+on:
+  workflow_dispatch:
+    inputs:
+      seed_release:
+        description: Temporary draft release containing jforex-sdk-cache.tar.gz
+        required: true
+        type: string
+      archive_sha256:
+        description: SHA256 printed by scripts/jforex_cache.py --export
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # GitHub requires push access to read unpublished draft assets. This job
+    # never publishes a release, executes SDK code or changes repository files.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Import the retained SDK with exact manifest and archive checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEED_RELEASE: ${{ inputs.seed_release }}
+          ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+        run: |
+          gh release download "$SEED_RELEASE" --pattern jforex-sdk-cache.tar.gz --dir "$RUNNER_TEMP/jforex-seed"
+          python3 scripts/jforex_cache.py --import "$RUNNER_TEMP/jforex-seed/jforex-sdk-cache.tar.gz" --sha256 "$ARCHIVE_SHA256"
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .tools/jforex-sdk/cache
+          key: jforex-sdk-v1-${{ hashFiles('jforex-bridge/SDK-ARTIFACTS.json') }}

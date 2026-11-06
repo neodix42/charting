@@ -108,6 +108,12 @@ def java_tool(name):
     return executable
 
 
+def sdk_classpath(cache):
+    # Older downloaded versions may stay in the cache for reuse. Only the
+    # reviewed manifest's verified files participate in this build/runtime.
+    return os.pathsep.join(str(Path(cache) / entry["name"]) for entry in artifacts())
+
+
 def compile_classes(cache, destination, test=False):
     javac = java_tool("javac")
     result = subprocess.run([javac, "-version"], text=True, capture_output=True, check=True)
@@ -118,7 +124,7 @@ def compile_classes(cache, destination, test=False):
     sources = sorted((SOURCE / "src").rglob("*.java"))
     if test:
         sources += sorted((SOURCE / "test").rglob("*.java"))
-    subprocess.run([javac, "--release", "17", "-encoding", "UTF-8", "-g:source,lines", "-cp", str(cache / "*"), "-d", str(destination), *map(str, sources)], check=True)
+    subprocess.run([javac, "--release", "17", "-encoding", "UTF-8", "-g:source,lines", "-cp", sdk_classpath(cache), "-d", str(destination), *map(str, sources)], check=True)
     shutil.copyfile(SOURCE / "src/cryptodesk-log4j.properties", destination / "cryptodesk-log4j.properties")
     return version
 
@@ -243,7 +249,7 @@ def test_bridge(cache):
         root = Path(temporary); classes = root / "classes"; classes.mkdir()
         compile_classes(cache, classes, test=True)
         command = [java_tool("java"), f"-Duser.home={root}", f"-Djava.util.prefs.userRoot={root / 'preferences'}",
-                   "-Djava.awt.headless=true", "-cp", str(classes) + os.pathsep + str(cache / "*")]
+                   "-Djava.awt.headless=true", "-cp", str(classes) + os.pathsep + sdk_classpath(cache)]
         subprocess.run([*command, "cryptodesk.jforex.BridgeTest"], check=True, timeout=30, cwd=root)
         subprocess.run([*command, "cryptodesk.jforex.BridgeResponsivenessTest"], check=True, timeout=30, cwd=root)
         subprocess.run([*command, "cryptodesk.jforex.BridgeHistoryTest"], check=True, timeout=30, cwd=root)

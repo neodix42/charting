@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parent.parent
 RELEASE = (ROOT / ".github/workflows/release.yml").read_text()
 TESTS = (ROOT / ".github/workflows/tests.yml").read_text()
 PINNED_ACTIONS = {
+    "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
+    "actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830",
     "actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961",
     "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
     "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
@@ -127,6 +129,17 @@ class WorkflowPolicyTests(unittest.TestCase):
             self.assertIn("overwrite-settings: false", workflow)
         self.assertIn("python3 scripts/jforex_bundle.py --test", step(TESTS, "Verify JForex bridge and SDK bootstrap offline"))
         self.assertNotIn("jforex_bundle.py --test", RELEASE)
+
+    def test_release_and_tests_share_manifest_pinned_sdk_cache_before_work(self):
+        for workflow, command in [(RELEASE, 'run: ./build.sh'), (TESTS, './scripts/test.sh')]:
+            restore = workflow.index('name: Restore the last verified JForex SDK cache')
+            verify = workflow.index('python3 scripts/jforex_bundle.py --materialize-sdk .tools/jforex-sdk/cache')
+            save = workflow.index('name: Save verified JForex dependencies before later build or test steps')
+            self.assertLess(restore, verify)
+            self.assertLess(verify, save)
+            self.assertLess(save, workflow.index(command))
+            self.assertEqual(workflow.count("key: jforex-sdk-v1-${{ hashFiles('jforex-bridge/SDK-ARTIFACTS.json') }}"), 2)
+            self.assertNotIn('restore-keys:', workflow)
 
 
 if __name__ == "__main__":
