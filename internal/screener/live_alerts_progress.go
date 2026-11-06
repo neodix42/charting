@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"strings"
 
 	"cryptodesk/internal/exchange"
 )
@@ -95,7 +94,14 @@ func (l *LiveAlerts) finishCheckProgressLocked(id string, err error, asOf int64)
 		return
 	}
 	switch {
-	case progress.revision != l.configRevision || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
+	case progress.revision != l.configRevision:
+		progress.state, progress.phase = "cancelled", "Cancelled"
+	case completedLiveAlertScan(err):
+		progress.state, progress.phase, progress.percent = "completed", "Completed with errors", 100
+		if check, ok := l.state.Checks[id]; ok && check.Error == "" {
+			progress.phase = "Completed"
+		}
+	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
 		progress.state, progress.phase = "cancelled", "Cancelled"
 	case errors.Is(err, errLiveAlertsBusy):
 		progress.state, progress.phase = "queued", "Waiting for other Screener work"
@@ -144,8 +150,6 @@ func (l *LiveAlerts) finishQueuedProgressLocked(err error) {
 		case errors.Is(err, errLiveAlertsPendingBar) && progress.started:
 			// This row actually ran and is awaiting provider publication. Its
 			// retry state must not be mistaken for an unstarted queue entry.
-		case err != nil && strings.Contains(err.Error(), "Telegram alert for "):
-			progress.state, progress.phase = "skipped", "Skipped after delivery failure"
 		case err != nil:
 			progress.state, progress.phase = "skipped", "Check did not start"
 		default:

@@ -133,7 +133,7 @@ func resolvedLiveAlertsConfig(config LiveAlertsConfig, conditions []SavedAnalysi
 			}
 			continue
 		}
-		for pair := range savedConditionEligiblePairs(saved) {
+		for pair := range liveConditionEligiblePairs(saved) {
 			_, period, _ := strings.Cut(pair, "/")
 			if !liveAlertsScopeAllows(config, saved.ID, period) {
 				config.scope = append(config.scope, LiveAlertConditionPeriod{ConditionID: saved.ID, Period: period})
@@ -157,11 +157,16 @@ func liveConditionScope(saved SavedAnalysisCondition, assets []LiveAlertAsset) L
 	}
 	scope := LiveAlertConditionScope{ConditionID: saved.ID, Period: period, Targets: []LiveAlertTarget{}}
 	eligible := savedConditionEligiblePairs(saved)
+	selected := liveAlertSelectedAssets(saved, "dukascopy")
 	for _, asset := range assets {
 		for _, period := range asset.Periods {
 			stats, allowed := eligible[asset.Symbol+"/"+period]
 			if allowed {
-				scope.Targets = append(scope.Targets, LiveAlertTarget{Symbol: asset.Symbol, Name: asset.Name, Category: asset.Category, Period: period, Profitability: stats})
+				target := LiveAlertTarget{Symbol: asset.Symbol, Name: asset.Name, Category: asset.Category, Period: period, Profitability: stats}
+				scope.AvailableTargets = append(scope.AvailableTargets, target)
+				if selected == nil || selected[LiveAlertAssetRef{Symbol: asset.Symbol}] {
+					scope.Targets = append(scope.Targets, target)
+				}
 			}
 		}
 	}

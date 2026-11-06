@@ -73,7 +73,7 @@ func TestLiveAlertsPublicationRetryKeepsOriginalCutoffAndExpires(t *testing.T) {
 				if sends.Load() != 1 || info.Sent != 1 || info.Error != "" {
 					t.Fatalf("published closed bar not delivered once: %+v sends=%d", info, sends.Load())
 				}
-			} else if sends.Load() != 0 || info.Error == "" || info.Status != "Check stopped" {
+			} else if sends.Load() != 0 || info.Error == "" || info.Status != "Check completed with errors; waiting for next closed bar" {
 				t.Fatalf("unavailable bar did not stop with visible status: %+v sends=%d", info, sends.Load())
 			}
 			// Same time cannot trigger another automatic cycle.

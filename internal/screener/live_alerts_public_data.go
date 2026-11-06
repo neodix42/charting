@@ -24,10 +24,11 @@ import (
 )
 
 type publicAlertAsset struct {
-	Symbol   string `json:"symbol"`
-	NativeID string `json:"nativeId"`
-	Market   string `json:"market"`
-	Name     string `json:"name"`
+	Symbol      string `json:"symbol"`
+	NativeID    string `json:"nativeId"`
+	Market      string `json:"market"`
+	Name        string `json:"name"`
+	Unavailable string `json:"unavailable,omitempty"`
 }
 
 type publicAlertBatch struct {
@@ -249,10 +250,14 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 			return batch, err
 		}
 	}
+	selected := publicAlertSelectedAssets(conditions, source)
 	seen := map[string]bool{}
 	for _, item := range items {
 		status := strings.ToLower(item.Availability)
 		if (item.Market != "spot" && item.Market != "perpetual") || (status != "available" && status != "trading" && status != "online") {
+			continue
+		}
+		if selected != nil && !selected[LiveAlertAssetRef{Market: item.Market, Symbol: item.NativeID}] {
 			continue
 		}
 		symbol := publicAlertSymbol(item.Market, item.NativeID)
@@ -270,6 +275,14 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		}
 		if warning := item.ProviderMetadata["catalogWarning"]; warning != "" {
 			batch.Failures["catalog"] = errors.New(warning)
+		}
+	}
+	if selected != nil {
+		for asset := range selected {
+			symbol := publicAlertSymbol(asset.Market, asset.Symbol)
+			if !seen[symbol] {
+				batch.Assets = append(batch.Assets, publicAlertAsset{Symbol: symbol, NativeID: asset.Symbol, Market: asset.Market, Name: asset.Symbol, Unavailable: "selected market is not in the source's active catalog"})
+			}
 		}
 	}
 	if len(batch.Assets) == 0 {
@@ -291,6 +304,12 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		return exchange.TimeframeSeconds(publicAlertIntervals[orderedPeriods[i]]) > exchange.TimeframeSeconds(publicAlertIntervals[orderedPeriods[j]])
 	})
 	for i, asset := range batch.Assets {
+		if asset.Unavailable != "" {
+			for _, period := range orderedPeriods {
+				batch.Failures[asset.Symbol+"/"+period] = fmt.Errorf("%s %s %s: %s", asset.NativeID, asset.Market, period, asset.Unavailable)
+			}
+			continue
+		}
 		for periodIndex, period := range orderedPeriods {
 			if err = ctx.Err(); err != nil {
 				return batch, err
@@ -302,11 +321,10 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 			name, e := preparePublicAlertSeries(ctx, a, worker, root, batch.Directory, source, asset, period, plans[period], asOf)
 			if e != nil {
 				batch.Failures[pair] = fmt.Errorf("%s %s %s: %w", asset.NativeID, asset.Market, period, e)
-				if errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
-					return batch, e
+				if ctx.Err() != nil {
+					return batch, ctx.Err()
 				}
-				switch exchange.ErrorKind(e) {
-				case "restricted", "rateLimited", "auth", "unauthorized", "authentication":
+				if publicAlertProviderRefused(e) {
 					return batch, e
 				}
 				continue

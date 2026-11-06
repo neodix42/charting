@@ -19,6 +19,10 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 	if err != nil {
 		return err
 	}
+	allowedAssets := map[string]map[LiveAlertAssetRef]bool{}
+	for _, saved := range conditions {
+		allowedAssets[saved.ID] = liveAlertSelectedAssets(saved, source)
+	}
 	periods := map[string][]string{}
 	selected := []SavedAnalysisCondition{}
 	for _, saved := range conditions {
@@ -131,6 +135,9 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 			series[pair] = s
 		}
 		for _, saved := range conditions {
+			if allowed := allowedAssets[saved.ID]; allowed != nil && !allowed[LiveAlertAssetRef{Market: asset.Market, Symbol: asset.NativeID}] {
+				continue
+			}
 			for _, period := range periods[saved.ID] {
 				pair := asset.Symbol + "/" + period
 				run.expectPair(saved.ID, asset.Symbol, period)
@@ -144,7 +151,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 				}
 				if failure != nil {
 					e := fmt.Errorf("%s %s %s, %s: %w", source, asset.NativeID, period, saved.Name, failure)
-					run.failed(saved.ID, e)
+					run.skipped(saved.ID, asset.Symbol, e)
 					failures = append(failures, e)
 					continue
 				}
@@ -203,7 +210,10 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 									if alert != nil {
 										if e = l.deliver(ctx, *alert); e != nil {
 											run.failed(saved.ID, e)
-											return joinLiveAlertErrors(append(failures, e)...)
+											if !recoverableLiveAlertDelivery(ctx, e) {
+												return joinLiveAlertErrors(append(failures, e)...)
+											}
+											failures = append(failures, e)
 										}
 									}
 									run.processedPair(saved.ID, asset.Symbol, period)
@@ -214,7 +224,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 				}
 				if failure != nil {
 					e := fmt.Errorf("%s %s %s, %s: %w", source, asset.NativeID, period, saved.Name, failure)
-					run.failed(saved.ID, e)
+					run.skipped(saved.ID, asset.Symbol, e)
 					failures = append(failures, e)
 				}
 			}
@@ -228,10 +238,10 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 		}
 		l.mu.Unlock()
 		if err != nil {
-			return fmt.Errorf("save processed public bars: %w", err)
+			return &liveAlertPersistenceError{fmt.Errorf("save processed public bars: %w", err)}
 		}
 	}
-	return joinLiveAlertErrors(failures...)
+	return finishedLiveAlertScan(failures...)
 }
 
 func (l *LiveAlerts) claimCurrentPublicCondition(ctx context.Context, evaluated SavedAnalysisCondition, source, key string, timestamp int64, alert *LiveAlert) (bool, error) {

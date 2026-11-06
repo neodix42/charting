@@ -27,7 +27,7 @@ func liveAlertRequiredFields(config LiveAlertsConfig, conditions []SavedAnalysis
 		sets[pair][field] = true
 	}
 	for _, saved := range conditions {
-		for pair := range savedConditionEligiblePairs(saved) {
+		for pair := range liveConditionEligiblePairs(saved) {
 			symbol, period, _ := strings.Cut(pair, "/")
 			if !liveAlertsScopeAllows(config, saved.ID, period) {
 				continue

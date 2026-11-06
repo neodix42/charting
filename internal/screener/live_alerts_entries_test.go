@@ -200,8 +200,8 @@ func TestNamedLiveAlertsMigrateV5EnabledAndPausedHistoryWithoutRewrite(t *testin
 	if err = readState(l.path, liveAlertsStateBytes, &persisted); err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Version != 6 || len(persisted.Config.Alerts) != 2 || len(persisted.Watermarks) != 2 {
-		t.Fatal("version6 save lost named rows or claims")
+	if persisted.Version != 7 || len(persisted.Config.Alerts) != 2 || len(persisted.Watermarks) != 2 {
+		t.Fatal("version7 save lost named rows or claims")
 	}
 }
 

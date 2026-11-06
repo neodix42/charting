@@ -52,6 +52,7 @@ type LiveAlertTarget struct {
 }
 
 type LiveAlertConditionScope struct {
+	AvailableTargets []LiveAlertTarget `json:"availableTargets,omitempty"`
 	AlertID          string            `json:"alertId,omitempty"`
 	SavedConditionID string            `json:"savedConditionId,omitempty"`
 	ConditionID      string            `json:"conditionId"`
@@ -180,7 +181,7 @@ type LiveAlerts struct {
 }
 
 func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error) (*LiveAlerts, error) {
-	l := &LiveAlerts{manager: manager, path: filepath.Join(manager.profile, "screener-live-alerts.json"), send: send, wake: make(chan struct{}, 1), status: "Disabled", now: time.Now, state: liveAlertsState{Version: 6, Config: LiveAlertsConfig{ConditionIDs: []string{}}, Watermarks: map[string]int64{}, Recent: []LiveAlertOutcome{}}}
+	l := &LiveAlerts{manager: manager, path: filepath.Join(manager.profile, "screener-live-alerts.json"), send: send, wake: make(chan struct{}, 1), status: "Disabled", now: time.Now, state: liveAlertsState{Version: 7, Config: LiveAlertsConfig{ConditionIDs: []string{}}, Watermarks: map[string]int64{}, Recent: []LiveAlertOutcome{}}}
 	st, err := os.Lstat(l.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return l, nil
@@ -200,7 +201,7 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 	}
 	legacyEnabled := l.state.Version < 3 && l.state.Config.Enabled
 	l.state.Config = canonicalLiveAlertsConfig(l.state.Config)
-	l.state.Version = 6
+	l.state.Version = 7
 	if legacyEnabled {
 		l.state.Config.Enabled = false
 		l.errorText = "Live Alerts now inherits each saved condition's analyzed assets and periods. Review the inherited scope and start alerts again. Previous delivery history is preserved."
@@ -241,6 +242,9 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 func copyLiveAlertsConfig(config LiveAlertsConfig) LiveAlertsConfig {
 	if config.Alerts != nil {
 		config.Alerts = append([]LiveAlertDefinition{}, config.Alerts...)
+		for i := range config.Alerts {
+			config.Alerts[i] = copyLiveAlertDefinition(config.Alerts[i])
+		}
 	}
 	config.ConditionIDs = append([]string{}, config.ConditionIDs...)
 	config.ConditionSources = append([]LiveAlertConditionSource(nil), config.ConditionSources...)
@@ -341,7 +345,7 @@ func validateLiveAlertsConfig(config LiveAlertsConfig) error {
 }
 
 func validateLiveAlertsState(state liveAlertsState) error {
-	if (state.Version < 1 || state.Version > 6) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*max(len(catalogAssets), 20000)*3 {
+	if (state.Version < 1 || state.Version > 7) || state.Sent < 0 || len(state.Recent) > 50 || len(state.Watermarks) > savedConditionsLimit*max(len(catalogAssets), 20000)*3 {
 		return errors.New("invalid Live Alerts state version or count")
 	}
 	validationConfig := state.Config
@@ -951,6 +955,9 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				l.status, l.nextRun = "Disabled", 0
 			} else if err != nil {
 				l.errorText, l.status = checkHistoryMessage(err), "Check stopped"
+				if completedLiveAlertScan(err) {
+					l.progress, l.status = 100, "Check completed with errors; waiting for next closed bar"
+				}
 				if errors.Is(err, errLiveAlertsBusy) || (errors.Is(err, errLiveAlertsPendingBar) && l.now().Sub(time.UnixMilli(asOf)) < liveAlertPublicationWindow) {
 					retry := copyLiveAlertsConfig(config)
 					l.retryConfig, l.retryAsOf, l.retryManual = &retry, asOf, manual

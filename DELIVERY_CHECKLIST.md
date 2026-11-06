@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Resilient Live Alerts and editable asset sets — 2026-11-06
+
+- [x] Per-asset history/warm-up/timeouts and Telegram failures retain details and allow remaining assets and later alerts to run. Completed scans reach 100% with skipped counts; actual cancellation and persistence failures remain distinct.
+- [x] Assets dialog stages per-source selections until Save; defaults/migration retain all eligible assets, native market identities and required companion histories. Existing enabled rows, counters, claims and restart behavior are covered by isolated regressions.
+- [x] Worker stages and provider waits are forwarded to row progress outside the manager lock. Scan errors no longer create a title-level error box.
+- [x] Full Go race suite, production-tagged app race tests, vet, generated bindings, typecheck/lint, 228 frontend unit tests, 31 related browser cases and Linux build/archive/checksums pass. Artifacts are rebuilt from the submitted commit; hosted jobs are monitored after submission.
+- [ ] Native desktop interaction, Windows execution and real provider/Telegram delivery timing were not exercised. Actual-profile investigation was read-only.
+
 ## Sequential alert checks and row progress — 2026-11-06
 
 - [x] Check history has per-alert Progress with phase, current asset, percentage and manual/scheduled mode; the aggregate running-progress block is removed.

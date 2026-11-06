@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -32,7 +33,13 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	l.mu.Unlock()
 	defer func() {
 		l.mu.Lock()
-		l.finishQueuedProgressLocked(cycleErr)
+		finishErr := cycleErr
+		if ctx.Err() != nil {
+			finishErr = ctx.Err()
+		} else if errors.Is(cycleErr, errLiveAlertsBusy) {
+			finishErr = errLiveAlertsBusy
+		}
+		l.finishQueuedProgressLocked(finishErr)
 		l.activeProgressID = ""
 		l.checkExecuting = false
 		l.mu.Unlock()
@@ -52,7 +59,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			periods := savedLiveAlertPeriods(saved)
 			if liveAlertSource(config, saved.ID) == "dukascopy" {
 				periods = nil
-				for pair := range savedConditionEligiblePairs(saved) {
+				for pair := range liveConditionEligiblePairs(saved) {
 					_, period, _ := strings.Cut(pair, "/")
 					periods = append(periods, period)
 				}
@@ -73,20 +80,11 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	l.queueCheckProgressLocked(ids, !scheduled)
 	l.mu.Unlock()
 	var failures []error
-	refused := map[string]error{}
 	for _, saved := range selected {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(errors.Join(failures...), err)
 		}
 		source := liveAlertSource(config, saved.ID)
-		if failure := refused[source]; failure != nil {
-			l.mu.Lock()
-			progress := l.checkProgress[saved.ID]
-			progress.state, progress.phase = "skipped", "Skipped after provider refusal"
-			l.checkProgress[saved.ID] = progress
-			l.mu.Unlock()
-			continue
-		}
 		subset := copyLiveAlertsConfig(config)
 		subset.ConditionIDs = []string{saved.ID}
 		if config.scope != nil {
@@ -111,10 +109,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		l.mu.Unlock()
 		if err != nil {
 			failures = append(failures, err)
-			if publicAlertProviderRefused(err) || (source == "dukascopy" && liveAlertProviderStopped(ctx, err)) {
-				refused[source] = err
-			}
-			if ctx.Err() != nil || errors.Is(err, errLiveAlertsBusy) || strings.Contains(err.Error(), "Telegram alert for ") {
+			if ctx.Err() != nil || errors.Is(err, errLiveAlertsBusy) || fatalLiveAlertPersistence(err) {
 				break
 			}
 		}
@@ -147,7 +142,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		seen := map[string]bool{}
 		for _, saved := range conditions {
 			found := false
-			for pair := range savedConditionEligiblePairs(saved) {
+			for pair := range liveConditionEligiblePairs(saved) {
 				_, period, _ := strings.Cut(pair, "/")
 				if !liveAlertsScopeAllows(config, saved.ID, period) || !liveAlertConditionDueAt(saved, period, time.UnixMilli(asOf)) {
 					continue
@@ -171,7 +166,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 	qualified := make(map[string]map[string]*SavedConditionProfitability, len(conditions))
 	basePairs := map[string]bool{}
 	for _, saved := range conditions {
-		qualified[saved.ID] = savedConditionEligiblePairs(saved)
+		qualified[saved.ID] = liveConditionEligiblePairs(saved)
 		for pair := range qualified[saved.ID] {
 			_, period, _ := strings.Cut(pair, "/")
 			if liveAlertsScopeAllows(config, saved.ID, period) {
@@ -220,7 +215,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 	failPair := func(symbol, period string, failure error) {
 		for _, saved := range conditions {
 			if _, allowed := qualified[saved.ID][symbol+"/"+period]; allowed && liveAlertsScopeAllows(config, saved.ID, period) {
-				run.failed(saved.ID, failure)
+				run.skipped(saved.ID, symbol, failure)
 			}
 		}
 	}
@@ -273,11 +268,11 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			}
 		}
 	}
-	if refreshErr != nil && len(refreshed) == 0 {
-		return refreshErr
-	}
 	if err = ctx.Err(); err != nil {
 		return err
+	}
+	if refreshErr != nil && len(refreshed) == 0 {
+		return finishedLiveAlertScan(refreshErr)
 	}
 	work, err := os.MkdirTemp(m.profile, ".screener-live-analysis-*")
 	if err != nil {
@@ -377,7 +372,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			matched, e := evaluateLiveAlertLatest(ctx, a, s, closed)
 			if e != nil {
 				failures = append(failures, fmt.Errorf("%s %s, %s: %w", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, saved.Name, e))
-				run.failed(saved.ID, e)
+				run.skipped(saved.ID, s.metadata.Symbol, e)
 				run.processedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
 				continue
 			}
@@ -407,9 +402,10 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			if alert != nil {
 				if e = l.deliver(ctx, *alert); e != nil {
 					run.failed(saved.ID, e)
-					// Stop after the first failed signal delivery, preserving
-					// unattempted signals and the existing recipient fan-out.
-					return errors.Join(append(failures, e)...)
+					if !recoverableLiveAlertDelivery(ctx, e) {
+						return errors.Join(append(failures, e)...)
+					}
+					failures = append(failures, e)
 				}
 			}
 			run.processedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
@@ -425,10 +421,10 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		}
 		l.mu.Unlock()
 		if err != nil {
-			return fmt.Errorf("save processed Live Alerts bars: %w", err)
+			return &liveAlertPersistenceError{fmt.Errorf("save processed Live Alerts bars: %w", err)}
 		}
 	}
-	return errors.Join(failures...)
+	return finishedLiveAlertScan(failures...)
 }
 
 // A saved rule can be updated while a slow refresh is in flight. Serialize its
@@ -471,7 +467,7 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 	// condition cannot widen another condition's profitability or period scope.
 	pairs := map[string]bool{}
 	for _, saved := range conditions {
-		eligible := savedConditionEligiblePairs(saved)
+		eligible := liveConditionEligiblePairs(saved)
 		found := false
 		for _, name := range names {
 			match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
@@ -566,6 +562,9 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 				m.mu.Lock()
 				m.refreshJobs[i].Message = message
 				m.mu.Unlock()
+				l.mu.Lock()
+				l.updateCheckProgressLocked(message, 70*float64(i)/float64(max(1, len(groups))), job.Name)
+				l.mu.Unlock()
 			})
 		}
 		if err == nil {
@@ -573,7 +572,15 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 			if match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name)); match != nil {
 				pair = match[1] + "/" + match[2]
 			}
-			err = m.refreshFileRequired(ctx, i, directory, job, legacy[job.Name], asOf, required[pair])
+			err = m.refreshFileRequiredProgress(ctx, i, directory, job, legacy[job.Name], asOf, required[pair], func(percent float64, message string) {
+				l.mu.Lock()
+				defer l.mu.Unlock()
+				phase := message
+				if phase == "" {
+					phase = "Refreshing closed history and indicators"
+				}
+				l.updateCheckProgressLocked(fmt.Sprintf("%s · asset %d of %d", phase, i+1, len(groups)), 70*(float64(i)+math.Max(0, math.Min(100, percent))/100)/float64(max(1, len(groups))), job.Name)
+			})
 		}
 		if err != nil {
 			m.mu.Lock()
@@ -742,7 +749,7 @@ func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionI
 			delete(l.state.Watermarks, key)
 		}
 		l.state.Recent = priorRecent
-		return fmt.Errorf("record processed Live Alerts bar: %w", err)
+		return &liveAlertPersistenceError{fmt.Errorf("record processed Live Alerts bar: %w", err)}
 	}
 	l.watermarksDirty = false
 	return nil
@@ -778,11 +785,11 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 		}
 	}
 	if saveErr := writeState(l.path, l.state); saveErr != nil {
-		return fmt.Errorf("record Live Alerts delivery result (the saved delivery claim prevents a duplicate): %w", saveErr)
+		return &liveAlertPersistenceError{fmt.Errorf("record Live Alerts delivery result (the saved delivery claim prevents a duplicate): %w", saveErr)}
 	}
 	l.watermarksDirty = false
 	if err != nil {
-		return fmt.Errorf("Telegram alert for %s, %s: %w", strings.ToUpper(alert.Symbol), alert.ConditionName, err)
+		return &liveAlertDeliveryIssue{fmt.Errorf("Telegram alert for %s, %s: %w", strings.ToUpper(alert.Symbol), alert.ConditionName, err)}
 	}
 	return nil
 }

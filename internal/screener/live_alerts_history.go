@@ -23,6 +23,7 @@ type LiveAlertCheck struct {
 	ConditionID      string  `json:"conditionId"`
 	Name             string  `json:"name"`
 	AssetsScanned    int     `json:"assetsScanned"`
+	AssetsSkipped    int     `json:"assetsSkipped,omitempty"`
 	LastChecked      int64   `json:"lastChecked"`
 	NextCheck        int64   `json:"nextCheck"`
 	SentAlerts       int64   `json:"sentAlerts"`
@@ -34,6 +35,7 @@ type LiveAlertCheck struct {
 
 type liveAlertCheckState struct {
 	AssetsScanned int    `json:"assetsScanned"`
+	AssetsSkipped int    `json:"assetsSkipped,omitempty"`
 	LastChecked   int64  `json:"lastChecked"`
 	SentAlerts    int64  `json:"sentAlerts"`
 	Status        string `json:"status"`
@@ -44,6 +46,7 @@ type liveAlertCheckState struct {
 type liveAlertCheckRun struct {
 	live           *LiveAlerts
 	scannedSymbols map[string]map[string]bool
+	skippedSymbols map[string]map[string]bool
 	expectedPairs  map[string]map[string]bool
 	processedPairs map[string]map[string]bool
 	failures       map[string]error
@@ -67,7 +70,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 		if err := validateLiveAlertsConfig(LiveAlertsConfig{ConditionIDs: []string{id}}); err != nil {
 			return err
 		}
-		if record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
+		if record.AssetsSkipped < 0 || record.AssetsSkipped > 20000 || record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
 			return errors.New("invalid Live Alerts condition check counts or timestamp")
 		}
 		switch record.Status {
@@ -84,7 +87,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 }
 
 func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*liveAlertCheckRun, error) {
-	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}}
+	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, skippedSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.blocked || l.closed {
@@ -99,6 +102,7 @@ func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*l
 			continue
 		}
 		run.scannedSymbols[id] = map[string]bool{}
+		run.skippedSymbols[id] = map[string]bool{}
 		run.expectedPairs[id] = map[string]bool{}
 		run.processedPairs[id] = map[string]bool{}
 		prior := l.state.Checks[id]
@@ -109,7 +113,7 @@ func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*l
 	}
 	if err := writeState(l.path, l.state); err != nil {
 		l.state.Checks = previous
-		return nil, fmt.Errorf("record Live Alerts check start: %w", err)
+		return nil, &liveAlertPersistenceError{fmt.Errorf("record Live Alerts check start: %w", err)}
 	}
 	for id := range run.scannedSymbols {
 		if progress, ok := l.checkProgress[id]; ok {
@@ -159,6 +163,24 @@ func (r *liveAlertCheckRun) scanned(conditionID, symbol string) {
 	if state, exists := r.live.state.Checks[conditionID]; exists {
 		state.AssetsScanned = len(symbols)
 		r.live.state.Checks[conditionID] = state
+	}
+}
+
+func (r *liveAlertCheckRun) skipped(id, symbol string, err error) {
+	if r == nil {
+		return
+	}
+	r.failed(id, err)
+	r.live.mu.Lock()
+	defer r.live.mu.Unlock()
+	if r.finished {
+		return
+	}
+	if symbols, known := r.skippedSymbols[id]; known {
+		symbols[symbol] = true
+		state := r.live.state.Checks[id]
+		state.AssetsSkipped = len(symbols)
+		r.live.state.Checks[id] = state
 	}
 }
 
@@ -248,9 +270,21 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 			continue
 		} // A deleted condition cannot be restored by a late cycle.
 		state.AssetsScanned = len(symbols)
+		state.AssetsSkipped = len(r.skippedSymbols[id])
 		state.LastChecked = l.now().UTC().UnixMilli()
 		state.Status, state.Error = "completed", ""
-		if errors.Is(cycleErr, context.Canceled) || errors.Is(cycleErr, context.DeadlineExceeded) {
+		if completedLiveAlertScan(cycleErr) {
+			state.Error = checkHistoryMessage(r.failures[id])
+			if state.Error == "" {
+				complete := len(r.expectedPairs[id]) > 0
+				for pair := range r.expectedPairs[id] {
+					complete = complete && r.processedPairs[id][pair]
+				}
+				if !complete {
+					state.Error = checkHistoryMessage(cycleErr)
+				}
+			}
+		} else if errors.Is(cycleErr, context.Canceled) || errors.Is(cycleErr, context.DeadlineExceeded) {
 			state.Status, state.Error = "cancelled", checkHistoryMessage(cycleErr)
 		} else if failure := r.failures[id]; failure != nil {
 			state.Status, state.Error = "failed", checkHistoryMessage(failure)
@@ -273,7 +307,7 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 		return nil
 	}
 	if err := writeState(l.path, l.state); err != nil {
-		return fmt.Errorf("save Live Alerts check history: %w", err)
+		return &liveAlertPersistenceError{fmt.Errorf("save Live Alerts check history: %w", err)}
 	}
 	return nil
 }
@@ -297,7 +331,7 @@ func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertCondit
 			continue
 		}
 		state, checked := states[condition.ID]
-		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
 		if named {
 			row.AlertID, row.SavedConditionID = entry.ID, entry.ConditionID
 		}

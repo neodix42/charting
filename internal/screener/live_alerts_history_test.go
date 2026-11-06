@@ -233,7 +233,7 @@ func TestLiveAlertsRetryHistoryHintDescribesRetryInsteadOfNextWeeklyClose(t *tes
 	}
 }
 
-func TestLiveAlertsSequentialDeliveryAbortPreservesCompletedRowsAndFailsCurrent(t *testing.T) {
+func TestLiveAlertsSequentialDeliveryFailurePreservesPeersAndCompletesRemainingAssets(t *testing.T) {
 	m, l, config, path := liveAlertsFixture(t)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -270,7 +270,7 @@ func TestLiveAlertsSequentialDeliveryAbortPreservesCompletedRowsAndFailsCurrent(
 		t.Fatal("fixture delivery did not abort", err)
 	}
 	rows := l.Info().Checks
-	if calls != 3 || rows[0].Status != "completed" || rows[0].AssetsScanned != 2 || rows[0].SentAlerts != 2 || rows[0].ProgressState != "completed" || rows[0].Progress != 100 || rows[1].Status != "failed" || rows[1].AssetsScanned != 1 || rows[1].SentAlerts != 0 || rows[1].ProgressState != "failed" || rows[1].Progress >= 100 || l.Info().Sent != 2 {
+	if calls != 4 || rows[0].Status != "completed" || rows[0].AssetsScanned != 2 || rows[0].SentAlerts != 2 || rows[0].ProgressState != "completed" || rows[0].Progress != 100 || rows[1].Status != "completed" || rows[1].Error == "" || rows[1].AssetsScanned != 2 || rows[1].SentAlerts != 1 || rows[1].ProgressState != "completed" || rows[1].Progress != 100 || l.Info().Sent != 3 {
 		t.Fatal("sequential delivery failure changed a completed peer or inflated confirmed sends", rows, calls)
 	}
 }
@@ -308,7 +308,7 @@ func TestLiveAlertsActualDedupVisitCompletesDespiteOtherAssetRefreshFailure(t *t
 		t.Fatal("fixture refresh did not fail", err)
 	}
 	rows := l.Info().Checks
-	if rows[0].Status != "completed" || rows[0].AssetsScanned != 0 || rows[0].Error != "" || rows[1].Status != "failed" || rows[1].AssetsScanned != 0 {
+	if rows[0].Status != "completed" || rows[0].AssetsScanned != 0 || rows[0].Error != "" || rows[1].Status != "completed" || rows[1].AssetsSkipped != 1 || rows[1].Error == "" || rows[1].AssetsScanned != 0 {
 		t.Fatal("real dedup visit inherited the unrelated refresh failure", rows)
 	}
 }

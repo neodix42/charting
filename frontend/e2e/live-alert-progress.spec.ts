@@ -7,6 +7,24 @@ const history=(page:Page)=>page.getByRole('table',{name:'Alert check history',ex
 const row=(page:Page,name:string)=>history(page).locator('tbody tr').filter({has:page.getByRole('rowheader',{name,exact:true})});
 const progress=(page:Page,name:string)=>row(page,name).getByRole('cell').first();
 
+test('finished scans with skipped assets reach 100 percent and show errors only in the row details',async({page})=>{
+ await openProgressApp(page);
+ const message='xyz:RELIANCE needs 28 closed bars; provider has 10\nTelegram delivery: 1 of 2 recipients confirmed; recipientNotFound';
+ await page.evaluate(({message,currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:true,progress:100,progressState:'completed',phase:index===0?'Completed with errors':'Completed',assetsSkipped:index===0?1:0,error:index===0?message:''}));
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,error:message,status:'Waiting for next closed bar'});
+ },{message,currentClose});
+ await expect(progress(page,names[0])).toContainText('100%');await expect(progress(page,names[0])).toContainText('1 asset skipped');
+ await expect(progress(page,names[1])).toContainText('100%');
+ await expect(page.locator('.live-alerts > [role="alert"]')).toHaveCount(0);
+ await expect(page.locator('.live-alerts-configuration-error')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
+ await row(page,names[0]).getByRole('button',{name:'Manual · Completed with errors',exact:true}).click();
+ const details=page.getByRole('dialog',{name:`Check for ${names[0]}`,exact:true});
+ await expect(details).toContainText('xyz:RELIANCE needs 28');await expect(details).toContainText('recipientNotFound');
+ await page.keyboard.press('Escape');await expect(details).toHaveCount(0);
+});
+
 async function openProgressApp(page:Page){
  await openTestApp(page);
  await page.evaluate(async({names,previousClose})=>{

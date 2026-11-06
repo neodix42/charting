@@ -67,7 +67,26 @@ func liveConditionScopeForConfig(saved SavedAnalysisCondition, assets []LiveAler
 	if period == "" {
 		period = "all"
 	}
-	return LiveAlertConditionScope{ConditionID: saved.ID, Period: period, DataSource: source, AllAssets: true, Targets: []LiveAlertTarget{}}
+	scope := LiveAlertConditionScope{ConditionID: saved.ID, Period: period, DataSource: source, AllAssets: true, Targets: []LiveAlertTarget{}}
+	if selected := liveAlertSelectedAssets(saved, source); selected != nil {
+		scope.AllAssets = false
+		for asset := range selected {
+			for _, basePeriod := range savedLiveAlertPeriods(saved) {
+				scope.Targets = append(scope.Targets, LiveAlertTarget{Symbol: asset.Symbol, Name: asset.Symbol, Category: asset.Market, Period: basePeriod})
+			}
+		}
+		sort.Slice(scope.Targets, func(i, j int) bool {
+			a, b := scope.Targets[i], scope.Targets[j]
+			if a.Symbol != b.Symbol {
+				return a.Symbol < b.Symbol
+			}
+			if a.Category != b.Category {
+				return a.Category < b.Category
+			}
+			return a.Period < b.Period
+		})
+	}
+	return scope
 }
 
 var publicLiveAlias = regexp.MustCompile(`^(spot|perpetual)[a-f0-9]{64}$`)

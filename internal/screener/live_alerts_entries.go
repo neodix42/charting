@@ -11,12 +11,13 @@ import (
 // A definition owns its identity independently of its reusable saved condition.
 // Keeping the ID stable across pause/resume and edits preserves delivery claims.
 type LiveAlertDefinition struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	ConditionID string `json:"conditionId"`
-	Period      string `json:"period"`
-	DataSource  string `json:"dataSource"`
-	Enabled     bool   `json:"enabled"`
+	ID              string                    `json:"id"`
+	Name            string                    `json:"name"`
+	ConditionID     string                    `json:"conditionId"`
+	Period          string                    `json:"period"`
+	DataSource      string                    `json:"dataSource"`
+	Enabled         bool                      `json:"enabled"`
+	AssetSelections []LiveAlertAssetSelection `json:"assetSelections,omitempty"`
 }
 
 func liveAlertEntry(config LiveAlertsConfig, id string) (LiveAlertDefinition, bool) {
@@ -37,6 +38,7 @@ func validateLiveAlertEntries(entries []LiveAlertDefinition) error {
 		return errors.New("at most 100 named Live Alerts may be saved")
 	}
 	seen := map[string]bool{}
+	selectedAssets := 0
 	for _, entry := range entries {
 		if !validLiveAlertID(entry.ID) || !validLiveAlertID(entry.ConditionID) || seen[entry.ID] {
 			return errors.New("invalid or duplicate Live Alert identity")
@@ -49,6 +51,14 @@ func validateLiveAlertEntries(entries []LiveAlertDefinition) error {
 		}
 		if entry.DataSource != "dukascopy" && !supportedPublicAlertSource(entry.DataSource) {
 			return errors.New("unsupported Live Alert data source")
+		}
+		count, err := validateLiveAlertAssetSelections(entry.AssetSelections)
+		if err != nil {
+			return err
+		}
+		selectedAssets += count
+		if selectedAssets > 100000 {
+			return errors.New("too many custom selected Live Alerts assets")
 		}
 		seen[entry.ID] = true
 	}
@@ -133,7 +143,7 @@ func materializeLiveAlertConditions(saved []SavedAnalysisCondition, config LiveA
 		condition.ID, condition.Name = entry.ID, entry.Name
 		condition.Request = copyAnalysisRequest(condition.Request)
 		condition.Request.Period = entry.Period
-		definition := entry
+		definition := copyLiveAlertDefinition(entry)
 		condition.liveAlertDefinition, condition.liveSavedConditionName = &definition, originalName
 		out = append(out, condition)
 	}
@@ -157,7 +167,7 @@ func (l *LiveAlerts) currentLiveAlertConditions(saved []SavedAnalysisCondition, 
 	config := canonicalLiveAlertsConfig(l.state.Config)
 	if evaluated.liveAlertDefinition != nil {
 		entry, found := liveAlertEntry(config, evaluated.ID)
-		if !found || entry != *evaluated.liveAlertDefinition || !entry.Enabled {
+		if !found || !reflect.DeepEqual(entry, *evaluated.liveAlertDefinition) || !entry.Enabled {
 			return nil, 0, false
 		}
 	}

@@ -31,7 +31,7 @@ func TestLiveAlertRowProgressKeepsPendingPublicationRetryAndThenCompletes(t *tes
 		t.Fatalf("missing closed candle was not retryable: %v", err)
 	}
 	row := sequentialCheckRow(t, l, entry.ID)
-	if row.ProgressState != "queued" || row.Phase != "Waiting for the newly closed candle" || row.Status != "failed" || row.LastChecked == 0 || row.ProgressMode != "manual" || sent != 0 {
+	if row.ProgressState != "completed" || row.Progress != 100 || row.Phase != "Completed with errors" || row.Status != "completed" || row.AssetsSkipped != 1 || row.Error == "" || row.LastChecked == 0 || row.ProgressMode != "manual" || sent != 0 {
 		t.Fatalf("actual pending attempt was overwritten as unstarted: %+v sent=%d", row, sent)
 	}
 	fake.pending = false
@@ -44,14 +44,14 @@ func TestLiveAlertRowProgressKeepsPendingPublicationRetryAndThenCompletes(t *tes
 	}
 }
 
-func TestLiveAlertRowProgressRefusalSkipsSameProviderAndContinuesOtherRows(t *testing.T) {
+func TestLiveAlertRowProgressRefusalStillAttemptsFollowingRows(t *testing.T) {
 	_, l, saved, binance := namedPublicLiveFixture(t)
 	binance.fail = &exchange.Error{Kind: "restricted", Message: "synthetic regional restriction"}
 	bybit := &publicAlertFakeAdapter{price: 500, items: []domain.Instrument{{NativeID: "BTCUSDT", Market: "spot", Availability: "Trading"}}}
 	l.publicData.adapters["bybit"] = bybit
 	entries := []LiveAlertDefinition{
 		{ID: strings.Repeat("a", 32), Name: "Refused", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true},
-		{ID: strings.Repeat("b", 32), Name: "Unattempted same provider", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true},
+		{ID: strings.Repeat("b", 32), Name: "Independent alert on same provider", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true},
 		{ID: strings.Repeat("c", 32), Name: "Independent source", ConditionID: saved.ID, Period: "h1", DataSource: "bybit", Enabled: true},
 	}
 	config := LiveAlertsConfig{Enabled: true, Alerts: entries}
@@ -67,16 +67,16 @@ func TestLiveAlertRowProgressRefusalSkipsSameProviderAndContinuesOtherRows(t *te
 	if !publicAlertProviderRefused(err) {
 		t.Fatalf("provider refusal lost: %v", err)
 	}
-	if len(binance.historyKeys) != 1 || len(bybit.historyKeys) != 1 || sent != 1 {
+	if len(binance.historyKeys) != 2 || len(bybit.historyKeys) != 1 || sent != 1 {
 		t.Fatalf("refusal repeated or independent venue was skipped: Binance=%d Bybit=%d sends=%d", len(binance.historyKeys), len(bybit.historyKeys), sent)
 	}
-	if !reflect.DeepEqual(l.state.Checks[entries[1].ID], prior) {
-		t.Fatal("skipped row overwrote its previous actual check")
+	if next := l.state.Checks[entries[1].ID]; next.LastChecked == prior.LastChecked || next.SentAlerts != prior.SentAlerts || next.Status != "completed" || next.Error == "" {
+		t.Fatal("following alert did not run or lost delivery history", next)
 	}
 	refused := sequentialCheckRow(t, l, entries[0].ID)
 	skipped := sequentialCheckRow(t, l, entries[1].ID)
 	completed := sequentialCheckRow(t, l, entries[2].ID)
-	if refused.ProgressState != "failed" || refused.Progress >= 100 || skipped.ProgressState != "skipped" || skipped.Progress != 0 || completed.ProgressState != "completed" || completed.Progress != 100 {
+	if refused.ProgressState != "completed" || refused.Progress != 100 || refused.AssetsSkipped != 1 || skipped.ProgressState != "completed" || skipped.Progress != 100 || skipped.AssetsSkipped != 1 || completed.ProgressState != "completed" || completed.Progress != 100 {
 		t.Fatalf("failure/skip/completion percentages were invented: %+v %+v %+v", refused, skipped, completed)
 	}
 }
@@ -106,7 +106,7 @@ func TestLiveAlertRowProgressIsTransientAndLegacyCompletedDoesNotInventZeroPerce
 	}
 }
 
-func TestLiveAlertRowProgressDukascopyRefusalSkipsLaterRowWithoutRefresh(t *testing.T) {
+func TestLiveAlertRowProgressDukascopyFailureStillAttemptsLaterRow(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
 	second, err := saveLiveCondition(t, m, "Later Dukascopy row", defaultAnalysisRequest())
 	if err != nil {
@@ -128,11 +128,11 @@ func TestLiveAlertRowProgressDukascopyRefusalSkipsLaterRowWithoutRefresh(t *test
 	if err = l.check(context.Background(), config, time.Date(2024, 1, 1, 2, 30, 0, 0, time.UTC).UnixMilli()); !errors.Is(err, refusal) {
 		t.Fatalf("Dukascopy refusal hidden: %v", err)
 	}
-	if calls != 1 || !reflect.DeepEqual(l.state.Checks[second.ID], prior) {
+	if next := l.state.Checks[second.ID]; calls != 2 || next.LastChecked == prior.LastChecked || next.SentAlerts != prior.SentAlerts || next.Error == "" {
 		t.Fatalf("later Dukascopy row refreshed or replaced history after refusal: calls=%d state=%+v", calls, l.state.Checks[second.ID])
 	}
 	row := sequentialCheckRow(t, l, second.ID)
-	if row.ProgressState != "skipped" || row.Progress != 0 || row.Phase != "Skipped after provider refusal" {
+	if row.ProgressState != "completed" || row.Progress != 100 || row.Phase != "Completed with errors" || row.AssetsSkipped != 1 {
 		t.Fatalf("Dukascopy cooldown was not shown on unattempted row: %+v", row)
 	}
 }

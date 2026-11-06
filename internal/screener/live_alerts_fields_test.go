@@ -135,7 +135,7 @@ func TestLiveRequiredIndicatorFailureCannotScanClaimOrSend(t *testing.T) {
 		t.Fatal("failed enrichment consumed a signal claim")
 	}
 	info := l.Info()
-	if len(info.Checks) != 1 || info.Checks[0].Status != "failed" || info.Checks[0].AssetsScanned != 0 || info.Checks[0].SentAlerts != 0 {
+	if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || info.Checks[0].AssetsSkipped != 1 || info.Checks[0].Progress != 100 || info.Checks[0].Error == "" || info.Checks[0].AssetsScanned != 0 || info.Checks[0].SentAlerts != 0 {
 		t.Fatalf("failed pre-scan enrichment was not recorded: %+v", info.Checks)
 	}
 }

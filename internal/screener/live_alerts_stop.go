@@ -69,7 +69,7 @@ func (l *LiveAlerts) stopInfoLocked() LiveAlertsInfo {
 				break
 			}
 		}
-		row := LiveAlertCheck{ConditionID: id, Name: name, AssetsScanned: state.AssetsScanned, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		row := LiveAlertCheck{ConditionID: id, Name: name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
 		if row.Status == "" {
 			row.Status = "never"
 		}

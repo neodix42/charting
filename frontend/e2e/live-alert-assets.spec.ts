@@ -6,18 +6,18 @@ const files=[
  {id:'assets-eth-d1',name:'ethusd-d1.csv',symbol:'ethusd',timeframe:'d1'},
 ].map(file=>({...file,fields:['timestamp','open','high','low','close'],bytes:1024}));
 
-async function openAssetsApp(page:Page){
+async function openAssetsApp(page:Page,allMatched=false){
  await openTestApp(page);
  await expect(page.getByLabel('OHLCV')).toBeVisible();
- await page.evaluate(async fixtures=>{
+ await page.evaluate(async({fixtures,allMatched})=>{
   (window as any).__testSetEnrichmentFiles(fixtures);
   const api=window.go!.main!.App!,view={...await api.GetScreenerAnalysisView(),period:'d1',profitabilityFilter:0};
   await api.StartScreenerAnalysis(view);
-  (window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results:[{...fixtures[0],id:'assets-matched-result',fileId:fixtures[0].id,status:'completed',rows:100,matches:2}]});
+  (window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results:(allMatched?fixtures:[fixtures[0]]).map(file=>({...file,id:`matched-${file.id}`,fileId:file.id,status:'completed',rows:100,matches:2}))});
   await api.SaveScreenerAnalysisCondition('Assets rule',view);
   const original=api.ListInstruments.bind(api);(window as any).__assetCatalogCalls=[];
   api.ListInstruments=async source=>{(window as any).__assetCatalogCalls.push(source);return original(source);};
- },files);
+ },{fixtures:files,allMatched});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
  await expect(page.getByRole('button',{name:'Add alert',exact:true})).toBeEnabled();
@@ -39,7 +39,7 @@ async function addDisabled(page:Page,name:string,source='hyperliquid'){
 const trigger=(page:Page,name:string)=>page.getByRole('button',{name:`View assets for ${name}`,exact:true});
 const modal=(page:Page,name:string)=>page.getByRole('dialog',{name:`Monitored assets for ${name}`,exact:true});
 const rows=(page:Page,name:string)=>modal(page,name).locator('.live-alert-assets-list li');
-const calls=(page:Page)=>page.evaluate(()=>(window as any).__assetCatalogCalls as string[]);
+const calls=(page:Page)=>page.evaluate(()=>((window as any).__assetCatalogCalls??[]) as string[]);
 const writes=(page:Page)=>page.evaluate(()=>(window as any).__testLiveAlertsWrites().length as number);
 
 test('disabled public rows discover catalogs only when Assets opens and viewing never saves or fetches history',async({page})=>{
@@ -142,8 +142,8 @@ test('asset dialogs trap keyboard focus, restore their trigger and ignore delaye
  await expect(modal(page,'Ready Bybit')).toBeVisible();await expect(rows(page,'Ready Bybit')).toHaveCount(3);await expect(modal(page,'Ready Bybit')).not.toContainText('HYPE/USDC');
  await modal(page,'Ready Bybit').getByRole('button',{name:'Close monitored assets',exact:true}).click();
  await origin.click();await expect(rows(page,'Delayed Hyperliquid')).toHaveCount(4);
- const readySearch=delayed.getByRole('searchbox',{name:'Filter monitored assets',exact:true});
- await close.focus();await page.keyboard.press('Shift+Tab');await expect(readySearch).toBeFocused();await page.keyboard.press('Tab');await expect(close).toBeFocused();
+ const lastAction=delayed.getByRole('button',{name:'Cancel',exact:true});
+ await close.focus();await page.keyboard.press('Shift+Tab');await expect(lastAction).toBeFocused();await page.keyboard.press('Tab');await expect(close).toBeFocused();
  await page.locator('.live-alert-assets-backdrop').click({position:{x:5,y:5}});await expect(delayed).toHaveCount(0);await expect(origin).toBeFocused();
  await page.evaluate(async()=>{const modulePath='/src/bridge/instruments.ts';const {clearInstrumentCatalog}=await import(modulePath);clearInstrumentCatalog('hyperliquid');});
  await origin.click();await expect(delayed.getByRole('status')).toContainText('Loading Hyperliquid assets');
@@ -167,4 +167,84 @@ test('a disabled Dukascopy alert lists only its analyzed matching targets withou
  expect(await calls(page)).toEqual(beforeCalls);
  expect(await writes(page)).toBe(beforeWrites);
  await dialog.getByRole('button',{name:'Close monitored assets',exact:true}).click();await expect(trigger(page,'Paused analyzed Dukascopy')).toBeFocused();
+});
+
+test('Dukascopy asset choices stage locally, retain unchecked choices, survive reload and restore all',async({page})=>{
+ await openAssetsApp(page,true);await addDisabled(page,'Selected Dukascopy','dukascopy');
+ const before=await writes(page),beforeCalls=await calls(page);
+ await trigger(page,'Selected Dukascopy').click();
+ let dialog=modal(page,'Selected Dukascopy');
+ await expect(dialog.getByRole('checkbox',{name:'Monitor btcusd',exact:true})).toBeChecked();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor ethusd',exact:true})).toBeChecked();
+ await dialog.getByRole('checkbox',{name:'Monitor ethusd',exact:true}).uncheck();
+ expect(await writes(page)).toBe(before);
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await trigger(page,'Selected Dukascopy').click();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor ethusd',exact:true})).toBeChecked();
+ await dialog.getByRole('checkbox',{name:'Monitor ethusd',exact:true}).uncheck();
+ await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
+ await expect.poll(()=>writes(page)).toBe(before+1);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].assetSelections)).toEqual([{dataSource:'dukascopy',assets:[{symbol:'btcusd'}]}]);
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ await trigger(page,'Selected Dukascopy').click();dialog=modal(page,'Selected Dukascopy');
+ await expect(dialog.getByRole('checkbox',{name:'Monitor btcusd',exact:true})).toBeChecked();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor ethusd',exact:true})).not.toBeChecked();
+ await dialog.getByRole('button',{name:'Select all',exact:true}).click();
+ await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].assetSelections??null)).toBe(null);
+ expect(await calls(page)).toEqual(beforeCalls);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.enabled)).toBe(false);
+});
+
+test('Hyperliquid supports a custom spot choice with no history download and an empty draft cannot be saved',async({page})=>{
+ await openAssetsApp(page);await addDisabled(page,'Selected Hyperliquid','hyperliquid');
+ const beforeHistory=await page.evaluate(()=>(window as any).__testHistoryKeys().length);
+ await trigger(page,'Selected Hyperliquid').click();const dialog=modal(page,'Selected Hyperliquid');
+ await expect(dialog.getByRole('checkbox')).toHaveCount(4);
+ for(const checkbox of await dialog.getByRole('checkbox').all())await expect(checkbox).toBeChecked();
+ await dialog.getByRole('button',{name:'Deselect all',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'Save assets',exact:true})).toBeDisabled();
+ await dialog.getByRole('checkbox',{name:'Monitor @107 spot',exact:true}).check();
+ await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].assetSelections)).toEqual([{dataSource:'hyperliquid',assets:[{market:'spot',symbol:'@107'}]}]);
+ await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ await trigger(page,'Selected Hyperliquid').click();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor @107 spot',exact:true})).toBeChecked();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor xyz:XYZ100 perpetual',exact:true})).not.toBeChecked();
+ expect(await page.evaluate(()=>(window as any).__testHistoryKeys().length)).toBe(beforeHistory);
+});
+
+test('asset selections stay independent across sources and spot/perpetual identities',async({page})=>{
+ await openAssetsApp(page);await addDisabled(page,'Source choices','hyperliquid');
+ await trigger(page,'Source choices').click();let dialog=modal(page,'Source choices');
+ await expect(rows(page,'Source choices')).toHaveCount(4);
+ await dialog.getByRole('button',{name:'Deselect all',exact:true}).click();await dialog.getByRole('checkbox',{name:'Monitor xyz:XYZ100 perpetual',exact:true}).check();await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
+ const editSource=async(source:string)=>{await page.getByRole('button',{name:'Edit alert Source choices',exact:true}).click();const editor=page.getByRole('dialog',{name:'Edit alert',exact:true});await editor.getByRole('combobox',{name:'Alert data source',exact:true}).selectOption(source);await editor.getByRole('button',{name:'Save alert',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].dataSource)).toBe(source);};
+ await editSource('bybit');await trigger(page,'Source choices').click();dialog=modal(page,'Source choices');
+ await expect(dialog.getByRole('checkbox',{name:'Monitor BTCUSDT spot',exact:true})).toBeChecked();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor BTCUSDT perpetual',exact:true})).toBeChecked();
+ await dialog.getByRole('button',{name:'Deselect all',exact:true}).click();await dialog.getByRole('checkbox',{name:'Monitor BTCUSDT spot',exact:true}).check();await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
+ await editSource('hyperliquid');await trigger(page,'Source choices').click();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor xyz:XYZ100 perpetual',exact:true})).toBeChecked();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor @107 spot',exact:true})).not.toBeChecked();
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await editSource('bybit');await trigger(page,'Source choices').click();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor BTCUSDT spot',exact:true})).toBeChecked();
+ await expect(dialog.getByRole('checkbox',{name:'Monitor BTCUSDT perpetual',exact:true})).not.toBeChecked();
+});
+
+test('failed asset selection save remains retryable without changing the alert or its saved history',async({page})=>{
+ await openAssetsApp(page);await addDisabled(page,'Retry selection','hyperliquid');
+ await page.evaluate(()=>{(window as any).__testLiveAlertsErrors({save:'Synthetic asset save failed'});(window as any).__testSetLiveAlertsInfo({sent:3});});
+ await trigger(page,'Retry selection').click();const dialog=modal(page,'Retry selection');await expect(rows(page,'Retry selection')).toHaveCount(4);
+ await dialog.getByRole('checkbox',{name:'Monitor @107 spot',exact:true}).uncheck();await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
+ await expect(page.locator('.live-alerts-configuration-error')).toContainText('Synthetic asset save failed');
+ await expect(page.locator('.live-alerts-heading + .live-alerts-error')).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].assetSelections??null)).toBe(null);
+ await page.evaluate(()=>(window as any).__testLiveAlertsErrors({}));
+ await page.locator('.live-alerts-configuration-error').getByRole('button',{name:'Retry',exact:true}).click();
+ await expect(page.locator('.live-alerts-configuration-error')).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].assetSelections[0].assets.length)).toBe(3);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().sent)).toBe(3);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.enabled)).toBe(false);
 });

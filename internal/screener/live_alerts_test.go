@@ -155,7 +155,7 @@ func TestLiveAlertsAmbiguousSendClaimSurvivesRestart(t *testing.T) {
 	}
 }
 
-func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T) {
+func TestLiveAlertsDeliveryFailureContinuesAndNeverResendsClaims(t *testing.T) {
 	for _, failOn := range []int{1, 2} {
 		t.Run(fmt.Sprintf("failure-on-delivery-%d", failOn), func(t *testing.T) {
 			m, l, config, path := liveAlertsFixture(t)
@@ -184,10 +184,10 @@ func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T)
 				return nil
 			}
 			asOf := time.Date(2024, 1, 1, 2, 30, 0, 0, time.UTC).UnixMilli()
-			if err = l.check(context.Background(), config, asOf); !errors.Is(err, failure) || calls != failOn {
-				t.Fatalf("delivery failure did not stop further requests: %v calls=%d", err, calls)
+			if err = l.check(context.Background(), config, asOf); !errors.Is(err, failure) || calls != 3 {
+				t.Fatalf("delivery failure stopped independent signals or hid its cause: %v calls=%d", err, calls)
 			}
-			if len(l.state.Watermarks) != failOn || l.state.Sent != int64(failOn-1) || len(l.state.Recent) != failOn {
+			if len(l.state.Watermarks) != 3 || l.state.Sent != 2 || len(l.state.Recent) != 3 {
 				t.Fatalf("remaining signals were claimed or previous successes lost: %+v", l.state)
 			}
 			for key := range l.state.Watermarks {
@@ -195,8 +195,7 @@ func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T)
 					t.Fatalf("unattempted signal was claimed: %s", key)
 				}
 			}
-			// The failed attempt remains claimed across restart, while later
-			// conditions and assets can still alert for this same latest bar.
+			// Every attempted signal, including failures, remains claimed across restart.
 			retryCalls := 0
 			restored, err := NewLiveAlerts(m, func(_ context.Context, alert LiveAlert) error {
 				retryCalls++
@@ -210,7 +209,7 @@ func TestLiveAlertsDeliveryFailureStopsFurtherClaimsUntilNextCheck(t *testing.T)
 			}
 			defer restored.Close()
 			restored.refresh = l.refresh
-			if err = restored.check(context.Background(), config, asOf); err != nil || retryCalls != 3-failOn || len(restored.state.Watermarks) != 3 || restored.state.Sent != 2 {
+			if err = restored.check(context.Background(), config, asOf); err != nil || retryCalls != 0 || len(restored.state.Watermarks) != 3 || restored.state.Sent != 2 {
 				t.Fatalf("remaining signals were not retained for a later check: %v calls=%d state=%+v", err, retryCalls, restored.state)
 			}
 		})

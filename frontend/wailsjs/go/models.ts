@@ -908,6 +908,54 @@ export namespace predictions {
 
 export namespace screener {
 
+	export class LiveAlertAssetRef {
+	    market?: string;
+	    symbol: string;
+
+	    static createFrom(source: any = {}) {
+	        return new LiveAlertAssetRef(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.market = source["market"];
+	        this.symbol = source["symbol"];
+	    }
+	}
+
+	export class LiveAlertAssetSelection {
+	    dataSource: string;
+	    assets: LiveAlertAssetRef[];
+
+	    static createFrom(source: any = {}) {
+	        return new LiveAlertAssetSelection(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
+	        this.assets = this.convertValues(source["assets"], LiveAlertAssetRef);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class LiveAlertDefinition {
 	    id: string;
 	    name: string;
@@ -915,6 +963,7 @@ export namespace screener {
 	    period: string;
 	    dataSource: string;
 	    enabled: boolean;
+	    assetSelections?: LiveAlertAssetSelection[];
 
 	    static createFrom(source: any = {}) {
 	        return new LiveAlertDefinition(source);
@@ -928,7 +977,26 @@ export namespace screener {
 	        this.period = source["period"];
 	        this.dataSource = source["dataSource"];
 	        this.enabled = source["enabled"];
+	        this.assetSelections = this.convertValues(source["assetSelections"], LiveAlertAssetSelection);
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 	export class LiveAlertConditionSource {
@@ -2119,6 +2187,7 @@ export namespace screener {
 		}
 	}
 	export class LiveAlertConditionScope {
+	    availableTargets?: LiveAlertTarget[];
 	    alertId?: string;
 	    savedConditionId?: string;
 	    conditionId: string;
@@ -2134,6 +2203,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.availableTargets = this.convertValues(source["availableTargets"], LiveAlertTarget);
 	        this.alertId = source["alertId"];
 	        this.savedConditionId = source["savedConditionId"];
 	        this.conditionId = source["conditionId"];
@@ -2291,6 +2361,7 @@ export namespace screener {
 	    conditionId: string;
 	    name: string;
 	    assetsScanned: number;
+	    assetsSkipped?: number;
 	    lastChecked: number;
 	    nextCheck: number;
 	    sentAlerts: number;
@@ -2315,6 +2386,7 @@ export namespace screener {
 	        this.conditionId = source["conditionId"];
 	        this.name = source["name"];
 	        this.assetsScanned = source["assetsScanned"];
+	        this.assetsSkipped = source["assetsSkipped"];
 	        this.lastChecked = source["lastChecked"];
 	        this.nextCheck = source["nextCheck"];
 	        this.sentAlerts = source["sentAlerts"];

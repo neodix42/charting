@@ -279,6 +279,10 @@ func (m *Manager) refreshFile(ctx context.Context, index int, directory string, 
 // Add it in the same download/recalculation/publication transaction, retaining
 // the existing manual Refresh behavior when no extra fields are requested.
 func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64, requiredFields []string) error {
+	return m.refreshFileRequiredProgress(ctx, index, directory, job, legacy, asOf, requiredFields, nil)
+}
+
+func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64, requiredFields []string, report func(float64, string)) error {
 	match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name))
 	if match == nil {
 		return errors.New("cannot identify the Dukascopy instrument, timeframe and start date from this CSV filename; original kept")
@@ -358,9 +362,13 @@ func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory 
 	var workerError string
 	replies := newProviderReplies(ctx, owner, func(message string) {
 		m.mu.Lock()
-		defer m.mu.Unlock()
+		progress := m.refreshJobs[index].Progress
 		if m.refreshJobs[index].Status == "running" {
 			m.refreshJobs[index].Message = message
+		}
+		m.mu.Unlock()
+		if report != nil {
+			report(progress, message)
 		}
 	})
 	defer replies.close()
@@ -386,7 +394,11 @@ func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory 
 			}
 			m.refreshJobs[index].Rows, m.refreshJobs[index].AddedRows, m.refreshJobs[index].UpdatedRows = event.Rows, event.AddedRows, event.UpdatedRows
 			m.refreshJobs[index].Message = cleanMessage(event.Message)
+			progress, message := m.refreshJobs[index].Progress, m.refreshJobs[index].Message
 			m.mu.Unlock()
+			if report != nil {
+				report(progress, message)
+			}
 		case "done":
 			result, done = event, event.Rows > 0 && event.AddedRows >= 0 && event.UpdatedRows >= 0 && len(event.Recipes) <= 2000
 		case "error":
