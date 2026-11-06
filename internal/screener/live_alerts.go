@@ -655,8 +655,10 @@ func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) 
 	if config.Alerts != nil {
 		l.mu.Lock()
 		runtimeUnchanged = sameActiveLiveAlertEntries(config, l.state.Config)
-		if !runtimeUnchanged && l.cycleCancel != nil {
-			l.cycleCancel()
+		if !runtimeUnchanged {
+			if l.cycleCancel != nil {
+				l.cycleCancel()
+			}
 			l.cancelCheckProgressLocked("Cancelled after configuration changed")
 		}
 		l.mu.Unlock()

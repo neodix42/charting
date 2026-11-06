@@ -171,3 +171,35 @@ func TestLiveAlertRowProgressSkipsQueuedCalendarChangeWithoutInventingCompletion
 		}
 	}
 }
+
+func TestLiveAlertConditionRenameClearsUnstartedManualQueue(t *testing.T) {
+	m, l, saved, adapter := namedPublicLiveFixture(t)
+	entry := LiveAlertDefinition{ID: strings.Repeat("a", 32), Name: saved.Name, ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true}
+	config := LiveAlertsConfig{Enabled: true, Alerts: []LiveAlertDefinition{entry}}
+	if _, err := l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	queued, err := l.CheckNow()
+	if err != nil || len(queued.Checks) != 1 || queued.Checks[0].ProgressState != "queued" {
+		t.Fatalf("manual check was not queued: %+v %v", queued, err)
+	}
+	renamed, err := m.RenameAnalysisCondition(saved.ID, "Renamed queued condition")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Alerts[0].Name = renamed.Name
+	info, err := l.Configure(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := info.Checks[0]
+	if l.requested || info.Running || row.ProgressState == "queued" || row.ProgressState == "running" {
+		t.Fatalf("renaming left an unstarted manual check stuck in progress: requested=%v row=%+v", l.requested, row)
+	}
+	if !info.Config.Enabled || row.LastChecked != 0 || row.Status != "never" || row.SentAlerts != 0 || len(adapter.historyKeys) != 0 {
+		t.Fatalf("renaming invented an attempt or changed monitoring: %+v", info)
+	}
+	if _, err = l.CheckNow(); err != nil {
+		t.Fatalf("renamed alert could not be checked again: %v", err)
+	}
+}
