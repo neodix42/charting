@@ -1,0 +1,119 @@
+import {test,expect,type Page} from '@playwright/test';
+import {openTestApp} from './helpers/testApp';
+
+const names=['Top Bybit','Middle Binance','Bottom Bybit','Disabled Hyperliquid'];
+const previousClose=Date.UTC(2026,10,5,10),currentClose=Date.UTC(2026,10,6,12);
+const history=(page:Page)=>page.getByRole('table',{name:'Alert check history',exact:true});
+const row=(page:Page,name:string)=>history(page).locator('tbody tr').filter({has:page.getByRole('rowheader',{name,exact:true})});
+const progress=(page:Page,name:string)=>row(page,name).getByRole('cell').first();
+
+async function openProgressApp(page:Page){
+ await openTestApp(page);
+ await page.evaluate(async({names,previousClose})=>{
+  const api=window.go!.main!.App!,file={id:'row-progress-file',name:'btcusd-d1.csv',symbol:'btcusd',timeframe:'d1',fields:['timestamp','open','high','low','close'],bytes:1024};
+  (window as any).__testSetEnrichmentFiles([file]);
+  const view={...await api.GetScreenerAnalysisView(),period:'d1',profitabilityFilter:0};
+  await api.StartScreenerAnalysis(view);
+  (window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results:[{...file,id:'row-progress-result',fileId:file.id,status:'completed',rows:10,matches:2}]});
+  const condition=await api.SaveScreenerAnalysisCondition('Reusable progress rule',view);
+  const ids=['c','a','b','d'],sources=['bybit','binance','bybit','hyperliquid'];
+  const alerts=names.map((name,index)=>({id:ids[index].repeat(32),name,conditionId:condition.id,period:'h1',dataSource:sources[index],enabled:index!==3}));
+  const checks=alerts.map((entry,index)=>({alertId:entry.id,savedConditionId:condition.id,conditionId:entry.id,name:entry.name,assetsScanned:10+index,lastChecked:previousClose,nextCheck:0,sentAlerts:3+index,status:'completed',manual:true,error:''}));
+  (window as any).__progressRows=checks;
+  (window as any).__testSetLiveAlertsInfo({config:{enabled:true,alerts},checks:[...checks].reverse(),running:false,status:'Waiting for next closed bar',sent:18});
+  const originalRead=api.GetScreenerLiveAlerts.bind(api);
+  api.GetScreenerLiveAlerts=async()=>{const value=await originalRead();return{...value,checks:[...value.checks].reverse()};};
+ },{names,previousClose});
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();
+ await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
+ await expect(history(page).getByRole('columnheader')).toHaveText(['Alert name','Progress','Number of assets scanned','Last checked','Next check','Sent alerts']);
+ await expect(history(page).locator('tbody th')).toHaveText(names);
+}
+
+async function setProgress(page:Page,mode:'manual'|'scheduled',active:number,percent:number){
+ await page.evaluate(({mode,active,percent,currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>{
+   if(index===3)return{...old,progress:100,progressState:'completed',progressMode:'manual',phase:'Previous completed check'};
+   if(index<active)return{...old,lastChecked:currentClose,status:'completed',manual:mode==='manual',progress:100,progressState:'completed',progressMode:mode,phase:'Completed',currentAsset:''};
+   if(index===active)return{...old,lastChecked:currentClose,status:'running',manual:mode==='manual',progress:percent,progressState:'running',progressMode:mode,phase:'Preparing required history',currentAsset:index===0?'BTCUSDT':'ETHUSDT'};
+   return{...old,progress:0,progressState:'queued',progressMode:mode,phase:'Queued',currentAsset:''};
+  });
+  (window as any).__testSetLiveAlertsInfo({checks:checks.reverse(),running:active<3,status:'Checking latest closed bars',currentAsset:'GLOBAL ASSET MUST STAY HIDDEN',progress:37});
+ },{mode,active,percent,currentClose});
+}
+
+test('Check now immediately queues enabled rows without rewriting prior history, then displays one manual alert at a time',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,original=api.CheckScreenerLiveAlerts.bind(api);
+  api.CheckScreenerLiveAlerts=()=>new Promise(resolve=>{(window as any).__releaseProgressCheck=async()=>resolve(await original());});
+ });
+ await page.getByRole('button',{name:'Check now',exact:true}).click();
+ for(const name of names.slice(0,3)){
+  await expect(progress(page,name)).toContainText('Queued');
+  await expect(progress(page,name)).toContainText('Manual check');
+  await expect(row(page,name).getByRole('cell').nth(2)).toContainText('2026-11-05 10:00:00 UTC');
+  await expect(row(page,name).getByRole('cell').nth(2)).toContainText('Manual · Completed');
+ }
+ await expect(progress(page,names[3])).not.toContainText('Queued');
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeDisabled();
+ await page.evaluate(()=>(window as any).__releaseProgressCheck());
+ await setProgress(page,'manual',0,25);
+ await expect(progress(page,names[0])).toContainText('25%');await expect(progress(page,names[0])).toContainText('BTCUSDT');
+ await expect(progress(page,names[0]).getByRole('progressbar',{name:`Progress for ${names[0]}`,exact:true})).toHaveAttribute('value','25');
+ await expect(progress(page,names[1])).toContainText('Queued');
+ await setProgress(page,'manual',1,60);
+ await expect(progress(page,names[0])).toContainText('Completed');await expect(progress(page,names[0])).toContainText('100%');
+ await expect(progress(page,names[1])).toContainText('ETHUSDT');await expect(progress(page,names[1])).toContainText('60%');
+ await expect(progress(page,names[2])).toContainText('Queued');
+ await expect(history(page).locator('tbody th')).toHaveText(names);
+ await expect(page.getByRole('heading',{name:'Checking latest closed bars',exact:true})).toHaveCount(0);
+ await expect(page.getByText('GLOBAL ASSET MUST STAY HIDDEN',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('progressbar',{name:'Live alerts progress',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites())).toEqual([]);
+});
+
+test('scheduled queue progress follows visible row order while retaining previous attempt metadata for waiting and disabled rows',async({page})=>{
+ await openProgressApp(page);
+ await setProgress(page,'scheduled',0,12);
+ await expect(progress(page,names[0])).toContainText('12%');await expect(progress(page,names[0])).toContainText('Scheduled check');
+ await expect(row(page,names[0]).getByRole('cell').nth(2)).toContainText('Scheduled · Running');
+ for(const name of names.slice(1,3)){
+  await expect(progress(page,name)).toContainText('Queued');await expect(progress(page,name)).toContainText('Scheduled check');
+  await expect(row(page,name).getByRole('cell').nth(2)).toContainText('Manual · Completed');
+  await expect(row(page,name).getByRole('cell').nth(2)).toContainText('2026-11-05 10:00:00 UTC');
+ }
+ await expect(progress(page,names[3])).toContainText('Previous completed check');
+ await expect(progress(page,names[3])).not.toContainText('Scheduled check');
+ await setProgress(page,'scheduled',2,75);
+ await expect(progress(page,names[0])).toContainText('100%');await expect(progress(page,names[1])).toContainText('100%');
+ await expect(progress(page,names[2])).toContainText('75%');await expect(progress(page,names[2])).toContainText('Scheduled check');
+ await setProgress(page,'scheduled',3,100);
+ for(const name of names.slice(0,3))await expect(progress(page,name)).toContainText('Completed');
+ await expect(history(page).locator('tbody th')).toHaveText(names);
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsChecks())).toBe(0);
+});
+
+test('failed progress stays distinct from check history and a manual retry can be stopped without an aggregate progress bar',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(()=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>index===0?{...old,status:'failed',manual:false,error:'Explicit public history failure',progress:38,progressState:'failed',progressMode:'scheduled',phase:'Public history failed',currentAsset:'BTCUSDT'}:old);
+  (window as any).__testSetLiveAlertsInfo({checks,running:false});
+ });
+ await expect(progress(page,names[0])).toContainText('Public history failed');await expect(progress(page,names[0])).toContainText('38%');
+ await row(page,names[0]).getByRole('button',{name:'Scheduled · Failed',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:`Check for ${names[0]}`,exact:true})).toContainText('Explicit public history failure');
+ await page.getByRole('button',{name:'Close check error',exact:true}).click();
+ await page.getByRole('button',{name:'Check now',exact:true}).click();
+ await expect(progress(page,names[0])).toContainText('Queued');await expect(progress(page,names[0])).toContainText('Manual check');
+ await setProgress(page,'manual',0,20);
+ await expect(progress(page,names[0])).toContainText('20%');
+ await page.getByRole('button',{name:'Stop alerts',exact:true}).click();
+ for(const name of names.slice(0,3))await expect(progress(page,name)).toContainText('Cancelled');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeVisible();
+ await expect(page.getByRole('progressbar',{name:'Live alerts progress',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites().at(-1).enabled)).toBe(false);
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().sent)).toBe(18);
+});

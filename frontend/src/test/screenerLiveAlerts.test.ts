@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,configWithLiveAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -74,4 +74,16 @@ it('queued edits preserve distinct alert entries sharing a rule and the active m
  const writer=new LiveAlertsConfigWriter(persist,()=>{}),base={id:'one',name:'Spot hourly',conditionId:'same-rule',period:'h1' as const,dataSource:'binance' as const,enabled:true};
  writer.edit({enabled:true,alerts:[base]});const entries=[{...base,enabled:false},{...base,id:'two',name:'Perp daily',period:'d1' as const,dataSource:'hyperliquid' as const}];writer.edit({enabled:true,alerts:entries});entries[0].name='Mutated caller';const flushed=writer.flush();release();await flushed;
  expect(persist.mock.calls[1][0]).toMatchObject({enabled:true,alerts:[{id:'one',name:'Spot hourly',enabled:false},{id:'two',name:'Perp daily',enabled:true,period:'d1',dataSource:'hyperliquid'}]});
+});
+
+
+it('renders history in configured alert order despite compact responses and supplies unattempted rows',()=>{
+ const entries=[{id:'z',name:'Top alert',conditionId:'rule',period:'h1' as const,dataSource:'bybit' as const,enabled:true},{id:'a',name:'Middle alert',conditionId:'rule',period:'d1' as const,dataSource:'dukascopy' as const,enabled:true},{id:'m',name:'Last alert',conditionId:'rule',period:'w1' as const,dataSource:'hyperliquid' as const,enabled:false}],base={conditionId:'a',name:'Middle alert',assetsScanned:4,lastChecked:123,nextCheck:0,sentAlerts:1,status:'completed' as const,manual:false,error:''};
+ const input=[base,{...base,conditionId:'z',alertId:'z',name:'Top alert',progressState:'queued' as const,progress:0,phase:'Queued'}];const ordered=orderedLiveAlertChecks(entries,input);
+ expect(ordered.map(row=>row.alertId??row.conditionId)).toEqual(['z','a','m']);expect(ordered[0].lastChecked).toBe(123);expect(ordered[0].status).toBe('completed');expect(ordered[2]).toMatchObject({status:'never',lastChecked:0,assetsScanned:0});expect(input[0].conditionId).toBe('a');
+});
+it('keeps queue progress separate from previous check outcome and clamps only finite percentages',()=>{
+ const previous={conditionId:'one',name:'First',assetsScanned:8,lastChecked:123,nextCheck:0,sentAlerts:2,status:'failed' as const,manual:false,error:'Previous attempt failed'};
+ expect(liveAlertCheckProgress({...previous,progressState:'queued',progressMode:'manual',phase:'Waiting for turn',progress:0})).toEqual({state:'queued',phase:'Waiting for turn',value:0});expect(previous.status).toBe('failed');
+ expect(liveAlertCheckProgress({...previous,progressState:'running',progress:180}).value).toBe(100);expect(liveAlertCheckProgress({...previous,progressState:'running',progress:-4}).value).toBe(0);expect(liveAlertCheckProgress({...previous,progress:NaN}).value).toBeUndefined();expect(liveAlertCheckProgress(previous)).toEqual({state:'failed',phase:'Failed',value:undefined});expect(liveAlertCheckProgress({...previous,progressState:'running',phase:'Preparing alert'})).toEqual({state:'running',phase:'Preparing alert',value:0});
 });

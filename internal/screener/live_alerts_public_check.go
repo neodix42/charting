@@ -71,7 +71,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 	}
 	defer func() { cycleErr = errors.Join(cycleErr, run.finish(cycleErr)) }()
 	l.mu.Lock()
-	l.status = "Discovering " + source + " markets and preparing required bars"
+	l.updateCheckProgressLocked("Discovering "+source+" markets", 0, "")
 	l.mu.Unlock()
 	batch, prepareErr := l.preparePublicAlertData(ctx, source, conditions, periods, asOf)
 	if ctx.Err() != nil {
@@ -104,9 +104,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 			return ctx.Err()
 		}
 		l.mu.Lock()
-		l.currentAsset = source + " " + asset.Market + " " + asset.NativeID
-		l.status = "Checking latest closed public bars"
-		l.progress = 70 + 30*float64(index)/float64(max(1, len(batch.Assets)))
+		l.updateCheckProgressLocked("Checking latest closed public bars", 70+30*float64(index)/float64(max(1, len(batch.Assets))), source+" "+asset.Market+" "+asset.NativeID)
 		l.mu.Unlock()
 		a := &analysisState{directory: batch.Directory, work: work, series: map[string]*analysisSeries{}, cache: newAnalysisRowCache(), asOf: asOf}
 		series := map[string]*analysisSeries{}

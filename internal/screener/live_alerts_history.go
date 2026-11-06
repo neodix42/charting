@@ -13,18 +13,23 @@ import (
 // SentAlerts counts alerts confirmed for at least one recipient since
 // condition-level tracking began, including incomplete recipient batches.
 type LiveAlertCheck struct {
-	AlertID          string `json:"alertId,omitempty"`
-	SavedConditionID string `json:"savedConditionId,omitempty"`
-	ConditionID      string `json:"conditionId"`
-	Name             string `json:"name"`
-	AssetsScanned    int    `json:"assetsScanned"`
-	LastChecked      int64  `json:"lastChecked"`
-	NextCheck        int64  `json:"nextCheck"`
-	SentAlerts       int64  `json:"sentAlerts"`
-	Status           string `json:"status"`
-	Manual           bool   `json:"manual"`
-	Error            string `json:"error"`
-	TimingHint       string `json:"timingHint,omitempty"`
+	Progress         float64 `json:"progress,omitempty"`
+	Phase            string  `json:"phase,omitempty"`
+	CurrentAsset     string  `json:"currentAsset,omitempty"`
+	ProgressState    string  `json:"progressState,omitempty"`
+	ProgressMode     string  `json:"progressMode,omitempty"`
+	AlertID          string  `json:"alertId,omitempty"`
+	SavedConditionID string  `json:"savedConditionId,omitempty"`
+	ConditionID      string  `json:"conditionId"`
+	Name             string  `json:"name"`
+	AssetsScanned    int     `json:"assetsScanned"`
+	LastChecked      int64   `json:"lastChecked"`
+	NextCheck        int64   `json:"nextCheck"`
+	SentAlerts       int64   `json:"sentAlerts"`
+	Status           string  `json:"status"`
+	Manual           bool    `json:"manual"`
+	Error            string  `json:"error"`
+	TimingHint       string  `json:"timingHint,omitempty"`
 }
 
 type liveAlertCheckState struct {
@@ -105,6 +110,12 @@ func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*l
 	if err := writeState(l.path, l.state); err != nil {
 		l.state.Checks = previous
 		return nil, fmt.Errorf("record Live Alerts check start: %w", err)
+	}
+	for id := range run.scannedSymbols {
+		if progress, ok := l.checkProgress[id]; ok {
+			progress.started = true
+			l.checkProgress[id] = progress
+		}
 	}
 	return run, nil
 }

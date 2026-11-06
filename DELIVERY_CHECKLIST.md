@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Sequential alert checks and row progress — 2026-11-06
+
+- [x] Check history has per-alert Progress with phase, current asset, percentage and manual/scheduled mode; the aggregate running-progress block is removed.
+- [x] Scheduled/manual checks dispatch one complete alert at a time in table order across sources, including all-Dukascopy batches. Queued and skipped rows retain their previous actual-attempt history and claims.
+- [x] Check now queues and acknowledges without Manager metadata reads; fast Stop and duplicate-request handling remain responsive under a held Manager lock.
+- [x] Focused Go race regressions, typecheck/lint, 226 frontend unit tests and 30 related browser cases pass, with a three-case rerun validating omitted zero-percent JSON fields.
+- [x] Final full Screener race suite passes (174.1 seconds), along with independent/bindings Go checks, vet, Wails model generation and Linux build/archive/checksums; clean artifacts are rebuilt from the submitted commit and hosted jobs are monitored.
+- [ ] Native desktop interaction, Windows execution and live venue-to-Telegram timing remain separate checks.
+
 ## Per-alert assets window — 2026-11-05
 
 - [x] Alerts table has an Assets column for enabled and disabled rows; the standalone Monitored assets section is removed.

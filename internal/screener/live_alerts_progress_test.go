@@ -1,0 +1,173 @@
+package screener
+
+import (
+	"context"
+	"cryptodesk/internal/domain"
+	"cryptodesk/internal/exchange"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestLiveAlertRowProgressKeepsPendingPublicationRetryAndThenCompletes(t *testing.T) {
+	_, l, saved, fake := namedPublicLiveFixture(t)
+	entry := LiveAlertDefinition{ID: strings.Repeat("a", 32), Name: "Awaiting close", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true}
+	config := LiveAlertsConfig{Enabled: true, Alerts: []LiveAlertDefinition{entry}}
+	if _, err := l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 6, 12, 0, 5, 0, time.UTC)
+	l.now = func() time.Time { return now }
+	fake.pending = true
+	var sent int
+	l.send = func(context.Context, LiveAlert) error { sent++; return nil }
+	err := l.check(context.Background(), config, now.UnixMilli())
+	if !errors.Is(err, errLiveAlertsPendingBar) {
+		t.Fatalf("missing closed candle was not retryable: %v", err)
+	}
+	row := sequentialCheckRow(t, l, entry.ID)
+	if row.ProgressState != "queued" || row.Phase != "Waiting for the newly closed candle" || row.Status != "failed" || row.LastChecked == 0 || row.ProgressMode != "manual" || sent != 0 {
+		t.Fatalf("actual pending attempt was overwritten as unstarted: %+v sent=%d", row, sent)
+	}
+	fake.pending = false
+	if err = l.check(context.Background(), config, now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	row = sequentialCheckRow(t, l, entry.ID)
+	if row.ProgressState != "completed" || row.Progress != 100 || row.Status != "completed" || sent != 1 {
+		t.Fatalf("publication retry did not complete once: %+v sent=%d", row, sent)
+	}
+}
+
+func TestLiveAlertRowProgressRefusalSkipsSameProviderAndContinuesOtherRows(t *testing.T) {
+	_, l, saved, binance := namedPublicLiveFixture(t)
+	binance.fail = &exchange.Error{Kind: "restricted", Message: "synthetic regional restriction"}
+	bybit := &publicAlertFakeAdapter{price: 500, items: []domain.Instrument{{NativeID: "BTCUSDT", Market: "spot", Availability: "Trading"}}}
+	l.publicData.adapters["bybit"] = bybit
+	entries := []LiveAlertDefinition{
+		{ID: strings.Repeat("a", 32), Name: "Refused", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true},
+		{ID: strings.Repeat("b", 32), Name: "Unattempted same provider", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true},
+		{ID: strings.Repeat("c", 32), Name: "Independent source", ConditionID: saved.ID, Period: "h1", DataSource: "bybit", Enabled: true},
+	}
+	config := LiveAlertsConfig{Enabled: true, Alerts: entries}
+	if _, err := l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	prior := liveAlertCheckState{LastChecked: 1704067200000, SentAlerts: 2, AssetsScanned: 7, Status: "completed", Manual: true}
+	l.state.Checks = map[string]liveAlertCheckState{entries[1].ID: prior}
+	l.state.Sent = 2
+	var sent int
+	l.send = func(context.Context, LiveAlert) error { sent++; return nil }
+	err := l.check(context.Background(), config, time.Date(2026, 11, 6, 12, 0, 5, 0, time.UTC).UnixMilli())
+	if !publicAlertProviderRefused(err) {
+		t.Fatalf("provider refusal lost: %v", err)
+	}
+	if len(binance.historyKeys) != 1 || len(bybit.historyKeys) != 1 || sent != 1 {
+		t.Fatalf("refusal repeated or independent venue was skipped: Binance=%d Bybit=%d sends=%d", len(binance.historyKeys), len(bybit.historyKeys), sent)
+	}
+	if !reflect.DeepEqual(l.state.Checks[entries[1].ID], prior) {
+		t.Fatal("skipped row overwrote its previous actual check")
+	}
+	refused := sequentialCheckRow(t, l, entries[0].ID)
+	skipped := sequentialCheckRow(t, l, entries[1].ID)
+	completed := sequentialCheckRow(t, l, entries[2].ID)
+	if refused.ProgressState != "failed" || refused.Progress >= 100 || skipped.ProgressState != "skipped" || skipped.Progress != 0 || completed.ProgressState != "completed" || completed.Progress != 100 {
+		t.Fatalf("failure/skip/completion percentages were invented: %+v %+v %+v", refused, skipped, completed)
+	}
+}
+
+func TestLiveAlertRowProgressIsTransientAndLegacyCompletedDoesNotInventZeroPercent(t *testing.T) {
+	_, l, saved, _ := namedPublicLiveFixture(t)
+	entry := LiveAlertDefinition{ID: strings.Repeat("a", 32), Name: "Previous completed", ConditionID: saved.ID, Period: "h1", DataSource: "binance", Enabled: true}
+	if _, err := l.Configure(LiveAlertsConfig{Enabled: true, Alerts: []LiveAlertDefinition{entry}}); err != nil {
+		t.Fatal(err)
+	}
+	l.state.Checks = map[string]liveAlertCheckState{entry.ID: {LastChecked: 1704067200000, Status: "completed"}}
+	row := sequentialCheckRow(t, l, entry.ID)
+	data, _ := json.Marshal(row)
+	if strings.Contains(string(data), `"progress"`) || row.ProgressState != "" {
+		t.Fatalf("restored history invented zero-percent progress: %s", data)
+	}
+	l.mu.Lock()
+	l.queueCheckProgressLocked([]string{entry.ID}, true)
+	l.mu.Unlock()
+	data, _ = json.Marshal(l.state)
+	if strings.Contains(string(data), "progressState") || strings.Contains(string(data), "Queued") {
+		t.Fatalf("transient queue leaked into persisted state: %s", data)
+	}
+	joined := errors.Join(&exchange.Error{Kind: "unknownInstrument", Message: "synthetic old symbol"}, fmt.Errorf("wrapped refusal: %w", &exchange.Error{Kind: "rateLimited", Message: "synthetic cooldown"}))
+	if !publicAlertProviderRefused(joined) {
+		t.Fatal("a later typed refusal inside joined asset failures was hidden by the first symbol error")
+	}
+}
+
+func TestLiveAlertRowProgressDukascopyRefusalSkipsLaterRowWithoutRefresh(t *testing.T) {
+	m, l, config, _ := liveAlertsFixture(t)
+	second, err := saveLiveCondition(t, m, "Later Dukascopy row", defaultAnalysisRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConditionIDs = append(config.ConditionIDs, second.ID)
+	if _, err = l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	prior := liveAlertCheckState{LastChecked: 1704067200000, SentAlerts: 1, AssetsScanned: 3, Status: "completed", Manual: false}
+	l.state.Checks = map[string]liveAlertCheckState{second.ID: prior}
+	l.state.Sent = 1
+	calls := 0
+	refusal := errors.New("synthetic Dukascopy worker HTTP 403 access-denial")
+	l.refresh = func(context.Context, string, []historyGroup, int64) (map[string]bool, error) {
+		calls++
+		return nil, refusal
+	}
+	if err = l.check(context.Background(), config, time.Date(2024, 1, 1, 2, 30, 0, 0, time.UTC).UnixMilli()); !errors.Is(err, refusal) {
+		t.Fatalf("Dukascopy refusal hidden: %v", err)
+	}
+	if calls != 1 || !reflect.DeepEqual(l.state.Checks[second.ID], prior) {
+		t.Fatalf("later Dukascopy row refreshed or replaced history after refusal: calls=%d state=%+v", calls, l.state.Checks[second.ID])
+	}
+	row := sequentialCheckRow(t, l, second.ID)
+	if row.ProgressState != "skipped" || row.Progress != 0 || row.Phase != "Skipped after provider refusal" {
+		t.Fatalf("Dukascopy cooldown was not shown on unattempted row: %+v", row)
+	}
+}
+
+func TestLiveAlertRowProgressSkipsQueuedCalendarChangeWithoutInventingCompletion(t *testing.T) {
+	l, config, _, gate, started := sequentialAlertFixture(t)
+	prior := copyLiveCheckStates(l.state.Checks)
+	var release sync.Once
+	t.Cleanup(func() { release.Do(func() { close(gate) }) })
+	finished := make(chan error, 1)
+	go func() { finished <- l.checkCycle(context.Background(), config, l.now().UnixMilli(), true) }()
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first row did not reach history")
+	}
+	saved, err := l.manager.SavedAnalysisConditions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := saved[0].Request
+	request.Conditions = append(request.Conditions, AnalysisCondition{ID: "new weekday", Operator: "equal", Left: AnalysisOperand{Kind: "field", Field: "weekday"}, Right: AnalysisOperand{Kind: "number", Value: 1}})
+	if _, err = l.manager.UpdateAnalysisCondition(saved[0].ID, request); err != nil {
+		t.Fatal(err)
+	}
+	release.Do(func() { close(gate) })
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("calendar-change check did not finish")
+	}
+	for _, entry := range config.Alerts[1:3] {
+		row := sequentialCheckRow(t, l, entry.ID)
+		if row.ProgressState != "skipped" || row.Progress != 0 || row.Phase != "No eligible closed bar" || !reflect.DeepEqual(l.state.Checks[entry.ID], prior[entry.ID]) {
+			t.Fatalf("ineligible queued row invented a completed check: %+v", row)
+		}
+	}
+}

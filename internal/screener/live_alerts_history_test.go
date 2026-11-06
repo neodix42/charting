@@ -233,7 +233,7 @@ func TestLiveAlertsRetryHistoryHintDescribesRetryInsteadOfNextWeeklyClose(t *tes
 	}
 }
 
-func TestLiveAlertsActualDeliveryAbortLeavesPartiallyVisitedHistoryFailed(t *testing.T) {
+func TestLiveAlertsSequentialDeliveryAbortPreservesCompletedRowsAndFailsCurrent(t *testing.T) {
 	m, l, config, path := liveAlertsFixture(t)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -258,7 +258,7 @@ func TestLiveAlertsActualDeliveryAbortLeavesPartiallyVisitedHistoryFailed(t *tes
 		t.Fatal(err)
 	}
 	calls := 0
-	failure := errors.New("A EUR delivery aborted the rest of the cycle")
+	failure := errors.New("First delivery of the second alert aborted the rest of the cycle")
 	l.send = func(context.Context, LiveAlert) error {
 		calls++
 		if calls == 3 {
@@ -270,8 +270,8 @@ func TestLiveAlertsActualDeliveryAbortLeavesPartiallyVisitedHistoryFailed(t *tes
 		t.Fatal("fixture delivery did not abort", err)
 	}
 	rows := l.Info().Checks
-	if calls != 3 || rows[0].Status != "failed" || rows[0].AssetsScanned != 2 || rows[0].SentAlerts != 1 || rows[1].Status != "failed" || rows[1].AssetsScanned != 1 || rows[1].SentAlerts != 1 {
-		t.Fatal("real pipeline marked partial condition complete or inflated confirmed sends", rows, calls)
+	if calls != 3 || rows[0].Status != "completed" || rows[0].AssetsScanned != 2 || rows[0].SentAlerts != 2 || rows[0].ProgressState != "completed" || rows[0].Progress != 100 || rows[1].Status != "failed" || rows[1].AssetsScanned != 1 || rows[1].SentAlerts != 0 || rows[1].ProgressState != "failed" || rows[1].Progress >= 100 || l.Info().Sent != 2 {
+		t.Fatal("sequential delivery failure changed a completed peer or inflated confirmed sends", rows, calls)
 	}
 }
 

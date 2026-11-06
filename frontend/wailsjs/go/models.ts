@@ -2281,6 +2281,11 @@ export namespace screener {
 		}
 	}
 	export class LiveAlertCheck {
+	    progress?: number;
+	    phase?: string;
+	    currentAsset?: string;
+	    progressState?: string;
+	    progressMode?: string;
 	    alertId?: string;
 	    savedConditionId?: string;
 	    conditionId: string;
@@ -2300,6 +2305,11 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.progress = source["progress"];
+	        this.phase = source["phase"];
+	        this.currentAsset = source["currentAsset"];
+	        this.progressState = source["progressState"];
+	        this.progressMode = source["progressMode"];
 	        this.alertId = source["alertId"];
 	        this.savedConditionId = source["savedConditionId"];
 	        this.conditionId = source["conditionId"];

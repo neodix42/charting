@@ -3,7 +3,6 @@ package screener
 import (
 	"errors"
 	"fmt"
-	"sort"
 )
 
 // Stopping must not queue behind catalog/history work on Manager.mu. The
@@ -18,6 +17,7 @@ func (l *LiveAlerts) stopAlerts(config LiveAlertsConfig) (LiveAlertsInfo, error)
 	if l.cycleCancel != nil {
 		l.cycleCancel()
 	}
+	l.cancelCheckProgressLocked("Cancelled")
 	previous := l.state.Config
 	l.state.Config = copyLiveAlertsConfig(config)
 	if err := writeState(l.path, l.state); err != nil {
@@ -52,11 +52,14 @@ func (l *LiveAlerts) stopInfoLocked() LiveAlertsInfo {
 		info.Recent[i].Message = liveAlertErrorText(info.Recent[i].Message)
 		info.Recent[i].Profitability = copyLiveProfitability(info.Recent[i].Profitability)
 	}
-	ids := make([]string, 0, len(l.state.Checks))
-	for id := range l.state.Checks {
-		ids = append(ids, id)
+	ids := []string{}
+	if info.Config.Alerts != nil {
+		for _, entry := range info.Config.Alerts {
+			ids = append(ids, entry.ID)
+		}
+	} else {
+		ids = append(ids, info.Config.ConditionIDs...)
 	}
-	sort.Strings(ids)
 	for _, id := range ids {
 		state := l.state.Checks[id]
 		name := id
@@ -67,6 +70,9 @@ func (l *LiveAlerts) stopInfoLocked() LiveAlertsInfo {
 			}
 		}
 		row := LiveAlertCheck{ConditionID: id, Name: name, AssetsScanned: state.AssetsScanned, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		if row.Status == "" {
+			row.Status = "never"
+		}
 		if info.Config.Alerts != nil {
 			entry, exists := liveAlertEntry(info.Config, id)
 			if !exists {
@@ -78,5 +84,6 @@ func (l *LiveAlerts) stopInfoLocked() LiveAlertsInfo {
 		}
 		info.Checks = append(info.Checks, row)
 	}
+	applyLiveAlertProgress(info.Checks, l.checkProgress)
 	return info
 }

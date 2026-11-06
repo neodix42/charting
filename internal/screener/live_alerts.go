@@ -172,8 +172,11 @@ type LiveAlerts struct {
 	send                            func(context.Context, LiveAlert) error
 	// Tests replace the transport only. Indexing, rule evaluation, claims and
 	// scheduling still use production code and real on-disk CSVs.
-	refresh    func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
-	publicData *publicAlertData
+	refresh          func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
+	publicData       *publicAlertData
+	checkExecuting   bool
+	checkProgress    map[string]liveAlertProgress
+	activeProgressID string
 }
 
 func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error) (*LiveAlerts, error) {
@@ -453,6 +456,7 @@ func (l *LiveAlerts) Info() LiveAlertsInfo {
 		info.Recent[i].Profitability = copyLiveProfitability(info.Recent[i].Profitability)
 	}
 	states := copyLiveCheckStates(l.state.Checks)
+	progressRows := copyLiveAlertProgress(l.checkProgress)
 	watermarks := make(map[string]int64, len(l.state.Watermarks))
 	for key, value := range l.state.Watermarks {
 		watermarks[key] = value
@@ -472,6 +476,7 @@ func (l *LiveAlerts) Info() LiveAlertsInfo {
 			info.ConditionScopes = append(info.ConditionScopes, scope)
 		}
 		info.Checks = liveAlertCheckRows(presented, info.ConditionScopes, info.Config, states, now, retry, retryAt, retryAsOf, retryManual)
+		applyLiveAlertProgress(info.Checks, progressRows)
 	} else if info.Error == "" {
 		info.Error = cleanMessage(savedErr.Error())
 	}
@@ -652,6 +657,7 @@ func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) 
 		runtimeUnchanged = sameActiveLiveAlertEntries(config, l.state.Config)
 		if !runtimeUnchanged && l.cycleCancel != nil {
 			l.cycleCancel()
+			l.cancelCheckProgressLocked("Cancelled after configuration changed")
 		}
 		l.mu.Unlock()
 	}
@@ -755,14 +761,14 @@ func (l *LiveAlerts) Start(parent context.Context) {
 
 func (l *LiveAlerts) CheckNow() (LiveAlertsInfo, error) {
 	l.mu.Lock()
-	if l.closed || l.blocked || !l.state.Config.Enabled || l.running || l.requested {
-		l.mu.Unlock()
-		return l.Info(), errors.New("enable Live Alerts and wait for the current check before checking again")
+	defer l.mu.Unlock()
+	if l.closed || l.blocked || !l.state.Config.Enabled || l.running || l.requested || len(l.state.Config.ConditionIDs) == 0 {
+		return l.stopInfoLocked(), errors.New("enable Live Alerts and wait for the current check before checking again")
 	}
 	l.requested, l.status = true, "Check queued"
-	l.mu.Unlock()
+	l.queueCheckProgressLocked(l.state.Config.ConditionIDs, true)
 	l.signal()
-	return l.Info(), nil
+	return l.stopInfoLocked(), nil
 }
 
 // Weekly bars use Monday 00:00 UTC rather than Unix-epoch week alignment.
@@ -925,6 +931,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			cycle, cancel := context.WithCancel(ctx)
 			executionRevision := l.configRevision
 			l.cycleCancel = cancel
+			l.queueCheckProgressLocked(config.ConditionIDs, manual)
 			l.mu.Unlock()
 			err := l.checkCycle(cycle, config, asOf, !manual)
 			cancel()

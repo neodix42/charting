@@ -291,13 +291,12 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		return exchange.TimeframeSeconds(publicAlertIntervals[orderedPeriods[i]]) > exchange.TimeframeSeconds(publicAlertIntervals[orderedPeriods[j]])
 	})
 	for i, asset := range batch.Assets {
-		for _, period := range orderedPeriods {
+		for periodIndex, period := range orderedPeriods {
 			if err = ctx.Err(); err != nil {
 				return batch, err
 			}
 			l.mu.Lock()
-			l.status, l.currentAsset = "Fetching public market history", source+" "+asset.Name+" "+asset.Market+" "+period
-			l.progress = 70 * float64(i) / float64(len(batch.Assets))
+			l.updateCheckProgressLocked("Fetching public market history and indicators", 70*float64(i*len(orderedPeriods)+periodIndex)/float64(len(batch.Assets)*len(orderedPeriods)), source+" "+asset.Name+" "+asset.Market+" "+period)
 			l.mu.Unlock()
 			pair := asset.Symbol + "/" + period
 			name, e := preparePublicAlertSeries(ctx, a, worker, root, batch.Directory, source, asset, period, plans[period], asOf)

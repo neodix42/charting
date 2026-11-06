@@ -23,33 +23,97 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		return err
 	}
 	config = canonicalLiveAlertsConfig(config)
-	hasPublic := false
-	for _, id := range canonicalLiveAlertsConfig(config).ConditionIDs {
-		hasPublic = hasPublic || supportedPublicAlertSource(liveAlertSource(config, id))
+	l.mu.Lock()
+	if l.checkExecuting {
+		l.mu.Unlock()
+		return errLiveAlertsBusy
 	}
-	if !hasPublic {
-		return l.checkDukascopyCycle(ctx, config, asOf, scheduled)
+	l.checkExecuting = true
+	l.mu.Unlock()
+	defer func() {
+		l.mu.Lock()
+		l.finishQueuedProgressLocked(cycleErr)
+		l.activeProgressID = ""
+		l.checkExecuting = false
+		l.mu.Unlock()
+	}()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	var failures []error
-	for _, source := range []string{"dukascopy", "hyperliquid", "binance", "bybit"} {
-		subset := copyLiveAlertsConfig(config)
-		subset.ConditionIDs = nil
-		for _, id := range canonicalLiveAlertsConfig(config).ConditionIDs {
-			if liveAlertSource(config, id) == source {
-				subset.ConditionIDs = append(subset.ConditionIDs, id)
+	conditions, err := l.selectedConditions(config)
+	if err != nil {
+		return err
+	}
+	selected := []SavedAnalysisCondition{}
+	ids := []string{}
+	for _, saved := range conditions {
+		due := !scheduled
+		if scheduled {
+			periods := savedLiveAlertPeriods(saved)
+			if liveAlertSource(config, saved.ID) == "dukascopy" {
+				periods = nil
+				for pair := range savedConditionEligiblePairs(saved) {
+					_, period, _ := strings.Cut(pair, "/")
+					periods = append(periods, period)
+				}
+			}
+			for _, period := range periods {
+				if liveAlertsScopeAllows(config, saved.ID, period) && liveAlertConditionDueAt(saved, period, time.UnixMilli(asOf)) {
+					due = true
+					break
+				}
 			}
 		}
-		if len(subset.ConditionIDs) == 0 {
+		if due {
+			selected = append(selected, saved)
+			ids = append(ids, saved.ID)
+		}
+	}
+	l.mu.Lock()
+	l.queueCheckProgressLocked(ids, !scheduled)
+	l.mu.Unlock()
+	var failures []error
+	refused := map[string]error{}
+	for _, saved := range selected {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(errors.Join(failures...), err)
+		}
+		source := liveAlertSource(config, saved.ID)
+		if failure := refused[source]; failure != nil {
+			l.mu.Lock()
+			progress := l.checkProgress[saved.ID]
+			progress.state, progress.phase = "skipped", "Skipped after provider refusal"
+			l.checkProgress[saved.ID] = progress
+			l.mu.Unlock()
 			continue
 		}
+		subset := copyLiveAlertsConfig(config)
+		subset.ConditionIDs = []string{saved.ID}
+		if config.scope != nil {
+			subset.scope = []LiveAlertConditionPeriod{}
+			for _, scope := range config.scope {
+				if scope.ConditionID == saved.ID {
+					subset.scope = append(subset.scope, scope)
+				}
+			}
+		}
+		l.mu.Lock()
+		l.startCheckProgressLocked(saved.ID)
+		l.mu.Unlock()
 		var err error
 		if source == "dukascopy" {
 			err = l.checkDukascopyCycle(ctx, subset, asOf, scheduled)
 		} else {
 			err = l.checkPublicCycle(ctx, subset, source, asOf, scheduled)
 		}
+		l.mu.Lock()
+		l.finishCheckProgressLocked(saved.ID, err, asOf)
+		l.mu.Unlock()
 		if err != nil {
 			failures = append(failures, err)
+			if publicAlertProviderRefused(err) || (source == "dukascopy" && liveAlertProviderStopped(ctx, err)) {
+				refused[source] = err
+			}
 			if ctx.Err() != nil || errors.Is(err, errLiveAlertsBusy) || strings.Contains(err.Error(), "Telegram alert for ") {
 				break
 			}
@@ -241,7 +305,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			return err
 		}
 		l.mu.Lock()
-		l.status, l.currentAsset = "Checking latest closed bars", strings.ToUpper(match[1])+" "+match[2]
+		l.updateCheckProgressLocked("Indexing closed history", 70, strings.ToUpper(match[1])+" "+match[2])
 		l.mu.Unlock()
 		id := dataFileID(directory, name)
 		s, e := indexAnalysisCSV(ctx, directory, name, filepath.Join(work, id+".rows"), func(float64) {})
@@ -261,7 +325,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			return err
 		}
 		l.mu.Lock()
-		l.currentAsset, l.progress = strings.ToUpper(s.metadata.Symbol)+" "+s.metadata.Timeframe, 70+30*float64(i)/float64(max(1, len(targets)))
+		l.updateCheckProgressLocked("Checking latest closed bars", 70+30*float64(i)/float64(max(1, len(targets))), strings.ToUpper(s.metadata.Symbol)+" "+s.metadata.Timeframe)
 		l.mu.Unlock()
 		closed, e := s.closedCount(asOf)
 		if e != nil {
@@ -488,7 +552,7 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 		}
 		err = nil
 		l.mu.Lock()
-		l.currentAsset, l.progress = group.name, 70*float64(i)/float64(max(1, len(groups)))
+		l.updateCheckProgressLocked("Refreshing closed history and indicators", 70*float64(i)/float64(max(1, len(groups))), group.name)
 		l.mu.Unlock()
 		m.mu.Lock()
 		m.refreshJobs[i].Status, m.refreshJobs[i].Message = "running", "Appending closed bars and updating applied indicators"
@@ -685,6 +749,9 @@ func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionI
 }
 
 func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
+	l.mu.Lock()
+	l.updateCheckProgressLocked("Sending alert", -1, alert.Symbol+" "+alert.Timeframe)
+	l.mu.Unlock()
 	var err error
 	if l.send == nil {
 		err = errors.New("Telegram delivery is unavailable; configure the Telegram Bot settings")

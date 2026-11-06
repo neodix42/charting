@@ -9,7 +9,20 @@ export interface LiveAlertAsset {symbol:string;name:string;category:string;perio
 export interface LiveAlertOutcome {alertId?:string;alertName?:string;savedConditionId?:string;savedConditionName?:string;conditionId?:string;dataSource?:LiveAlertDataSource;market?:string;confirmedRecipients?:number;assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertConditionScope {alertId?:string;savedConditionId?:string;conditionId:string;period:string;dataSource?:LiveAlertDataSource;allAssets?:boolean;targets:LiveAlertTarget[];error:string}
-export interface LiveAlertCheck {alertId?:string;savedConditionId?:string;conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
+export type LiveAlertProgressState='queued'|'running'|'completed'|'failed'|'cancelled'|'skipped';
+export interface LiveAlertCheck {progress?:number;phase?:string;currentAsset?:string;progressState?:LiveAlertProgressState;progressMode?:'manual'|'scheduled';alertId?:string;savedConditionId?:string;conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
+/** Follow the visible alert list even when a compact Stop response orders IDs. */
+export function orderedLiveAlertChecks(entries:LiveAlertDefinition[],checks:LiveAlertCheck[]):LiveAlertCheck[]{
+ const byID=new Map(checks.map(check=>[check.alertId??check.conditionId,check]));
+ return entries.map(entry=>byID.get(entry.id)??{alertId:entry.id,savedConditionId:entry.conditionId,conditionId:entry.id,name:entry.name,assetsScanned:0,lastChecked:0,nextCheck:0,sentAlerts:0,status:'never',manual:false,error:''});
+}
+export function liveAlertCheckProgress(check:LiveAlertCheck):{state:string;phase:string;value:number|undefined}{
+ const state=check.progressState??check.status,labels:Record<string,string>={never:'Not checked yet',queued:'Queued',running:'Running',completed:'Completed',failed:'Failed',cancelled:'Cancelled',skipped:'Skipped'};
+ // Go omits zero-valued progress; a runtime state still proves that zero.
+ const reported=check.progress??(check.progressState?0:undefined);
+ const value=typeof reported==='number'&&Number.isFinite(reported)?Math.max(0,Math.min(100,reported)):state==='queued'?0:undefined;
+ return{state,phase:check.phase||labels[state]||state,value};
+}
 export interface LiveAlertsInfo {checks:LiveAlertCheck[];savedConditionsRevision:number;conditionScopes:LiveAlertConditionScope[];config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
 export interface ScreenerLiveAlertsBackend {
  GetScreenerLiveAlerts():Promise<LiveAlertsInfo>;
