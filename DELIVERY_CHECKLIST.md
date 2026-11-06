@@ -6,7 +6,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 
 - [x] Tests and release builds restore/verify/save the same manifest-pinned SDK cache before subsequent work; valid client/dependencies are reused without vendor requests.
 - [x] Failed downloads preserve previous files. Classpaths exclude older/unlisted cached JARs; cache-transfer inventory/checksum tests and real offline bridge/bootstrap checks pass.
-- [ ] Seed the empty hosted cache from the retained verified SDK, remove its temporary draft transfer, and monitor resumed release/Tests jobs.
+- [x] Hosted seed run 42235757876 verified all 51 artifacts and saved the shared cache. The temporary unpublished transfer was removed. Resumed release/Tests jobs are monitored for the submitted revision.
 
 ## Resilient Live Alerts and editable asset sets — 2026-11-06
 
