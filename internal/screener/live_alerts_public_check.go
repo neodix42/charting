@@ -103,6 +103,12 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 		}
 	}
 	sort.Slice(batch.Assets, func(i, j int) bool { return batch.Assets[i].Symbol < batch.Assets[j].Symbol })
+	filesByAsset := map[string][]string{}
+	for pair := range batch.Files {
+		symbol, _, _ := strings.Cut(pair, "/")
+		filesByAsset[symbol] = append(filesByAsset[symbol], pair)
+	}
+	var ruleGuard publicAlertRuleGuard
 	for index, asset := range batch.Assets {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -113,12 +119,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 		a := &analysisState{directory: batch.Directory, work: work, series: map[string]*analysisSeries{}, cache: newAnalysisRowCache(), asOf: asOf}
 		series := map[string]*analysisSeries{}
 		indexFailures := map[string]error{}
-		keys := []string{}
-		for pair := range batch.Files {
-			if strings.HasPrefix(pair, asset.Symbol+"/") {
-				keys = append(keys, pair)
-			}
-		}
+		keys := filesByAsset[asset.Symbol]
 		sort.Strings(keys)
 		for _, pair := range keys {
 			name := batch.Files[pair]
@@ -200,7 +201,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 								}
 							}
 							if failure == nil {
-								claimed, e := l.claimCurrentPublicCondition(ctx, saved, source, key, latest.timestamp, alert)
+								claimed, e := l.claimCurrentPublicCondition(ctx, saved, source, key, latest.timestamp, alert, &ruleGuard)
 								if e != nil {
 									return e
 								}
@@ -244,10 +245,16 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 	return finishedLiveAlertScan(failures...)
 }
 
-func (l *LiveAlerts) claimCurrentPublicCondition(ctx context.Context, evaluated SavedAnalysisCondition, source, key string, timestamp int64, alert *LiveAlert) (bool, error) {
+func (l *LiveAlerts) claimCurrentPublicCondition(ctx context.Context, evaluated SavedAnalysisCondition, source, key string, timestamp int64, alert *LiveAlert, guards ...*publicAlertRuleGuard) (bool, error) {
 	l.manager.mu.Lock()
 	defer l.manager.mu.Unlock()
-	saved, err := l.manager.readSavedConditions()
+	var saved []SavedAnalysisCondition
+	var err error
+	if len(guards) > 0 {
+		saved, err = guards[0].read(l.manager)
+	} else {
+		saved, err = l.manager.readSavedConditions()
+	}
 	if err != nil {
 		return false, err
 	}

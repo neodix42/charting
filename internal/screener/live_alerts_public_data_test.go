@@ -28,6 +28,7 @@ type publicAlertFakeAdapter struct {
 	items        []domain.Instrument
 	price        float64
 	short        bool
+	listedAt     int64
 	pending      bool
 	provisional  bool
 	fail         error
@@ -54,12 +55,15 @@ func (f *publicAlertFakeAdapter) History(ctx context.Context, key domain.FeedKey
 		return nil, f.fail
 	}
 	d := exchange.TimeframeSeconds(key.Timeframe)
+	if f.short && f.listedAt == 0 {
+		f.listedAt = to - d
+	}
 	if to-from > int64(limit)*d {
 		return nil, errors.New("unbounded history range")
 	}
 	rows := []domain.Candle{}
 	for ts := from; ts < to; ts += d {
-		if f.short && ts+d < to {
+		if f.short && ts < f.listedAt {
 			continue
 		}
 		if f.pending && ts+d == to {

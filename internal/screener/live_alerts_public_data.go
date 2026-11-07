@@ -336,12 +336,14 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 }
 
 type publicAlertRawState struct {
-	Source         string `json:"source"`
-	Market         string `json:"market"`
-	NativeID       string `json:"nativeId"`
-	Period         string `json:"period"`
-	Checksum       string `json:"checksum"`
-	CheckedThrough int64  `json:"checkedThrough"`
+	Source          string `json:"source"`
+	Market          string `json:"market"`
+	NativeID        string `json:"nativeId"`
+	Period          string `json:"period"`
+	Checksum        string `json:"checksum"`
+	CheckedThrough  int64  `json:"checkedThrough"`
+	BackfillThrough int64  `json:"backfillThrough,omitempty"`
+	BackfillBars    int    `json:"backfillBars,omitempty"`
 }
 
 func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, worker *publicAlertWorker, root, directory, source string, asset publicAlertAsset, period string, plan publicAlertPlan, asOf int64) (string, error) {
@@ -389,6 +391,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
+	previousState := state
 	first := end
 	for ts := range bars {
 		first = min(first, ts)
@@ -398,7 +401,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	if len(bars) == 0 {
 		ranges = append(ranges, span{from, end})
 	} else {
-		if first > from {
+		if first > from && (state.BackfillThrough < end || state.BackfillBars < plan.Bars) {
 			ranges = append(ranges, span{from, min(first, end)})
 		}
 		repairFrom := max(from, state.CheckedThrough-d)
@@ -412,22 +415,73 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			ranges = append(ranges, span{repairFrom, end})
 		}
 	}
+	fetch := func(from, to int64) error {
+		rows, e := adapter.History(ctx, key, from, to, 1000)
+		if e != nil {
+			return e
+		}
+		for _, c := range rows {
+			if err := c.Validate(); err != nil || exchange.BucketStart(c.Time, d) != c.Time {
+				return errors.New("public provider returned invalid candle data")
+			}
+			if c.Time >= from && c.Time < to && c.Closed && c.Time+d <= end {
+				bars[c.Time] = c
+			}
+		}
+		return nil
+	}
 	for _, r := range ranges {
 		for cursor := r.from; cursor < r.to; {
 			pageEnd := min(r.to, cursor+1000*d)
-			rows, e := adapter.History(ctx, key, cursor, pageEnd, 1000)
-			if e != nil {
+			if e := fetch(cursor, pageEnd); e != nil {
 				return "", e
 			}
-			for _, c := range rows {
-				if err := c.Validate(); err != nil || exchange.BucketStart(c.Time, d) != c.Time {
-					return "", errors.New("public provider returned invalid candle data")
-				}
-				if c.Time >= cursor && c.Time < pageEnd && c.Closed && c.Time+d <= end {
-					bars[c.Time] = c
-				}
-			}
 			cursor = pageEnd
+		}
+	}
+	// Warm-up counts actual bars, not calendar slots. Sparse markets can need
+	// a longer window. Probe older pages before enrichment, with a hard horizon
+	// and a wide empty-page stop for newly listed/retention-limited assets.
+	count := func() int {
+		n := 0
+		for ts := range bars {
+			if ts < end {
+				n++
+			}
+		}
+		return n
+	}
+	if count() < plan.Bars && (state.BackfillThrough < end || state.BackfillBars < plan.Bars) {
+		horizon := int64(50000)
+		if source == "hyperliquid" {
+			horizon = 5000
+			if period == "w1" {
+				horizon = 5000 / 7
+			}
+		}
+		cursor := from
+		for ts := range bars {
+			cursor = min(cursor, ts)
+		}
+		floor := max(int64(0), end-horizon*d)
+		for count() < plan.Bars && cursor > floor {
+			start := max(floor, cursor-1000*d)
+			before := count()
+			if e := fetch(start, cursor); e != nil {
+				return "", e
+			}
+			cursor = start
+			if count() == before {
+				break
+			}
+		}
+		state.BackfillThrough, state.BackfillBars = end, plan.Bars
+	}
+	// Repair publication races with one narrow request, rather than waiting for
+	// the next full-universe check. Never substitute an older or synthetic bar.
+	if latest, ok := bars[end-d]; !ok || latest.Quality != "authoritative" {
+		if e := fetch(end-d, end); e != nil {
+			return "", e
 		}
 	}
 	// A successful empty/provisional response does not prove publication of
@@ -465,8 +519,10 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	if err = ctx.Err(); err != nil {
 		return "", err
 	}
-	if err = publicAlertPublishRaw(rawPath, metadataPath, encoded, state, previousChecksum); err != nil {
-		return "", err
+	if state != previousState || state.Checksum != previousChecksum {
+		if err = publicAlertPublishRaw(rawPath, metadataPath, encoded, state, previousChecksum); err != nil {
+			return "", err
+		}
 	}
 	eligible := []domain.Candle{}
 	for _, c := range ordered {
@@ -475,28 +531,36 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		}
 	}
 	if len(eligible) == 0 || eligible[len(eligible)-1].Time != end-d {
-		return "", errLiveAlertsPendingBar
+		return "", fmt.Errorf("%w; requested %s UTC explicitly but the provider returned no closed candle (no stale or synthetic substitution)", errLiveAlertsPendingBar, time.Unix(end-d, 0).UTC().Format("2006-01-02 15:04"))
 	}
 	if eligible[len(eligible)-1].Quality != "authoritative" {
 		return "", fmt.Errorf("%w; latest public candle is provisional", errLiveAlertsPendingBar)
 	}
 	if len(eligible) < plan.Bars {
-		return "", fmt.Errorf("indicator/rule warm-up needs %d closed bars; provider has %d in the requested history window (saved for reuse)", plan.Bars, len(eligible))
+		return "", fmt.Errorf("indicator/rule warm-up needs %d closed bars; only %d available after older-history backfill (saved for reuse; a new listing or provider history limit can prevent warm-up)", plan.Bars, len(eligible))
 	}
 	for _, c := range eligible[len(eligible)-plan.Bars:] {
 		if c.Quality != "authoritative" {
 			return "", errors.New("required public candles are provisional; awaiting authoritative history")
 		}
 	}
+	input, err := publicAlertRawCSV(eligible, false)
+	if err != nil {
+		return "", err
+	}
+	fromDate := time.Unix(eligible[0].Time, 0).UTC().Format("2006-01-02")
+	toDate := time.Unix(end, 0).UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	name := stem + "-" + fromDate + "-" + toDate + ".csv"
+	cachePath := filepath.Join(root, "raw", stem+".enriched.json")
+	cacheKey := publicAlertEnrichmentKey(input, plan, worker.fingerprint)
+	if publicAlertReuseEnriched(cachePath, filepath.Join(directory, name), cacheKey) {
+		return name, ctx.Err()
+	}
 	work, err := os.MkdirTemp(root, ".prepare-*")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(work)
-	input, err := publicAlertRawCSV(eligible, false)
-	if err != nil {
-		return "", err
-	}
 	inputPath, outputPath := filepath.Join(work, "input.csv"), filepath.Join(work, "enriched.csv")
 	if err = writeSyncedExclusive(inputPath, input); err != nil {
 		return "", err
@@ -504,9 +568,6 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	if err = worker.enrich(period, inputPath, outputPath); err != nil {
 		return "", err
 	}
-	fromDate := time.Unix(eligible[0].Time, 0).UTC().Format("2006-01-02")
-	toDate := time.Unix(end, 0).UTC().AddDate(0, 0, 1).Format("2006-01-02")
-	name := stem + "-" + fromDate + "-" + toDate + ".csv"
 	output, err := publicAlertReadBounded(outputPath, 128<<20)
 	if err != nil {
 		return "", err
@@ -515,6 +576,9 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		return "", err
 	}
 	if err = publicAlertAtomicWrite(filepath.Join(directory, name), output); err != nil {
+		return "", err
+	}
+	if err = publicAlertSaveEnriched(cachePath, cacheKey, output); err != nil {
 		return "", err
 	}
 	// Only this application's previous derived snapshot is replaced. Raw venue
@@ -705,15 +769,17 @@ func publicAlertAtomicWrite(path string, data []byte) error {
 }
 
 type publicAlertWorker struct {
-	cmd    *exec.Cmd
-	in     io.WriteCloser
-	encode *json.Encoder
-	decode *json.Decoder
-	stderr tailBuffer
+	cmd         *exec.Cmd
+	in          io.WriteCloser
+	encode      *json.Encoder
+	decode      *json.Decoder
+	stderr      tailBuffer
+	fingerprint string
 }
 
 func startPublicAlertWorker(ctx context.Context, runtime workerRuntime, plans map[string]publicAlertPlan) (*publicAlertWorker, map[string]publicAlertPlan, error) {
 	w := &publicAlertWorker{}
+	w.fingerprint = publicAlertRuntimeFingerprint(runtime)
 	w.cmd = exec.CommandContext(ctx, runtime.node, "-e", publicAlertWorkerScript, filepath.Dir(runtime.worker))
 	configureProcess(w.cmd)
 	in, err := w.cmd.StdinPipe()

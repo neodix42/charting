@@ -14,6 +14,32 @@ import (
 	"time"
 )
 
+func TestHyperliquidPacingReservesResponseWeight(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+		weight  int
+	}{
+		{"metadata", `{"type":"meta"}`, 20},
+		{"incremental", `{"type":"candleSnapshot","req":{"interval":"1d","startTime":86400000,"endTime":172799999}}`, 21},
+		{"full-page", `{"type":"candleSnapshot","req":{"interval":"1m","startTime":0,"endTime":59999999}}`, 37},
+		{"unaligned-two-buckets", `{"type":"candleSnapshot","req":{"interval":"1m","startTime":59999,"endTime":60000}}`, 21},
+		{"unknown-window", `{"type":"candleSnapshot"}`, 104},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := hyperliquidRequestSpacing([]byte(tc.payload))
+			if got != time.Duration(tc.weight)*55*time.Millisecond {
+				t.Fatal("incorrect reserved weight", got)
+			}
+			// Conservatively include one maximum-weight boundary request in a
+			// rolling minute, even when switching between cheap and large calls.
+			if 60000/55+104 > 1200 {
+				t.Fatal("weighted pacing exceeds IP budget")
+			}
+		})
+	}
+}
+
 func hyperliquidTestAdapter(t *testing.T, handler http.HandlerFunc) *publicAdapter {
 	t.Helper()
 	var adapter *publicAdapter

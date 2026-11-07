@@ -57,6 +57,10 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 	if err = readState(path, savedConditionsBytes, &saved); err != nil {
 		return nil, fmt.Errorf("read saved conditions (original state preserved): %w", err)
 	}
+	return validatedSavedConditions(saved)
+}
+
+func validatedSavedConditions(saved savedAnalysisConditions) ([]SavedAnalysisCondition, error) {
 	if saved.Version != 1 || len(saved.Conditions) > savedConditionsLimit {
 		return nil, errors.New("unsupported saved conditions version or count; original state preserved")
 	}
@@ -66,7 +70,7 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 		if nameErr != nil || name != condition.Name || len(condition.ID) != 32 || ids[condition.ID] {
 			return nil, errors.New("invalid saved condition name or ID; original state preserved")
 		}
-		if _, err = hex.DecodeString(condition.ID); err != nil {
+		if _, err := hex.DecodeString(condition.ID); err != nil {
 			return nil, errors.New("invalid saved condition ID; original state preserved")
 		}
 		ids[condition.ID] = true
@@ -75,10 +79,10 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 				return nil, errors.New("duplicate saved condition names; original state preserved")
 			}
 		}
-		if err = validateSavedConditionAnalysis(condition.Analysis); err != nil {
+		if err := validateSavedConditionAnalysis(condition.Analysis); err != nil {
 			return nil, fmt.Errorf("invalid saved condition profitability (original state preserved): %w", err)
 		}
-		if err = validateAnalysisRequest(condition.Request, false); err != nil {
+		if err := validateAnalysisRequest(condition.Request, false); err != nil {
 			return nil, fmt.Errorf("invalid saved condition %q (original state preserved): %w", name, err)
 		}
 	}

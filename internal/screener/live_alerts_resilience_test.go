@@ -19,6 +19,7 @@ type selectiveAlertHistory struct {
 	failSymbol  string
 	failure     error
 	shortSymbol string
+	listedAt    int64
 }
 
 func (a selectiveAlertHistory) History(ctx context.Context, key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
@@ -26,8 +27,14 @@ func (a selectiveAlertHistory) History(ctx context.Context, key domain.FeedKey, 
 		return nil, a.failure
 	}
 	rows, err := a.Adapter.History(ctx, key, from, to, limit)
-	if key.Instrument == a.shortSymbol && len(rows) > 10 {
-		rows = rows[len(rows)-10:]
+	if key.Instrument == a.shortSymbol {
+		filtered := rows[:0]
+		for _, row := range rows {
+			if row.Time >= a.listedAt {
+				filtered = append(filtered, row)
+			}
+		}
+		rows = filtered
 	}
 	return rows, err
 }
@@ -47,6 +54,7 @@ func TestLiveAlertsIndividualHistoryTimeoutAndShortWarmupContinueAcrossAlerts(t 
 				adapter.failSymbol, adapter.failure = "SHORT", context.DeadlineExceeded
 			} else {
 				adapter.shortSymbol = "SHORT"
+				adapter.listedAt = time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -10).Unix()
 			}
 			l.publicData.adapters["hyperliquid"] = adapter
 			entries := []LiveAlertDefinition{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/exchange"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,9 +15,15 @@ import (
 // The smoke deliberately restricts only discovery. History remains the actual
 // production Hyperliquid adapter, including HTTP pacing, parsing and weekly
 // correctness. This never starts the all-market alert scheduler or Telegram.
-type publicAlertLiveSmokeAdapter struct{ exchange.Adapter }
+type publicAlertLiveSmokeAdapter struct {
+	exchange.Adapter
+	items []domain.Instrument
+}
 
 func (a publicAlertLiveSmokeAdapter) Instruments(context.Context) ([]domain.Instrument, error) {
+	if a.items != nil {
+		return a.items, nil
+	}
 	return []domain.Instrument{
 		{NativeID: "@107", Market: "spot", BaseAsset: "HYPE", QuoteAsset: "USDC", Availability: "available", ProviderMetadata: map[string]string{"displaySymbol": "HYPE/USDC"}},
 		{NativeID: "BTC", Market: "perpetual", BaseAsset: "BTC", QuoteAsset: "USDC", Availability: "available"},
@@ -43,7 +50,7 @@ func TestPublicAlertLiveHyperliquidSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.publicData = &publicAlertData{adapters: map[string]exchange.Adapter{"hyperliquid": publicAlertLiveSmokeAdapter{actual}}}
+	l.publicData = &publicAlertData{adapters: map[string]exchange.Adapter{"hyperliquid": publicAlertLiveSmokeAdapter{Adapter: actual}}}
 	condition := SavedAnalysisCondition{ID: strings.Repeat("a", 32), Name: "Real public multi-period indicator smoke", Request: AnalysisRequest{Period: "d1"}}
 	for _, field := range []string{"close", "weekday", "tenkan_9", "kijun_26", "senkou_a_9_26", "senkou_b_52"} {
 		condition.Request.Conditions = append(condition.Request.Conditions, AnalysisCondition{Operator: "above", Left: AnalysisOperand{Kind: "field", Field: field}, Right: AnalysisOperand{Kind: "number", Value: 0}})
@@ -102,4 +109,57 @@ func TestPublicAlertLiveHyperliquidSmoke(t *testing.T) {
 		t.Fatalf("same-cutoff persisted history refetched REST: before=%d after=%d", after, got)
 	}
 	t.Logf("real source preparation/evaluation passed; actual REST requests=%d, same-cutoff cache requests=0, Telegram sends=0, temporary profile only", after-before)
+}
+
+func TestPublicAlertLiveReportedHyperliquidAssets(t *testing.T) {
+	if os.Getenv("CRYPTODESK_LIVE_PUBLIC_ALERT_SMOKE") != "1" {
+		t.Skip("explicit opt-in only: real public history, temporary profile, no Telegram")
+	}
+	m := sourceEnrichmentManager(t, false)
+	actual, err := exchange.New("hyperliquid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []domain.Instrument{
+		{NativeID: "xyz:RELIANCE", Market: "perpetual", Availability: "available"},
+		{NativeID: "io:XIAOMI", Market: "perpetual", Availability: "available"},
+		{NativeID: "@698", Market: "spot", Availability: "available"},
+		{NativeID: "@300", Market: "spot", Availability: "available"},
+	}
+	l, err := NewLiveAlerts(m, func(context.Context, LiveAlert) error {
+		t.Error("smoke attempted delivery")
+		return errors.New("delivery forbidden in smoke")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.publicData = &publicAlertData{adapters: map[string]exchange.Adapter{"hyperliquid": publicAlertLiveSmokeAdapter{Adapter: actual, items: items}}}
+	c := publicAlertTestCondition()
+	c.Request.Conditions = c.Request.Conditions[:1]
+	c.Request.Conditions[0].Right.Field = "sma_27"
+	asOf := time.Now().UTC().UnixMilli()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	started := time.Now()
+	batch, err := l.preparePublicAlertData(ctx, "hyperliquid", []SavedAnalysisCondition{c}, map[string][]string{c.ID: {"d1"}}, asOf)
+	if err != nil || len(batch.Assets) != len(items) {
+		t.Fatal("real history preparation failed", batch.Failures, err)
+	}
+	for _, asset := range batch.Assets {
+		failure := batch.Failures[asset.Symbol+"/d1"]
+		if failure != nil && !errors.Is(failure, errLiveAlertsPendingBar) && !strings.Contains(failure.Error(), "after older-history backfill") {
+			t.Fatal("unexpected provider/processing failure", failure)
+		}
+		raw, err := os.ReadFile(filepath.Join(m.profile, "screener-public-history", "hyperliquid", "raw", asset.Symbol+"-d1.csv"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		bars, err := publicAlertReadRaw(raw, 86400)
+		if err != nil || len(bars) == 0 {
+			t.Fatal("reported market has no usable real history", asset.NativeID, err)
+		}
+		latest := bars[len(bars)-1]
+		t.Logf("%s %s: retained %d actual closed D1 bars, first=%s latest=%s; result=%v", asset.NativeID, asset.Market, len(bars), time.Unix(bars[0].Time, 0).UTC().Format("2006-01-02"), time.Unix(latest.Time, 0).UTC().Format("2006-01-02"), failure)
+	}
+	t.Logf("bounded production preparation: elapsed=%s; prepared=%d unavailable=%d; no active-profile write or Telegram send", time.Since(started), len(batch.Files), len(batch.Failures))
 }

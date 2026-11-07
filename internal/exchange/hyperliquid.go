@@ -19,14 +19,16 @@ import (
 
 // Hyperliquid's public info endpoint is POST-only. This uses the same bounded
 // request slots and diagnostics as other providers, with its own weighted budget:
-// metadata weighs 20; a bounded 1000-bar candle page weighs at most 37. Spacing
-// these requests by two seconds stays below the documented 1200 weight/minute.
+// Reserve the maximum response weight from the requested candle window. The
+// 55ms per weight budget leaves headroom below 1200 weight/minute, without
+// charging a two-second, 1000-candle delay for a one-candle refresh.
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits
 func (a *publicAdapter) hyperliquidPost(ctx context.Context, body any, dst any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
+	spacing := hyperliquidRequestSpacing(payload)
 	for attempt := 0; attempt < 3; attempt++ {
 		if until := a.blockedUntil.Load(); until > time.Now().UnixMilli() {
 			return &Error{Kind: "rateLimited", Message: "Hyperliquid public requests are backing off", RetryAt: until / 1000}
@@ -38,7 +40,7 @@ func (a *publicAdapter) hyperliquidPost(ctx context.Context, body any, dst any) 
 		}
 		a.requestMu.Lock()
 		scheduled := maxTime(time.Now(), a.nextRequest)
-		a.nextRequest = scheduled.Add(2 * time.Second)
+		a.nextRequest = scheduled.Add(spacing)
 		a.requestMu.Unlock()
 		if err := wait(ctx, time.Until(scheduled)); err != nil {
 			<-a.requestSlots
@@ -131,6 +133,28 @@ func (a *publicAdapter) hyperliquidPost(ctx context.Context, body any, dst any) 
 		return nil
 	}
 	return &Error{Kind: "offline", Message: "Hyperliquid public request failed"}
+}
+
+func hyperliquidRequestSpacing(payload []byte) time.Duration {
+	var req struct {
+		Type string `json:"type"`
+		Req  struct {
+			Interval string `json:"interval"`
+			Start    int64  `json:"startTime"`
+			End      int64  `json:"endTime"`
+		} `json:"req"`
+	}
+	weight := int64(20)
+	if json.Unmarshal(payload, &req) == nil && req.Type == "candleSnapshot" {
+		// Hyperliquid retains at most 5000 native candles. Include both
+		// boundary buckets since the API uses inclusive millisecond ends.
+		count := int64(5000)
+		if d := TimeframeSeconds(req.Req.Interval) * 1000; d > 0 && req.Req.Start >= 0 && req.Req.End >= req.Req.Start {
+			count = min(count, req.Req.End/d-req.Req.Start/d+1)
+		}
+		weight += (count + 59) / 60
+	}
+	return time.Duration(weight) * 55 * time.Millisecond
 }
 
 type hyperliquidToken struct {

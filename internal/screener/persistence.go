@@ -104,9 +104,13 @@ func readState(path string, limit int64, value any) error {
 	if int64(len(data)) > limit {
 		return errors.New("saved Screener state exceeds its size limit")
 	}
+	return decodeState(data, value)
+}
+
+func decodeState(data []byte, value any) error {
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if err = d.Decode(value); err != nil {
+	if err := d.Decode(value); err != nil {
 		return err
 	}
 	if d.Decode(new(any)) != io.EOF {
