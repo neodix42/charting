@@ -35,7 +35,7 @@ for(const screen of ['Downloader','Enrichment','Analysis'] as const){
   });
   await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:screen,exact:true}).click();
   if(screen==='Downloader')await page.getByRole('checkbox',{name:'Select all symbols',exact:true}).check();
-  const button=screen==='Downloader'?page.getByRole('button',{name:'Download 4 symbols',exact:true}):page.getByRole('button',{name:screen==='Enrichment'?'Refresh data and indicators':'Apply conditions',exact:true});
+  const button=screen==='Downloader'?page.getByRole('button',{name:'Download 4 symbols',exact:true}):page.getByRole('button',{name:screen==='Enrichment'?'Refresh Dukascopy data and indicators':'Apply conditions',exact:true});
   const progress=screen==='Downloader'?page.locator('.screener-job progress'):page.getByRole('progressbar',{name:screen==='Enrichment'?'Overall enrichment progress':'Analysis scan progress',exact:true});
   await expect(button).toBeEnabled();await expect(progress).toHaveAttribute('value','50');
   for(const source of THEME_OPTIONS){
