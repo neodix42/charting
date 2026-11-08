@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -66,11 +67,14 @@ func TestLiveAlertsIndividualHistoryTimeoutAndShortWarmupContinueAcrossAlerts(t 
 				t.Fatal(err)
 			}
 			sent := 0
+			var sendsMu sync.Mutex
 			l.send = func(_ context.Context, alert LiveAlert) error {
 				if alert.Symbol != "HEALTHY" {
 					t.Fatal("unavailable asset produced a signal", alert)
 				}
+				sendsMu.Lock()
 				sent++
+				sendsMu.Unlock()
 				return nil
 			}
 			cutoff := time.Date(2026, 11, 6, 12, 0, 5, 0, time.UTC).UnixMilli()
@@ -107,9 +111,12 @@ func TestLiveAlertsPartialTelegramFailureContinuesEveryAssetAndFollowingAlert(t 
 		t.Fatal(err)
 	}
 	calls := 0
-	l.send = func(context.Context, LiveAlert) error {
+	var sendsMu sync.Mutex
+	l.send = func(_ context.Context, alert LiveAlert) error {
+		sendsMu.Lock()
+		defer sendsMu.Unlock()
 		calls++
-		if calls == 1 || calls == 5 {
+		if alert.AlertID == config.Alerts[0].ID && alert.Symbol == "BTCUSDT" {
 			return confirmedDeliveryTestError{count: 1}
 		}
 		return nil
@@ -343,32 +350,54 @@ func TestLiveAlertAssetSelectionValidationRejectsAmbiguousOrUnboundedChoices(t *
 	}
 }
 
-func TestLiveAlertsUnsafeOutcomeWriteStillStopsQueueAndRetainsBeforeSendClaim(t *testing.T) {
+func TestLiveAlertsUnsafeOutcomeWriteCancelsPeersAndRetainsBeforeSendClaim(t *testing.T) {
 	m, l, saved, _ := namedPublicLiveFixture(t)
-	config := LiveAlertsConfig{Enabled: true, Alerts: []LiveAlertDefinition{
-		{ID: strings.Repeat("a", 32), Name: "First", ConditionID: saved.ID, Period: "d1", DataSource: "binance", Enabled: true},
-		{ID: strings.Repeat("b", 32), Name: "Later", ConditionID: saved.ID, Period: "d1", DataSource: "binance", Enabled: true},
-	}}
+	config := LiveAlertsConfig{Enabled: true, Alerts: []LiveAlertDefinition{}}
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		source := "bybit"
+		if id == "a" || id == "e" {
+			source = "binance"
+		}
+		config.Alerts = append(config.Alerts, LiveAlertDefinition{ID: strings.Repeat(id, 32), Name: id, ConditionID: saved.ID, Period: "d1", DataSource: source, Enabled: true})
+	}
 	if _, err := l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
-	path := l.path
-	blocked := filepath.Join(t.TempDir(), "cannot-replace-directory")
-	if err := os.Mkdir(blocked, 0700); err != nil {
-		t.Fatal(err)
-	}
+	// Peers have started but cannot deliver before the failing result. A fifth
+	// condition remains queued behind the bounded worker pool.
+	gate, started := make(chan struct{}), make(chan struct{})
+	defer close(gate)
+	l.publicData.adapters["bybit"] = &sequentialAlertAdapter{base: &publicAlertFakeAdapter{price: 100, items: []domain.Instrument{{NativeID: "BTCUSDT", Market: "spot", Availability: "available"}}}, source: "bybit", audit: &sequentialAlertAudit{}, historyGate: gate, historyStarted: started}
+	path := filepath.Join(t.TempDir(), "durable-state.json")
 	calls := 0
-	l.send = func(context.Context, LiveAlert) error { calls++; l.path = blocked; return nil }
+	l.send = func(context.Context, LiveAlert) error {
+		calls++
+		// Preserve the exact durable before-send file, then force subsequent
+		// atomic renames to fail without racing a mutation of l.path.
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		if err := os.Rename(l.path, path); err != nil {
+			t.Error(err)
+			return err
+		}
+		return os.Mkdir(l.path, 0700)
+	}
 	err := l.check(context.Background(), config, time.Date(2026, 11, 6, 12, 0, 5, 0, time.UTC).UnixMilli())
 	if !fatalLiveAlertPersistence(err) || calls != 1 {
 		t.Fatal("unsafe persistence continued delivery", err, calls)
 	}
-	if _, started := l.state.Checks[config.Alerts[1].ID]; started {
-		t.Fatal("later alert started after failed outcome persistence")
+	if _, started := l.state.Checks[config.Alerts[4].ID]; started {
+		t.Fatal("queued condition started after unsafe persistence")
 	}
 	var disk liveAlertsState
 	if err = readState(path, liveAlertsStateBytes, &disk); err != nil || len(disk.Watermarks) != 1 || len(disk.Recent) != 1 || disk.Recent[0].Status != "claimed" {
 		t.Fatal("before-send claim was not durable", err, disk)
+	}
+	if err = os.Remove(l.path); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(path, l.path); err != nil {
+		t.Fatal(err)
 	}
 	restored, err := NewLiveAlerts(m, nil)
 	if err != nil {

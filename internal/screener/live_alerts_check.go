@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,7 +41,6 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 			finishErr = errLiveAlertsBusy
 		}
 		l.finishQueuedProgressLocked(finishErr)
-		l.activeProgressID = ""
 		l.checkExecuting = false
 		l.mu.Unlock()
 	}()
@@ -79,42 +79,121 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	l.mu.Lock()
 	l.queueCheckProgressLocked(ids, !scheduled)
 	l.mu.Unlock()
-	var failures []error
-	for _, saved := range selected {
-		if err := ctx.Err(); err != nil {
-			return errors.Join(errors.Join(failures...), err)
-		}
-		source := liveAlertSource(config, saved.ID)
-		subset := copyLiveAlertsConfig(config)
-		subset.ConditionIDs = []string{saved.ID}
-		if config.scope != nil {
-			subset.scope = []LiveAlertConditionPeriod{}
-			for _, scope := range config.scope {
-				if scope.ConditionID == saved.ID {
-					subset.scope = append(subset.scope, scope)
+	if len(selected) == 0 {
+		return nil
+	}
+	// Reserve Manager once for the complete batch. Public checks own private
+	// snapshots; Dukascopy still has one owner of its shared refresh job list.
+	checkContext, release, err := l.reserveCheckManager(ctx, asOf)
+	if err != nil {
+		return err
+	}
+	defer release()
+	cycleCtx, cancel := context.WithCancel(checkContext)
+	defer cancel()
+	failures := make([]error, len(selected))
+	var workers sync.WaitGroup
+	completed := make(chan bool, len(selected))
+	active, localActive := 0, false
+	pending := make([]int, len(selected))
+	for i := range pending {
+		pending[i] = i
+	}
+	for len(pending) > 0 || active > 0 {
+		launched := false
+		if cycleCtx.Err() == nil && active < liveAlertCheckConcurrency {
+			for queueIndex, index := range pending {
+				saved := selected[index]
+				source := liveAlertSource(config, saved.ID)
+				if source == "dukascopy" && localActive {
+					continue
 				}
-			}
-		}
-		l.mu.Lock()
-		l.startCheckProgressLocked(saved.ID)
-		l.mu.Unlock()
-		var err error
-		if source == "dukascopy" {
-			err = l.checkDukascopyCycle(ctx, subset, asOf, scheduled)
-		} else {
-			err = l.checkPublicCycle(ctx, subset, source, asOf, scheduled)
-		}
-		l.mu.Lock()
-		l.finishCheckProgressLocked(saved.ID, err, asOf)
-		l.mu.Unlock()
-		if err != nil {
-			failures = append(failures, err)
-			if ctx.Err() != nil || errors.Is(err, errLiveAlertsBusy) || fatalLiveAlertPersistence(err) {
+				pending = append(pending[:queueIndex], pending[queueIndex+1:]...)
+				local := source == "dukascopy"
+				if local {
+					localActive = true
+				}
+				active++
+				launched = true
+				l.mu.Lock()
+				l.startCheckProgressLocked(saved.ID)
+				l.mu.Unlock()
+				workers.Add(1)
+				go func() {
+					defer workers.Done()
+					subset := copyLiveAlertsConfig(config)
+					subset.ConditionIDs = []string{saved.ID}
+					if config.scope != nil {
+						subset.scope = []LiveAlertConditionPeriod{}
+						for _, scope := range config.scope {
+							if scope.ConditionID == saved.ID {
+								subset.scope = append(subset.scope, scope)
+							}
+						}
+					}
+					checkCtx := context.WithValue(cycleCtx, liveAlertProgressKey{}, saved.ID)
+					var checkErr error
+					if local {
+						checkErr = l.checkDukascopyCycle(checkCtx, subset, asOf, scheduled)
+					} else {
+						checkErr = l.checkPublicCycle(checkCtx, subset, source, asOf, scheduled)
+					}
+					failures[index] = checkErr
+					if fatalLiveAlertPersistence(checkErr) || errors.Is(checkErr, errLiveAlertsBusy) {
+						cancel()
+					}
+					l.mu.Lock()
+					l.finishCheckProgressLocked(saved.ID, checkErr, asOf)
+					l.mu.Unlock()
+					completed <- local
+				}()
 				break
 			}
 		}
+		if launched {
+			continue
+		}
+		if active == 0 {
+			break
+		}
+		if <-completed {
+			localActive = false
+		}
+		active--
+	}
+	workers.Wait()
+	if cycleCtx.Err() != nil {
+		failures = append(failures, cycleCtx.Err())
 	}
 	return errors.Join(failures...)
+}
+
+const liveAlertCheckConcurrency = 4
+
+func (l *LiveAlerts) reserveCheckManager(ctx context.Context, asOf int64) (context.Context, func(), error) {
+	m := l.manager
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return ctx, nil, errors.New("screener is closed")
+	}
+	if m.active || m.pendingLocked() || m.enrichmentActive || m.refreshActive || m.analysisActiveLocked() || m.liveActive {
+		return ctx, nil, errLiveAlertsBusy
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	m.liveActive, m.liveCancel = true, cancel
+	m.refreshActive, m.refreshCancel, m.refreshDone, m.refreshAsOf = true, cancel, done, asOf
+	m.wg.Add(1)
+	return ctx, func() {
+		cancel()
+		m.mu.Lock()
+		m.liveActive, m.liveCancel = false, nil
+		m.refreshActive, m.refreshCancel = false, nil
+		close(done)
+		m.mu.Unlock()
+		m.wg.Done()
+	}, nil
 }
 
 func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsConfig, asOf int64, scheduled bool) (cycleErr error) {
@@ -176,34 +255,13 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 	}
 	m := l.manager
 	m.mu.Lock()
-	if m.closed {
-		m.mu.Unlock()
-		return errors.New("screener is closed")
-	}
-	if m.active || m.pendingLocked() || m.enrichmentActive || m.refreshActive || m.analysisActiveLocked() || m.liveActive {
-		m.mu.Unlock()
-		return errLiveAlertsBusy
-	}
 	runtimeMessage := ""
 	if l.refresh == nil {
 		runtimeMessage = m.refreshRuntimeError()
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	m.liveActive, m.liveCancel = true, cancel
-	m.refreshActive, m.refreshCancel, m.refreshDone, m.refreshAsOf = true, cancel, done, asOf
 	directory := m.directory
-	m.wg.Add(1)
 	m.mu.Unlock()
-	defer func() {
-		cancel()
-		m.mu.Lock()
-		m.liveActive, m.liveCancel = false, nil
-		m.refreshActive, m.refreshCancel = false, nil
-		close(done)
-		m.mu.Unlock()
-		m.wg.Done()
-	}()
+
 	run, err := l.beginCheckHistory(config, !scheduled)
 	if err != nil {
 		return err
@@ -300,7 +358,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			return err
 		}
 		l.mu.Lock()
-		l.updateCheckProgressLocked("Indexing closed history", 70, strings.ToUpper(match[1])+" "+match[2])
+		l.updateCheckProgressContextLocked(ctx, "Indexing closed history", 70, strings.ToUpper(match[1])+" "+match[2])
 		l.mu.Unlock()
 		id := dataFileID(directory, name)
 		s, e := indexAnalysisCSV(ctx, directory, name, filepath.Join(work, id+".rows"), func(float64) {})
@@ -320,7 +378,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			return err
 		}
 		l.mu.Lock()
-		l.updateCheckProgressLocked("Checking latest closed bars", 70+30*float64(i)/float64(max(1, len(targets))), strings.ToUpper(s.metadata.Symbol)+" "+s.metadata.Timeframe)
+		l.updateCheckProgressContextLocked(ctx, "Checking latest closed bars", 70+30*float64(i)/float64(max(1, len(targets))), strings.ToUpper(s.metadata.Symbol)+" "+s.metadata.Timeframe)
 		l.mu.Unlock()
 		closed, e := s.closedCount(asOf)
 		if e != nil {
@@ -548,7 +606,7 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 		}
 		err = nil
 		l.mu.Lock()
-		l.updateCheckProgressLocked("Refreshing closed history and indicators", 70*float64(i)/float64(max(1, len(groups))), group.name)
+		l.updateCheckProgressContextLocked(ctx, "Refreshing closed history and indicators", 70*float64(i)/float64(max(1, len(groups))), group.name)
 		l.mu.Unlock()
 		m.mu.Lock()
 		m.refreshJobs[i].Status, m.refreshJobs[i].Message = "running", "Appending closed bars and updating applied indicators"
@@ -563,7 +621,7 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 				m.refreshJobs[i].Message = message
 				m.mu.Unlock()
 				l.mu.Lock()
-				l.updateCheckProgressLocked(message, 70*float64(i)/float64(max(1, len(groups))), job.Name)
+				l.updateCheckProgressContextLocked(ctx, message, 70*float64(i)/float64(max(1, len(groups))), job.Name)
 				l.mu.Unlock()
 			})
 		}
@@ -579,7 +637,7 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 				if phase == "" {
 					phase = "Refreshing closed history and indicators"
 				}
-				l.updateCheckProgressLocked(fmt.Sprintf("%s · asset %d of %d", phase, i+1, len(groups)), 70*(float64(i)+math.Max(0, math.Min(100, percent))/100)/float64(max(1, len(groups))), job.Name)
+				l.updateCheckProgressContextLocked(ctx, fmt.Sprintf("%s · asset %d of %d", phase, i+1, len(groups)), 70*(float64(i)+math.Max(0, math.Min(100, percent))/100)/float64(max(1, len(groups))), job.Name)
 			})
 		}
 		if err != nil {
@@ -757,7 +815,7 @@ func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionI
 
 func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 	l.mu.Lock()
-	l.updateCheckProgressLocked("Sending alert", -1, alert.Symbol+" "+alert.Timeframe)
+	l.updateCheckProgressContextLocked(ctx, "Sending alert", -1, alert.Symbol+" "+alert.Timeframe)
 	l.mu.Unlock()
 	var err error
 	if l.send == nil {
@@ -773,8 +831,11 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 		l.state.Sent++
 		l.recordConfirmedAlertLocked(alert.ConditionID)
 	}
-	if len(l.state.Recent) > 0 {
-		outcome := &l.state.Recent[0]
+	for i := range l.state.Recent {
+		outcome := &l.state.Recent[i]
+		if outcome.ConditionID != alert.ConditionID || outcome.DataSource != alert.DataSource || outcome.Market != alert.Market || outcome.Symbol != alert.Symbol || outcome.Timeframe != alert.Timeframe || outcome.Time != alert.Time {
+			continue
+		}
 		outcome.ConfirmedRecipients = confirmedAlertRecipientCount(err)
 		outcome.Status, outcome.Message = "sent", "Telegram alert sent"
 		if err != nil {
@@ -783,6 +844,7 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 				outcome.Status = "uncertain"
 			}
 		}
+		break
 	}
 	if saveErr := writeState(l.path, l.state); saveErr != nil {
 		return &liveAlertPersistenceError{fmt.Errorf("record Live Alerts delivery result (the saved delivery claim prevents a duplicate): %w", saveErr)}

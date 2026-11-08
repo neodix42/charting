@@ -36,6 +36,15 @@ type publicAlertBatch struct {
 	Assets    []publicAlertAsset
 	Files     map[string]string
 	Failures  map[string]error
+	snapshot  string
+}
+
+// Every check evaluates immutable files, even when another alert needs a different
+// indicator plan for the same source/market/period.
+func (b publicAlertBatch) close() {
+	if b.snapshot != "" {
+		_ = os.RemoveAll(b.snapshot)
+	}
 }
 
 type publicAlertCatalog struct {
@@ -49,6 +58,70 @@ type publicAlertData struct {
 	mu       sync.Mutex
 	adapters map[string]exchange.Adapter
 	catalogs map[string]publicAlertCatalog
+	slots    chan struct{}
+	locks    map[string]*publicAlertDataLock
+}
+
+type publicAlertDataLock struct {
+	token chan struct{}
+	users int
+}
+
+// Share both the process bound and series ownership across concurrent named checks.
+// The adapter's own provider budget remains authoritative for HTTP pacing.
+const publicAlertConcurrency = 4
+
+func (l *LiveAlerts) publicAlertDataState() *publicAlertData {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.publicData == nil {
+		l.publicData = &publicAlertData{}
+	}
+	return l.publicData
+}
+
+func (d *publicAlertData) acquireSlot(ctx context.Context) (func(), error) {
+	d.mu.Lock()
+	if d.slots == nil {
+		d.slots = make(chan struct{}, publicAlertConcurrency)
+	}
+	slots := d.slots
+	d.mu.Unlock()
+	select {
+	case slots <- struct{}{}:
+		return func() { <-slots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (d *publicAlertData) acquireKey(ctx context.Context, key string) (func(), error) {
+	d.mu.Lock()
+	if d.locks == nil {
+		d.locks = map[string]*publicAlertDataLock{}
+	}
+	lock := d.locks[key]
+	if lock == nil {
+		lock = &publicAlertDataLock{token: make(chan struct{}, 1)}
+		d.locks[key] = lock
+	}
+	lock.users++
+	d.mu.Unlock()
+	releaseRef := func() {
+		d.mu.Lock()
+		lock.users--
+		if lock.users == 0 {
+			delete(d.locks, key)
+		}
+		d.mu.Unlock()
+	}
+	select {
+	case lock.token <- struct{}{}:
+		return func() { <-lock.token; releaseRef() }, nil
+	case <-ctx.Done():
+		releaseRef()
+		return nil, ctx.Err()
+	}
 }
 
 var publicAlertIntervals = map[string]string{"m1": "1m", "m5": "5m", "m15": "15m", "h1": "1h", "h4": "4h", "d1": "1d", "w1": "1w"}
@@ -162,12 +235,14 @@ func (l *LiveAlerts) publicAlertCatalog(ctx context.Context, source string) (exc
 	if source != "binance" && source != "bybit" && source != "hyperliquid" {
 		return nil, nil, errors.New("unsupported public alert source")
 	}
-	l.mu.Lock()
-	if l.publicData == nil {
-		l.publicData = &publicAlertData{}
+	data := l.publicAlertDataState()
+	// One discovery per source, including cold concurrent checks. Waiters cancel
+	// independently and reuse the successful catalog without another HTTP scan.
+	release, err := data.acquireKey(ctx, "catalog/"+source)
+	if err != nil {
+		return nil, nil, err
 	}
-	data := l.publicData
-	l.mu.Unlock()
+	defer release()
 	data.mu.Lock()
 	if data.adapters == nil {
 		data.adapters = map[string]exchange.Adapter{}
@@ -213,6 +288,9 @@ func publicAlertSymbol(market, native string) string {
 
 func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, conditions []SavedAnalysisCondition, periods map[string][]string, asOf int64) (publicAlertBatch, error) {
 	batch := publicAlertBatch{Files: map[string]string{}, Failures: map[string]error{}}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	data := l.publicAlertDataState()
 	plans, err := publicAlertPlans(conditions, periods)
 	if err != nil {
 		return batch, err
@@ -231,18 +309,31 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		return batch, errors.New("public alert cutoff must be a UTC millisecond timestamp")
 	}
 	root := filepath.Join(profile, "screener-public-history", source)
-	batch.Directory = filepath.Join(root, "data")
-	worker, preparedPlans, err := startPublicAlertWorker(ctx, runtime, plans)
+	cacheDirectory := filepath.Join(root, "data")
+	releaseInitial, err := data.acquireSlot(ctx)
 	if err != nil {
 		return batch, err
 	}
-	defer worker.close()
+	worker, preparedPlans, err := startPublicAlertWorker(ctx, runtime, plans)
+	if err != nil {
+		releaseInitial()
+		if ctx.Err() != nil {
+			return batch, ctx.Err()
+		}
+		return batch, err
+	}
+	defer func() {
+		if worker != nil {
+			worker.close()
+			releaseInitial()
+		}
+	}()
 	plans = preparedPlans
 	a, items, err := l.publicAlertCatalog(ctx, source)
 	if err != nil {
 		return batch, err
 	}
-	for _, dir := range []string{root, filepath.Join(root, "raw"), batch.Directory} {
+	for _, dir := range []string{root, filepath.Join(root, "raw"), cacheDirectory} {
 		if err = os.MkdirAll(dir, 0700); err != nil {
 			return batch, err
 		}
@@ -303,36 +394,129 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	sort.Slice(orderedPeriods, func(i, j int) bool {
 		return exchange.TimeframeSeconds(publicAlertIntervals[orderedPeriods[i]]) > exchange.TimeframeSeconds(publicAlertIntervals[orderedPeriods[j]])
 	})
-	for i, asset := range batch.Assets {
-		if asset.Unavailable != "" {
-			for _, period := range orderedPeriods {
+	snapshot, err := os.MkdirTemp(root, ".check-*")
+	if err != nil {
+		return batch, err
+	}
+	batch.Directory, batch.snapshot = snapshot, snapshot
+	type task struct {
+		asset  publicAlertAsset
+		period string
+	}
+	tasks := make([]task, 0, len(batch.Assets)*len(orderedPeriods))
+	for _, asset := range batch.Assets {
+		for _, period := range orderedPeriods {
+			if asset.Unavailable != "" {
 				batch.Failures[asset.Symbol+"/"+period] = fmt.Errorf("%s %s %s: %s", asset.NativeID, asset.Market, period, asset.Unavailable)
+			} else {
+				tasks = append(tasks, task{asset, period})
 			}
-			continue
-		}
-		for periodIndex, period := range orderedPeriods {
-			if err = ctx.Err(); err != nil {
-				return batch, err
-			}
-			l.mu.Lock()
-			l.updateCheckProgressLocked("Fetching public market history and indicators", 70*float64(i*len(orderedPeriods)+periodIndex)/float64(len(batch.Assets)*len(orderedPeriods)), source+" "+asset.Name+" "+asset.Market+" "+period)
-			l.mu.Unlock()
-			pair := asset.Symbol + "/" + period
-			name, e := preparePublicAlertSeries(ctx, a, worker, root, batch.Directory, source, asset, period, plans[period], asOf)
-			if e != nil {
-				batch.Failures[pair] = fmt.Errorf("%s %s %s: %w", asset.NativeID, asset.Market, period, e)
-				if ctx.Err() != nil {
-					return batch, ctx.Err()
-				}
-				if publicAlertProviderRefused(e) {
-					return batch, e
-				}
-				continue
-			}
-			batch.Files[pair] = name
 		}
 	}
+	if len(tasks) == 0 {
+		return batch, nil
+	}
+	var resultMu sync.Mutex
+	var next, completed int
+	var fatal error
+	var wg sync.WaitGroup
+	initial := worker
+	worker = nil // The first task worker now owns the initial process and slot.
+	for index := 0; index < min(publicAlertConcurrency, len(tasks)); index++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			current, release := initial, releaseInitial
+			if index != 0 {
+				var err error
+				release, err = data.acquireSlot(ctx)
+				if err != nil {
+					return
+				}
+				current = nil
+			}
+			defer release()
+			defer func() {
+				if current != nil {
+					current.close()
+				}
+			}()
+			for {
+				resultMu.Lock()
+				if ctx.Err() != nil || next >= len(tasks) {
+					resultMu.Unlock()
+					return
+				}
+				job := tasks[next]
+				next++
+				progress := 70 * float64(completed) / float64(len(tasks))
+				resultMu.Unlock()
+				if current == nil {
+					var err error
+					current, _, err = startPublicAlertWorker(ctx, runtime, plans)
+					if err != nil {
+						if ctx.Err() != nil {
+							return
+						}
+						resultMu.Lock()
+						if fatal == nil {
+							fatal = err
+						}
+						resultMu.Unlock()
+						cancel()
+						return
+					}
+				}
+				l.mu.Lock()
+				l.updateCheckProgressContextLocked(ctx, "Fetching public market history and indicators", progress, source+" "+job.asset.Name+" "+job.asset.Market+" "+job.period)
+				l.mu.Unlock()
+				pair := job.asset.Symbol + "/" + job.period
+				unlock, e := data.acquireKey(ctx, "series/"+source+"/"+pair)
+				var name string
+				if e == nil {
+					name, e = preparePublicAlertSeries(ctx, a, current, root, cacheDirectory, source, job.asset, job.period, plans[job.period], asOf)
+					if e == nil {
+						e = publicAlertSnapshot(filepath.Join(cacheDirectory, name), filepath.Join(snapshot, name))
+					}
+					unlock()
+				}
+				resultMu.Lock()
+				completed++
+				if e != nil {
+					batch.Failures[pair] = fmt.Errorf("%s %s %s: %w", job.asset.NativeID, job.asset.Market, job.period, e)
+					if publicAlertProviderRefused(e) && fatal == nil {
+						fatal = e
+						cancel()
+					}
+				} else {
+					batch.Files[pair] = name
+				}
+				resultMu.Unlock()
+			}
+		}(index)
+	}
+	wg.Wait()
+	if fatal != nil {
+		return batch, fatal
+	}
+	if err := ctx.Err(); err != nil {
+		return batch, err
+	}
+
 	return batch, nil
+}
+
+// Cache publication always replaces files atomically. A hard link therefore pins
+// the exact validated inode for evaluation; copy on filesystems without links.
+func publicAlertSnapshot(source, target string) error {
+	if err := os.Link(source, target); err == nil {
+		return nil
+	}
+	data, err := publicAlertReadBounded(source, 128<<20)
+	if err != nil {
+		return err
+	}
+	return writeSyncedExclusive(target, data)
 }
 
 type publicAlertRawState struct {
@@ -844,7 +1028,7 @@ func (w *publicAlertWorker) close() { _ = w.in.Close(); _ = w.cmd.Wait() }
 // Reuse the pinned production recipe recovery and calculators. Warm-up counts
 // come from the installed constructors' getRequiredInputs(), including the
 // extra signal smoothing required by MACD histogram/signal fields. Each batch
-// owns one cancellable child, irrespective of the number of discovered assets.
+// owns a bounded set of cancellable children, shared across concurrent checks.
 const publicAlertWorkerScript = `
 'use strict';
 const path=require('node:path'),fs=require('node:fs/promises'),readline=require('node:readline');

@@ -45,39 +45,17 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 		config.ConditionIDs = append(config.ConditionIDs, saved.ID)
 	}
 	m := l.manager
-	m.mu.Lock()
-	if m.closed {
-		m.mu.Unlock()
-		return errors.New("screener is closed")
-	}
-	if m.active || m.pendingLocked() || m.enrichmentActive || m.refreshActive || m.analysisActiveLocked() || m.liveActive {
-		m.mu.Unlock()
-		return errLiveAlertsBusy
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	m.liveActive, m.liveCancel = true, cancel
-	m.refreshActive, m.refreshCancel, m.refreshDone, m.refreshAsOf = true, cancel, done, asOf
-	m.wg.Add(1)
-	m.mu.Unlock()
-	defer func() {
-		cancel()
-		m.mu.Lock()
-		m.liveActive, m.liveCancel = false, nil
-		m.refreshActive, m.refreshCancel = false, nil
-		close(done)
-		m.mu.Unlock()
-		m.wg.Done()
-	}()
+
 	run, err := l.beginCheckHistory(config, !scheduled)
 	if err != nil {
 		return err
 	}
 	defer func() { cycleErr = errors.Join(cycleErr, run.finish(cycleErr)) }()
 	l.mu.Lock()
-	l.updateCheckProgressLocked("Discovering "+source+" markets", 0, "")
+	l.updateCheckProgressContextLocked(ctx, "Discovering "+source+" markets", 0, "")
 	l.mu.Unlock()
 	batch, prepareErr := l.preparePublicAlertData(ctx, source, conditions, periods, asOf)
+	defer batch.close()
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -114,7 +92,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 			return ctx.Err()
 		}
 		l.mu.Lock()
-		l.updateCheckProgressLocked("Checking latest closed public bars", 70+30*float64(index)/float64(max(1, len(batch.Assets))), source+" "+asset.Market+" "+asset.NativeID)
+		l.updateCheckProgressContextLocked(ctx, "Checking latest closed public bars", 70+30*float64(index)/float64(max(1, len(batch.Assets))), source+" "+asset.Market+" "+asset.NativeID)
 		l.mu.Unlock()
 		a := &analysisState{directory: batch.Directory, work: work, series: map[string]*analysisSeries{}, cache: newAnalysisRowCache(), asOf: asOf}
 		series := map[string]*analysisSeries{}

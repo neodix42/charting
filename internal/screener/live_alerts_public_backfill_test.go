@@ -151,8 +151,10 @@ func TestPublicAlertEnrichmentReuseChecksOutputPlanAndRuntime(t *testing.T) {
 		if err != nil || len(batch.Files) != 1 || len(batch.Failures) != 0 {
 			t.Fatal(batch, err)
 		}
+		defer batch.close()
 		for _, name := range batch.Files {
-			return filepath.Join(batch.Directory, name)
+			// Inspect the reusable cache, rather than this check's immutable snapshot.
+			return filepath.Join(m.profile, "screener-public-history", "hyperliquid", "data", name)
 		}
 		return ""
 	}

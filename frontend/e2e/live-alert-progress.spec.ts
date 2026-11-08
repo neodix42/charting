@@ -61,7 +61,7 @@ async function setProgress(page:Page,mode:'manual'|'scheduled',active:number,per
  },{mode,active,percent,currentClose});
 }
 
-test('Check now immediately queues enabled rows without rewriting prior history, then displays one manual alert at a time',async({page})=>{
+test('Check now immediately queues enabled rows without rewriting prior history, then displays independent manual alert progress',async({page})=>{
  await openProgressApp(page);
  await page.evaluate(()=>{
   const api=window.go!.main!.App!,original=api.CheckScreenerLiveAlerts.bind(api);
@@ -90,6 +90,32 @@ test('Check now immediately queues enabled rows without rewriting prior history,
  await expect(page.getByText('GLOBAL ASSET MUST STAY HIDDEN',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('progressbar',{name:'Live alerts progress',exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites())).toEqual([]);
+});
+
+test('parallel checks keep independent progress and completion in stable table rows, then Stop cancels every active row',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(({currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>{
+   if(index===3)return old;
+   return{...old,lastChecked:currentClose,status:'running',manual:true,progress:[24,67,41][index],progressState:'running',progressMode:'manual',phase:index===1?'Checking latest closed public bars':'Fetching public market history and indicators',currentAsset:['bybit BTCUSDT','binance ETHUSDT','bybit SOLUSDT'][index]};
+  });
+  (window as any).__testSetLiveAlertsInfo({checks:checks.reverse(),running:true});
+ },{currentClose});
+ await expect(progress(page,names[0])).toContainText('24%');await expect(progress(page,names[0])).toContainText('bybit BTCUSDT');
+ await expect(progress(page,names[1])).toContainText('67%');await expect(progress(page,names[1])).toContainText('binance ETHUSDT');
+ await expect(progress(page,names[2])).toContainText('41%');await expect(progress(page,names[2])).toContainText('bybit SOLUSDT');
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeDisabled();
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo();
+  (window as any).__testSetLiveAlertsInfo({checks:info.checks.map((check:any)=>check.name==='Middle Binance'?{...check,status:'completed',progress:100,progressState:'completed',phase:'Completed',currentAsset:''}:check)});
+ });
+ await expect(progress(page,names[1])).toContainText('100%');await expect(progress(page,names[0])).toContainText('24%');
+ await expect(history(page).locator('tbody th')).toHaveText(names);
+ await page.getByRole('button',{name:'Stop alerts',exact:true}).click();
+ await expect(progress(page,names[0])).toContainText('Cancelled');await expect(progress(page,names[2])).toContainText('Cancelled');
+ await expect(progress(page,names[1])).toContainText('Completed');await expect(progress(page,names[1])).toContainText('100%');
+ await expect(row(page,names[3]).getByRole('cell').nth(2)).toContainText('2026-11-05 10:00:00 UTC');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeVisible();
 });
 
 test('scheduled queue progress follows visible row order while retaining previous attempt metadata for waiting and disabled rows',async({page})=>{

@@ -109,7 +109,7 @@ func sequentialCheckRow(t *testing.T, l *LiveAlerts, id string) LiveAlertCheck {
 	return LiveAlertCheck{}
 }
 
-func TestLiveAlertSequentialRowsFollowTableOrderForManualAndScheduledChecks(t *testing.T) {
+func TestLiveAlertParallelRowsOverlapForManualAndScheduledChecks(t *testing.T) {
 	for _, scheduled := range []bool{false, true} {
 		name := "manual"
 		if scheduled {
@@ -124,74 +124,43 @@ func TestLiveAlertSequentialRowsFollowTableOrderForManualAndScheduledChecks(t *t
 				}
 				config = dueLiveAlertsConfig(resolved, l.now().Truncate(time.Hour), l.now())
 			}
-			before := copyLiveCheckStates(l.state.Checks)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			sendStarted, sendGate := make(chan struct{}), make(chan struct{})
-			var firstSend sync.Once
-			l.send = func(ctx context.Context, alert LiveAlert) error {
+			independentSend := make(chan struct{})
+			l.send = func(_ context.Context, alert LiveAlert) error {
 				audit.add("send:" + alert.AlertID)
-				var stopped error
-				firstSend.Do(func() {
-					close(sendStarted)
-					select {
-					case <-sendGate:
-					case <-ctx.Done():
-						stopped = ctx.Err()
-					}
-				})
-				return stopped
+				if alert.AlertID == config.Alerts[1].ID {
+					close(independentSend)
+				}
+				return nil
 			}
 			done := make(chan error, 1)
 			go func() { done <- l.checkCycle(ctx, config, l.now().UnixMilli(), scheduled) }()
 			select {
 			case <-started:
 			case <-time.After(5 * time.Second):
-				t.Fatal("top row never started public history")
+				t.Fatal("Bybit never reached gated history")
 			}
-			first := sequentialCheckRow(t, l, config.Alerts[0].ID)
-			if first.ProgressState != "running" || first.ProgressMode != name || first.Progress < 0 || first.Progress > 100 {
-				t.Fatalf("active row has incorrect progress %+v", first)
+			// A slow first provider cannot hold the independent condition behind it.
+			select {
+			case <-independentSend:
+			case <-time.After(5 * time.Second):
+				t.Fatal("independent Binance condition did not finish while Bybit was blocked")
 			}
-			for _, entry := range config.Alerts[1:3] {
+			for _, entry := range []LiveAlertDefinition{config.Alerts[0], config.Alerts[2]} {
 				row := sequentialCheckRow(t, l, entry.ID)
-				prior := before[entry.ID]
-				if row.ProgressState != "queued" || row.Progress != 0 || row.ProgressMode != name || row.LastChecked != prior.LastChecked || row.Manual != prior.Manual || row.SentAlerts != prior.SentAlerts || row.Status != prior.Status {
-					t.Fatalf("queued row overwrote prior actual attempt %+v prior%+v", row, prior)
+				if row.ProgressState != "running" || row.ProgressMode != name || row.Phase == "Sending alert" {
+					t.Fatalf("peer progress was overwritten: %+v", row)
 				}
-			}
-			if events := audit.snapshot(); !reflect.DeepEqual(events, []string{"catalog:bybit"}) {
-				t.Fatalf("a later row prepared before the first row finished: %v", events)
 			}
 			close(gate)
-			select {
-			case <-sendStarted:
-			case <-time.After(5 * time.Second):
-				t.Fatal("first row did not reach delivery")
-			}
-			for _, event := range audit.snapshot() {
-				if event == "catalog:binance" {
-					t.Fatal("next row started while previous delivery was still outstanding")
-				}
-			}
-			close(sendGate)
 			select {
 			case err := <-done:
 				if err != nil {
 					t.Fatal(err)
 				}
 			case <-time.After(5 * time.Second):
-				t.Fatal("sequential check did not finish")
-			}
-			var sent []string
-			for _, event := range audit.snapshot() {
-				if strings.HasPrefix(event, "send:") {
-					sent = append(sent, strings.TrimPrefix(event, "send:"))
-				}
-			}
-			want := []string{config.Alerts[0].ID, config.Alerts[1].ID, config.Alerts[2].ID}
-			if !reflect.DeepEqual(sent, want) {
-				t.Fatalf("alert execution differed from table order: %v want%v", sent, want)
+				t.Fatal("parallel checks did not drain")
 			}
 			for _, entry := range config.Alerts[:3] {
 				row := sequentialCheckRow(t, l, entry.ID)
@@ -202,24 +171,42 @@ func TestLiveAlertSequentialRowsFollowTableOrderForManualAndScheduledChecks(t *t
 			if paused := sequentialCheckRow(t, l, config.Alerts[3].ID); paused.Status != "never" || paused.ProgressState == "queued" || paused.ProgressState == "running" {
 				t.Fatalf("disabled row was attempted %+v", paused)
 			}
+			for _, outcome := range l.Info().Recent {
+				if outcome.Status != "sent" {
+					t.Fatalf("concurrent delivery result attributed to wrong claim: %+v", outcome)
+				}
+			}
+			// Durable identities, rather than execution order, suppress repeats.
+			l.send = func(context.Context, LiveAlert) error { t.Error("repeated cutoff resent a claim"); return nil }
 			if err := l.checkCycle(context.Background(), config, l.now().UnixMilli(), scheduled); err != nil {
 				t.Fatal(err)
 			}
 			if l.Info().Sent != 15 {
-				t.Fatalf("repeating a cutoff resent an already claimed alert: %+v", l.Info())
+				t.Fatalf("unexpected total after repeat: %d", l.Info().Sent)
 			}
 		})
 	}
 }
 
-func TestLiveAlertSequentialCancellationPreservesUnattemptedHistoryAndClaims(t *testing.T) {
+func TestLiveAlertParallelCancellationPreservesQueuedHistoryAndClaims(t *testing.T) {
 	l, config, audit, gate, started := sequentialAlertFixture(t)
+	// All four workers wait on one provider; the fifth condition stays queued.
+	config.Alerts = config.Alerts[:3]
+	for i := range config.Alerts {
+		config.Alerts[i].DataSource = "bybit"
+	}
+	for _, id := range []string{"e", "f"} {
+		entry := config.Alerts[0]
+		entry.ID = strings.Repeat(id, 32)
+		entry.Name = id
+		config.Alerts = append(config.Alerts, entry)
+	}
+	if _, err := l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
 	beforeChecks := copyLiveCheckStates(l.state.Checks)
 	beforeClaims := copyWatermarksForDeliveryTest(l.state.Watermarks)
-	l.send = func(context.Context, LiveAlert) error {
-		t.Error("cancelled initial history delivered an alert")
-		return nil
-	}
+	l.send = func(context.Context, LiveAlert) error { t.Error("cancelled history delivered an alert"); return nil }
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
@@ -227,42 +214,47 @@ func TestLiveAlertSequentialCancellationPreservesUnattemptedHistoryAndClaims(t *
 	select {
 	case <-started:
 	case <-time.After(5 * time.Second):
-		t.Fatal("first row did not start")
+		t.Fatal("history did not start")
 	}
 	cancel()
 	select {
 	case err := <-done:
 		if err == nil {
-			t.Fatal("cancellation was hidden")
+			t.Fatal("cancellation hidden")
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("cancelled check did not stop")
+		t.Fatal("cancelled checks did not drain")
 	}
-	if events := audit.snapshot(); !reflect.DeepEqual(events, []string{"catalog:bybit"}) {
-		t.Fatalf("cancelled check started a later row: %v", events)
+	last := config.Alerts[4]
+	if got := l.state.Checks[last.ID]; got != beforeChecks[last.ID] {
+		t.Fatalf("queued history changed: %+v", got)
 	}
-	for _, entry := range config.Alerts[1:3] {
-		if got := l.state.Checks[entry.ID]; got != beforeChecks[entry.ID] {
-			t.Fatalf("unattempted row history changed after cancellation %+v prior%+v", got, beforeChecks[entry.ID])
-		}
+	for _, entry := range config.Alerts {
 		row := sequentialCheckRow(t, l, entry.ID)
 		if row.ProgressState == "running" || row.ProgressState == "queued" {
-			t.Fatalf("unattempted row retained an active progress state after cancellation %+v", row)
+			t.Fatalf("cancelled row still active %+v", row)
 		}
 	}
 	if !reflect.DeepEqual(l.state.Watermarks, beforeClaims) || l.state.Sent != 12 || !l.state.Config.Enabled {
-		t.Fatal("cancellation changed delivery claims, totals or enabled config")
+		t.Fatal("cancellation changed claims or enabled state")
 	}
 	close(gate)
-	var sent []string
-	l.send = func(_ context.Context, alert LiveAlert) error { sent = append(sent, alert.AlertID); return nil }
+	l.send = func(_ context.Context, alert LiveAlert) error { audit.add("send:" + alert.AlertID); return nil }
 	for i := 0; i < 2; i++ {
 		if err := l.checkCycle(context.Background(), config, l.now().UnixMilli(), false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if !reflect.DeepEqual(sent, []string{config.Alerts[0].ID, config.Alerts[1].ID, config.Alerts[2].ID}) || l.state.Sent != 15 {
-		t.Fatalf("resuming cancelled work skipped or resent an alert: %v sent%d", sent, l.state.Sent)
+	counts := map[string]int{}
+	for _, event := range audit.snapshot() {
+		if strings.HasPrefix(event, "send:") {
+			counts[strings.TrimPrefix(event, "send:")]++
+		}
+	}
+	for _, entry := range config.Alerts {
+		if counts[entry.ID] != 1 {
+			t.Fatalf("resume skipped or repeated %s: %v", entry.ID, counts)
+		}
 	}
 }
 

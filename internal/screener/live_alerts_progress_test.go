@@ -139,6 +139,19 @@ func TestLiveAlertRowProgressDukascopyFailureStillAttemptsLaterRow(t *testing.T)
 
 func TestLiveAlertRowProgressSkipsQueuedCalendarChangeWithoutInventingCompletion(t *testing.T) {
 	l, config, _, gate, started := sequentialAlertFixture(t)
+	config.Alerts = config.Alerts[:3]
+	for i := range config.Alerts {
+		config.Alerts[i].DataSource = "bybit"
+	}
+	for _, id := range []string{"e", "f"} {
+		entry := config.Alerts[0]
+		entry.ID = strings.Repeat(id, 32)
+		entry.Name = id
+		config.Alerts = append(config.Alerts, entry)
+	}
+	if _, err := l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
 	prior := copyLiveCheckStates(l.state.Checks)
 	var release sync.Once
 	t.Cleanup(func() { release.Do(func() { close(gate) }) })
@@ -164,7 +177,7 @@ func TestLiveAlertRowProgressSkipsQueuedCalendarChangeWithoutInventingCompletion
 	case <-time.After(5 * time.Second):
 		t.Fatal("calendar-change check did not finish")
 	}
-	for _, entry := range config.Alerts[1:3] {
+	for _, entry := range config.Alerts[4:] {
 		row := sequentialCheckRow(t, l, entry.ID)
 		if row.ProgressState != "skipped" || row.Progress != 0 || row.Phase != "No eligible closed bar" || !reflect.DeepEqual(l.state.Checks[entry.ID], prior[entry.ID]) {
 			t.Fatalf("ineligible queued row invented a completed check: %+v", row)

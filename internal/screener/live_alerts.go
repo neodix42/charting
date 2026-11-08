@@ -173,11 +173,10 @@ type LiveAlerts struct {
 	send                            func(context.Context, LiveAlert) error
 	// Tests replace the transport only. Indexing, rule evaluation, claims and
 	// scheduling still use production code and real on-disk CSVs.
-	refresh          func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
-	publicData       *publicAlertData
-	checkExecuting   bool
-	checkProgress    map[string]liveAlertProgress
-	activeProgressID string
+	refresh        func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
+	publicData     *publicAlertData
+	checkExecuting bool
+	checkProgress  map[string]liveAlertProgress
 }
 
 func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error) (*LiveAlerts, error) {

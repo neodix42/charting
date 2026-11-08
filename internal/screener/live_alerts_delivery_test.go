@@ -165,3 +165,108 @@ func TestLiveAlertsLegacyPartialRecoveryRollsBackOnSaveFailure(t *testing.T) {
 		t.Fatal("live counting trusted arbitrary error text")
 	}
 }
+
+// A slow send can finish after a newer claim and its delivery. Match the actual
+// alert identity instead of updating whichever outcome is newest at that time.
+func TestLiveAlertsConcurrentDeliveryKeepsEachClaimOutcomeAndCounts(t *testing.T) {
+	m, l, config, _ := liveAlertsFixture(t)
+	second, err := saveLiveCondition(t, m, "Second condition", defaultAnalysisRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConditionIDs = append(config.ConditionIDs, second.ID)
+	if _, err = l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	run, err := l.beginCheckHistory(config, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := LiveAlert{ConditionID: config.ConditionIDs[0], ConditionName: "Latest close positive", Symbol: "eurusd", Timeframe: "h1", Time: 1704070800000}
+	next := LiveAlert{ConditionID: second.ID, ConditionName: "Second condition", Symbol: "gbpusd", Timeframe: "h1", Time: first.Time}
+	firstKey, nextKey := first.ConditionID+"/eurusd/h1", next.ConditionID+"/gbpusd/h1"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	entered, release := make(chan struct{}), make(chan struct{})
+	l.send = func(ctx context.Context, alert LiveAlert) error {
+		if alert.ConditionID == first.ConditionID {
+			close(entered)
+			select {
+			case <-release:
+				return confirmedDeliveryTestError{count: 1}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	}
+	if err = l.claim(ctx, firstKey, first.Time, &first); err != nil {
+		t.Fatal(err)
+	}
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- l.deliver(ctx, first) }()
+	drained := false
+	defer func() {
+		cancel()
+		if !drained {
+			<-firstDone
+		}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first send never started")
+	}
+	if err = l.claim(ctx, nextKey, next.Time, &next); err != nil {
+		t.Fatal(err)
+	}
+	if err = l.deliver(ctx, next); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	select {
+	case err = <-firstDone:
+		drained = true
+	case <-time.After(5 * time.Second):
+		t.Fatal("first send did not drain")
+	}
+	if err == nil {
+		t.Fatal("partial delivery failure was hidden")
+	}
+	run.failed(first.ConditionID, err)
+	if err = run.finish(err); err != nil {
+		t.Fatal(err)
+	}
+	assert := func(state liveAlertsState) {
+		t.Helper()
+		if state.Sent != 2 || state.Checks[first.ConditionID].SentAlerts != 1 || state.Checks[next.ConditionID].SentAlerts != 1 {
+			t.Fatalf("out-of-order delivery changed confirmed counts: %+v", state)
+		}
+		if len(state.Recent) != 2 {
+			t.Fatalf("lost claimed outcomes: %+v", state.Recent)
+		}
+		for _, outcome := range state.Recent {
+			switch outcome.ConditionID {
+			case first.ConditionID:
+				if outcome.Status != "failed" || outcome.ConfirmedRecipients != 1 {
+					t.Fatalf("slow partial delivery was attributed elsewhere: %+v", outcome)
+				}
+			case next.ConditionID:
+				if outcome.Status != "sent" || outcome.ConfirmedRecipients != 0 {
+					t.Fatalf("newer successful outcome was overwritten: %+v", outcome)
+				}
+			default:
+				t.Fatalf("unknown outcome: %+v", outcome)
+			}
+		}
+		if state.Watermarks[firstKey] != first.Time || state.Watermarks[nextKey] != next.Time {
+			t.Fatal("durable claims changed")
+		}
+	}
+	assert(l.state)
+	var saved liveAlertsState
+	if err = readState(l.path, liveAlertsStateBytes, &saved); err != nil {
+		t.Fatal(err)
+	}
+	assert(saved)
+}

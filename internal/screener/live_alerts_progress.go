@@ -64,15 +64,21 @@ func (l *LiveAlerts) startCheckProgressLocked(id string) {
 	progress.state, progress.phase = "running", "Preparing alert"
 	progress.revision = l.configRevision
 	l.checkProgress[id] = progress
-	l.activeProgressID = id
 	l.progress, l.currentAsset = 0, ""
 }
 
 // A negative percent changes only the phase/asset, for work such as a Telegram
 // send whose byte or recipient progress cannot be measured by this owner.
-func (l *LiveAlerts) updateCheckProgressLocked(phase string, percent float64, asset string) {
-	if l.activeProgressID != "" {
-		progress, ok := l.checkProgress[l.activeProgressID]
+type liveAlertProgressKey struct{}
+
+func (l *LiveAlerts) updateCheckProgressContextLocked(ctx context.Context, phase string, percent float64, asset string) {
+	id, _ := ctx.Value(liveAlertProgressKey{}).(string)
+	l.updateCheckProgressIDLocked(id, phase, percent, asset)
+}
+
+func (l *LiveAlerts) updateCheckProgressIDLocked(id, phase string, percent float64, asset string) {
+	if id != "" {
+		progress, ok := l.checkProgress[id]
 		if !ok || progress.state != "running" || progress.revision != l.configRevision {
 			return
 		}
@@ -80,7 +86,7 @@ func (l *LiveAlerts) updateCheckProgressLocked(phase string, percent float64, as
 			progress.percent = math.Max(progress.percent, math.Min(100, percent))
 		}
 		progress.phase, progress.asset = phase, asset
-		l.checkProgress[l.activeProgressID] = progress
+		l.checkProgress[id] = progress
 		l.progress = progress.percent
 	} else if percent >= 0 {
 		l.progress = math.Min(100, math.Max(0, percent))
@@ -116,9 +122,6 @@ func (l *LiveAlerts) finishCheckProgressLocked(id string, err error, asOf int64)
 	}
 	progress.asset = ""
 	l.checkProgress[id] = progress
-	if l.activeProgressID == id {
-		l.activeProgressID = ""
-	}
 }
 
 func (l *LiveAlerts) cancelCheckProgressLocked(phase string) {
