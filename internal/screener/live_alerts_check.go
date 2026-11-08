@@ -31,6 +31,8 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		return errLiveAlertsBusy
 	}
 	l.checkExecuting = true
+	l.queueCheckProgressLocked(config.ConditionIDs, !scheduled)
+	l.prepareCheckProgressLocked(config.ConditionIDs, "Preparing saved conditions")
 	l.mu.Unlock()
 	defer func() {
 		l.mu.Lock()
@@ -47,7 +49,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	conditions, err := l.selectedConditions(config)
+	conditions, err := l.selectedConditionsForCheck(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -82,6 +84,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if len(selected) == 0 {
 		return nil
 	}
+	l.reportCheckPreparation(ctx, ids, "Waiting for Screener work before checking alerts")
 	// Reserve Manager once for the complete batch. Public checks own private
 	// snapshots; Dukascopy still has one owner of its shared refresh job list.
 	checkContext, release, err := l.reserveCheckManager(ctx, asOf)
@@ -89,6 +92,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		return err
 	}
 	defer release()
+	l.reportCheckPreparation(ctx, ids, "Waiting for an alert worker")
 	cycleCtx, cancel := context.WithCancel(checkContext)
 	defer cancel()
 	failures := make([]error, len(selected))
@@ -106,6 +110,9 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 				saved := selected[index]
 				source := liveAlertSource(config, saved.ID)
 				if source == "dukascopy" && localActive {
+					l.mu.Lock()
+					l.prepareCheckProgressLocked([]string{saved.ID}, "Waiting for the active Dukascopy refresh")
+					l.mu.Unlock()
 					continue
 				}
 				pending = append(pending[:queueIndex], pending[queueIndex+1:]...)
@@ -202,7 +209,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 	}
 	scope := config.scope
 	config = canonicalLiveAlertsConfig(config)
-	conditions, err := l.selectedConditions(config)
+	conditions, err := l.selectedConditionsForCheck(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -253,6 +260,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			}
 		}
 	}
+	l.reportCheckPreparation(ctx, config.ConditionIDs, "Preparing Dukascopy history refresh")
 	m := l.manager
 	m.mu.Lock()
 	runtimeMessage := ""
@@ -280,9 +288,11 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	l.reportCheckPreparation(ctx, config.ConditionIDs, "Recovering saved history publications")
 	if err = recoverHistoryPublications(directory); err != nil {
 		return fmt.Errorf("recover saved history: %w", err)
 	}
+	l.reportCheckPreparation(ctx, config.ConditionIDs, "Selecting assets and required companion history")
 	groups, err := liveAlertGroups(directory, config, conditions)
 	if err != nil {
 		return err
@@ -592,11 +602,13 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 	m.mu.Lock()
 	m.refreshJobs = jobs
 	m.mu.Unlock()
+	l.reportCheckPreparation(ctx, nil, "Preparing provider session")
 	ctx, cleanup, err := withProviderSession(ctx, m.profile)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
+	l.reportCheckPreparation(ctx, nil, "Loading saved indicator recipes")
 	legacy := legacyRecipes(ctx, directory)
 	refreshed := map[string]bool{}
 	var failures []error
@@ -634,6 +646,9 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 				l.mu.Lock()
 				defer l.mu.Unlock()
 				phase := message
+				if strings.Contains(strings.ToLower(phase), "recalculating") {
+					phase = "Enriching indicators · " + phase
+				}
 				if phase == "" {
 					phase = "Refreshing closed history and indicators"
 				}

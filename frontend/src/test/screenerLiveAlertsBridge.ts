@@ -57,6 +57,11 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
   return structuredClone({...info,config:{enabled:info.config.enabled,alerts:entries},checks,savedConditionsRevision:(window as unknown as {__testSavedAnalysisConditionsRevision?:()=>number}).__testSavedAnalysisConditionsRevision?.()??0,conditionScopes,assets:assets()});
  };
  const api:ScreenerLiveAlertsBackend={
+  async GetScreenerLiveAlertsProgress(){
+   if(errors.read)throw Error(errors.read);
+   const value=snapshot();
+   return{...value,savedConditionsRevision:0,conditionScopes:[],assets:[],checks:value.checks.map(row=>({...row,nextCheck:0,timingHint:undefined}))};
+  },
   async GetScreenerLiveAlerts(){reads++;const response=snapshot();if(statusDelay)await new Promise(resolve=>setTimeout(resolve,statusDelay));if(errors.read)throw Error(errors.read);return response;},
   async ConfigureScreenerLiveAlerts(value){
    writes.push(structuredClone(value));if(gate)await gate;if(errors.save)throw Error(errors.save);

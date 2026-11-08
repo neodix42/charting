@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -97,4 +97,19 @@ it('follows renamed conditions only for exact copied alert names while preservin
  expect(config.alerts.map(entry=>entry.name)).toEqual(['Before','Before','Custom signal','Before','before']);
  expect(renameConditionAlerts(next,'condition','Before','After')).toBe(next);
  expect(renameConditionAlerts(config,'condition','Before','Before')).toBe(config);
+});
+
+it('merges compact live work without erasing schedule/evidence, and late metadata without rewinding progress',()=>{
+ const row={conditionId:'a',name:'Rule',assetsScanned:0,lastChecked:10,nextCheck:100,sentAlerts:0,status:'completed' as const,manual:true,error:'',timingHint:'Daily close'};
+ const metadata={...result({enabled:true}),savedConditionsRevision:7,checks:[row],assets:[{symbol:'btc',name:'BTC',category:'Crypto',periods:['d1']}]};
+ const compact={...result({enabled:true}),running:true,status:'Enriching indicators',checks:[{...row,progressState:'running' as const,phase:'Enriching indicators',progress:40,nextCheck:0,timingHint:undefined}]};
+ const live=mergeLiveAlertsProgress(metadata,compact);
+ expect(live.checks[0]).toMatchObject({phase:'Enriching indicators',progress:40,nextCheck:100,timingHint:'Daily close'});
+ expect(live.assets).toEqual(metadata.assets);expect(live.savedConditionsRevision).toBe(7);
+ const late=mergeLiveAlertsMetadata(live,{...metadata,savedConditionsRevision:8,checks:[{...row,nextCheck:200,timingHint:'New daily close'}]});
+ expect(late.running).toBe(true);expect(late.checks[0]).toMatchObject({phase:'Enriching indicators',progress:40,nextCheck:200,timingHint:'New daily close'});
+ expect(late.savedConditionsRevision).toBe(8);
+ const paused={...live,config:{enabled:true,alerts:[{id:'a',name:'Rule',conditionId:'saved',period:'d1' as const,dataSource:'hyperliquid' as const,enabled:false}]}};
+ expect(mergeLiveAlertsMetadata(paused,metadata).checks[0].nextCheck).toBe(0);
+ expect(mergeLiveAlertsProgress(late,{...compact,config:{enabled:false}}).checks[0].nextCheck).toBe(0);
 });

@@ -51,8 +51,36 @@ func (l *LiveAlerts) queueCheckProgressLocked(ids []string, manual bool) {
 	}
 	for _, id := range ids {
 		if known[id] {
-			l.checkProgress[id] = liveAlertProgress{state: "queued", phase: "Queued", mode: mode, revision: l.configRevision}
+			l.checkProgress[id] = liveAlertProgress{state: "queued", phase: "Waiting for an alert worker", mode: mode, revision: l.configRevision}
 		}
+	}
+}
+
+// Preparation happens before a real attempt is durably recorded. Keep the prior
+// history/counters intact while telling each waiting row what is blocking it.
+func (l *LiveAlerts) prepareCheckProgressLocked(ids []string, phase string) {
+	updated := false
+	for _, id := range ids {
+		progress, ok := l.checkProgress[id]
+		if !ok || progress.state != "queued" || progress.revision != l.configRevision {
+			continue
+		}
+		progress.phase, progress.asset = phase, ""
+		l.checkProgress[id] = progress
+		updated = true
+	}
+	if updated {
+		l.status, l.currentAsset = phase, ""
+	}
+}
+
+func (l *LiveAlerts) reportCheckPreparation(ctx context.Context, ids []string, phase string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if id, _ := ctx.Value(liveAlertProgressKey{}).(string); id != "" {
+		l.updateCheckProgressIDLocked(id, phase, -1, "")
+	} else {
+		l.prepareCheckProgressLocked(ids, phase)
 	}
 }
 

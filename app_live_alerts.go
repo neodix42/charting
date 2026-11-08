@@ -22,6 +22,18 @@ func (a *App) GetScreenerLiveAlerts() screener.LiveAlertsInfo {
 	return info
 }
 
+// Progress polling never waits for saved-condition evidence or CSV inventory.
+func (a *App) GetScreenerLiveAlertsProgress() screener.LiveAlertsInfo {
+	if a.liveAlerts == nil {
+		return a.GetScreenerLiveAlerts()
+	}
+	info := a.liveAlerts.ProgressInfo()
+	if a.liveAlertsError != "" {
+		info.Error, info.Config.Enabled = a.liveAlertsError, false
+	}
+	return info
+}
+
 func (a *App) ConfigureScreenerLiveAlerts(config screener.LiveAlertsConfig) (screener.LiveAlertsInfo, error) {
 	if a.liveAlerts == nil || a.liveAlertsError != "" {
 		return a.GetScreenerLiveAlerts(), errors.New("Live Alerts settings are unavailable; saved data was preserved")

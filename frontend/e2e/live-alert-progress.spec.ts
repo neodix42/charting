@@ -69,7 +69,7 @@ test('Check now immediately queues enabled rows without rewriting prior history,
  });
  await page.getByRole('button',{name:'Check now',exact:true}).click();
  for(const name of names.slice(0,3)){
-  await expect(progress(page,name)).toContainText('Queued');
+  await expect(progress(page,name)).toContainText('Requesting check');
   await expect(progress(page,name)).toContainText('Manual check');
   await expect(row(page,name).getByRole('cell').nth(2)).toContainText('2026-11-05 10:00:00 UTC');
   await expect(row(page,name).getByRole('cell').nth(2)).toContainText('Manual · Completed');
@@ -160,4 +160,58 @@ test('failed progress stays distinct from check history and a manual retry can b
  await expect(page.getByRole('progressbar',{name:'Live alerts progress',exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites().at(-1).enabled)).toBe(false);
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().sent)).toBe(18);
+});
+
+test('live steps keep updating while metadata, saved rules and the Check now response are blocked',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,read=api.GetScreenerLiveAlerts.bind(api),saved=api.GetScreenerSavedConditions.bind(api),check=api.CheckScreenerLiveAlerts.bind(api);
+  api.GetScreenerLiveAlerts=async()=>{const old=await read();(window as any).__fullProgressReadBlocked=true;await new Promise<void>(resolve=>{(window as any).__releaseFullProgressRead=resolve;});return{...old,savedConditionsRevision:old.savedConditionsRevision+1};};
+  api.GetScreenerSavedConditions=async()=>{const value=await saved();(window as any).__savedProgressReadBlocked=true;await new Promise<void>(resolve=>{(window as any).__releaseSavedProgressRead=resolve;});return value;};
+  api.CheckScreenerLiveAlerts=async()=>{const old=await check();await new Promise<void>(resolve=>{(window as any).__releaseSlowProgressCheck=resolve;});return old;};
+ });
+ await expect.poll(()=>page.evaluate(()=>(window as any).__fullProgressReadBlocked)).toBe(true);
+ await page.getByRole('button',{name:'Check now',exact:true}).click();
+ for(const phase of ['Loading saved rules','Downloading history · waiting for provider pacing or network','Enriching indicators']){
+  await page.evaluate(({phase,currentClose})=>{
+   const checks=(window as any).__progressRows.map((old:any,index:number)=>index===0?{...old,lastChecked:currentClose,status:'running',manual:true,progress:35,progressState:'running',phase,currentAsset:'Hyperliquid BTC perpetual d1'}:old);
+   (window as any).__testSetLiveAlertsInfo({checks,running:true,status:phase});
+  },{phase,currentClose});
+  await expect(progress(page,names[0])).toContainText(phase);
+  await expect(progress(page,names[0])).toContainText('Hyperliquid BTC perpetual d1');
+  await expect(progress(page,names[0])).not.toContainText('Queued');
+ }
+ // Release stale responses; they may refresh metadata but must not restore Queued.
+ await page.evaluate(()=>(window as any).__releaseSlowProgressCheck());
+ await page.evaluate(()=>(window as any).__releaseFullProgressRead());
+ await expect.poll(()=>page.evaluate(()=>(window as any).__savedProgressReadBlocked)).toBe(true);
+ await page.evaluate(()=>(window as any).__releaseSavedProgressRead());
+ await expect(progress(page,names[0])).toContainText('Enriching indicators');
+ await expect(progress(page,names[0])).toContainText('35%');
+ await expect(history(page).locator('tbody th')).toHaveText(names);
+});
+
+test('a progress sample taken during Stop cannot restore the old enabled check after Stop finishes',async({page})=>{
+ await openProgressApp(page);await setProgress(page,'manual',0,20);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,configure=api.ConfigureScreenerLiveAlerts.bind(api);
+  api.ConfigureScreenerLiveAlerts=async value=>{if(!value.enabled){(window as any).__stopProgressActionBlocked=true;await new Promise<void>(resolve=>{(window as any).__releaseStopProgressAction=resolve;});}return configure(value);};
+ });
+ await page.getByRole('button',{name:'Stop alerts',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__stopProgressActionBlocked)).toBe(true);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!,read=api.GetScreenerLiveAlertsProgress.bind(api);let held=false;
+  api.GetScreenerLiveAlertsProgress=async()=>{
+   if(held)return new Promise(()=>{});
+   held=true;const old=await read();(window as any).__oldStopProgressBlocked=true;
+   await new Promise<void>(resolve=>{(window as any).__releaseOldStopProgress=resolve;});return old;
+  };
+ });
+ await expect.poll(()=>page.evaluate(()=>(window as any).__oldStopProgressBlocked)).toBe(true);
+ await page.evaluate(()=>(window as any).__releaseStopProgressAction());
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeVisible();
+ await page.evaluate(()=>(window as any).__releaseOldStopProgress());
+ await expect(progress(page,names[0])).toContainText('Cancelled');
+ await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toHaveCount(0);
 });

@@ -26,8 +26,30 @@ export function liveAlertCheckProgress(check:LiveAlertCheck):{state:string;phase
  return{state,phase:check.phase||(state==='completed'&&check.error?'Completed with errors':labels[state])||state,value};
 }
 export interface LiveAlertsInfo {checks:LiveAlertCheck[];savedConditionsRevision:number;conditionScopes:LiveAlertConditionScope[];config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
+/** Compact status carries no evidence/catalog metadata; retain the last full schedule. */
+export function mergeLiveAlertsProgress(previous:LiveAlertsInfo|null,next:LiveAlertsInfo):LiveAlertsInfo {
+ if(!previous)return next;
+ const previousRows=new Map(previous.checks.map(row=>[row.alertId??row.conditionId,row]));
+ return{...next,savedConditionsRevision:previous.savedConditionsRevision,conditionScopes:previous.conditionScopes,assets:previous.assets,
+  checks:next.checks.map(row=>{
+   const old=previousRows.get(row.alertId??row.conditionId);
+   const enabled=next.config.enabled&&(next.config.alerts?.find(entry=>entry.id===(row.alertId??row.conditionId))?.enabled??true);
+   return old?{...old,...row,nextCheck:enabled?(row.nextCheck||old.nextCheck):0,timingHint:row.timingHint??old.timingHint}:row;
+  })};
+}
+/** A slow evidence read may refresh metadata, but cannot rewind newer live work. */
+export function mergeLiveAlertsMetadata(latest:LiveAlertsInfo,metadata:LiveAlertsInfo):LiveAlertsInfo {
+ const fullRows=new Map(metadata.checks.map(row=>[row.alertId??row.conditionId,row]));
+ const merged=mergeLiveAlertsProgress(metadata,latest);
+ return{...merged,checks:merged.checks.map(row=>{
+  const full=fullRows.get(row.alertId??row.conditionId);
+  const enabled=latest.config.enabled&&(latest.config.alerts?.find(entry=>entry.id===(row.alertId??row.conditionId))?.enabled??true);
+  return full?{...row,nextCheck:enabled?full.nextCheck:0,timingHint:full.timingHint}:row;
+ })};
+}
 export interface ScreenerLiveAlertsBackend {
  GetScreenerLiveAlerts():Promise<LiveAlertsInfo>;
+ GetScreenerLiveAlertsProgress():Promise<LiveAlertsInfo>;
  ConfigureScreenerLiveAlerts(config:LiveAlertsConfig):Promise<LiveAlertsInfo>;
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
 }

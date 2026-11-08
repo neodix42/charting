@@ -173,10 +173,11 @@ type LiveAlerts struct {
 	send                            func(context.Context, LiveAlert) error
 	// Tests replace the transport only. Indexing, rule evaluation, claims and
 	// scheduling still use production code and real on-disk CSVs.
-	refresh        func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
-	publicData     *publicAlertData
-	checkExecuting bool
-	checkProgress  map[string]liveAlertProgress
+	refresh         func(context.Context, string, []historyGroup, int64) (map[string]bool, error)
+	publicData      *publicAlertData
+	checkExecuting  bool
+	resolutionPhase string
+	checkProgress   map[string]liveAlertProgress
 }
 
 func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error) (*LiveAlerts, error) {
@@ -443,6 +444,15 @@ func containsLiveValue(values []string, target string) bool {
 	return false
 }
 
+// ProgressInfo reads only LiveAlerts-owned memory. It must remain available while
+// Info's catalog/evidence refresh or a worker holds Manager.mu. Callers retain
+// separately loaded rule/scope metadata when merging this lightweight snapshot.
+func (l *LiveAlerts) ProgressInfo() LiveAlertsInfo {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.stopInfoLocked()
+}
+
 func (l *LiveAlerts) Info() LiveAlertsInfo {
 	assets, assetErr := l.assets()
 	l.manager.mu.Lock()
@@ -494,8 +504,53 @@ func (l *LiveAlerts) Info() LiveAlertsInfo {
 }
 
 func (l *LiveAlerts) selectedConditions(config LiveAlertsConfig) ([]SavedAnalysisCondition, error) {
-	l.manager.mu.Lock()
+	return l.selectedConditionsWithProgress(context.Background(), config, false)
+}
+
+func (l *LiveAlerts) selectedConditionsForCheck(ctx context.Context, config LiveAlertsConfig) ([]SavedAnalysisCondition, error) {
+	return l.selectedConditionsWithProgress(ctx, config, true)
+}
+
+func (l *LiveAlerts) selectedConditionsWithProgress(ctx context.Context, config LiveAlertsConfig, report bool) ([]SavedAnalysisCondition, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	reportPhase := func(phase string) {
+		if !report {
+			return
+		}
+		if id, _ := ctx.Value(liveAlertProgressKey{}).(string); id == "" {
+			l.mu.Lock()
+			l.resolutionPhase = phase
+			// Idle scope refresh also reads the saved rules. Track that work so a
+			// new Check now can describe it, but leave future retry rows waiting.
+			preparing := l.requested || l.running || l.checkExecuting || (l.state.Config.Enabled && l.nextRun > 0 && l.now().UnixMilli() >= l.nextRun)
+			if preparing {
+				l.prepareCheckProgressLocked(config.ConditionIDs, phase)
+			}
+			l.mu.Unlock()
+			return
+		}
+		l.reportCheckPreparation(ctx, config.ConditionIDs, phase)
+	}
+	if report {
+		defer func() {
+			if id, _ := ctx.Value(liveAlertProgressKey{}).(string); id == "" {
+				l.mu.Lock()
+				l.resolutionPhase = ""
+				l.mu.Unlock()
+			}
+		}()
+	}
+	if !l.manager.mu.TryLock() {
+		reportPhase("Waiting for Screener work to load saved conditions")
+		l.manager.mu.Lock()
+	}
 	defer l.manager.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	reportPhase("Loading and validating saved conditions")
 	saved, err := l.manager.readSavedConditions()
 	if err != nil {
 		return nil, err
@@ -770,8 +825,13 @@ func (l *LiveAlerts) CheckNow() (LiveAlertsInfo, error) {
 	if l.closed || l.blocked || !l.state.Config.Enabled || l.running || l.requested || len(l.state.Config.ConditionIDs) == 0 {
 		return l.stopInfoLocked(), errors.New("enable Live Alerts and wait for the current check before checking again")
 	}
-	l.requested, l.status = true, "Check queued"
+	l.requested, l.status = true, "Waiting for scheduler"
 	l.queueCheckProgressLocked(l.state.Config.ConditionIDs, true)
+	phase := l.resolutionPhase
+	if phase == "" {
+		phase = "Waiting for scheduler"
+	}
+	l.prepareCheckProgressLocked(l.state.Config.ConditionIDs, phase)
 	l.signal()
 	return l.stopInfoLocked(), nil
 }
@@ -871,8 +931,18 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		}
 		l.mu.Lock()
 		current, revision := copyLiveAlertsConfig(l.state.Config), l.configRevision
+		preparing := current.Enabled && (l.requested || (l.nextRun > 0 && l.now().UnixMilli() >= l.nextRun))
+		if preparing {
+			l.queueCheckProgressLocked(current.ConditionIDs, l.requested)
+			l.prepareCheckProgressLocked(current.ConditionIDs, "Preparing saved conditions")
+		}
 		l.mu.Unlock()
-		resolved, resolveErr := l.resolveConfig(current)
+		var resolved LiveAlertsConfig
+		conditions, resolveErr := l.selectedConditionsForCheck(ctx, current)
+		resolved = current
+		if resolveErr == nil {
+			resolved = resolvedLiveAlertsConfig(current, conditions)
+		}
 		now := l.now()
 		l.mu.Lock()
 		if revision != l.configRevision {

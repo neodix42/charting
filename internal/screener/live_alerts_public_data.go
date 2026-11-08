@@ -236,6 +236,7 @@ func (l *LiveAlerts) publicAlertCatalog(ctx context.Context, source string) (exc
 		return nil, nil, errors.New("unsupported public alert source")
 	}
 	data := l.publicAlertDataState()
+	l.publicAlertStep(ctx, "Waiting for shared market discovery", source)
 	// One discovery per source, including cold concurrent checks. Waiters cancel
 	// independently and reuse the successful catalog without another HTTP scan.
 	release, err := data.acquireKey(ctx, "catalog/"+source)
@@ -263,8 +264,10 @@ func (l *LiveAlerts) publicAlertCatalog(ctx context.Context, source string) (exc
 	cached := data.catalogs[source]
 	data.mu.Unlock()
 	if len(cached.items) > 0 && time.Since(cached.at) < 30*time.Minute {
+		l.publicAlertStep(ctx, "Reusing market catalog", source)
 		return a, cached.items, nil
 	}
+	l.publicAlertStep(ctx, "Discovering public markets (provider pacing and network)", source)
 	items, err := a.Instruments(ctx)
 	if err != nil {
 		return a, nil, err
@@ -291,6 +294,7 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	data := l.publicAlertDataState()
+	l.publicAlertStep(ctx, "Planning required history and indicators", source)
 	plans, err := publicAlertPlans(conditions, periods)
 	if err != nil {
 		return batch, err
@@ -298,6 +302,7 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	if len(plans) == 0 {
 		return batch, errors.New("selected public conditions have no supported periods")
 	}
+	l.publicAlertStep(ctx, "Loading indicator runtime", source)
 	l.manager.mu.Lock()
 	profile, runtime := l.manager.profile, l.manager.runtime
 	runtimeError := l.manager.enrichmentRuntimeError()
@@ -310,10 +315,12 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	}
 	root := filepath.Join(profile, "screener-public-history", source)
 	cacheDirectory := filepath.Join(root, "data")
+	l.publicAlertStep(ctx, "Waiting for public data worker", source)
 	releaseInitial, err := data.acquireSlot(ctx)
 	if err != nil {
 		return batch, err
 	}
+	l.publicAlertStep(ctx, "Starting indicator worker", source)
 	worker, preparedPlans, err := startPublicAlertWorker(ctx, runtime, plans)
 	if err != nil {
 		releaseInitial()
@@ -333,6 +340,7 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	if err != nil {
 		return batch, err
 	}
+	l.publicAlertStep(ctx, "Preparing market history tasks", source)
 	for _, dir := range []string{root, filepath.Join(root, "raw"), cacheDirectory} {
 		if err = os.MkdirAll(dir, 0700); err != nil {
 			return batch, err
@@ -417,7 +425,8 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		return batch, nil
 	}
 	var resultMu sync.Mutex
-	var next, completed int
+	var next int
+	progress := newPublicAlertPreparationProgress(l, ctx, len(tasks))
 	var fatal error
 	var wg sync.WaitGroup
 	initial := worker
@@ -426,8 +435,10 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
+			defer progress.remove(index)
 			current, release := initial, releaseInitial
 			if index != 0 {
+				progress.step(index, "Waiting for public data worker", source)
 				var err error
 				release, err = data.acquireSlot(ctx)
 				if err != nil {
@@ -449,9 +460,11 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 				}
 				job := tasks[next]
 				next++
-				progress := 70 * float64(completed) / float64(len(tasks))
 				resultMu.Unlock()
+				assetLabel := source + " " + job.asset.Name + " " + job.asset.Market + " " + job.period
+				report := func(phase string) { progress.step(index, phase, assetLabel) }
 				if current == nil {
+					report("Starting indicator worker")
 					var err error
 					current, _, err = startPublicAlertWorker(ctx, runtime, plans)
 					if err != nil {
@@ -467,21 +480,19 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 						return
 					}
 				}
-				l.mu.Lock()
-				l.updateCheckProgressContextLocked(ctx, "Fetching public market history and indicators", progress, source+" "+job.asset.Name+" "+job.asset.Market+" "+job.period)
-				l.mu.Unlock()
+				report("Waiting for shared history")
 				pair := job.asset.Symbol + "/" + job.period
 				unlock, e := data.acquireKey(ctx, "series/"+source+"/"+pair)
 				var name string
 				if e == nil {
-					name, e = preparePublicAlertSeries(ctx, a, current, root, cacheDirectory, source, job.asset, job.period, plans[job.period], asOf)
+					name, e = preparePublicAlertSeries(ctx, a, current, root, cacheDirectory, source, job.asset, job.period, plans[job.period], asOf, report)
 					if e == nil {
+						report("Preparing evaluation snapshot")
 						e = publicAlertSnapshot(filepath.Join(cacheDirectory, name), filepath.Join(snapshot, name))
 					}
 					unlock()
 				}
 				resultMu.Lock()
-				completed++
 				if e != nil {
 					batch.Failures[pair] = fmt.Errorf("%s %s %s: %w", job.asset.NativeID, job.asset.Market, job.period, e)
 					if publicAlertProviderRefused(e) && fatal == nil {
@@ -492,6 +503,7 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 					batch.Files[pair] = name
 				}
 				resultMu.Unlock()
+				progress.complete(index)
 			}
 		}(index)
 	}
@@ -530,7 +542,15 @@ type publicAlertRawState struct {
 	BackfillBars    int    `json:"backfillBars,omitempty"`
 }
 
-func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, worker *publicAlertWorker, root, directory, source string, asset publicAlertAsset, period string, plan publicAlertPlan, asOf int64) (string, error) {
+func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, worker *publicAlertWorker, root, directory, source string, asset publicAlertAsset, period string, plan publicAlertPlan, asOf int64, reporters ...func(string)) (string, error) {
+	report := func(phase string) {
+		for _, reporter := range reporters {
+			if reporter != nil {
+				reporter(phase)
+			}
+		}
+	}
+	report("Validating cached history")
 	interval := publicAlertIntervals[period]
 	d := exchange.TimeframeSeconds(interval)
 	end := exchange.BucketStart(asOf/1000, d)
@@ -617,6 +637,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	for _, r := range ranges {
 		for cursor := r.from; cursor < r.to; {
 			pageEnd := min(r.to, cursor+1000*d)
+			report("Downloading history (provider pacing and network)")
 			if e := fetch(cursor, pageEnd); e != nil {
 				return "", e
 			}
@@ -651,6 +672,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		for count() < plan.Bars && cursor > floor {
 			start := max(floor, cursor-1000*d)
 			before := count()
+			report("Downloading older indicator warm-up history")
 			if e := fetch(start, cursor); e != nil {
 				return "", e
 			}
@@ -664,6 +686,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	// Repair publication races with one narrow request, rather than waiting for
 	// the next full-universe check. Never substitute an older or synthetic bar.
 	if latest, ok := bars[end-d]; !ok || latest.Quality != "authoritative" {
+		report("Downloading latest closed candle")
 		if e := fetch(end-d, end); e != nil {
 			return "", e
 		}
@@ -704,9 +727,12 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		return "", err
 	}
 	if state != previousState || state.Checksum != previousChecksum {
+		report("Saving verified candle history")
 		if err = publicAlertPublishRaw(rawPath, metadataPath, encoded, state, previousChecksum); err != nil {
 			return "", err
 		}
+	} else {
+		report("Reusing verified candle history")
 	}
 	eligible := []domain.Candle{}
 	for _, c := range ordered {
@@ -737,7 +763,9 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	name := stem + "-" + fromDate + "-" + toDate + ".csv"
 	cachePath := filepath.Join(root, "raw", stem+".enriched.json")
 	cacheKey := publicAlertEnrichmentKey(input, plan, worker.fingerprint)
+	report("Checking reusable indicators")
 	if publicAlertReuseEnriched(cachePath, filepath.Join(directory, name), cacheKey) {
+		report("Reusing verified indicators")
 		return name, ctx.Err()
 	}
 	work, err := os.MkdirTemp(root, ".prepare-*")
@@ -749,9 +777,11 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	if err = writeSyncedExclusive(inputPath, input); err != nil {
 		return "", err
 	}
+	report("Enriching indicators")
 	if err = worker.enrich(period, inputPath, outputPath); err != nil {
 		return "", err
 	}
+	report("Saving enriched history")
 	output, err := publicAlertReadBounded(outputPath, 128<<20)
 	if err != nil {
 		return "", err
