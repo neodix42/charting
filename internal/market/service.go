@@ -457,11 +457,18 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	if cached, ok := s.forexPage(key, from, to, limit); ok {
 		return s.acceptHistoryEpoch(id, key, from, to, revision, cached, false, &providerEpoch)
 	}
+	var retained []domain.Candle
 	// Only a complete contiguous page of closed, past buckets can bypass REST.
 	// Gaps, delistings and current buckets still go to the provider; a sparse disk
 	// page must never be mistaken for a complete market history.
 	if s.opts.Cache != nil && key.Exchange != "dukascopy" && to <= exchange.BucketStart(s.opts.Now().Unix(), exchange.TimeframeSeconds(key.Timeframe)) {
 		cached, cacheErr := s.opts.Cache.Range(key, from, to-1, limit)
+		if key.Exchange == "hyperliquid" {
+			if cacheErr != nil {
+				return History{}, cacheErr
+			}
+			retained = cached
+		}
 		if err := ctx.Err(); err != nil {
 			return History{}, err
 		}
@@ -490,6 +497,20 @@ func (s *Service) history(ctx context.Context, id string, key domain.FeedKey, fr
 	bars, err := a.History(ctx, key, from, to, limit)
 	if err != nil {
 		return History{}, err
+	}
+	if key.Exchange == "hyperliquid" && len(retained) > 0 {
+		merged := map[int64]domain.Candle{}
+		for _, c := range retained {
+			c.SourceRevision = 0
+			merged[c.Time] = c
+		}
+		for _, c := range bars {
+			merged[c.Time] = c
+		}
+		bars = sorted(merged)
+		if len(bars) > limit {
+			bars = bars[len(bars)-limit:]
+		}
 	}
 	var epoch *uint64
 	if key.Exchange == "dukascopy" {
@@ -521,7 +542,7 @@ func completeCachedPage(key domain.FeedKey, from, to int64, limit int, bars []do
 		return false
 	}
 	for i, c := range bars {
-		if !c.Closed || c.Time != first+int64(i)*step {
+		if !c.Closed || c.Quality == "provisional" || c.Time != first+int64(i)*step {
 			return false
 		}
 	}

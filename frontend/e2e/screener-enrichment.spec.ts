@@ -209,8 +209,8 @@ test('Period filters files before pagination, resets the page and scopes enrichm
  await period.selectOption('m5');await expect(scope).toHaveText('21 of 64 files selected · m5');
  await expect(panel(page).locator('tbody tr')).toHaveCount(20);await expect(panel(page)).toContainText('1–20 of 21 files');
  await expect(panel(page).locator('tbody tr td:first-child small')).toHaveText(Array(20).fill('m5 · 2.0 KiB'));
- await expect(panel(page)).toContainText('Applies only to m5 files in this folder.');
- await expect(panel(page)).toContainText('Refresh includes all periods');
+ await expect(panel(page)).toContainText('Applies only to Dukascopy m5 files in this folder.');
+ await expect(panel(page)).toContainText('Refresh includes Dukascopy files across all periods');
  await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page)).toContainText('21–21 of 21 files');await expect(panel(page).locator('tbody tr')).toHaveCount(1);
  await page.getByRole('button',{name:'Enrich 21 files',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toEqual({indicator:'sma',parameters:{period:200},source:'auto',period:'m5'});
@@ -232,7 +232,7 @@ test('Period with no files disables enrichment and keeps global refresh availabl
  await page.getByLabel('Enrichment period',{exact:true}).selectOption('m1');
  await expect(page.getByLabel('Enrichment file scope',{exact:true})).toHaveText('0 of 1 files selected · m1');
  await expect(page.getByRole('button',{name:'Enrich 0 files',exact:true})).toBeDisabled();
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeEnabled();
  await expect(panel(page).locator('tbody tr')).toHaveCount(0);await expect(panel(page)).toContainText('No downloaded m1 CSV files.');
  await expect(panel(page).getByLabel('Data file pages',{exact:true})).toHaveCount(0);
  await page.getByLabel('Enrichment period',{exact:true}).selectOption('all');

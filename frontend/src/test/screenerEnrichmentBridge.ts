@@ -9,19 +9,21 @@ export function screenerEnrichmentBridge(directory:()=>string){
  let info:ScreenerEnrichmentInfo={directory:directory(),active:false,runtimeAvailable:true,indicator:'',total:0,completed:0,failed:0,cancelled:0,currentFile:'',currentProgress:0,jobs:[]};
  let refresh:ScreenerRefreshInfo={directory:directory(),active:false,runtimeAvailable:true,total:0,completed:0,failed:0,cancelled:0,currentFile:'',currentProgress:0,jobs:[]},refreshStarts=0,refreshStartError='';
  const saveFiles=()=>sessionStorage.setItem(fileKey,JSON.stringify(files));
- const api:Pick<Backend,'GetScreenerIndicators'|'GetScreenerFiles'|'GetScreenerFilesForPeriod'|'GetScreenerEnrichment'|'StartScreenerEnrichment'|'CancelScreenerEnrichment'|'GetScreenerRefresh'|'StartScreenerRefresh'|'CancelScreenerRefresh'>={
+ const api:Pick<Backend,'GetScreenerIndicators'|'GetScreenerFiles'|'GetScreenerFilesForPeriod'|'GetScreenerFilesForSource'|'GetScreenerEnrichment'|'StartScreenerEnrichment'|'CancelScreenerEnrichment'|'GetScreenerRefresh'|'StartScreenerRefresh'|'CancelScreenerRefresh'>={
   async GetScreenerIndicators(){return structuredClone(catalog as ScreenerIndicators);},
   async GetScreenerFiles(offset,limit){return api.GetScreenerFilesForPeriod(offset,limit,'all');},
-  async GetScreenerFilesForPeriod(offset,limit,period){
+  async GetScreenerFilesForPeriod(offset,limit,period){return api.GetScreenerFilesForSource(offset,limit,period,'dukascopy');},
+  async GetScreenerFilesForSource(offset,limit,period,source){
    reads++;if(fileError)throw Error(fileError);
-   const selected=files.filter(file=>!period||period==='all'||file.timeframe===period);
-   return{directory:directory(),total:selected.length,allTotal:files.length,offset,limit,periodCounts:files.reduce<Record<string,number>>((counts,file)=>{if(file.timeframe)counts[file.timeframe]=(counts[file.timeframe]??0)+1;return counts;},{}),files:structuredClone(selected.slice(offset,offset+limit))};
+   const sourceFiles=files.filter(file=>(file.dataSource??'dukascopy')===source);
+   const selected=sourceFiles.filter(file=>!period||period==='all'||file.timeframe===period);
+   return{directory:directory(),total:selected.length,allTotal:sourceFiles.length,offset,limit,periodCounts:sourceFiles.reduce<Record<string,number>>((counts,file)=>{if(file.timeframe)counts[file.timeframe]=(counts[file.timeframe]??0)+1;return counts;},{}),files:structuredClone(selected.slice(offset,offset+limit))};
   },
   async GetScreenerEnrichment(ids){return structuredClone({...info,directory:directory(),jobs:info.jobs.filter(job=>ids.includes(job.fileId))});},
   async StartScreenerEnrichment(value){
    if(startError)throw Error(startError);
    request=structuredClone(value);
-   const selected=files.filter(file=>!value.period||value.period==='all'||file.timeframe===value.period);
+   const selected=files.filter(file=>(file.dataSource??'dukascopy')===(value.dataSource??'dukascopy')&&(!value.period||value.period==='all'||file.timeframe===value.period));
    info={...info,active:true,indicator:value.indicator,total:selected.length,completed:0,failed:0,cancelled:0,jobs:selected.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,message:'Queued in explicit test mode',columns:[]}))};
    return structuredClone({...info,jobs:[]});
   },

@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Hyperliquid downloaded history — 2026-11-09
+
+- [x] Source selectors retain Dukascopy defaults, independent Hyperliquid choices, all-selected initialization and deliberately empty selection; source-filtered enrichment applies before pagination.
+- [x] D1 actual availability, source/market/native identity, daily-derived Monday W1, decimal volume, durable extension/recipe replay, closed-bar provenance and interrupted replay recovery are covered by production regressions.
+- [x] D1/W1 chart history works with optional storage disabled; source isolation, sparse-page merges and shared Live Alerts history/required indicators are covered by race tests.
+- [x] Frontend build/lint/230 unit tests and 44 related browser tests pass. Runtime 97 tests, independent Go race packages, complete final Screener race rerun, root bindings/native race and vet pass. Linux production build succeeds.
+- [x] Isolated real BTC/HYPE daily/weekly download, SMA enrichment, backward extension, full BTC daily snapshot and alert preparation/cache reuse pass without Telegram sends.
+- [ ] Native desktop interaction, Windows execution and full live-universe timing remain unrun; see STATUS.md for exact commands and the next manual check.
+
 ## Retained JForex dependency cache — 2026-11-06
 
 - [x] Tests and release builds restore/verify/save the same manifest-pinned SDK cache before subsequent work; valid client/dependencies are reused without vendor requests.

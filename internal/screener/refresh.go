@@ -132,8 +132,17 @@ func (m *Manager) StartRefresh() (RefreshInfo, error) {
 	if err != nil {
 		return m.refreshInfoLocked(nil), err
 	}
+	// The manual Refresh worker speaks Dukascopy only. Hyperliquid history is
+	// updated by its downloader and Live Alerts, never by this provider worker.
+	dukascopyNames := make([]string, 0, len(names))
+	for _, name := range names {
+		if fileDataSource(name) != "hyperliquid" {
+			dukascopyNames = append(dukascopyNames, name)
+		}
+	}
+	names = dukascopyNames
 	if len(names) == 0 {
-		return m.refreshInfoLocked(nil), errors.New("there are no downloaded CSV files to refresh")
+		return m.refreshInfoLocked(nil), errors.New("there are no Dukascopy CSV files to refresh; use the Hyperliquid downloader to update Hyperliquid histories")
 	}
 	groups := groupHistories(m.directory, names)
 	jobs := make([]RefreshJob, len(groups))
@@ -283,6 +292,9 @@ func (m *Manager) refreshFileRequired(ctx context.Context, index int, directory 
 }
 
 func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64, requiredFields []string, report func(float64, string)) error {
+	if fileDataSource(job.Name) == "hyperliquid" {
+		return errors.New("Hyperliquid history cannot be refreshed through Dukascopy; original kept")
+	}
 	match := downloadFilename.FindStringSubmatch(strings.ToLower(job.Name))
 	if match == nil {
 		return errors.New("cannot identify the Dukascopy instrument, timeframe and start date from this CSV filename; original kept")

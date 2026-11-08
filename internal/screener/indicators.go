@@ -59,6 +59,7 @@ func (m *Manager) Indicators() IndicatorCatalog {
 }
 
 type EnrichmentRequest struct {
+	DataSource string             `json:"dataSource,omitempty"`
 	Indicator  string             `json:"indicator"`
 	Parameters map[string]float64 `json:"parameters"`
 	Source     string             `json:"source"`
@@ -68,6 +69,9 @@ type EnrichmentRequest struct {
 }
 
 func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentRequest, error) {
+	if request.DataSource != "" && request.DataSource != "all" && request.DataSource != "dukascopy" && request.DataSource != "hyperliquid" {
+		return request, errors.New("unsupported enrichment data source")
+	}
 	if request.Period != "" && request.Period != "all" {
 		known := false
 		for _, period := range loadCatalog().Timeframes {

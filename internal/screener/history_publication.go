@@ -36,7 +36,11 @@ type historyPublication struct {
 	Sources          []historyOriginal `json:"sources"`
 }
 
-func canonicalHistoryName(symbol, timeframe, from, to string, sources []downloadSource, metadata fileMetadata) (string, error) {
+func canonicalHistoryName(symbol, timeframe, from, to string, sources []downloadSource, metadata fileMetadata, directories ...string) (string, error) {
+	directory := ""
+	if len(directories) > 0 {
+		directory = directories[0]
+	}
 	addBounds := func(start, end string) error {
 		for _, value := range []string{start, end} {
 			if value == "" {
@@ -62,7 +66,7 @@ func canonicalHistoryName(symbol, timeframe, from, to string, sources []download
 		if err := addBounds(source.From, source.To); err != nil {
 			return "", err
 		}
-		if match := downloadFilename.FindStringSubmatch(strings.ToLower(source.Name)); match != nil {
+		if match := parseDownloadFilename(directory, source.Name); match != nil {
 			if match[1] != symbol || match[2] != timeframe {
 				return "", errors.New("history sources belong to different assets or timeframes")
 			}
@@ -81,7 +85,15 @@ func canonicalHistoryName(symbol, timeframe, from, to string, sources []download
 			return "", err
 		}
 	}
-	name := symbol + "-" + timeframe + "-" + from + "-" + to + ".csv"
+	fileSymbol := symbol
+	if directory != "" && validHyperliquidDownloadID(symbol) {
+		var err error
+		fileSymbol, err = hyperliquidFileSymbol(directory, symbol)
+		if err != nil {
+			return "", err
+		}
+	}
+	name := fileSymbol + "-" + timeframe + "-" + from + "-" + to + ".csv"
 	if from >= to || downloadFilename.FindStringSubmatch(name) == nil {
 		return "", errors.New("invalid canonical history filename")
 	}
@@ -438,13 +450,13 @@ func checkHistoryDirectory(path string, create bool) error {
 }
 
 func checkHistoryFamily(directory string, journal historyPublication) error {
-	match := downloadFilename.FindStringSubmatch(strings.ToLower(journal.Name))
+	match := parseDownloadFilename(directory, journal.Name)
 	if match == nil {
 		return nil
 	}
 	allowed := map[string]bool{journal.Name: true}
 	for _, source := range journal.Sources {
-		other := downloadFilename.FindStringSubmatch(strings.ToLower(source.Name))
+		other := parseDownloadFilename(directory, source.Name)
 		if other == nil || other[1] != match[1] || other[2] != match[2] {
 			return errors.New("publication sources belong to different assets or timeframes")
 		}
@@ -455,7 +467,7 @@ func checkHistoryFamily(directory string, journal historyPublication) error {
 		return err
 	}
 	for _, name := range names {
-		other := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+		other := parseDownloadFilename(directory, name)
 		if other != nil && other[1] == match[1] && other[2] == match[2] && !allowed[name] {
 			return errors.New("another history range appeared during processing; existing files kept")
 		}

@@ -170,6 +170,10 @@ export function GetScreenerCatalog() {
   return window['go']['main']['App']['GetScreenerCatalog']();
 }
 
+export function GetScreenerCatalogForSource(arg1) {
+  return window['go']['main']['App']['GetScreenerCatalogForSource'](arg1);
+}
+
 export function GetScreenerEnrichment(arg1) {
   return window['go']['main']['App']['GetScreenerEnrichment'](arg1);
 }
@@ -182,12 +186,20 @@ export function GetScreenerFilesForPeriod(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetScreenerFilesForPeriod'](arg1, arg2, arg3);
 }
 
+export function GetScreenerFilesForSource(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetScreenerFilesForSource'](arg1, arg2, arg3, arg4);
+}
+
 export function GetScreenerIndicators() {
   return window['go']['main']['App']['GetScreenerIndicators']();
 }
 
 export function GetScreenerLiveAlerts() {
   return window['go']['main']['App']['GetScreenerLiveAlerts']();
+}
+
+export function GetScreenerLiveAlertsProgress() {
+  return window['go']['main']['App']['GetScreenerLiveAlertsProgress']();
 }
 
 export function GetScreenerRefresh(arg1) {

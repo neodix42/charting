@@ -7,7 +7,7 @@ const file=(index:number):ScreenerDataFile=>({id:`refresh-${index}`,name:`asset$
 async function open(page:Page,count=2){
  await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),Array.from({length:count},(_,i)=>file(i)));
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeEnabled();
 }
 const panel=(page:Page)=>page.locator('#screener-enrichment');
 
@@ -16,7 +16,7 @@ test('Refresh updates all existing files and applied indicators, independently o
  await page.getByLabel('Period',{exact:true}).fill('3');
  await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(20);
  await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(17);
- await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  const info=await page.evaluate(()=>(window as any).__testRefresh()) as ScreenerRefreshInfo;
  expect(info.jobs).toHaveLength(57);expect(info.jobs[0].columns).toEqual(fields.slice(6));
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toBeNull();
@@ -25,7 +25,7 @@ test('Refresh updates all existing files and applied indicators, independently o
  await page.evaluate(info=>(window as any).__testSetRefresh({...info,currentFile:info.jobs[56].name,currentProgress:36,jobs:info.jobs.map((job,i)=>({...job,status:i===56?'running':'queued',progress:i===56?36:0,message:'Downloading new rows and recalculating saved indicators'}))}),info);
  await expect(panel(page).locator('tbody tr').last().getByRole('progressbar')).toHaveAttribute('value','36');
  await expect(page.getByRole('button',{name:'Enrich 57 files',exact:true})).toBeDisabled();
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeDisabled();
  await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(panel(page).locator('tbody tr').last()).toContainText('Downloading new rows');
  await page.getByRole('button',{name:'Cancel refresh',exact:true}).click();
@@ -34,7 +34,7 @@ test('Refresh updates all existing files and applied indicators, independently o
 });
 
 test('completed refresh shows new row counts, recalculated columns and the available UTC period',async({page})=>{
- await open(page);await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await open(page);await page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  await page.evaluate(()=>{
   const files=(window as any).__testEnrichmentFiles() as ScreenerDataFile[];
   (window as any).__testSetEnrichmentFiles(files.map(file=>({...file,bytes:3000,firstTimestamp:1704067200000,lastTimestamp:1706832000000})));
@@ -47,13 +47,13 @@ test('completed refresh shows new row counts, recalculated columns and the avail
  await expect(first).toContainText('Available bar open times');
  await expect(first.locator('td').nth(2)).toContainText('sma_200, macd_histogram_12_26_9');
  await expect(panel(page).getByLabel('Data refresh progress',{exact:true})).toContainText('2 / 2 complete · 0 failed');
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeEnabled();
 });
 
 for(const action of ['refresh','enrichment'] as const){
  test(`${action} follows a range rename while running and reloads a failed job's consolidated file`,async({page})=>{
   await open(page,1);
-  await page.getByRole('button',{name:action==='refresh'?'Refresh data and indicators':'Enrich 1 file',exact:true}).click();
+  await page.getByRole('button',{name:action==='refresh'?'Refresh Dukascopy data and indicators':'Enrich 1 file',exact:true}).click();
   const renamed={...file(0),id:'renamed-history',name:'asset0-d1-2023-01-01-2024-02-01.csv',from:'2023-01-01'};
   await page.evaluate(({action,renamed})=>{
    const win=window as any,api=win.go.main.App;
@@ -80,7 +80,7 @@ for(const action of ['refresh','enrichment'] as const){
   await expect(row).toContainText('failed');
   await expect(row).toContainText('8.8 KiB');
   await expect(row).toContainText('consolidated history retained');
-  await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeEnabled();
  });
 }
 
@@ -92,10 +92,10 @@ test('a stale refresh poll cannot replace a newer started batch',async({page})=>
   api.GetScreenerRefresh=()=>new Promise(resolve=>{(window as any).__releaseRefreshPoll=()=>{api.GetScreenerRefresh=original;resolve(old);};});
  });
  await expect.poll(()=>page.evaluate(()=>!!(window as any).__releaseRefreshPoll)).toBe(true);
- await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  await page.evaluate(()=>(window as any).__releaseRefreshPoll());
  await expect(page.getByRole('button',{name:'Cancel refresh',exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'Cancel refresh',exact:true}).click();
 });
 
@@ -103,10 +103,10 @@ test('refresh runtime and write errors are visible and leave listed data intact'
  await open(page,1);
  await page.evaluate(()=>(window as any).__testSetRefresh({runtimeAvailable:false,runtimeError:'Explicit missing refresh worker'}));
  await expect(panel(page).getByRole('alert')).toContainText('Explicit missing refresh worker');
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeDisabled();
  await page.evaluate(()=>{(window as any).__testSetRefresh({runtimeAvailable:true,runtimeError:''});(window as any).__testRefreshError('Explicit original backup failure');});
- await expect(page.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
- await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  await expect(panel(page).getByRole('alert')).toContainText('Explicit original backup failure');
  expect(await page.evaluate(()=>(window as any).__testRefreshStarts())).toBe(0);
  expect((await page.evaluate(()=>(window as any).__testEnrichmentFiles()))[0].fields).toEqual(fields);
@@ -121,7 +121,7 @@ test('reloading the file list performs no download or indicator calculation',asy
 });
 
 test('refresh keeps whole-batch progress across completed, active and queued files',async({page})=>{
- await open(page,25);await expect(panel(page).locator('.enrichment-refresh-help')).toContainText('Each Refresh worker downloads missing and new data');await page.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await open(page,25);await expect(panel(page).locator('.enrichment-refresh-help')).toContainText('Each Refresh worker downloads missing and new data');await page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  await page.evaluate(()=>{
   const info=(window as any).__testRefresh() as ScreenerRefreshInfo;
   (window as any).__testSetRefresh({...info,completed:10,progress:42,currentFile:info.jobs[10].name,currentProgress:50,jobs:info.jobs.map((job,index)=>({...job,status:index<10?'completed':index===10?'running':'queued',progress:index<10?100:index===10?50:0}))});
@@ -139,7 +139,7 @@ test('Refresh offers header cancellation for a filtered list and preserves compl
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await page.getByLabel('Enrichment period',{exact:true}).selectOption('w1');await expect(panel(page).locator('tbody tr')).toHaveCount(2);
  const actions=panel(page).locator('.enrichment-file-actions');
- await actions.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await actions.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  expect((await page.evaluate(()=>(window as any).__testRefresh())).jobs).toHaveLength(4);
  await page.evaluate(()=>{
   const info=(window as any).__testRefresh() as ScreenerRefreshInfo;
@@ -152,14 +152,14 @@ test('Refresh offers header cancellation for a filtered list and preserves compl
  expect(info.active).toBe(false);expect(info.jobs.map(job=>job.status)).toEqual(['completed','failed','cancelled','cancelled']);
  expect(info.jobs[0].message).toBe('Finished history retained');expect(info.jobs[0].progress).toBe(100);
  expect(await page.evaluate(()=>(window as any).__testEnrichmentFiles())).toEqual(files);
- await expect(actions.getByRole('button',{name:'Refresh data and indicators',exact:true})).toBeEnabled();
+ await expect(actions.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeEnabled();
 });
 
 test('Refresh can be cancelled from its header while the selected period has no files',async({page})=>{
  await open(page,1);await page.getByLabel('Enrichment period',{exact:true}).selectOption('w1');
  await expect(panel(page).locator('tbody tr')).toHaveCount(0);
  const actions=panel(page).locator('.enrichment-file-actions');
- await actions.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await actions.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  await expect(actions.getByRole('button',{name:'Cancel refresh',exact:true})).toBeEnabled();
  expect((await page.evaluate(()=>(window as any).__testRefresh())).total).toBe(1);
  await actions.getByRole('button',{name:'Cancel refresh',exact:true}).click();
@@ -170,7 +170,7 @@ test('Refresh can be cancelled from its header while the selected period has no 
 
 test('a failed cancellation keeps the active Refresh cancel button available to retry',async({page})=>{
  await open(page,1);const actions=panel(page).locator('.enrichment-file-actions');
- await actions.getByRole('button',{name:'Refresh data and indicators',exact:true}).click();
+ await actions.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  await page.evaluate(()=>{
   const api=window.go!.main!.App!,cancel=api.CancelScreenerRefresh;
   api.CancelScreenerRefresh=async()=>{api.CancelScreenerRefresh=cancel;throw Error('Explicit refresh cancellation failure');};

@@ -562,40 +562,81 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	if err := key.Validate(); err != nil {
 		return "", err
 	}
+	if source == "hyperliquid" {
+		release, err := hyperliquidHistoryLock(ctx, root, asset, period)
+		if err != nil {
+			return "", err
+		}
+		defer release()
+	}
 	stem := asset.Symbol + "-" + period
 	rawPath := filepath.Join(root, "raw", stem+".csv")
 	metadataPath := filepath.Join(root, "raw", stem+".json")
 	state := publicAlertRawState{Source: source, Market: asset.Market, NativeID: asset.NativeID, Period: period}
 	bars := map[int64]domain.Candle{}
-	if err := publicAlertRecoverRaw(rawPath, metadataPath, state); err != nil {
-		return "", err
-	}
-	raw, err := publicAlertReadBounded(rawPath, 32<<20)
-	if err == nil {
-		if encoded, e := publicAlertReadBounded(metadataPath, 1<<20); e == nil {
-			var previous publicAlertRawState
-			if json.Unmarshal(encoded, &previous) != nil || previous.Source != source || previous.Market != asset.Market || previous.NativeID != asset.NativeID || previous.Period != period {
-				return "", errors.New("saved public history identity is invalid; original preserved")
-			}
-			digest := sha256.Sum256(raw)
-			if previous.Checksum != hex.EncodeToString(digest[:]) {
-				return "", errors.New("saved public history changed outside its provider cache; original preserved")
-			}
-			state = previous
-		} else if !errors.Is(e, os.ErrNotExist) {
-			return "", e
-		}
-		rows, e := publicAlertReadRaw(raw, d)
-		if e != nil {
-			return "", fmt.Errorf("read saved public history: %w", e)
+	var raw []byte
+	var err error
+	if source == "hyperliquid" {
+		var rows []domain.Candle
+		rows, state, raw, err = readHyperliquidRaw(root, asset, period)
+		if err != nil {
+			return "", err
 		}
 		for _, c := range rows {
 			bars[c.Time] = c
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", err
+	} else {
+		if err := publicAlertRecoverRaw(rawPath, metadataPath, state); err != nil {
+			return "", err
+		}
+		raw, err = publicAlertReadBounded(rawPath, 32<<20)
+		if err == nil {
+			if encoded, e := publicAlertReadBounded(metadataPath, 1<<20); e == nil {
+				var previous publicAlertRawState
+				if json.Unmarshal(encoded, &previous) != nil || previous.Source != source || previous.Market != asset.Market || previous.NativeID != asset.NativeID || previous.Period != period {
+					return "", errors.New("saved public history identity is invalid; original preserved")
+				}
+				digest := sha256.Sum256(raw)
+				if previous.Checksum != hex.EncodeToString(digest[:]) {
+					return "", errors.New("saved public history changed outside its provider cache; original preserved")
+				}
+				state = previous
+			} else if !errors.Is(e, os.ErrNotExist) {
+				return "", e
+			}
+			rows, e := publicAlertReadRaw(raw, d)
+			if e != nil {
+				return "", fmt.Errorf("read saved public history: %w", e)
+			}
+			for _, c := range rows {
+				bars[c.Time] = c
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
 	}
 	previousState := state
+	// Weekly alerts reuse downloaded native daily bars even when Downloader
+	// was used only for D1. Incomplete weeks remain provisional.
+	if source == "hyperliquid" && period == "w1" {
+		dailyKey := key
+		dailyKey.Timeframe = "1d"
+		daily, e := readHyperliquidHistory(ctx, filepath.Dir(filepath.Dir(root)), dailyKey, 0, end-1, 0)
+		if e != nil {
+			return "", e
+		}
+		for _, c := range hyperliquidWeeklyFromDaily(daily) {
+			if c.Closed && c.Time < end {
+				old, ok := bars[c.Time]
+				if !ok || c.Quality == "authoritative" || old.Quality != "authoritative" {
+					bars[c.Time] = c
+				}
+				if c.Quality == "authoritative" {
+					state.CheckedThrough = max(state.CheckedThrough, c.Time+d)
+				}
+			}
+		}
+	}
 	first := end
 	for ts := range bars {
 		first = min(first, ts)
@@ -620,7 +661,13 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		}
 	}
 	fetch := func(from, to int64) error {
-		rows, e := adapter.History(ctx, key, from, to, 1000)
+		var rows []domain.Candle
+		var e error
+		if source == "hyperliquid" && period == "w1" {
+			rows, e = hyperliquidAlertWeeklyHistory(ctx, adapter, filepath.Dir(filepath.Dir(root)), asset, from, to)
+		} else {
+			rows, e = adapter.History(ctx, key, from, to, 1000)
+		}
 		if e != nil {
 			return e
 		}
@@ -871,6 +918,11 @@ type publicAlertRawJournal struct {
 }
 
 func publicAlertPublishRaw(rawPath, metadataPath string, data []byte, state publicAlertRawState, previousChecksum string) error {
+	release, lockErr := publicHistoryPublications.acquireKey(context.Background(), rawPath)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer release()
 	current, err := publicAlertReadBounded(rawPath, 32<<20)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

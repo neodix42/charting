@@ -124,3 +124,33 @@ func TestHyperliquidHistoryDeadlineIncludesWeightedRequestQueue(t *testing.T) {
 		t.Fatal("unexpected paced history deadline", a.remaining)
 	}
 }
+
+func TestHyperliquidHistoryMergesSparseRetainedBarsWithProviderPage(t *testing.T) {
+	const day = int64(86400)
+	start := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC).Unix()
+	makeBar := func(ts int64, price float64) domain.Candle {
+		return domain.Candle{Time: ts, Open: price, High: price + 1, Low: price - 1, Close: price, Volume: 1, Closed: true, Quality: "authoritative"}
+	}
+	retained := []domain.Candle{makeBar(start, 10), makeBar(start+day, 11)}
+	cache := &recordingDiskCache{rangeFn: func(domain.FeedKey, int64, int64, int) ([]domain.Candle, error) { return retained, nil }, pauseWrites: true}
+	adapter := &diskHistoryAdapter{historyBars: []domain.Candle{makeBar(start+day, 12), makeBar(start+2*day, 13)}}
+	service := newDiskTestService(t, cache, adapter, start+10*day)
+	key := domain.FeedKey{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1d"}
+	got, err := service.History(context.Background(), "retained", key, start, start+3*day, 1000)
+	if err != nil || len(got.Bars) != 3 || got.Bars[0].Close != 10 || got.Bars[1].Close != 12 || got.Bars[2].Close != 13 || adapter.calls() != 1 {
+		t.Fatalf("sparse retained bars discarded: %+v %v calls=%d", got, err, adapter.calls())
+	}
+}
+func TestHyperliquidSparseRetainedHistorySurvivesEmptyProviderPage(t *testing.T) {
+	const day = int64(86400)
+	start := time.Date(2020, 10, 19, 0, 0, 0, 0, time.UTC).Unix()
+	bar := domain.Candle{Time: start, Open: 10, High: 12, Low: 9, Close: 11, Volume: 1, Closed: true, Quality: "authoritative"}
+	cache := &recordingDiskCache{rangeFn: func(domain.FeedKey, int64, int64, int) ([]domain.Candle, error) { return []domain.Candle{bar}, nil }, pauseWrites: true}
+	adapter := &diskHistoryAdapter{}
+	service := newDiskTestService(t, cache, adapter, start+6000*day)
+	key := domain.FeedKey{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1d"}
+	got, err := service.History(context.Background(), "retained", key, start, start+30*day, 1000)
+	if err != nil || len(got.Bars) != 1 || got.Bars[0].Time != start || adapter.calls() != 1 {
+		t.Fatalf("retained page discarded after empty provider response: %+v %v calls=%d", got, err, adapter.calls())
+	}
+}

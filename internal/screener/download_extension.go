@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -50,7 +49,7 @@ func prepareDownloadPlan(job Job, directory, work string) (downloadPlan, map[str
 			return plan, nil, listErr
 		}
 		for _, name := range names {
-			match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+			match := parseDownloadFilename(directory, name)
 			if match == nil || match[1] != job.Symbol || match[2] != job.Timeframe {
 				continue
 			}
@@ -94,7 +93,7 @@ func prepareDownloadPlan(job Job, directory, work string) (downloadPlan, map[str
 	}
 	originals := map[string]os.FileInfo{}
 	for _, source := range plan.Inputs {
-		match := downloadFilename.FindStringSubmatch(strings.ToLower(source.Name))
+		match := parseDownloadFilename(directory, source.Name)
 		if filepath.Base(source.Name) != source.Name || source.Input != filepath.Join(directory, source.Name) || match == nil || match[1] != job.Symbol || match[2] != job.Timeframe {
 			return plan, nil, errors.New("saved incremental source belongs to another asset or folder")
 		}
@@ -187,7 +186,7 @@ func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Jo
 			return "", "", err
 		}
 	}
-	name, err := canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, plan.Inputs, metadata)
+	name, err := canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, plan.Inputs, metadata, directory)
 	if err != nil {
 		return "", "", err
 	}

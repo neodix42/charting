@@ -17,6 +17,7 @@ import (
 )
 
 type DataFile struct {
+	DataSource     string   `json:"dataSource"`
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
 	Symbol         string   `json:"symbol,omitempty"`
@@ -42,7 +43,7 @@ type FilePage struct {
 	PeriodCounts map[string]int `json:"periodCounts,omitempty"`
 }
 
-var downloadFilename = regexp.MustCompile(`^([a-z0-9]+)-(tick|s1|m1|m5|m15|m30|h1|h4|d1|w1|mn1)-(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.csv$`)
+var downloadFilename = regexp.MustCompile(`^((?:(?:hyperliquid-)?[a-z0-9]+|hyperliquid_[a-z0-9]+(?:-[a-z0-9]+)*))-(tick|s1|m1|m5|m15|m30|h1|h4|d1|w1|mn1)-(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.csv$`)
 
 func dataFileID(directory, name string) string {
 	sum := sha256.Sum256([]byte(filepath.Join(directory, name)))
@@ -84,7 +85,7 @@ func downloadedSymbols(directory string) ([]string, error) {
 	}
 	seen := map[string]bool{}
 	for _, name := range names {
-		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+		if match := parseDownloadFilename(directory, name); match != nil {
 			seen[match[1]] = true
 		}
 	}
@@ -97,12 +98,18 @@ func downloadedSymbols(directory string) ([]string, error) {
 }
 
 func describeFileName(directory, name string) DataFile {
-	file := DataFile{ID: dataFileID(directory, name), Name: name, Fields: []string{}}
-	if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+	file := DataFile{DataSource: fileDataSource(name), ID: dataFileID(directory, name), Name: name, Fields: []string{}}
+	if match := parseDownloadFilename(directory, name); match != nil {
 		file.Symbol, file.Timeframe, file.From, file.To = match[1], match[2], match[3], match[4]
 	}
 	asset := describeAsset(file.Symbol, name)
 	file.Description, file.Category = asset.description, asset.category
+	if strings.HasPrefix(file.Symbol, "hyperliquid-") {
+		file.DataSource, file.Category = "hyperliquid", "Hyperliquid"
+		if asset, err := readHyperliquidAsset(directory, file.Symbol); err == nil {
+			file.Description, file.Category = asset.Name, "Hyperliquid "+asset.Market
+		}
+	}
 	return file
 }
 
@@ -169,6 +176,12 @@ func (m *Manager) Files(offset, limit int) (FilePage, error) {
 // FilesForPeriod filters before pagination while preserving whole-inventory
 // counts for enrichment scope and the independently global Refresh action.
 func (m *Manager) FilesForPeriod(offset, limit int, period string) (FilePage, error) {
+	return m.FilesForSource(offset, limit, period, "all")
+}
+func (m *Manager) FilesForSource(offset, limit int, period, source string) (FilePage, error) {
+	if source != "all" && normalizeDataSource(source) != "dukascopy" && source != "hyperliquid" {
+		return FilePage{}, errors.New("unsupported file data source")
+	}
 	if offset < 0 || limit < 1 || limit > 200 {
 		return FilePage{}, errors.New("file page requires a nonnegative offset and a limit between 1 and 200")
 	}
@@ -192,12 +205,19 @@ func (m *Manager) FilesForPeriod(offset, limit int, period string) (FilePage, er
 	if err != nil {
 		return page, err
 	}
+	selectedNames := names[:0]
+	for _, name := range names {
+		if source == "all" || fileDataSource(name) == normalizeDataSource(source) {
+			selectedNames = append(selectedNames, name)
+		}
+	}
+	names = selectedNames
 	page.AllTotal = len(names)
 	// Count the complete inventory without opening off-page histories; only
 	// matching filenames can enter the page (custom CSVs require All periods).
 	filtered := make([]string, 0, len(names))
 	for _, name := range names {
-		match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+		match := parseDownloadFilename(directory, name)
 		if match != nil {
 			page.PeriodCounts[match[2]]++
 		}

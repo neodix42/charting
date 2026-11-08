@@ -17,23 +17,42 @@ import (
 
 // ViewState is machine-local UI state, deliberately separate from chart exports.
 type ViewState struct {
-	Symbols             []string `json:"symbols"`
-	Timeframe           string   `json:"timeframe"`
-	From                string   `json:"from"`
-	To                  string   `json:"to"`
-	Concurrency         int      `json:"concurrency"`
-	CollapsedCategories []string `json:"collapsedCategories"`
+	DataSource                      string   `json:"dataSource,omitempty"`
+	HyperliquidSymbols              []string `json:"hyperliquidSymbols,omitempty"`
+	HyperliquidSelectionInitialized bool     `json:"hyperliquidSelectionInitialized,omitempty"`
+	Symbols                         []string `json:"symbols"`
+	Timeframe                       string   `json:"timeframe"`
+	From                            string   `json:"from"`
+	To                              string   `json:"to"`
+	Concurrency                     int      `json:"concurrency"`
+	CollapsedCategories             []string `json:"collapsedCategories"`
 }
 
 func defaultView() ViewState {
 	return ViewState{Symbols: []string{}, Timeframe: "d1", From: "2010-01-01", To: time.Now().UTC().Format("2006-01-02"), Concurrency: DefaultConcurrency, CollapsedCategories: []string{}}
 }
 func copyView(v ViewState) ViewState {
+	if v.HyperliquidSymbols != nil {
+		v.HyperliquidSymbols = append([]string{}, v.HyperliquidSymbols...)
+	}
 	v.Symbols = append([]string{}, v.Symbols...)
 	v.CollapsedCategories = append([]string{}, v.CollapsedCategories...)
 	return v
 }
 func validateView(v ViewState) error {
+	if source := normalizeDataSource(v.DataSource); source != "dukascopy" && source != "hyperliquid" {
+		return errors.New("unsupported saved data source")
+	}
+	if len(v.HyperliquidSymbols) > 20000 {
+		return errors.New("too many saved Hyperliquid selections")
+	}
+	seenHL := map[string]bool{}
+	for _, id := range v.HyperliquidSymbols {
+		if !validHyperliquidDownloadID(id) || seenHL[id] {
+			return errors.New("invalid saved Hyperliquid selection")
+		}
+		seenHL[id] = true
+	}
 	catalog := loadCatalog()
 	ids, groups := map[string]bool{}, map[string]bool{}
 	for _, group := range catalog.Groups {
@@ -239,7 +258,7 @@ func (m *Manager) loadDownloads() error {
 	if err != nil || directory != saved.Directory {
 		return errors.New("invalid saved download directory")
 	}
-	if len(saved.Jobs) == 0 || len(saved.Jobs) > 2*len(catalogAssets) || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
+	if len(saved.Jobs) == 0 || len(saved.Jobs) > 40000 || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid saved download queue limits")
 	}
 	request, err := downloadBatchRequest(saved.Jobs, saved.Concurrency)
@@ -258,7 +277,12 @@ func (m *Manager) loadDownloads() error {
 		default:
 			return errors.New("invalid saved job status")
 		}
-		if job.OutputPath != "" && (filepath.Dir(job.OutputPath) != directory || !strings.HasPrefix(strings.ToLower(filepath.Base(job.OutputPath)), job.Symbol+"-")) {
+		if normalizeDataSource(job.DataSource) == "hyperliquid" {
+			if !validHyperliquidJob(job) {
+				return errors.New("invalid saved Hyperliquid job")
+			}
+		}
+		if job.OutputPath != "" && (filepath.Dir(job.OutputPath) != directory || (!strings.HasPrefix(strings.ToLower(filepath.Base(job.OutputPath)), job.Symbol+"-") && !downloadPathMatchesJob(directory, job))) {
 			return errors.New("invalid saved output path")
 		}
 	}
@@ -314,7 +338,7 @@ func (m *Manager) reconcileCompletedHistoryPaths(directory string) error {
 		if job.Status != "completed" || job.OutputPath == "" {
 			continue
 		}
-		match := downloadFilename.FindStringSubmatch(strings.ToLower(filepath.Base(job.OutputPath)))
+		match := parseDownloadFilename(directory, filepath.Base(job.OutputPath))
 		if match == nil || match[1] != job.Symbol || match[2] != job.Timeframe {
 			continue
 		}
@@ -331,7 +355,7 @@ func (m *Manager) reconcileCompletedHistoryPaths(directory string) error {
 	}
 	byAsset := map[string][]string{}
 	for _, name := range names {
-		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+		if match := parseDownloadFilename(directory, name); match != nil {
 			key := match[1] + "/" + match[2]
 			byAsset[key] = append(byAsset[key], name)
 		}
@@ -393,7 +417,7 @@ func (m *Manager) Resume() (Info, error) {
 	if m.invalidDownloads {
 		return m.infoLocked(), errors.New(m.stateError)
 	}
-	if m.runtimeError != "" {
+	if m.runtimeError != "" && (len(m.jobs) == 0 || m.jobs[0].DataSource != "hyperliquid") {
 		return m.infoLocked(), errors.New(m.runtimeError)
 	}
 	before := append([]Job(nil), m.jobs...)
@@ -435,6 +459,7 @@ func downloadBatchRequest(jobs []Job, concurrency int) (Request, error) {
 		return request, errors.New("empty saved download batch")
 	}
 	first := jobs[0]
+	request.DataSource = first.DataSource
 	request.Timeframe, request.From, request.To = first.Timeframe, first.From, first.To
 	weekly := false
 	for _, job := range jobs {
@@ -453,7 +478,7 @@ func downloadBatchRequest(jobs []Job, concurrency int) (Request, error) {
 		if weekly && i < count {
 			period = "d1"
 		}
-		if job.Timeframe != period || job.From != first.From || job.To != first.To || (weekly && job.AsOf != first.AsOf) {
+		if normalizeDataSource(job.DataSource) != normalizeDataSource(first.DataSource) || job.Timeframe != period || job.From != first.From || job.To != first.To || (weekly && job.AsOf != first.AsOf) {
 			return request, errors.New("saved jobs do not belong to one batch")
 		}
 		if i < count {

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"cryptodesk/internal/exchange"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 )
 
 type Request struct {
+	DataSource  string   `json:"dataSource,omitempty"`
 	Symbols     []string `json:"symbols"`
 	Timeframe   string   `json:"timeframe"`
 	From        string   `json:"from"`
@@ -35,6 +37,9 @@ const DefaultConcurrency = 5
 const legacyMaxConcurrency = MaxConcurrency
 
 type Job struct {
+	DataSource string  `json:"dataSource,omitempty"`
+	NativeID   string  `json:"nativeId,omitempty"`
+	Market     string  `json:"market,omitempty"`
 	ID         string  `json:"id"`
 	Symbol     string  `json:"symbol"`
 	Timeframe  string  `json:"timeframe"`
@@ -64,6 +69,10 @@ type Info struct {
 // Preferences belong to the local profile, never imported workspaces.
 type Manager struct {
 	mu                      sync.Mutex
+	hyperliquidMu           sync.Mutex
+	hyperliquidAdapter      exchange.Adapter
+	hyperliquidCatalog      Catalog
+	hyperliquidCatalogAt    time.Time
 	wg                      sync.WaitGroup
 	profile, directory      string
 	runtime                 workerRuntime
@@ -130,7 +139,7 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 					m.cleanupJobAt(m.batchDirectory, job)
 				}
 			}
-			if m.runtimeError == "" && m.pendingLocked() {
+			if (m.runtimeError == "" || m.jobs[0].DataSource == "hyperliquid") && m.pendingLocked() {
 				m.beginLocked()
 			}
 		}
@@ -260,6 +269,12 @@ func validateRequest(request Request, now time.Time) error {
 	if request.Concurrency < 0 || request.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid legacy download concurrency; use a value between 0 and 20")
 	}
+	if normalizeDataSource(request.DataSource) == "hyperliquid" {
+		return validateHyperliquidRequest(request, now)
+	}
+	if normalizeDataSource(request.DataSource) != "dukascopy" {
+		return errors.New("unsupported download data source")
+	}
 	catalog := loadCatalog()
 	known := make(map[string]bool)
 	for _, group := range catalog.Groups {
@@ -306,8 +321,27 @@ func validateRequest(request Request, now time.Time) error {
 }
 
 func (m *Manager) Start(request Request) (Info, error) {
+	request.DataSource = normalizeDataSource(request.DataSource)
 	if err := validateRequest(request, time.Now()); err != nil {
 		return m.Info(), err
+	}
+	var assets map[string]Instrument
+	if request.DataSource == "hyperliquid" {
+		catalog, err := m.CatalogForSource(context.Background(), request.DataSource)
+		if err != nil {
+			return m.Info(), err
+		}
+		assets = map[string]Instrument{}
+		for _, g := range catalog.Groups {
+			for _, item := range g.Instruments {
+				assets[item.ID] = item
+			}
+		}
+		for _, id := range request.Symbols {
+			if _, ok := assets[id]; !ok {
+				return m.Info(), fmt.Errorf("unsupported Hyperliquid instrument %q", id)
+			}
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -329,7 +363,7 @@ func (m *Manager) Start(request Request) (Info, error) {
 	if m.invalidDownloads || m.pendingLocked() {
 		return m.infoLocked(), errors.New("resume or cancel the saved download queue before starting another batch: " + m.stateError)
 	}
-	if m.runtimeError != "" {
+	if m.runtimeError != "" && request.DataSource != "hyperliquid" {
 		return m.infoLocked(), errors.New(m.runtimeError)
 	}
 	if err := checkDirectory(m.directory); err != nil {
@@ -350,7 +384,12 @@ func (m *Manager) Start(request Request) (Info, error) {
 			if _, err := rand.Read(id[:]); err != nil {
 				return m.infoLocked(), err
 			}
-			jobs = append(jobs, Job{ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
+			if request.DataSource == "hyperliquid" {
+				if err := writeHyperliquidAsset(m.directory, assets[symbol]); err != nil {
+					return m.infoLocked(), err
+				}
+			}
+			jobs = append(jobs, Job{DataSource: request.DataSource, NativeID: assets[symbol].NativeID, Market: assets[symbol].Market, ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
 		}
 	}
 	oldJobs, oldDirectory, oldPublication := m.jobs, m.batchDirectory, m.publication
@@ -433,6 +472,10 @@ func (m *Manager) Close() {
 func (m *Manager) run(ctx context.Context, directory string, done chan struct{}, workers int) {
 	defer m.wg.Done()
 	defer func() { m.mu.Lock(); m.active, m.cancel = false, nil; close(done); m.mu.Unlock() }()
+	if len(m.jobs) > 0 && m.jobs[0].DataSource == "hyperliquid" {
+		m.runHyperliquidDownloads(ctx, directory, workers)
+		return
+	}
 	ctx, cleanup, err := withProviderSession(ctx, m.profile)
 	if err != nil {
 		m.mu.Lock()
@@ -698,7 +741,7 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	}
 	name := fmt.Sprintf("%s-%s-%s-%s.csv", job.Symbol, job.Timeframe, job.From, job.To)
 	if job.Timeframe == "w1" {
-		name, err = canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, nil, fileMetadata{FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp})
+		name, err = canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, nil, fileMetadata{FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp}, directory)
 		if err != nil {
 			return "", "", err
 		}
@@ -710,7 +753,7 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		return "", "", err
 	}
 	for _, existing := range names {
-		match := downloadFilename.FindStringSubmatch(strings.ToLower(existing))
+		match := parseDownloadFilename(directory, existing)
 		if match != nil && match[1] == job.Symbol && match[2] == job.Timeframe {
 			return "", "", errors.New("another history appeared while downloading; retry to merge its data")
 		}

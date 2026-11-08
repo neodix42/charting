@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -25,7 +24,7 @@ func groupHistories(directory string, names []string) []historyGroup {
 	positions := map[string]int{}
 	for _, name := range names {
 		key := name
-		if match := downloadFilename.FindStringSubmatch(strings.ToLower(name)); match != nil {
+		if match := parseDownloadFilename(directory, name); match != nil {
 			key = match[1] + "/" + match[2]
 		}
 		index, exists := positions[key]
@@ -56,7 +55,7 @@ func historyIDWanted(wanted map[string]bool, id string, aliases []string) bool {
 // the visible CSV list. The worker performs the same bounded ordered merge and
 // indicator replay as incremental downloads; Go alone publishes/removes files.
 func (m *Manager) consolidateHistory(ctx context.Context, directory, name string, legacy map[string][]EnrichmentRequest, progress func(string)) (string, error) {
-	match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+	match := parseDownloadFilename(directory, name)
 	if match == nil {
 		return name, nil
 	}
@@ -179,7 +178,7 @@ func (m *Manager) consolidateHistory(ctx context.Context, directory, name string
 			return name, err
 		}
 	}
-	canonical, err := canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, plan.Inputs, metadata)
+	canonical, err := canonicalHistoryName(job.Symbol, job.Timeframe, job.From, job.To, plan.Inputs, metadata, directory)
 	if err != nil {
 		return name, err
 	}

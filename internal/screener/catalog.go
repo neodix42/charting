@@ -9,6 +9,8 @@ import (
 )
 
 type Instrument struct {
+	NativeID     string `json:"nativeId,omitempty"`
+	Market       string `json:"market,omitempty"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	EarliestDate string `json:"earliestDate"`

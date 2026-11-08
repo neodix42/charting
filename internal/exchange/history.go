@@ -16,7 +16,10 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 		return nil, err
 	}
 	d := TimeframeSeconds(k.Timeframe)
-	if limit <= 0 || limit > 1000 {
+	// A full native Hyperliquid snapshot is bounded by the provider's 5,000
+	// retained candles, not by calendar duration (sparse markets have gaps).
+	fullSnapshot := a.provider == "hyperliquid" && k.Timeframe != "1w" && limit == 5000
+	if limit <= 0 || (limit > 1000 && !fullSnapshot) {
 		limit = 300
 	}
 	if a.provider == "coinbase" && k.Timeframe != "1w" && limit > 350 {
@@ -25,13 +28,15 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 	if to <= 0 {
 		to = time.Now().Unix() + 1
 	}
-	if from <= 0 {
+	if fullSnapshot && from < 0 {
+		from = 0
+	} else if from <= 0 && !fullSnapshot {
 		from = BucketStart(to, d) - int64(limit)*d
 	}
 	if from >= to {
 		return []domain.Candle{}, nil
 	}
-	if to-from > d*int64(limit) {
+	if !fullSnapshot && to-from > d*int64(limit) {
 		from = to - d*int64(limit)
 	}
 	if a.provider == "hyperliquid" {

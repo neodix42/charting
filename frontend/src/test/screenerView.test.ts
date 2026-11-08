@@ -32,3 +32,12 @@ it('normalizes invalid compatibility worker counts without aliasing saved symbol
   expect(normalized.concurrency).toBe(5);normalized.symbols.push('ethusd');expect(original.symbols).toEqual(['btcusd']);
  }
 });
+
+it('defaults legacy views to Dukascopy and durably keeps an intentionally empty Hyperliquid selection',async()=>{
+ const legacy={symbols:['btcusd'],timeframe:'d1',from:'2024-01-01',to:'2024-02-01',concurrency:5,collapsedCategories:[]};
+ expect(normalizeScreenerView(legacy).dataSource).toBe('dukascopy');
+ const value={...legacy,dataSource:'hyperliquid' as const,hyperliquidSymbols:[],hyperliquidSelectionInitialized:true};
+ const persist=vi.fn(async view=>view),writer=new ScreenerViewWriter(persist,()=>{});
+ writer.edit(value);await writer.flush();expect(persist).toHaveBeenCalledWith(value);
+ expect(value.symbols).toEqual(['btcusd']);
+});

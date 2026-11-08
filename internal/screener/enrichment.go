@@ -143,6 +143,13 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	if err != nil {
 		return m.enrichmentInfoLocked(nil), err
 	}
+	selectedNames := names[:0]
+	for _, name := range names {
+		if request.DataSource == "all" || fileDataSource(name) == normalizeDataSource(request.DataSource) {
+			selectedNames = append(selectedNames, name)
+		}
+	}
+	names = selectedNames
 	if len(names) == 0 {
 		return m.enrichmentInfoLocked(nil), errors.New("there are no downloaded CSV files to enrich")
 	}
@@ -250,6 +257,7 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	// Selection belongs to the batch, not to an applied per-file recipe. Keep
 	// replay during Refresh identical whether enrichment selected all or one period.
 	request.Period = ""
+	request.DataSource = ""
 	source := filepath.Join(directory, job.Name)
 	original, err := os.Lstat(source)
 	if err != nil || !original.Mode().IsRegular() {

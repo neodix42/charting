@@ -93,15 +93,21 @@ export function GetScreenerAnalysisView():Promise<screener.AnalysisRequest>;
 
 export function GetScreenerCatalog():Promise<screener.Catalog>;
 
+export function GetScreenerCatalogForSource(arg1:string):Promise<screener.Catalog>;
+
 export function GetScreenerEnrichment(arg1:Array<string>):Promise<screener.EnrichmentInfo>;
 
 export function GetScreenerFiles(arg1:number,arg2:number):Promise<screener.FilePage>;
 
 export function GetScreenerFilesForPeriod(arg1:number,arg2:number,arg3:string):Promise<screener.FilePage>;
 
+export function GetScreenerFilesForSource(arg1:number,arg2:number,arg3:string,arg4:string):Promise<screener.FilePage>;
+
 export function GetScreenerIndicators():Promise<screener.IndicatorCatalog>;
 
 export function GetScreenerLiveAlerts():Promise<screener.LiveAlertsInfo>;
+
+export function GetScreenerLiveAlertsProgress():Promise<screener.LiveAlertsInfo>;
 
 export function GetScreenerRefresh(arg1:Array<string>):Promise<screener.RefreshInfo>;
 

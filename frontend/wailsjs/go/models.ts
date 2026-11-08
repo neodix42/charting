@@ -1046,6 +1046,7 @@ export namespace screener {
 	    }
 	}
 	export class DataFile {
+	    dataSource: string;
 	    id: string;
 	    name: string;
 	    symbol?: string;
@@ -1066,6 +1067,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.symbol = source["symbol"];
@@ -1507,16 +1509,20 @@ export namespace screener {
 	}
 
 	export class Instrument {
+	    nativeId?: string;
+	    market?: string;
 	    id: string;
 	    name: string;
 	    earliestDate: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Instrument(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nativeId = source["nativeId"];
+	        this.market = source["market"];
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.earliestDate = source["earliestDate"];
@@ -1673,6 +1679,7 @@ export namespace screener {
 	}
 
 	export class EnrichmentRequest {
+	    dataSource?: string;
 	    indicator: string;
 	    parameters: Record<string, number>;
 	    source: string;
@@ -1684,6 +1691,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
 	        this.indicator = source["indicator"];
 	        this.parameters = source["parameters"];
 	        this.source = source["source"];
@@ -1829,6 +1837,9 @@ export namespace screener {
 	}
 
 	export class Job {
+	    dataSource?: string;
+	    nativeId?: string;
+	    market?: string;
 	    id: string;
 	    symbol: string;
 	    timeframe: string;
@@ -1839,13 +1850,16 @@ export namespace screener {
 	    message: string;
 	    outputPath?: string;
 	    asOf?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
+	        this.nativeId = source["nativeId"];
+	        this.market = source["market"];
 	        this.id = source["id"];
 	        this.symbol = source["symbol"];
 	        this.timeframe = source["timeframe"];
@@ -1993,18 +2007,20 @@ export namespace screener {
 	}
 
 	export class Request {
+	    dataSource?: string;
 	    symbols: string[];
 	    timeframe: string;
 	    from: string;
 	    to: string;
 	    concurrency?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Request(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
 	        this.symbols = source["symbols"];
 	        this.timeframe = source["timeframe"];
 	        this.from = source["from"];
@@ -2107,6 +2123,9 @@ export namespace screener {
 		}
 	}
 	export class ViewState {
+	    dataSource?: string;
+	    hyperliquidSymbols?: string[];
+	    hyperliquidSelectionInitialized?: boolean;
 	    symbols: string[];
 	    timeframe: string;
 	    from: string;
@@ -2120,6 +2139,9 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
+	        this.hyperliquidSymbols = source["hyperliquidSymbols"];
+	        this.hyperliquidSelectionInitialized = source["hyperliquidSelectionInitialized"];
 	        this.symbols = source["symbols"];
 	        this.timeframe = source["timeframe"];
 	        this.from = source["from"];

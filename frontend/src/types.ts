@@ -36,18 +36,19 @@ export interface TelegramBotIdentity {id:number;username:string}
 export interface TelegramTestResult {sent:boolean;code?:string;botUsername?:string;messageId?:number;sentCount?:number;totalRecipients?:number}
 export interface DucascopySettings {username:string;password:string;environment:'demo'|'live';clearPassword?:boolean}
 export interface DucascopyInfo {username:string;environment:'demo'|'live';passwordConfigured:boolean;runtimeAvailable:boolean;runtimeDirectory:string;javaPath:string;connected:boolean;instrumentCount:number;error?:string}
-export interface ScreenerInstrument {id:string;name:string;earliestDate:string}
+export type ScreenerDataSource='dukascopy'|'hyperliquid';
+export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
-export interface ScreenerDownloadRequest {symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
-export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategories:string[]}
-export interface ScreenerJob {id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
+export interface ScreenerDownloadRequest {dataSource?:ScreenerDataSource;symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
+export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategories:string[];hyperliquidSymbols?:string[];hyperliquidSelectionInitialized?:boolean}
+export interface ScreenerJob {dataSource?:ScreenerDataSource;nativeId?:string;market?:string;id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
 export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[];downloadedSymbols?:string[]}
 export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
 export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'low'|'high'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string}
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
-export interface ScreenerDataFile {id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
+export interface ScreenerDataFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
 export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;allTotal?:number;offset:number;limit:number;periodCounts?:Record<string,number>}
-export interface ScreenerEnrichmentRequest {indicator:string;parameters:Record<string,number>;source:string;period?:string}
+export interface ScreenerEnrichmentRequest {dataSource?:ScreenerDataSource;indicator:string;parameters:Record<string,number>;source:string;period?:string}
 export interface ScreenerEnrichmentJob {id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}
 export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;indicator:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerEnrichmentJob[]}
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}
@@ -62,11 +63,11 @@ export interface Backend extends ScreenerAnalysisBackend,ScreenerLiveAlertsBacke
  GetCandleStorage():Promise<CandleStorageInfo>;ConfigureCandleStorage(enabled:boolean,directory:string):Promise<CandleStorageInfo>;ChooseCandleStorageDirectory():Promise<string>;
  GetTelegramBotSettings():Promise<TelegramBotSettings>;ConfigureTelegramBot(token:string):Promise<TelegramBotSettings>;ConfigureTelegramBotSettings(token:string,recipient:string):Promise<TelegramBotSettings>;GetTelegramBotIdentity(token:string):Promise<TelegramBotIdentity>;TestTelegramBot():Promise<TelegramTestResult>;
  GetDucascopy():Promise<DucascopyInfo>;ConfigureDucascopy(settings:DucascopySettings):Promise<DucascopyInfo>;TestDucascopyConnection():Promise<DucascopyInfo>;GetDucascopyLoginChallenge():Promise<{imageDataUrl:string}>;TestDucascopyConnectionWithPIN(pin:string):Promise<DucascopyInfo>;CancelDucascopyConnectionTest():Promise<DucascopyInfo>;
- GetScreenerCatalog():Promise<ScreenerCatalog>;GetScreener():Promise<ScreenerInfo>;ConfigureScreenerDirectory(directory:string):Promise<ScreenerInfo>;ChooseScreenerDirectory():Promise<string>;
+ GetScreenerCatalog():Promise<ScreenerCatalog>;GetScreenerCatalogForSource(source:ScreenerDataSource):Promise<ScreenerCatalog>;GetScreener():Promise<ScreenerInfo>;ConfigureScreenerDirectory(directory:string):Promise<ScreenerInfo>;ChooseScreenerDirectory():Promise<string>;
  ConfigureScreenerConcurrency(concurrency:number):Promise<ScreenerInfo>;
  StartScreenerDownload(request:ScreenerDownloadRequest):Promise<ScreenerInfo>;CancelScreenerDownload():Promise<ScreenerInfo>;
  ResumeScreenerDownload():Promise<ScreenerInfo>;GetScreenerView():Promise<ScreenerView>;SaveScreenerView(view:ScreenerView):Promise<ScreenerView>;
- GetScreenerIndicators():Promise<ScreenerIndicators>;GetScreenerFiles(offset:number,limit:number):Promise<ScreenerFilePage>;GetScreenerFilesForPeriod(offset:number,limit:number,period:string):Promise<ScreenerFilePage>;
+ GetScreenerIndicators():Promise<ScreenerIndicators>;GetScreenerFiles(offset:number,limit:number):Promise<ScreenerFilePage>;GetScreenerFilesForPeriod(offset:number,limit:number,period:string):Promise<ScreenerFilePage>;GetScreenerFilesForSource(offset:number,limit:number,period:string,source:ScreenerDataSource):Promise<ScreenerFilePage>;
  GetScreenerEnrichment(fileIDs:string[]):Promise<ScreenerEnrichmentInfo>;StartScreenerEnrichment(request:ScreenerEnrichmentRequest):Promise<ScreenerEnrichmentInfo>;CancelScreenerEnrichment():Promise<ScreenerEnrichmentInfo>;
  GetScreenerRefresh(fileIDs:string[]):Promise<ScreenerRefreshInfo>;StartScreenerRefresh():Promise<ScreenerRefreshInfo>;CancelScreenerRefresh():Promise<ScreenerRefreshInfo>;
  GetDiagnostics():Promise<Record<string,unknown>>; ImportWorkspace():Promise<LoadResult>;ExportWorkspace():Promise<string>;ResetWorkspace():Promise<LoadResult>;

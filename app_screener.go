@@ -11,6 +11,14 @@ import (
 
 func (a *App) GetScreenerCatalog() screener.Catalog { return a.screener.Catalog() }
 
+func (a *App) GetScreenerCatalogForSource(source string) (screener.Catalog, error) {
+	return a.screener.CatalogForSource(a.ctx, source)
+}
+
+func (a *App) GetScreenerFilesForSource(offset, limit int, period, source string) (screener.FilePage, error) {
+	return a.screener.FilesForSource(offset, limit, period, source)
+}
+
 func (a *App) GetScreener() screener.Info { return a.screener.Info() }
 
 func (a *App) ConfigureScreenerDirectory(directory string) (screener.Info, error) {

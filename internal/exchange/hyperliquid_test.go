@@ -366,7 +366,8 @@ func TestHyperliquidPublicHistoryBoundsDefaults(t *testing.T) {
 		span  int64
 	}{
 		{"defaults", 0, 0, 0, 300 * 60},
-		{"excessiveLimit", 0, 0, 5000, 300 * 60},
+		{"excessiveLimit", 0, 0, 5001, 300 * 60},
+		{"fullRetainedSnapshot", 60, 600000, 5000, 600000 - 60},
 		{"boundedRange", 60, 600000, 1000, 1000 * 60},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -390,6 +391,32 @@ func TestHyperliquidPublicHistoryBoundsDefaults(t *testing.T) {
 				t.Fatalf("invalid range sent upstream request: %v, %d requests", err, calls)
 			}
 		})
+	}
+}
+
+func TestHyperliquidFullDailySnapshotPreservesEarliestBars(t *testing.T) {
+	const first = int64(1704067200)
+	a := hyperliquidTestAdapter(t, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Req struct{ StartTime, EndTime int64 }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		if req.Req.StartTime != 0 {
+			t.Errorf("earliest history was truncated to a calendar window: %d", req.Req.StartTime)
+		}
+		rows := make([]map[string]any, 1200)
+		for i := range rows {
+			start := (first + int64(i)*86400) * 1000
+			rows[i] = map[string]any{"t": start, "T": start + 86400000 - 1, "s": "BTC", "i": "1d", "o": "10", "h": "12", "l": "9", "c": "11", "v": "0.1"}
+		}
+		_ = json.NewEncoder(w).Encode(rows)
+	})
+	key := domain.FeedKey{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1d"}
+	bars, err := a.History(context.Background(), key, 0, first+1200*86400, 5000)
+	if err != nil || len(bars) != 1200 || bars[0].Time != first || bars[1199].Time != first+1199*86400 {
+		t.Fatalf("full retained daily snapshot lost bars: count=%d error=%v", len(bars), err)
 	}
 }
 

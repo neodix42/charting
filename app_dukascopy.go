@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
 	"cryptodesk/internal/candlestorage"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/jforex"
+	"cryptodesk/internal/screener"
 )
 
 func (a *App) GetDucascopy() jforex.Info { return a.jforex.Info() }
@@ -72,8 +74,9 @@ func (a *App) CancelDucascopyConnectionTest() jforex.Info { return a.jforex.Canc
 // private chart and SDK caches, scoped to the configured server/account, so
 // demo/live sessions cannot reuse one another's chart snapshots.
 type chartCandleCache struct {
-	manager *candlestorage.Manager
-	forex   *jforex.Manager
+	manager  *candlestorage.Manager
+	forex    *jforex.Manager
+	screener *screener.Manager
 }
 
 func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
@@ -83,7 +86,44 @@ func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit in
 		}
 		return []domain.Candle{}, nil
 	}
-	return cache.manager.Range(key, from, to, limit)
+	var retained []domain.Candle
+	if key.Exchange == "hyperliquid" && cache.screener != nil {
+		var err error
+		retained, err = cache.screener.HyperliquidHistory(key, from, to, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cached []domain.Candle
+	if cache.manager != nil {
+		var err error
+		cached, err = cache.manager.Range(key, from, to, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(retained) == 0 {
+		return cached, nil
+	}
+	byTime := map[int64]domain.Candle{}
+	for _, bar := range retained {
+		byTime[bar.Time] = bar
+	}
+	for _, bar := range cached {
+		old, ok := byTime[bar.Time]
+		if !ok || old.Quality != "authoritative" || bar.Quality == "authoritative" {
+			byTime[bar.Time] = bar
+		}
+	}
+	merged := make([]domain.Candle, 0, len(byTime))
+	for _, bar := range byTime {
+		merged = append(merged, bar)
+	}
+	sort.Slice(merged, func(i, j int) bool { return merged[i].Time < merged[j].Time })
+	if limit > 0 && len(merged) > limit {
+		merged = merged[len(merged)-limit:]
+	}
+	return merged, nil
 }
 
 func (cache chartCandleCache) Put(key domain.FeedKey, bars []domain.Candle) {
@@ -93,5 +133,7 @@ func (cache chartCandleCache) Put(key domain.FeedKey, bars []domain.Candle) {
 		}
 		return
 	}
-	cache.manager.Put(key, bars)
+	if cache.manager != nil {
+		cache.manager.Put(key, bars)
+	}
 }
