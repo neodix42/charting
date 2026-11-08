@@ -60,3 +60,10 @@ screener-live-alerts.json
 /jforex-runtime/
 dukascopy-jforex.json
 .dukascopy-jforex-*
+
+# Machine-local trading credentials and execution journals
+hyperliquid.json
+.hyperliquid-*
+hyperliquid-nonce.json
+hyperliquid-orders/
+dukascopy-trade-claims/
