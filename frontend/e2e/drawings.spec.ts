@@ -2,6 +2,13 @@ import {test,expect,type Locator,type Page} from '@playwright/test';
 
 test.use({deviceScaleFactor:2,launchOptions:{args:['--force-device-scale-factor=2']}});
 
+// The explicit bridge derives candle timestamps from Date.now(). Pixel comparisons
+// across reload require the same candles: crossing an hour shifts them by one bar.
+// Fix Date only, leaving animation frames, polling and save timers running normally.
+test.beforeEach(async({page})=>{
+ await page.clock.setFixedTime('2026-11-07T17:59:59Z');
+});
+
 type DrawingType='arrowUp'|'arrowDown'|'horizontal'|'trendline';
 interface DrawingPoint {time:number;price:number}
 interface Drawing {id:string;type:DrawingType;exchange:string;market:string;instrument:string;points:DrawingPoint[]}

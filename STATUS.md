@@ -1,4 +1,12 @@
-# Implementation status — updated 2026-11-07
+# Implementation status — updated 2026-11-08
+
+## Drawing browser CI hour-boundary fix — 2026-11-08
+
+[Tests run 42396789558](https://github.com/neodix42/charting/actions/runs/42396789558) passed domain/storage/frontend/packaging and offline JForex checks, then failed one browser test (303 passed). The high-density drawing reload crossed 18:00 UTC. The explicit browser bridge generates its 100 candles relative to `Date.now()`, so the new hour shifted the time window by one bar, yielding exactly the reported six-pixel displacement for unchanged saved time/price anchors.
+
+Confirmed locally by fixing initial Date to `2026-11-07T17:59:59Z` and advancing to `18:00:01Z` before reload: the same test failed with displacement **6** against tolerance **1**. The final drawing spec fixes Date in `beforeEach` using the installed Playwright `page.clock.setFixedTime` API; timers and animation frames continue normally. No production behavior, fixtures, dependencies or pixel tolerances change. The temporary forced advance was removed.
+
+Verification: all **31** tests in `drawings.spec.ts`, `drawing-move.spec.ts` and `drawing-selection.spec.ts` pass (including reload, physical DPR 2, previews, movement and endpoint edits); `npm run typecheck` and `git diff --check` pass. The Playwright run also builds the production frontend. Logs are ignored `.tools/verification/drawing-hour-boundary.log` (intentional reproduction) and `drawing-fixed-browser.log` (passing final run). Full hosted workflow, packaged-runtime checks skipped by that failed run, native desktop, Windows and live-provider checks were not rerun locally for this test-only change. Submit the fix and run Tests to verify the full hosted workflow; no hosted green result is claimed. Existing IDE changes and user data are preserved.
 
 ## Public Live Alerts backfill, exact latest-bar repair and repeated-work reduction — 2026-11-07
 
