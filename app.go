@@ -14,6 +14,7 @@ import (
 	"cryptodesk/internal/candlestorage"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/exchange"
+	"cryptodesk/internal/hyperliquid"
 	"cryptodesk/internal/jforex"
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/predictions"
@@ -33,6 +34,10 @@ type App struct {
 	candles         *candlestorage.Manager
 	screener        *screener.Manager
 	predictions     *predictions.Manager
+	hyperliquid     *hyperliquid.Store
+	tradingMu       sync.Mutex
+	tradingWG       sync.WaitGroup
+	tradingClosed   bool
 	jforex          *jforex.Manager
 	jforexMu        sync.Mutex
 	telegram        *telegram.Store
@@ -55,6 +60,7 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	a.screener = screener.New(store.Directory())
 	a.predictions = predictions.New(store.Directory(), a.predictionDatasets, predictions.NewRuntime(store.Directory()))
 	a.jforex = jforex.New(store.Directory())
+	a.hyperliquid = hyperliquid.NewStore(store.Directory())
 	a.telegram = telegram.NewStore(store.Directory())
 	alerts, err := screener.NewLiveAlerts(a.screener, a.sendScreenerLiveAlert)
 	a.liveAlerts = alerts

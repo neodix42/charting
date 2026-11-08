@@ -1,5 +1,6 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
 import type {Backend,DucascopyInfo,DucascopySettings} from '../types';
+import {TRADING_CONFIGURED} from '../workspace/trading';
 import {clearInstrumentCatalog,DUCASCOPY_CONFIGURED} from '../bridge/instruments';
 
 export interface DucascopySettingHandle {flush():Promise<void>}
@@ -32,7 +33,7 @@ export const DucascopySetting=forwardRef<DucascopySettingHandle,{api:Backend;vis
  const valid=!!username.trim()&&(retainedPassword||password!==''||clearPassword);
  const disabled=!info||loading||!!operation||cancelling;
  const edit=()=>{setError('');setStatus('');setChallenge('');setPIN('');};
- const changed=()=>{clearInstrumentCatalog('dukascopy');window.dispatchEvent(new Event(DUCASCOPY_CONFIGURED));};
+ const changed=()=>{clearInstrumentCatalog('dukascopy');window.dispatchEvent(new Event(DUCASCOPY_CONFIGURED));window.dispatchEvent(new Event(TRADING_CONFIGURED));};
  const perform=(kind:'save'|'test'|'challenge')=>{
   if(pending.current||cancellation.current||!info||!valid||(kind!=='save'&&clearPassword))return;
   cancelRequested.current=false;setOperation(kind);setError('');setStatus('');

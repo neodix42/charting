@@ -54,6 +54,10 @@ export function ConfigureDucascopy(arg1) {
   return window['go']['main']['App']['ConfigureDucascopy'](arg1);
 }
 
+export function ConfigureHyperliquid(arg1) {
+  return window['go']['main']['App']['ConfigureHyperliquid'](arg1);
+}
+
 export function ConfigurePredictions(arg1) {
   return window['go']['main']['App']['ConfigurePredictions'](arg1);
 }
@@ -128,6 +132,10 @@ export function GetFeedSnapshot(arg1, arg2) {
 
 export function GetHistory(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetHistory'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function GetHyperliquid() {
+  return window['go']['main']['App']['GetHyperliquid']();
 }
 
 export function GetPredictionDatasets() {
@@ -222,6 +230,10 @@ export function GetTelegramBotSettings() {
   return window['go']['main']['App']['GetTelegramBotSettings']();
 }
 
+export function GetTradingStatus(arg1) {
+  return window['go']['main']['App']['GetTradingStatus'](arg1);
+}
+
 export function ImportWorkspace() {
   return window['go']['main']['App']['ImportWorkspace']();
 }
@@ -234,12 +246,20 @@ export function LoadWorkspace() {
   return window['go']['main']['App']['LoadWorkspace']();
 }
 
+export function OpenHyperliquidHelp(arg1) {
+  return window['go']['main']['App']['OpenHyperliquidHelp'](arg1);
+}
+
 export function OpenTradingView() {
   return window['go']['main']['App']['OpenTradingView']();
 }
 
 export function PreparePredictionModel() {
   return window['go']['main']['App']['PreparePredictionModel']();
+}
+
+export function PreviewTrade(arg1) {
+  return window['go']['main']['App']['PreviewTrade'](arg1);
 }
 
 export function RecoverWorkspace(arg1) {
@@ -298,12 +318,20 @@ export function StartScreenerRefresh() {
   return window['go']['main']['App']['StartScreenerRefresh']();
 }
 
+export function SubmitTrade(arg1) {
+  return window['go']['main']['App']['SubmitTrade'](arg1);
+}
+
 export function TestDucascopyConnection() {
   return window['go']['main']['App']['TestDucascopyConnection']();
 }
 
 export function TestDucascopyConnectionWithPIN(arg1) {
   return window['go']['main']['App']['TestDucascopyConnectionWithPIN'](arg1);
+}
+
+export function TestHyperliquidConnection() {
+  return window['go']['main']['App']['TestHyperliquidConnection']();
 }
 
 export function TestTelegramBot() {

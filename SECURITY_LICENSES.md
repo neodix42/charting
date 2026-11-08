@@ -3,7 +3,7 @@
 This is a new public-data chart application, not a modified TradingView client. Do not extract
 TradingView Desktop code, load its private APIs, impersonate paid sessions or rely on an
 existing TradingView login. Use the published Lightweight Charts package and documented
-exchange market data. The app has no trading, withdrawal, seed phrase, wallet or API-key scope.
+exchange market data. Public market data is the default. Explicit chart trades use a dedicated Hyperliquid API wallet or the configured JForex account, after a fresh provider preview and one-use confirmation. No withdrawal/transfer or seed-phrase controls are implemented. Hyperliquid main-wallet keys are rejected; API keys and JForex passwords are machine-local, owner-only files and are excluded from workspace exports and bridge read responses.
 
 Treat exchange messages, product names and imported workspaces as untrusted data. Apply body
 and queue limits, strict parsing and schema checks. Render labels as text, not raw HTML.
@@ -29,5 +29,4 @@ alternative. Do not invent endorsement or name the app TradingView. [S04, S22]
 
 Collect licenses for all dependencies and fonts/icons included in the actual app. Use an
 original project icon and properly licensed assets. Do not assume public exchange data can
-be redistributed commercially without checking current provider terms; this v1 is a local
-read-only application and no data redistribution service is requested.
+be redistributed commercially without checking current provider terms; this is a local application and no data redistribution service is requested.

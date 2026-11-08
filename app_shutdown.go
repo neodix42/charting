@@ -26,7 +26,7 @@ func (a *App) shutdown(context.Context) {
 	if a.cancel != nil {
 		a.cancel()
 	}
-	var workers []func()
+	workers := []func(){a.closeTrading}
 	if a.liveAlerts != nil {
 		workers = append(workers, a.liveAlerts.Close)
 	}

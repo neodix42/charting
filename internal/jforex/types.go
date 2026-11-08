@@ -1,5 +1,5 @@
 // Package jforex adapts the authenticated Dukascopy JForex SDK bridge to the
-// application's independent market-data interface. It never places orders.
+// application's independent market-data and explicitly confirmed trading interfaces.
 package jforex
 
 // Settings is a write-only request. An empty password retains an existing

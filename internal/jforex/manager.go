@@ -28,6 +28,7 @@ type bridgeVersion struct {
 	SDKVersion        string `json:"sdkVersion"`
 	JavaVersion       int    `json:"javaVersion"`
 	InstrumentCatalog string `json:"instrumentCatalog"`
+	Trading           string `json:"trading"`
 }
 
 func verifyBridge(ctx context.Context, process *bridgeProcess) error {
@@ -74,6 +75,7 @@ type Manager struct {
 	next               atomic.Uint64
 	testCancel         context.CancelFunc
 	testGeneration     uint64
+	tradePreviews      map[string]*tradeConfirmation
 }
 
 // New reads only machine-local configuration and discovers files. Login is

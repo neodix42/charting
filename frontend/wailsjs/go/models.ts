@@ -2602,3 +2602,189 @@ export namespace telegram {
 	}
 
 }
+
+export namespace hyperliquid {
+
+	export class Info {
+	    accountAddress: string;
+	    agentAddress: string;
+	    network: string;
+	    privateKeyConfigured: boolean;
+	    connected: boolean;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accountAddress = source["accountAddress"];
+	        this.agentAddress = source["agentAddress"];
+	        this.network = source["network"];
+	        this.privateKeyConfigured = source["privateKeyConfigured"];
+	        this.connected = source["connected"];
+	        this.error = source["error"];
+	    }
+	}
+	export class Settings {
+	    accountAddress: string;
+	    privateKey: string;
+	    network: string;
+	    clearPrivateKey: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Settings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accountAddress = source["accountAddress"];
+	        this.privateKey = source["privateKey"];
+	        this.network = source["network"];
+	        this.clearPrivateKey = source["clearPrivateKey"];
+	    }
+	}
+
+}
+
+export namespace trading {
+
+	export class Preview {
+	    id: string;
+	    feedKey: domain.FeedKey;
+	    side: string;
+	    quantity: string;
+	    entryPrice: string;
+	    stopLoss: string;
+	    takeProfit: string;
+	    leverage: number;
+	    environment: string;
+	    expiresAt: number;
+	    warnings: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Preview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.feedKey = this.convertValues(source["feedKey"], domain.FeedKey);
+	        this.side = source["side"];
+	        this.quantity = source["quantity"];
+	        this.entryPrice = source["entryPrice"];
+	        this.stopLoss = source["stopLoss"];
+	        this.takeProfit = source["takeProfit"];
+	        this.leverage = source["leverage"];
+	        this.environment = source["environment"];
+	        this.expiresAt = source["expiresAt"];
+	        this.warnings = source["warnings"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Request {
+	    feedKey: domain.FeedKey;
+	    side: string;
+	    quantity: string;
+	    stopLoss: string;
+	    takeProfit: string;
+	    leverage: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Request(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.feedKey = this.convertValues(source["feedKey"], domain.FeedKey);
+	        this.side = source["side"];
+	        this.quantity = source["quantity"];
+	        this.stopLoss = source["stopLoss"];
+	        this.takeProfit = source["takeProfit"];
+	        this.leverage = source["leverage"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Result {
+	    status: string;
+	    orderIds: string[];
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.orderIds = source["orderIds"];
+	        this.message = source["message"];
+	    }
+	}
+	export class Status {
+	    configured: boolean;
+	    enabled: boolean;
+	    environment: string;
+	    canBuy: boolean;
+	    canSell: boolean;
+	    leverageSupported: boolean;
+	    protectiveOrdersSupported: boolean;
+	    maxLeverage: number;
+	    quantityLabel: string;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Status(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.configured = source["configured"];
+	        this.enabled = source["enabled"];
+	        this.environment = source["environment"];
+	        this.canBuy = source["canBuy"];
+	        this.canSell = source["canSell"];
+	        this.leverageSupported = source["leverageSupported"];
+	        this.protectiveOrdersSupported = source["protectiveOrdersSupported"];
+	        this.maxLeverage = source["maxLeverage"];
+	        this.quantityLabel = source["quantityLabel"];
+	        this.error = source["error"];
+	    }
+	}
+
+}

@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Explicit chart trading — 2026-11-09
+
+- [x] Hyperliquid private API-agent setup/help/read-only test and source-scoped chart Buy/Sell review/confirm tickets.
+- [x] One-use expiry/account/precision fences, persistent intent/nonce claims, no automatic signed-write retries and explicit partial/uncertain handling covered by provider race tests.
+- [x] Exact official signing vectors and installed JForex sizing/thread/protective-order tests pass; secrets remain outside exports and read responses.
+- [x] Local deterministic, native/bindings, frontend and related browser checks pass. Linux build is verified before the authorized commit/push; hosted Tests are monitored afterward.
+- [ ] Native desktop, funded/Testnet/Demo execution and Windows trading interaction remain unrun; no real orders were placed during implementation.
+
 ## Hyperliquid downloaded history — 2026-11-09
 
 - [x] Source selectors retain Dukascopy defaults, independent Hyperliquid choices, all-selected initialization and deliberately empty selection; source-filtered enrichment applies before pagination.

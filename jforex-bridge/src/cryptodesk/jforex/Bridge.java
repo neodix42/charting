@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
-/** Read-only JForex IClient transport. It never obtains an engine or places orders. */
+/** JForex IClient transport. Trading requires a separate explicit confirmation request. */
 public final class Bridge implements AutoCloseable {
     static final Gson JSON = new GsonBuilder().disableHtmlEscaping().create();
     static final Map<String, Period> PERIODS = Map.of("1m", Period.ONE_MIN, "5m", Period.FIVE_MINS,
@@ -37,6 +37,7 @@ public final class Bridge implements AutoCloseable {
     private final ScheduledThreadPoolExecutor deadlines = new ScheduledThreadPoolExecutor(1, r -> daemon(r, "jforex-deadlines"));
     private final ExecutorService data = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS,
         new ArrayBlockingQueue<>(32), r -> daemon(r, "jforex-history"));
+    private final ExecutorService trading = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), r -> daemon(r, "jforex-trading"));
     private final Set<DataJob> dataJobs = ConcurrentHashMap.newKeySet();
     private final Object instrumentLock = new Object();
     private final Map<Instrument, Integer> historyUsers = new HashMap<>();
@@ -135,6 +136,11 @@ public final class Bridge implements AutoCloseable {
     // Only control work uses the command queue. A slow SDK HTTP history load
     // must never queue login checks, subscriptions or unsubscribe behind it.
     void dispatch(JsonObject request, Consumer<JsonObject> reply) {
+        if (request.has("op") && request.get("op").getAsString().startsWith("trade")) {
+            try { trading.execute(() -> reply.accept(handle(request))); }
+            catch (RejectedExecutionException error) { reply.accept(failure(request.has("id") ? request.get("id").getAsString() : "", "restricted", "JForex trading is busy; no order was submitted by this request")); }
+            return;
+        }
         if (request.has("op") && "history".equals(request.get("op").getAsString())) {
             String id = request.has("id") ? request.get("id").getAsString() : "";
             AtomicBoolean replied = new AtomicBoolean();
@@ -176,8 +182,10 @@ public final class Bridge implements AutoCloseable {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1");
+                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1");
                 case "instruments" -> instruments();
+                case "tradePreview" -> tradePreview(request);
+                case "tradeSubmit" -> tradeSubmit(request);
                 case "history" -> history(request);
                 case "subscribe" -> subscribe(request);
                 case "unsubscribe" -> unsubscribe(text(request, "subscriptionId", 128));
@@ -645,6 +653,103 @@ public final class Bridge implements AutoCloseable {
             context.setSubscribedInstruments(new HashSet<>(requestedInstruments), false);
         }
     }
+    private final Set<String> tradeClaims = ConcurrentHashMap.newKeySet();
+
+    private Instrument tradeInstrument(JsonObject request) {
+        String symbol = text(request, "instrument", 128);
+        for (Instrument item : available) if (item.name().equals(symbol)) return item;
+        throw new Failure("unknownInstrument", "This instrument is unavailable for the connected JForex account");
+    }
+    private static double tradeNumber(JsonObject request, String field, boolean zero) {
+        double value;
+        try { value = request.get(field).getAsDouble(); }
+        catch (Exception error) { throw new Failure("restricted", "Enter a valid " + field); }
+        if (!Double.isFinite(value) || value < 0 || (!zero && value == 0)) throw new Failure("restricted", "Enter a valid " + field);
+        return value;
+    }
+    private static boolean multiple(double value, double step) {
+        if (!Double.isFinite(step) || step <= 0) return false;
+        BigDecimal remainder = BigDecimal.valueOf(value).remainder(BigDecimal.valueOf(step)).abs();
+        return remainder.compareTo(BigDecimal.valueOf(step).multiply(new BigDecimal("0.00000001"))) <= 0;
+    }
+    private Map<String, Object> tradePreview(JsonObject request) throws Exception {
+        requireConnected();
+        Instrument instrument = tradeInstrument(request);
+        String side = text(request, "side", 4);
+        if (!side.equals("buy") && !side.equals("sell")) throw new Failure("restricted", "Select Buy or Sell");
+        double quantity = tradeNumber(request, "quantity", false), sl = tradeNumber(request, "stopLoss", true), tp = tradeNumber(request, "takeProfit", true);
+        double contract = instrument.getAmountPerContract(), minimum = instrument.getMinTradeAmount() * contract,
+            increment = instrument.getTradeAmountIncrement() * contract, maximum = instrument.getMaxTradeAmount() * contract;
+        if (!Double.isFinite(contract) || contract <= 0 || !Double.isFinite(minimum) || minimum <= 0 || !Double.isFinite(increment) || increment <= 0)
+            throw new Failure("restricted", "JForex did not supply verified order size rules for this instrument");
+        if (quantity < minimum || !multiple(quantity, increment) || Double.isFinite(maximum) && maximum > 0 && quantity > maximum)
+            throw new Failure("restricted", "Quantity must be at least " + minimum + " base units, in increments of " + increment + ", within the instrument maximum");
+        double priceStep = Math.pow(10, -instrument.getTickScale());
+        if ((sl > 0 && !multiple(sl, priceStep)) || (tp > 0 && !multiple(tp, priceStep)))
+            throw new Failure("restricted", "SL and TP must respect the instrument price increment");
+        ensureInstrument(instrument);
+        ITick quote = context.getHistory().getLastTick(instrument);
+        if (quote == null || nowMillis.getAsLong() - quote.getTime() > 30_000 || quote.getTime() > nowMillis.getAsLong() + 5_000)
+            throw new Failure("restricted", "A fresh JForex Bid/Ask quote is required; wait for the market to open");
+        double entry = side.equals("buy") ? quote.getAsk() : quote.getBid();
+        if (!Double.isFinite(entry) || entry <= 0) throw new Failure("restricted", "The current JForex market price is unavailable");
+        boolean buy = side.equals("buy");
+        if ((sl > 0 && (buy ? sl >= entry : sl <= entry)) || (tp > 0 && (buy ? tp <= entry : tp >= entry)))
+            throw new Failure("restricted", "SL and TP must be on the appropriate side of the current entry price");
+        double leverage = context.getAccount().getLeverage(), requested = tradeNumber(request, "leverage", true);
+        if (!Double.isFinite(leverage) || leverage <= 0) throw new Failure("restricted", "JForex account leverage is unavailable");
+        if (requested != 0 && requested != leverage) throw new Failure("restricted", "Dukascopy leverage is fixed by the account and cannot be set per order");
+        Map<String, Object> result = new HashMap<>();
+        result.put("instrument", instrument.name()); result.put("side", side); result.put("quantity", quantity);
+        result.put("stopLoss", sl); result.put("takeProfit", tp); result.put("entryPrice", entry);
+        result.put("accountLeverage", leverage); result.put("minQuantity", minimum); result.put("quantityStep", increment); result.put("priceStep", priceStep);
+        result.put("message", "Market entry uses the execution-time quote. Account leverage is fixed by Dukascopy; quantity is base units, not lots.");
+        return result;
+    }
+    private Map<String, Object> tradeSubmit(JsonObject request) throws Exception {
+        requireConnected();
+        String intent = text(request, "intent", 32);
+        if (!intent.matches("[a-f0-9]{32}")) throw new Failure("restricted", "Invalid trade confirmation");
+        // Never submit a confirmation twice, including when an earlier reply timed out.
+        if (!tradeClaims.add(intent)) throw new Failure("restricted", "This trade confirmation was already used; inspect the account before submitting another trade");
+        Map<String, Object> preview = tradePreview(request);
+        Instrument instrument = tradeInstrument(request);
+        String side = (String) preview.get("side");
+        double quantity = (Double) preview.get("quantity"), sl = (Double) preview.get("stopLoss"), tp = (Double) preview.get("takeProfit");
+        IContext active = context;
+        Future<IOrder> submission = active.executeTask(() -> {
+            if (closing || context != active || client == null || !client.isConnected()) throw new Failure("offline", "JForex disconnected before order submission");
+            tradePreview(request); // revalidate fresh price/levels on the SDK strategy thread
+            return active.getEngine().submitOrder("CD_" + intent, instrument, side.equals("buy") ? IEngine.OrderCommand.BUY : IEngine.OrderCommand.SELL,
+                quantity / 1_000_000.0, 0, 5, sl, tp);
+        });
+        IOrder order;
+        try { order = submission.get(10, TimeUnit.SECONDS); }
+        catch (Exception error) {
+            submission.cancel(false);
+            return Map.of("status", "unknown", "message", "JForex submission outcome is unknown. Inspect account orders labelled CD_" + intent + " before another trade; no automatic retry was made.", "protectionConfirmed", false);
+        }
+        if (order == null) return Map.of("status", "unknown", "message", "JForex returned no order; inspect your account before another trade.", "protectionConfirmed", false);
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.min(10_000, historyTimeoutMillis));
+        while (System.nanoTime() < deadline && !closing) {
+            IOrder.State state = order.getState();
+            boolean protectedOrder = (sl == 0 || order.getStopLossPrice() == sl) && (tp == 0 || order.getTakeProfitPrice() == tp);
+            if (state == IOrder.State.FILLED && protectedOrder || state == IOrder.State.CANCELED || state == IOrder.State.CLOSED) break;
+            Thread.sleep(20);
+        }
+        IOrder.State state = order.getState();
+        boolean protection = (sl == 0 || order.getStopLossPrice() == sl) && (tp == 0 || order.getTakeProfitPrice() == tp);
+        Map<String, Object> result = new HashMap<>();
+        boolean fullyFilled = state == IOrder.State.FILLED && Math.abs(order.getAmount() * 1_000_000.0 - quantity) <= Math.max(0.00000001, quantity * 0.000000001);
+        result.put("status", state == IOrder.State.FILLED ? fullyFilled && protection ? "filled" : "partial" : state == IOrder.State.CANCELED ? "rejected" : "submitted");
+        result.put("orderID", order.getId() == null ? "" : order.getId());
+        result.put("filledQuantity", state == IOrder.State.FILLED ? order.getAmount() * 1_000_000.0 : 0);
+        result.put("entryPrice", order.getOpenPrice()); result.put("protectionConfirmed", protection && state == IOrder.State.FILLED);
+        result.put("message", fullyFilled && protection ? "JForex reports the market order filled with the requested protective levels." :
+            "JForex order state: " + state + ". Inspect the account; fill and protective levels are not fully confirmed. No automatic retry was made.");
+        return result;
+    }
+
     private Feed feed(JsonObject value) {
         if (value == null || !"dukascopy".equals(text(value, "exchange", 32)))
             throw new Failure("unknownInstrument", "Select a Dukascopy instrument");
@@ -710,7 +815,7 @@ public final class Bridge implements AutoCloseable {
         if (old != null) { try { if (strategyId >= 0) old.stopStrategy(strategyId); } catch (Exception ignored) { } try { old.disconnect(); } catch (Exception ignored) { } }
         strategyId = -1;
     }
-    public void close() { disconnect(); reconnect.shutdownNow(); deadlines.shutdownNow(); data.shutdownNow(); }
+    public void close() { disconnect(); reconnect.shutdownNow(); deadlines.shutdownNow(); data.shutdownNow(); trading.shutdownNow(); }
     static JsonObject failure(String id, String kind, String message) {
         JsonObject out = new JsonObject(); out.addProperty("id", id); out.addProperty("ok", false);
         JsonObject error = new JsonObject(); error.addProperty("kind", kind); error.addProperty("message", message); out.add("error", error); return out;

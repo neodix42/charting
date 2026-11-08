@@ -253,6 +253,7 @@ def test_bridge(cache):
         subprocess.run([*command, "cryptodesk.jforex.BridgeTest"], check=True, timeout=30, cwd=root)
         subprocess.run([*command, "cryptodesk.jforex.BridgeResponsivenessTest"], check=True, timeout=30, cwd=root)
         subprocess.run([*command, "cryptodesk.jforex.BridgeHistoryTest"], check=True, timeout=30, cwd=root)
+        subprocess.run([*command, "cryptodesk.jforex.BridgeTradingTest"], check=True, timeout=30, cwd=root)
         subprocess.run([*command, "cryptodesk.jforex.SdkBootstrapTest", str(root / "sdk-cache")], check=True, timeout=30, cwd=root)
 
 

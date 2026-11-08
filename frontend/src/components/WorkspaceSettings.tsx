@@ -10,9 +10,10 @@ import {ScreenerDirectorySetting} from './ScreenerDirectorySetting';
 import {ScreenerConcurrencySetting,type ScreenerConcurrencySettingHandle} from './ScreenerConcurrencySetting';
 import {TelegramBotSetting,type TelegramBotSettingHandle} from './TelegramBotSetting';
 import {PredictionSettings,type PredictionSettingsHandle} from './PredictionSettings';
+import {HyperliquidSetting,type HyperliquidSettingHandle} from './HyperliquidSetting';
 import {DucascopySetting,type DucascopySettingHandle} from './DucascopySetting';
 
-const pages=['Appearance','Storage','Screener','Predictions','Dukascopy','Telegram Bot','Export','Debug'] as const;
+const pages=['Appearance','Storage','Screener','Predictions','Dukascopy','Hyperliquid','Telegram Bot','Export','Debug'] as const;
 type SettingsPage=typeof pages[number];
 const pageID=(page:SettingsPage)=>page.toLowerCase().replaceAll(' ','-');
 export interface WorkspaceSettingsHandle {flush():Promise<void>}
@@ -25,7 +26,8 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
  const screenerWorkers=useRef<ScreenerConcurrencySettingHandle>(null);
  const predictions=useRef<PredictionSettingsHandle>(null);
  const ducascopy=useRef<DucascopySettingHandle>(null);
- const flush=async()=>{await telegram.current?.flush();await screenerWorkers.current?.flush();await predictions.current?.flush();await ducascopy.current?.flush();};
+ const hyperliquid=useRef<HyperliquidSettingHandle>(null);
+ const flush=async()=>{await telegram.current?.flush();await screenerWorkers.current?.flush();await predictions.current?.flush();await ducascopy.current?.flush();await hyperliquid.current?.flush();};
  useImperativeHandle(ref,()=>({flush}),[]);
  const close=()=>{void Promise.resolve().then(flush).then(onClose).catch(()=>{});};
  const timezones=Array.from(new Set(['UTC','system',Intl.DateTimeFormat().resolvedOptions().timeZone,'America/New_York','Europe/London','Europe/Berlin','Asia/Dubai','Asia/Tokyo','Asia/Singapore','Australia/Sydney']));
@@ -50,6 +52,7 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
    <ScreenerConcurrencySetting ref={screenerWorkers} api={api} visible={page==='Screener'}/>
    <TelegramBotSetting ref={telegram} api={api} visible={page==='Telegram Bot'}/>
    <PredictionSettings ref={predictions} api={api} visible={page==='Predictions'}/>
+   <HyperliquidSetting ref={hyperliquid} api={api} visible={page==='Hyperliquid'}/>
    <DucascopySetting ref={ducascopy} api={api} visible={page==='Dukascopy'}/>
   </div>
  </section></div>;

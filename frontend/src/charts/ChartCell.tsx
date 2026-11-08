@@ -17,6 +17,7 @@ import {applyRightGap,chartGapDiagnostics,effectiveRightGapBars,latestCandleVisi
 import {DrawingToolbar} from './DrawingToolbar';
 import {DrawingLayer,drawingDiagnostics} from './drawings/DrawingLayer';
 import {historyFrom} from './historyRange';
+import {ChartTrading} from './ChartTrading';
 import {instrumentLabel} from './instrumentLabel';
 const matchesDrawing=(drawing:DrawingConfig,config:ChartConfig)=>drawing.exchange===config.exchange&&drawing.market===config.market&&drawing.instrument===config.instrument;
 export const viewportCaptures=new Map<string,()=>void>();
@@ -140,6 +141,7 @@ export function ChartCell(p:Props){
   {hyperliquid&&<div className="bid-ask" aria-label="Bid and Ask" title={health.quote?`Top of book · ${freshness(health.quote.time)}`:'Waiting for top of book'}><span>Bid <b>{health.quote?.bid==null?'—':price(health.quote.bid)}</b></span><span>Ask <b>{health.quote?.ask==null?'—':price(health.quote.ask)}</b></span><span className="muted">{health.quote?freshness(health.quote.time):'Awaiting quotes'}</span></div>}
   <div className="chart-canvas" ref={host} data-testid="chart-canvas"/>
   {(failed||(status==='loading'&&barCount===0))&&<div className={`chart-message ${barCount?'compact':''}`}><span className={`status-dot ${status}`}/><strong>{status==='loading'?(jforex?'Connecting to JForex Bid feed…':`Connecting to public ${c.market} feed…`):status}</strong>{health.reason&&<p>{health.reason}</p>}{status!=='loading'&&<button onClick={()=>setRetry(x=>x+1)}>Retry feed</button>}</div>}
+  <ChartTrading api={api} feedKey={feedKey(c)} target={host}/>
   <footer className="chart-status" title={`Feed message: ${freshness(health.lastMessageAt)} · Last ${jforex?'quote':'trade'}: ${health.lastTradeAt?freshness(health.lastTradeAt):'unknown'} · ${warmupError||health.reason||''}`}><span className={`status-dot ${status}`}/><span title={health.reason}>{status}{health.reason?` · ${health.reason}`:''}</span><span className="toolbar-spacer"/><span>{warming?'Loading older history for indicators…':warmupError&&barCount<warmupBars?'More history needed for indicators':historyState||`${c.view.mode==='live'?'Following live':'Historical viewport'} · Feed ${freshness(health.lastMessageAt)}${jforex?'':` · trade ${health.lastTradeAt?freshness(health.lastTradeAt):'unknown'}`}`}</span>{jforex&&<span aria-label="Last quote">Quote {health.lastTradeAt?freshness(health.lastTradeAt):'unknown'}</span>}<span>{p.workspace.displayTimezone}</span></footer>
  </section>;
 }

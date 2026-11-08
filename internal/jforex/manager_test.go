@@ -736,6 +736,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 		switch op {
 		case "version":
 			version := bridgeVersion{Protocol: 1, SDKVersion: "3.6.51", JavaVersion: 17, InstrumentCatalog: bridgeInstrumentCatalog}
+			if strings.HasPrefix(scenario, "trade") {
+				version.Trading = "market-bracket-v1"
+			}
 			switch scenario {
 			case "version-legacy":
 				respond(id, map[string]any{"protocol": 1, "sdkVersion": "3.6.51", "javaVersion": 17})
@@ -750,6 +753,20 @@ func TestBridgeHelperProcess(t *testing.T) {
 				select {}
 			}
 			respond(id, version)
+		case "tradePreview":
+			var preview TradePreview
+			_ = json.Unmarshal(scanner.Bytes(), &preview)
+			preview.EntryPrice = 1.1002
+			preview.AccountLeverage = 100
+			preview.MinQuantity = 1000
+			preview.QuantityStep = 1000
+			preview.PriceStep = 0.00001
+			respond(id, preview)
+		case "tradeSubmit":
+			if scenario == "trade-hang" {
+				select {}
+			}
+			respond(id, TradeResult{Status: "filled", OrderID: "offline-order-1", FilledQuantity: 1000, EntryPrice: 1.1003, ProtectionConfirmed: true})
 		case "connect":
 			connections++
 			if scenario == "hang-retest" && connections > 1 {

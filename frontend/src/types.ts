@@ -36,6 +36,13 @@ export interface TelegramBotIdentity {id:number;username:string}
 export interface TelegramTestResult {sent:boolean;code?:string;botUsername?:string;messageId?:number;sentCount?:number;totalRecipients?:number}
 export interface DucascopySettings {username:string;password:string;environment:'demo'|'live';clearPassword?:boolean}
 export interface DucascopyInfo {username:string;environment:'demo'|'live';passwordConfigured:boolean;runtimeAvailable:boolean;runtimeDirectory:string;javaPath:string;connected:boolean;instrumentCount:number;error?:string}
+export interface HyperliquidSettings {accountAddress:string;privateKey:string;network:'mainnet'|'testnet';clearPrivateKey?:boolean}
+export interface HyperliquidInfo {accountAddress:string;agentAddress:string;network:'mainnet'|'testnet';privateKeyConfigured:boolean;connected:boolean;error?:string}
+export interface TradingStatus {configured:boolean;enabled:boolean;environment:string;canBuy:boolean;canSell:boolean;leverageSupported:boolean;maxLeverage:number;protectiveOrdersSupported:boolean;quantityLabel:string;error?:string}
+export interface TradeRequest {feedKey:FeedKey;side:'buy'|'sell';quantity:string;stopLoss:string;takeProfit:string;leverage:number}
+export interface TradePreview {id:string;feedKey:FeedKey;side:'buy'|'sell';quantity:string;entryPrice:string;stopLoss:string;takeProfit:string;leverage:number;environment:string;expiresAt:number;warnings:string[]}
+export interface TradeResult {status:'submitted'|'rejected'|'uncertain'|'partial';orderIds:string[];message:string}
+export interface TradingBackend {OpenHyperliquidHelp(kind:'api'|'testnetApi'|'docs'):Promise<void>;GetHyperliquid():Promise<HyperliquidInfo>;ConfigureHyperliquid(settings:HyperliquidSettings):Promise<HyperliquidInfo>;TestHyperliquidConnection():Promise<HyperliquidInfo>;GetTradingStatus(key:FeedKey):Promise<TradingStatus>;PreviewTrade(request:TradeRequest):Promise<TradePreview>;SubmitTrade(previewID:string):Promise<TradeResult>}
 export type ScreenerDataSource='dukascopy'|'hyperliquid';
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
@@ -54,7 +61,7 @@ export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtime
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}
 export interface ScreenerRefreshInfo {directory:string;active:boolean;asOf?:number;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
-export interface Backend extends ScreenerAnalysisBackend,ScreenerLiveAlertsBackend,PredictionsBackend {
+export interface Backend extends TradingBackend,ScreenerAnalysisBackend,ScreenerLiveAlertsBackend,PredictionsBackend {
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
  ListInstruments(exchange:Exchange):Promise<Instrument[]>;
  AttachChart(id:string,generation:number,key:FeedKey,fromSec:number,toSec:number):Promise<Snapshot>; DetachChart(leaseId:string):Promise<void>;

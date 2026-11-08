@@ -6,8 +6,10 @@ import {jforex} from '../models';
 import {predictions} from '../models';
 import {screener} from '../models';
 import {candlestorage} from '../models';
+import {hyperliquid} from '../models';
 import {telegram} from '../models';
 import {storage} from '../models';
+import {trading} from '../models';
 
 export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:number,arg5:number):Promise<market.Snapshot>;
 
@@ -34,6 +36,8 @@ export function ChooseScreenerDirectory():Promise<string>;
 export function ConfigureCandleStorage(arg1:boolean,arg2:string):Promise<candlestorage.Info>;
 
 export function ConfigureDucascopy(arg1:jforex.Settings):Promise<jforex.Info>;
+
+export function ConfigureHyperliquid(arg1:hyperliquid.Settings):Promise<hyperliquid.Info>;
 
 export function ConfigurePredictions(arg1:predictions.Settings):Promise<predictions.Info>;
 
@@ -72,6 +76,8 @@ export function GetDucascopyLoginChallenge():Promise<jforex.LoginChallenge>;
 export function GetFeedSnapshot(arg1:string,arg2:number):Promise<market.Snapshot>;
 
 export function GetHistory(arg1:string,arg2:domain.FeedKey,arg3:number,arg4:number,arg5:number):Promise<market.History>;
+
+export function GetHyperliquid():Promise<hyperliquid.Info>;
 
 export function GetPredictionDatasets():Promise<Array<predictions.Dataset>>;
 
@@ -119,15 +125,21 @@ export function GetTelegramBotIdentity(arg1:string):Promise<telegram.BotIdentity
 
 export function GetTelegramBotSettings():Promise<telegram.Settings>;
 
+export function GetTradingStatus(arg1:domain.FeedKey):Promise<trading.Status>;
+
 export function ImportWorkspace():Promise<storage.Loaded>;
 
 export function ListInstruments(arg1:string):Promise<Array<domain.Instrument>>;
 
 export function LoadWorkspace():Promise<storage.Loaded>;
 
+export function OpenHyperliquidHelp(arg1:string):Promise<void>;
+
 export function OpenTradingView():Promise<void>;
 
 export function PreparePredictionModel():Promise<predictions.Info>;
+
+export function PreviewTrade(arg1:trading.Request):Promise<trading.Preview>;
 
 export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 
@@ -157,9 +169,13 @@ export function StartScreenerEnrichment(arg1:screener.EnrichmentRequest):Promise
 
 export function StartScreenerRefresh():Promise<screener.RefreshInfo>;
 
+export function SubmitTrade(arg1:string):Promise<trading.Result>;
+
 export function TestDucascopyConnection():Promise<jforex.Info>;
 
 export function TestDucascopyConnectionWithPIN(arg1:string):Promise<jforex.Info>;
+
+export function TestHyperliquidConnection():Promise<hyperliquid.Info>;
 
 export function TestTelegramBot():Promise<telegram.TestResult>;
 
