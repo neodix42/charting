@@ -1,5 +1,5 @@
-import {test,expect,type Page} from '@playwright/test';
-import {openTestApp} from './helpers/testApp';
+import {test,expect,type Page,type Route} from '@playwright/test';
+import {openTestApp,reloadTestApp} from './helpers/testApp';
 import type {ChartConfig,FeedKey,Instrument,MarketEvent} from '../src/types';
 
 const picker=(page:Page)=>page.getByLabel('Instruments',{exact:true});
@@ -41,7 +41,7 @@ test('silver perpetual selection persists across restart and tabs and uses perpe
  await expect.poll(()=>page.evaluate(()=>(window as any).__testHistoryKeys())).toContainEqual({exchange:'binance',market:'perpetual',instrument:'XAGUSDT',timeframe:'1h'});
  await page.getByRole('button',{name:'Add tab',exact:true}).click();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Spot');
  await page.locator('[role="tab"][data-tab-id]').first().click();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');
- await expect(page.locator('.save-indicator.saved')).toBeVisible();await page.reload();await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();await reloadTestApp(page);await expect(page.getByLabel('Selected market',{exact:true})).toHaveText('Perpetual');await expect(page.getByLabel('OHLCV')).toContainText('31.00');
  expect(await savedChart(page)).toMatchObject({market:'perpetual',instrument:'XAGUSDT'});
  await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('coinbase');
  await expect.poll(()=>subscriptions(page)).toMatchObject([{feedKey:{exchange:'coinbase',market:'spot',instrument:'BTC-USD'}}]);
@@ -93,7 +93,7 @@ test('Hyperliquid spot pair labels and builder perpetuals keep native IDs, show 
  await picker(page).getByRole('button',{name:'HYPE/USDC Spot',exact:true}).click();
  await expect.poll(()=>subscriptions(page)).toMatchObject([{feedKey:{exchange:'hyperliquid',market:'spot',instrument:'@107'}}]);
  await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toHaveText('HYPE/USDC⌄');
- await expect(page.locator('.save-indicator.saved')).toBeVisible();await page.reload();
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();await reloadTestApp(page);
  await expect(page.getByRole('button',{name:'Select instrument',exact:true})).toHaveText('HYPE/USDC⌄');
  expect(await savedChart(page)).toMatchObject({exchange:'hyperliquid',market:'spot',instrument:'@107'});
  await openPicker(page);await page.getByRole('textbox',{name:'Search instruments',exact:true}).fill('xyz:');
@@ -108,6 +108,20 @@ test('Hyperliquid spot pair labels and builder perpetuals keep native IDs, show 
  await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('Ask 24.50');
  await page.evaluate(subscription=>{(window as any).__testPublish({...subscription,revision:subscription.revision+2,kind:'health',bars:[],health:{state:'disconnected'}} satisfies MarketEvent);},active);
  await expect(page.getByLabel('Bid and Ask',{exact:true})).toContainText('Awaiting quotes');
- await expect(page.locator('.save-indicator.saved')).toBeVisible();await page.reload();
- expect(await savedChart(page)).toMatchObject({exchange:'hyperliquid',market:'perpetual',instrument:'xyz:XYZ100'});
+ await expect(page.locator('.save-indicator.saved')).toBeVisible();
+ // Browser load does not wait for main.tsx's dynamic fixture import. Hold it
+ // across restart to prove workspace access waits for complete installation.
+ let releaseBridge!:()=>void,moduleRequested=false,reloadReady=false;
+ const released=new Promise<void>(resolve=>{releaseBridge=resolve;});
+ const holdBridge=async(route:Route)=>{moduleRequested=true;await released;await route.continue();};
+ await page.route('**/src/test/browserBridge.ts*',holdBridge);
+ const reloaded=reloadTestApp(page).then(()=>{reloadReady=true;});
+ try{
+  await expect.poll(()=>moduleRequested).toBe(true);await page.waitForLoadState('load');
+  expect(await page.evaluate(()=>typeof(window as any).__testWorkspace)).toBe('undefined');
+  expect(reloadReady).toBe(false);releaseBridge();await reloaded;
+  expect(await savedChart(page)).toMatchObject({exchange:'hyperliquid',market:'perpetual',instrument:'xyz:XYZ100'});
+ }finally{
+  releaseBridge();await reloaded;await page.unroute('**/src/test/browserBridge.ts*',holdBridge);
+ }
 });

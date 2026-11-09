@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-11-09
 
+## Hyperliquid restart test readiness in CI — 2026-11-09
+
+Hosted Tests run42574422183 failed one browser case because the Hyperliquid market restore test read `__testWorkspace` before the asynchronous explicit bridge import finished. The later run42578125902 passed, confirming the failure was intermittent; the unsafe reload remained in the test. All market reloads now use the existing bridge-readiness helper. The affected builder-market restore case holds the bridge module across browser load, checks that workspace access is still unavailable and the helper remains pending, then releases it and verifies the saved exact native ID/market.
+
+Verification: the controlled raw-reload negative case fails the readiness assertion as expected; restoring the fix passes65 repeated market/readiness/right-gap browser cases (five runs each), with typecheck/lint and diff checks passing. Logs are ignored `.tools/verification/ci-market-{raw-reload-negative,readiness-repeat}.log`. Hosted validation is tracked by the Tests workflow for the fix commit. Production code, dependency pins, workflows and user profiles are unchanged. Native desktop/live checks and local distribution rebuilds were not rerun for this browser-test correction.
+
 ## Check one Live Alert from its table row — 2026-11-09
 
 The Alerts table now has Check after Actions, with Check now for each named alert. It flushes pending settings before requesting the exact alert ID; rows sharing a saved condition remain independent. Only the selected row shows the initial save/request phases and check progress. The existing list-wide action still checks every enabled row. Both use the existing enabled-monitor/enabled-row and no-overlap rules, with tooltips explaining disabled row buttons.
