@@ -166,6 +166,10 @@ export function GetScreenerAnalysisCatalog() {
   return window['go']['main']['App']['GetScreenerAnalysisCatalog']();
 }
 
+export function GetScreenerAnalysisCatalogForSource(arg1) {
+  return window['go']['main']['App']['GetScreenerAnalysisCatalogForSource'](arg1);
+}
+
 export function GetScreenerAnalysisChart(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetScreenerAnalysisChart'](arg1, arg2, arg3, arg4);
 }

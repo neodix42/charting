@@ -93,6 +93,8 @@ export function GetScreenerAnalysis(arg1:number,arg2:number):Promise<screener.An
 
 export function GetScreenerAnalysisCatalog():Promise<screener.AnalysisCatalog>;
 
+export function GetScreenerAnalysisCatalogForSource(arg1:string):Promise<screener.AnalysisCatalog>;
+
 export function GetScreenerAnalysisChart(arg1:string,arg2:number,arg3:number,arg4:number):Promise<screener.AnalysisChart>;
 
 export function GetScreenerAnalysisFiltered(arg1:number,arg2:number,arg3:screener.AnalysisFilter):Promise<screener.AnalysisInfo>;

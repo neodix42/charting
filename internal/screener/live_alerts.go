@@ -698,6 +698,7 @@ func (l *LiveAlerts) validateSelection(config LiveAlertsConfig) error {
 func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) {
 	l.mu.Lock()
 	submittedRevision := l.configureRevision
+	previousSources := copyLiveAlertsConfig(l.state.Config)
 	l.mu.Unlock()
 	if config.Alerts != nil {
 		config.derived = false
@@ -706,6 +707,14 @@ func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) 
 		return l.Info(), err
 	}
 	config = canonicalLiveAlertsConfig(config)
+	config = preserveLiveAlertSourceOverrides(config, previousSources)
+	if needsLiveAlertSourceDefaults(config) {
+		var err error
+		config, err = l.resolveSourceDefaults(config, previousSources)
+		if err != nil {
+			return l.Info(), err
+		}
+	}
 	if !config.Enabled {
 		return l.stopAlerts(config)
 	}

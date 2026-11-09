@@ -1,3 +1,5 @@
+import type {ScreenerDataSource} from '../types';
+
 export type AnalysisOperator='above'|'below'|'equal'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
 export interface AnalysisOperand {kind:'field'|'number';field?:string;value?:number;timeframe?:string;offset?:number;aggregate?:'value'|'highest'|'lowest'|'';window?:number}
 export interface AnalysisCondition {id:string;operator:AnalysisOperator;comparison?:string;left:AnalysisOperand;right:AnalysisOperand;upper?:AnalysisOperand;distance?:AnalysisOperand;multiplier?:number;bars?:number}
@@ -5,21 +7,22 @@ export type AnalysisTradeDirection='long'|'short';
 export interface AnalysisTradeSimulation {direction?:AnalysisTradeDirection|'';stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
 export type AnalysisPeriod='all'|'w1'|'d1'|'h1';
-export interface AnalysisRequest {conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
+export interface AnalysisRequest {dataSource?:ScreenerDataSource;conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|'';profitabilityFilter?:number}
 export interface SavedConditionProfitability {profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
 export interface SavedConditionAnalysis {analyzedAt:number;failedFiles?:number;assets:SavedConditionProfitability[]}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest;analysis?:SavedConditionAnalysis|null}
 export interface SavedConditionRename {previousName:string;condition:SavedAnalysisCondition}
-export interface AnalysisFile {id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
-export interface AnalysisCatalog {directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
+export interface AnalysisFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
+export interface AnalysisCatalog {dataSource?:ScreenerDataSource;directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
 export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}
-export interface AnalysisInfo {active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
+export interface AnalysisInfo {dataSource?:ScreenerDataSource;active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
 export interface AnalysisBar {index:number;time:number;values:Record<string,number>}
 export interface AnalysisTradeExecution {entryTime:number;outcome:'takeProfit'|'stopLoss'|'expired'|'insufficientData'|'unavailable';exitTime?:number}
 export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];profitableMatches?:Array<{index:number;time:number}>;trade?:{entry:number;stopLoss:number;takeProfit:number};tradeExecution?:AnalysisTradeExecution}
 export interface ScreenerAnalysisBackend {
  GetScreenerAnalysisCatalog():Promise<AnalysisCatalog>;
+ GetScreenerAnalysisCatalogForSource(source:ScreenerDataSource):Promise<AnalysisCatalog>;
  GetScreenerAnalysisView():Promise<AnalysisRequest>;
  SaveScreenerAnalysisView(request:AnalysisRequest):Promise<AnalysisRequest>;
  GetScreenerSavedConditions():Promise<SavedAnalysisCondition[]>;
@@ -37,7 +40,7 @@ export interface ScreenerAnalysisBackend {
 export const numberOperand=(value=0):AnalysisOperand=>({kind:'number',value});
 export const fieldOperand=(field='close'):AnalysisOperand=>({kind:'field',field,timeframe:'same',offset:0,aggregate:'value',window:1});
 export const newAnalysisCondition=(id:string=crypto.randomUUID()):AnalysisCondition=>({id,operator:'above',left:fieldOperand(),right:numberOperand(),upper:numberOperand(100),distance:fieldOperand('atr_14'),multiplier:0.2,bars:3,comparison:'above'});
-export const initialAnalysisView=():AnalysisRequest=>({conditions:[newAnalysisCondition('condition-1')],profitabilityFilter:85});
+export const initialAnalysisView=():AnalysisRequest=>({dataSource:'dukascopy',conditions:[newAnalysisCondition('condition-1')],profitabilityFilter:85});
 /** Keep custom levels; adapt the conventional OHLC choices when changing sides. */
 export function changeSimulationDirection(value:AnalysisTradeSimulation,direction:AnalysisTradeDirection,fields:readonly string[]):AnalysisTradeSimulation{
  const previous=value.direction||'long',stopLoss=direction==='short'?'high':'low',takeProfit=direction==='short'?'low':'high';
@@ -69,6 +72,7 @@ export function analysisFieldGroups(fields:string[]){
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return priceFields.has(base.toLowerCase())||/^(?:low|high|sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
 export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
 export function analysisInputError(view:AnalysisRequest){
+ if(view.dataSource&&!['dukascopy','hyperliquid'].includes(view.dataSource))return'Choose Dukascopy or Hyperliquid as the data source.';
  if(view.profitabilityFilter!==undefined&&(!Number.isInteger(view.profitabilityFilter)||view.profitabilityFilter<0||view.profitabilityFilter>100||view.profitabilityFilter%5!==0))return'Profitability must be 0–100 in steps of 5.';
  if(view.period&&!['all','w1','d1','h1'].includes(view.period))return'Choose All periods, w1, d1 or h1 before scanning.';
  if(view.categories&&view.categories.length===0)return'Select at least one asset category before scanning.';
@@ -118,7 +122,7 @@ export function profitabilityLabel(value:SavedConditionProfitability):string{ret
 /** Compare semantic rule values across Go JSON defaults and older saved drafts. */
 export function analysisRequestIdentity(value:AnalysisRequest,includeProfitability=true):string{
  const operand=(item?:AnalysisOperand)=>item?.kind==='number'?{kind:'number',value:item.value??0}:item?.kind==='field'?{kind:'field',field:item.field??'',timeframe:item.timeframe||'same',offset:item.offset??0,aggregate:item.aggregate||'value',window:item.aggregate==='highest'||item.aggregate==='lowest'?item.window??1:1}:{kind:''};
- return JSON.stringify({period:value.period||'all',categories:value.categories?.slice().sort()??null,profitabilityFilter:includeProfitability?value.profitabilityFilter??0:undefined,
+ return JSON.stringify({dataSource:value.dataSource||'dukascopy',period:value.period||'all',categories:value.categories?.slice().sort()??null,profitabilityFilter:includeProfitability?value.profitabilityFilter??0:undefined,
   tradeSimulation:value.tradeSimulation?{direction:value.tradeSimulation.direction||'long',stopLoss:value.tradeSimulation.stopLoss,stopLossBarsAgo:value.tradeSimulation.stopLossBarsAgo??0,takeProfit:value.tradeSimulation.takeProfit,takeProfitMultiple:value.tradeSimulation.takeProfitMultiple??0,duration:value.tradeSimulation.duration}:null,
   conditions:value.conditions.map(condition=>({operator:condition.operator,comparison:condition.comparison||'above',left:operand(condition.left),right:operand(condition.right),upper:operand(condition.upper),distance:operand(condition.distance),multiplier:condition.multiplier??0,bars:condition.bars??0}))});
 }

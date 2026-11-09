@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -46,6 +46,19 @@ it('treats omitted sources as Dukascopy without changing legacy enabled configur
  const config={enabled:true,conditionIds:['daily','hourly']},before=structuredClone(config);
  expect(liveAlertConditionSource(config,'daily')).toBe('dukascopy');expect(liveAlertConditionSource(config,'hourly')).toBe('dukascopy');expect(config).toEqual(before);expect('conditionSources' in config).toBe(false);
  expect(liveAlertSourceLabel('hyperliquid')).toBe('Hyperliquid');
+});
+it('inherits saved Analysis source only when an alert has no explicit source and limits editable choices',()=>{
+ const hyper={id:'hyper-rule',name:'Hyperliquid rule',request:{dataSource:'hyperliquid',period:'d1'}} as any;
+ expect(defaultLiveAlertSource(hyper)).toBe('hyperliquid');expect(defaultLiveAlertSource(undefined)).toBe('dukascopy');
+ expect(defaultLiveAlertSource({...hyper,request:{period:'d1'}})).toBe('dukascopy');
+ expect(liveAlertDataSources.map(row=>row.source)).toEqual(['dukascopy','hyperliquid']);
+ expect(liveAlertSourceLabel('bybit')).toBe('Bybit');expect(liveAlertSourceLabel('binance')).toBe('Binance');
+ const missing={enabled:false,alerts:[{id:'draft',name:'Inherited',conditionId:'hyper-rule',period:'d1',enabled:true}]} as any;
+ expect(liveAlertDefinitions(missing,[hyper])[0].dataSource).toBe('hyperliquid');expect(missing.alerts[0]).not.toHaveProperty('dataSource');
+ const explicit={...missing,alerts:[{...missing.alerts[0],dataSource:'dukascopy'}]};
+ expect(liveAlertDefinitions(explicit,[hyper])[0].dataSource).toBe('dukascopy');
+ expect(liveAlertDefinitions({enabled:false,conditionIds:['hyper-rule']},[hyper])[0].dataSource).toBe('hyperliquid');
+ expect(liveAlertDefinitions({...explicit,alerts:[{...explicit.alerts[0],dataSource:'bybit'}]},[hyper])[0].dataSource).toBe('bybit');
 });
 it('updates one condition source independently and restores omitted default without mutating selected conditions',()=>{
  const config={enabled:false,conditionIds:['daily']};

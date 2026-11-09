@@ -38,6 +38,8 @@ type AnalysisCondition struct {
 }
 type AnalysisRequest struct {
 	Conditions []AnalysisCondition `json:"conditions"`
+	// Empty preserves legacy conditions as Dukascopy; sources never mix in a scan.
+	DataSource string `json:"dataSource,omitempty"`
 	// Zero disables profitability filtering and preserves legacy saved rules.
 	ProfitabilityFilter int `json:"profitabilityFilter,omitempty"`
 	// Empty preserves legacy requests that scan every downloaded timeframe.
@@ -48,6 +50,7 @@ type AnalysisRequest struct {
 	TradeSimulation *AnalysisTradeSimulation `json:"tradeSimulation,omitempty"`
 }
 type AnalysisCatalog struct {
+	DataSource string     `json:"dataSource"`
 	Directory  string     `json:"directory"`
 	Fields     []string   `json:"fields"`
 	Timeframes []string   `json:"timeframes"`
@@ -79,6 +82,7 @@ type AnalysisResult struct {
 	Simulation   *AnalysisSimulationSummary `json:"simulation,omitempty"`
 }
 type AnalysisInfo struct {
+	DataSource          string                   `json:"dataSource"`
 	ProfitabilityFilter int                      `json:"profitabilityFilter"`
 	Active              bool                     `json:"active"`
 	Phase               string                   `json:"phase"`
@@ -197,6 +201,9 @@ func baseAnalysisOperator(op string) bool {
 	return false
 }
 func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
+	if err := validateAnalysisDataSource(request.DataSource); err != nil {
+		return err
+	}
 	if err := validateProfitabilityFilter(request.ProfitabilityFilter); err != nil {
 		return err
 	}
@@ -260,6 +267,13 @@ func validateAnalysisRequest(request AnalysisRequest, draft bool) error {
 	return nil
 }
 
+func validateAnalysisDataSource(source string) error {
+	if normalized := normalizeDataSource(source); normalized != "dukascopy" && normalized != "hyperliquid" {
+		return errors.New("analysis data source must be Dukascopy or Hyperliquid")
+	}
+	return nil
+}
+
 func includesAnalysisPeriod(period, timeframe string) bool {
 	return period == "" || period == "all" || period == timeframe
 }
@@ -273,7 +287,7 @@ func copyAnalysisRequest(request AnalysisRequest) AnalysisRequest {
 }
 
 func validateAnalysisCategories(categories []string) error {
-	known := map[string]bool{otherAssetCategory: true}
+	known := map[string]bool{otherAssetCategory: true, "Hyperliquid": true, "Hyperliquid spot": true, "Hyperliquid perpetual": true}
 	for _, group := range loadCatalog().Groups {
 		known[group.Name] = true
 	}
@@ -344,12 +358,26 @@ func (m *Manager) SaveAnalysisView(request AnalysisRequest) (AnalysisRequest, er
 	return request, err
 }
 func (m *Manager) AnalysisCatalog() (AnalysisCatalog, error) {
+	return m.AnalysisCatalogForSource("dukascopy")
+}
+
+// AnalysisCatalogForSource restricts field discovery and inventory to the same
+// source as the eventual scan, before opening any CSV header or contents.
+func (m *Manager) AnalysisCatalogForSource(source string) (AnalysisCatalog, error) {
+	if err := validateAnalysisDataSource(source); err != nil {
+		return AnalysisCatalog{}, err
+	}
+	source = normalizeDataSource(source)
 	m.mu.Lock()
 	directory := m.directory
 	m.mu.Unlock()
-	catalog := AnalysisCatalog{Directory: directory, Fields: []string{}, Timeframes: []string{}, Files: []DataFile{}, Categories: []string{}}
-	for _, group := range loadCatalog().Groups {
-		catalog.Categories = append(catalog.Categories, group.Name)
+	catalog := AnalysisCatalog{DataSource: source, Directory: directory, Fields: []string{}, Timeframes: []string{}, Files: []DataFile{}, Categories: []string{}}
+	if source == "hyperliquid" {
+		catalog.Categories = []string{"Hyperliquid", "Hyperliquid spot", "Hyperliquid perpetual"}
+	} else {
+		for _, group := range loadCatalog().Groups {
+			catalog.Categories = append(catalog.Categories, group.Name)
+		}
 	}
 	names, err := csvNames(directory)
 	if err != nil {
@@ -358,6 +386,9 @@ func (m *Manager) AnalysisCatalog() (AnalysisCatalog, error) {
 	fields, tfs := map[string]bool{}, map[string]bool{}
 	hasOther := false
 	for _, name := range names {
+		if fileDataSource(name) != source {
+			continue
+		}
 		file := describeFile(directory, name)
 		catalog.Files = append(catalog.Files, file)
 		hasOther = hasOther || file.Category == otherAssetCategory
@@ -403,7 +434,7 @@ func (m *Manager) analysisInfoLocked(offset, limit int) AnalysisInfo {
 	return m.analysisFilteredInfoLocked(offset, limit, AnalysisFilter{IncludeEmpty: true})
 }
 func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisFilter) AnalysisInfo {
-	info := AnalysisInfo{Phase: "idle", Results: []AnalysisResult{}, Offset: offset, Limit: limit}
+	info := AnalysisInfo{DataSource: "dukascopy", Phase: "idle", Results: []AnalysisResult{}, Offset: offset, Limit: limit}
 	if filter.ProfitabilityFilter != nil {
 		info.ProfitabilityFilter = *filter.ProfitabilityFilter
 	}
@@ -411,6 +442,7 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 	if a == nil {
 		return info
 	}
+	info.DataSource = normalizeDataSource(a.request.DataSource)
 	info.Active, info.Phase, info.CurrentFile, info.Progress, info.Rows, info.Error = a.active, a.phase, a.current, a.progress, a.rows, a.errorText
 	info.TradeSimulation = copyAnalysisTradeSimulation(a.request.TradeSimulation)
 	info.ProfitabilityFilter = a.request.ProfitabilityFilter
@@ -542,6 +574,9 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	candidates := []DataFile{}
 	baseSymbols := map[string]bool{}
 	for _, name := range names {
+		if fileDataSource(name) != normalizeDataSource(request.DataSource) {
+			continue
+		}
 		// Planning needs identity/category only. Read CSV contents in the
 		// background indexer, after applying the base and companion scope.
 		file := describeFileName(m.directory, name)

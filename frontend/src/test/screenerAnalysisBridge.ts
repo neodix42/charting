@@ -1,5 +1,5 @@
 import type {AnalysisCatalog,AnalysisChart,AnalysisFile,AnalysisInfo,AnalysisRequest,AnalysisResult,AnalysisResultFilter,SavedAnalysisCondition,SavedConditionAnalysis,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
-import type {ScreenerCatalog} from '../types';
+import type {ScreenerCatalog,ScreenerDataSource} from '../types';
 import {analysisRequestIdentity,initialAnalysisView} from '../workspace/screenerAnalysis';
 import {analysisChartResources} from '../components/ScreenerAnalysisChart';
 
@@ -18,8 +18,11 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
  let info:AnalysisInfo={active:false,phase:'idle',total:0,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],offset:0,limit:50,totalResults:0};
  let charts:Record<string,AnalysisChart>={},saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined;
  const metadata=(symbol:string)=>{for(const group of instrumentCatalog().groups){const item=group.instruments.find(item=>item.id===symbol.toLowerCase());if(item)return{description:item.name,category:group.name};}return{description:'Description unavailable',category:'Other'};};
- const files=()=>((window as unknown as {__testEnrichmentFiles?:()=>AnalysisFile[]}).__testEnrichmentFiles?.()??[]).map(file=>({...metadata(file.symbol),...file}));
- const catalog=():AnalysisCatalog=>({directory:directory(),files:files(),fields:[...new Set(['price','close',...files().flatMap(file=>file.fields.map(field=>field.toLowerCase()))])].filter(field=>field!=='timestamp'),timeframes:[...new Set(files().map(file=>file.timeframe).filter(Boolean))],categories:[...new Set([...instrumentCatalog().groups.map(group=>group.name),...files().map(file=>file.category)])],...structuredClone(catalogOverride)});
+ const files=()=>((window as unknown as {__testEnrichmentFiles?:()=>AnalysisFile[]}).__testEnrichmentFiles?.()??[]).map(file=>({...metadata(file.symbol),...file,...(file.dataSource==='hyperliquid'&&!file.category?{category:'Hyperliquid'}:{})}));
+ const catalog=(source:ScreenerDataSource='dukascopy'):AnalysisCatalog=>{
+  const selected=(catalogOverride.files??files()).filter(file=>(file.dataSource??'dukascopy')===source);
+  return{directory:directory(),...structuredClone(catalogOverride),dataSource:source,files:structuredClone(selected),fields:catalogOverride.fields??[...new Set(['price','close',...selected.flatMap(file=>file.fields.map(field=>field.toLowerCase()))])].filter(field=>field!=='timestamp'),timeframes:catalogOverride.timeframes??[...new Set(selected.map(file=>file.timeframe).filter(Boolean))],categories:catalogOverride.categories??[...new Set([...(source==='dukascopy'?instrumentCatalog().groups.map(group=>group.name):['Hyperliquid','Hyperliquid spot','Hyperliquid perpetual']),...selected.map(file=>file.category||'Other')])]};
+ };
  const signalKey=(value:AnalysisRequest)=>analysisRequestIdentity(value,false);
  const evidence=(value:AnalysisRequest):SavedConditionAnalysis|undefined=>{
   if(!request||signalKey(request)!==signalKey(value)||info.phase!=='completed'||info.active||info.error||info.results.some(result=>!['completed','failed'].includes(result.status))||info.results.length>0&&info.results.every(result=>result.status==='failed'||!!result.error))return;
@@ -48,11 +51,12 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
  const chart=(result:AnalysisResult,occurrence:number):AnalysisChart=>{
   const fixture=charts[`${result.id}:${occurrence}`];if(fixture)return structuredClone(fixture);
   const time=(result.firstTime??Date.UTC(2024,0,5))+occurrence*86400000,index=20+occurrence;
-  const fields=['open','high','low','close','volume',...(catalog().fields.filter(field=>!['open','high','low','close','price','volume'].includes(field.toLowerCase())))];
+  const fields=['open','high','low','close','volume',...(catalog(request?.dataSource??'dukascopy').fields.filter(field=>!['open','high','low','close','price','volume'].includes(field.toLowerCase())))];
   return{resultId:result.id,name:result.name,symbol:result.symbol,timeframe:result.timeframe,occurrence,totalMatches:result.matches,matchTime:time,matchIndex:index,startIndex:index-8,fields,bars:Array.from({length:17},(_,i)=>({index:index-8+i,time:time+(i-8)*86400000,values:Object.fromEntries(fields.map(field=>[field,field==='open'?100+i:field==='high'?105+i:field==='low'?96+i:field==='close'?103+i:field==='volume'?1000+i:/histogram/.test(field)?(i-8)/10:50+i/2]))}))};
  };
  const api:ScreenerAnalysisBackend={
-  async GetScreenerAnalysisCatalog(){if(errors.catalog)throw Error(errors.catalog);return catalog();},
+  async GetScreenerAnalysisCatalog(){return api.GetScreenerAnalysisCatalogForSource('dukascopy');},
+  async GetScreenerAnalysisCatalogForSource(source){if(errors.catalog)throw Error(errors.catalog);return catalog(source);},
   async GetScreenerAnalysisView(){if(errors.view)throw Error(errors.view);return structuredClone(view);},
   async SaveScreenerAnalysisView(value){saves.push(structuredClone(value));if(saveGate)await saveGate;if(errors.save)throw Error(errors.save);view=structuredClone(value);sessionStorage.setItem(viewKey,JSON.stringify(view));return structuredClone(view);},
   async GetScreenerSavedConditions(){savedReads++;if(errors.savedList)throw Error(errors.savedList);return structuredClone(savedConditions);},
@@ -82,7 +86,7 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
    const renamed={...savedConditions[index],name};savedConditions[index]=renamed;
    persistSaved();return structuredClone(renamed);
   },
-  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);analyzedAt=Date.now();info={...info,tradeSimulation:structuredClone(value.tradeSimulation??null),active:true,error:'',phase:'indexing',total:files().filter(file=>(value.categories==null||value.categories.includes(file.category))&&(!value.period||value.period==='all'||file.timeframe===value.period)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
+  async StartScreenerAnalysis(value){if(errors.start)throw Error(errors.start);request=structuredClone(value);analyzedAt=Date.now();info={...info,dataSource:value.dataSource??'dukascopy',tradeSimulation:structuredClone(value.tradeSimulation??null),active:true,error:'',phase:'indexing',total:files().filter(file=>(file.dataSource??'dukascopy')===(value.dataSource??'dukascopy')&&(value.categories==null||value.categories.includes(file.category))&&(!value.period||value.period==='all'||file.timeframe===value.period)).length,completed:0,failed:0,currentFile:'',progress:0,rows:0,totalMatches:0,matchedFiles:0,results:[],totalResults:0};return page(0,10);},
   async GetScreenerAnalysis(offset,limit){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit);},
   async GetScreenerAnalysisFiltered(offset,limit,filter){reads++;if(errors.status)throw Error(errors.status);return page(offset,limit,filter);},
   async CancelScreenerAnalysis(){info={...info,active:false,phase:'cancelled',currentFile:''};return page(0,50);},

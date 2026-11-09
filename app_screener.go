@@ -90,6 +90,10 @@ func (a *App) GetScreenerAnalysisCatalog() (screener.AnalysisCatalog, error) {
 	return a.screener.AnalysisCatalog()
 }
 
+func (a *App) GetScreenerAnalysisCatalogForSource(source string) (screener.AnalysisCatalog, error) {
+	return a.screener.AnalysisCatalogForSource(source)
+}
+
 func (a *App) GetScreenerAnalysisView() (screener.AnalysisRequest, error) {
 	return a.screener.AnalysisView()
 }

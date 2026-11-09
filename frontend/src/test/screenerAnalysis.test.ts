@@ -1,9 +1,21 @@
 import {describe,expect,it,vi} from 'vitest';
 import {analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
-import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
+import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
+ it('defaults to Dukascopy and keeps source identity distinct while accepting legacy drafts',()=>{
+  const {dataSource,...legacy}=initialAnalysisView();
+  expect(dataSource).toBe('dukascopy');
+  expect(analysisRequestIdentity(legacy)).toBe(analysisRequestIdentity({...legacy,dataSource:'dukascopy'}));
+  expect(analysisRequestIdentity({...legacy,dataSource:'hyperliquid'})).not.toBe(analysisRequestIdentity(legacy));
+  expect(analysisRequestIdentity({...legacy,dataSource:'hyperliquid'},false)).not.toBe(analysisRequestIdentity(legacy,false));
+ });
+ it('persists the selected data source in the serial draft writer',async()=>{
+  const saved=vi.fn(async value=>value),writer=new AnalysisViewWriter(saved,()=>{}),draft={...initialAnalysisView(),dataSource:'hyperliquid' as const};
+  writer.edit(draft);await writer.flush();
+  expect(saved).toHaveBeenCalledWith(draft);
+ });
  it('serializes saves, snapshots edits and coalesces pending changes into the latest draft',async()=>{
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
   const saved=vi.fn(async value=>{if(saved.mock.calls.length===1)await gate;return value;});
@@ -23,6 +35,11 @@ describe('Analysis draft persistence',()=>{
 });
 
 describe('Analysis field selection and validation',()=>{
+ it('accepts downloaded source choices and rejects other providers',()=>{
+  const draft=initialAnalysisView();
+  for(const dataSource of [undefined,'dukascopy','hyperliquid'] as const)expect(analysisInputError({...draft,dataSource})).toBe('');
+  expect(analysisInputError({...draft,dataSource:'binance' as never})).toContain('Dukascopy or Hyperliquid');
+ });
  it('keeps MACD components grouped and qualified higher-timeframe labels explicit',()=>{
   expect(analysisFieldGroup('macd_histogram_12_26_9')).toBe('MACD');
   expect(analysisFieldLabel('macd_histogram_12_26_9')).toBe('Histogram (12, 26, 9)');

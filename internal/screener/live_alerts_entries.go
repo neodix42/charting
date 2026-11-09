@@ -49,7 +49,7 @@ func validateLiveAlertEntries(entries []LiveAlertDefinition) error {
 		if !supportedLiveAlertPeriod(entry.Period) && entry.Period != "all" {
 			return errors.New("Live Alert period must be H1, D1 or W1")
 		}
-		if entry.DataSource != "dukascopy" && !supportedPublicAlertSource(entry.DataSource) {
+		if entry.DataSource != "" && entry.DataSource != "dukascopy" && !supportedPublicAlertSource(entry.DataSource) {
 			return errors.New("unsupported Live Alert data source")
 		}
 		count, err := validateLiveAlertAssetSelections(entry.AssetSelections)
@@ -72,7 +72,7 @@ func projectLiveAlertEntries(config LiveAlertsConfig) LiveAlertsConfig {
 		if entry.Enabled {
 			config.ConditionIDs = append(config.ConditionIDs, entry.ID)
 		}
-		if entry.DataSource != "dukascopy" {
+		if entry.DataSource != "" && entry.DataSource != "dukascopy" {
 			config.ConditionSources = append(config.ConditionSources, LiveAlertConditionSource{ConditionID: entry.ID, Source: entry.DataSource})
 		}
 	}
@@ -84,6 +84,7 @@ func projectLiveAlertEntries(config LiveAlertsConfig) LiveAlertsConfig {
 // their old IDs, source and period; inactive conditions with claims/check counts
 // become paused rows so selecting them again cannot resend their previous bar.
 func migrateLiveAlertEntries(config LiveAlertsConfig, saved []SavedAnalysisCondition, watermarks map[string]int64, checks map[string]liveAlertCheckState) LiveAlertsConfig {
+	config = inheritLiveAlertSources(config, saved, LiveAlertsConfig{})
 	if config.Alerts != nil {
 		return canonicalLiveAlertsConfig(config)
 	}
@@ -114,6 +115,92 @@ func migrateLiveAlertEntries(config LiveAlertsConfig, saved []SavedAnalysisCondi
 		config.Alerts = append(config.Alerts, LiveAlertDefinition{ID: condition.ID, Name: condition.Name, ConditionID: condition.ID, Period: period, DataSource: liveAlertSource(config, condition.ID), Enabled: containsLiveValue(config.ConditionIDs, condition.ID)})
 	}
 	return projectLiveAlertEntries(config)
+}
+
+// Resolve omitted sources once, against the saved rule used to create the
+// alert. Persisted explicit overrides then survive later edits to that rule.
+func inheritLiveAlertSources(config LiveAlertsConfig, saved []SavedAnalysisCondition, previous LiveAlertsConfig) LiveAlertsConfig {
+	config = copyLiveAlertsConfig(config)
+	defaults := map[string]string{}
+	for _, condition := range saved {
+		defaults[condition.ID] = normalizeDataSource(condition.Request.DataSource)
+	}
+	if config.Alerts != nil {
+		for i, entry := range config.Alerts {
+			if entry.DataSource != "" {
+				continue
+			}
+			source := defaults[entry.ConditionID]
+			if old, exists := liveAlertEntry(previous, entry.ID); exists && old.DataSource != "" {
+				source = old.DataSource
+			}
+			config.Alerts[i].DataSource = normalizeDataSource(source)
+		}
+		config.derived = false
+		return canonicalLiveAlertsConfig(config)
+	}
+	for _, id := range config.ConditionIDs {
+		explicit := false
+		for _, choice := range config.ConditionSources {
+			explicit = explicit || choice.ConditionID == id
+		}
+		if !explicit && defaults[id] == "hyperliquid" {
+			config.ConditionSources = append(config.ConditionSources, LiveAlertConditionSource{ConditionID: id, Source: "hyperliquid"})
+		}
+	}
+	return config
+}
+
+func needsLiveAlertSourceDefaults(config LiveAlertsConfig) bool {
+	if config.Alerts == nil {
+		if config.Enabled {
+			for _, id := range config.ConditionIDs {
+				explicit := false
+				for _, choice := range config.ConditionSources {
+					explicit = explicit || choice.ConditionID == id
+				}
+				if !explicit {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, entry := range config.Alerts {
+		if entry.DataSource == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// Existing sources are owned by the alert, so even an incomplete Stop draft can
+// retain them from memory without queueing behind manager/history work.
+func preserveLiveAlertSourceOverrides(config, previous LiveAlertsConfig) LiveAlertsConfig {
+	if config.Alerts == nil {
+		return config
+	}
+	config = copyLiveAlertsConfig(config)
+	for i, entry := range config.Alerts {
+		if entry.DataSource != "" {
+			continue
+		}
+		if old, exists := liveAlertEntry(previous, entry.ID); exists && old.DataSource != "" {
+			config.Alerts[i].DataSource = old.DataSource
+		}
+	}
+	config.derived = false
+	return canonicalLiveAlertsConfig(config)
+}
+
+func (l *LiveAlerts) resolveSourceDefaults(config, previous LiveAlertsConfig) (LiveAlertsConfig, error) {
+	l.manager.mu.Lock()
+	saved, err := l.manager.readSavedConditions()
+	l.manager.mu.Unlock()
+	if err != nil {
+		return config, err
+	}
+	return inheritLiveAlertSources(config, saved, previous), nil
 }
 
 func materializeLiveAlertConditions(saved []SavedAnalysisCondition, config LiveAlertsConfig, includeDisabled bool) []SavedAnalysisCondition {

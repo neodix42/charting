@@ -24,6 +24,12 @@ async function openAssetsApp(page:Page,allMatched=false){
 }
 
 async function addDisabled(page:Page,name:string,source='hyperliquid'){
+ // Legacy public-source rows remain inspectable; these sources are no longer
+ // offered by Add/Edit. Seed an existing persisted row instead of creating it.
+ if(source==='binance'||source==='bybit'){
+  await page.evaluate(async({name,source})=>{const condition=(await window.go!.main!.App!.GetScreenerSavedConditions()).find(condition=>condition.name==='Assets rule')!,state=(window as any).__testLiveAlertsInfo();(window as any).__testSetLiveAlertsInfo({config:{...state.config,alerts:[...(state.config.alerts??[]),{id:crypto.randomUUID().replaceAll('-',''),name,conditionId:condition.id,period:'d1',dataSource:source,enabled:false}]}});},{name,source});
+  await expect(page.getByRole('checkbox',{name:`Enable alert ${name}`,exact:true})).not.toBeChecked();return;
+ }
  await page.getByRole('button',{name:'Add alert',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Add alert',exact:true});
  await dialog.getByRole('textbox',{name:'Alert name',exact:true}).fill(name);
@@ -219,7 +225,13 @@ test('asset selections stay independent across sources and spot/perpetual identi
  await trigger(page,'Source choices').click();let dialog=modal(page,'Source choices');
  await expect(rows(page,'Source choices')).toHaveCount(4);
  await dialog.getByRole('button',{name:'Deselect all',exact:true}).click();await dialog.getByRole('checkbox',{name:'Monitor xyz:XYZ100 perpetual',exact:true}).check();await dialog.getByRole('button',{name:'Save assets',exact:true}).click();
- const editSource=async(source:string)=>{await page.getByRole('button',{name:'Edit alert Source choices',exact:true}).click();const editor=page.getByRole('dialog',{name:'Edit alert',exact:true});await editor.getByRole('combobox',{name:'Alert data source',exact:true}).selectOption(source);await editor.getByRole('button',{name:'Save alert',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].dataSource)).toBe(source);};
+ const editSource=async(source:string)=>{
+  if(source==='bybit'){
+   // Restore the retained legacy venue preference through persisted fixture data.
+   await page.evaluate(()=>{const state=(window as any).__testLiveAlertsInfo();(window as any).__testSetLiveAlertsInfo({config:{...state.config,alerts:state.config.alerts.map((entry:any)=>({...entry,dataSource:'bybit'}))}});});
+   await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].dataSource)).toBe('bybit');return;
+  }
+  await page.getByRole('button',{name:'Edit alert Source choices',exact:true}).click();const editor=page.getByRole('dialog',{name:'Edit alert',exact:true});await editor.getByRole('combobox',{name:'Alert data source',exact:true}).selectOption(source);await editor.getByRole('button',{name:'Save alert',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertsInfo().config.alerts[0].dataSource)).toBe(source);};
  await editSource('bybit');await trigger(page,'Source choices').click();dialog=modal(page,'Source choices');
  await expect(dialog.getByRole('checkbox',{name:'Monitor BTCUSDT spot',exact:true})).toBeChecked();
  await expect(dialog.getByRole('checkbox',{name:'Monitor BTCUSDT perpetual',exact:true})).toBeChecked();

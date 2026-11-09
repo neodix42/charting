@@ -115,6 +115,42 @@ func TestLiveAlertsStopPreservesNamedDraftWithoutResolvingItsSavedCondition(t *t
 	}
 }
 
+func TestLiveAlertsStopRetainsExistingSourceWhenDraftOmitsItWithoutManagerRead(t *testing.T) {
+	m, l, legacy, _ := liveAlertsFixture(t)
+	entry := LiveAlertDefinition{ID: "1234567890abcdef1234567890abcdef", Name: "Existing Hyperliquid alert", ConditionID: legacy.ConditionIDs[0], Period: "d1", DataSource: "hyperliquid", Enabled: true}
+	l.mu.Lock()
+	l.state.Config = canonicalLiveAlertsConfig(LiveAlertsConfig{Enabled: true, Alerts: []LiveAlertDefinition{entry}})
+	l.mu.Unlock()
+	entry.DataSource = ""
+	draft := LiveAlertsConfig{Alerts: []LiveAlertDefinition{entry}}
+	m.mu.Lock()
+	done := make(chan struct {
+		info LiveAlertsInfo
+		err  error
+	}, 1)
+	go func() {
+		info, err := l.Configure(draft)
+		done <- struct {
+			info LiveAlertsInfo
+			err  error
+		}{info, err}
+	}()
+	select {
+	case result := <-done:
+		m.mu.Unlock()
+		if result.err != nil || result.info.Config.Enabled || len(result.info.Config.Alerts) != 1 || result.info.Config.Alerts[0].DataSource != "hyperliquid" {
+			t.Fatalf("Stop lost the retained source: %+v %v", result.info.Config, result.err)
+		}
+	case <-time.After(time.Second):
+		m.mu.Unlock()
+		t.Fatal("Stop waited for Manager to restore an existing alert source already held in memory")
+	}
+	var saved liveAlertsState
+	if err := readState(l.path, liveAlertsStateBytes, &saved); err != nil || saved.Config.Enabled || saved.Config.Alerts[0].DataSource != "hyperliquid" {
+		t.Fatal("Stop did not persist the retained source", saved.Config, err)
+	}
+}
+
 func TestLiveAlertsStopInvalidatesAnEarlierPendingStart(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
 	// The old enabled mutation cannot get past the manager lock. Wait until it
@@ -126,7 +162,15 @@ func TestLiveAlertsStopInvalidatesAnEarlierPendingStart(t *testing.T) {
 	for {
 		buffer := make([]byte, 64*1024)
 		stacks := string(buffer[:runtime.Stack(buffer, true)])
-		if strings.Contains(stacks, "(*LiveAlerts).selectedConditions") && strings.Contains(stacks, "(*LiveAlerts).Configure") {
+		waiting := false
+		for _, stack := range strings.Split(stacks, "\n\n") {
+			// Source inheritance is now an earlier saved-rule read. Either
+			// preparation stage must be blocked on the held manager lock in
+			// the same Configure goroutine before the later Stop commits.
+			preparing := strings.Contains(stack, "(*LiveAlerts).resolveSourceDefaults") || strings.Contains(stack, "(*LiveAlerts).selectedConditions")
+			waiting = waiting || preparing && strings.Contains(stack, "(*LiveAlerts).Configure") && strings.Contains(stack, "(*Mutex).Lock")
+		}
+		if waiting {
 			break
 		}
 		if time.Now().After(deadline) {

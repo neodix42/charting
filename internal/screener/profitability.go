@@ -110,6 +110,7 @@ func validateSavedConditionAnalysis(value *SavedConditionAnalysis) error {
 func sameAnalysisProfitabilityRequest(left, right AnalysisRequest) bool {
 	normalize := func(value AnalysisRequest) AnalysisRequest {
 		value = copyAnalysisRequest(value)
+		value.DataSource = normalizeDataSource(value.DataSource)
 		value.ProfitabilityFilter = 0
 		if value.Period == "" {
 			value.Period = "all"

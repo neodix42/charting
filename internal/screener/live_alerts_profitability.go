@@ -15,12 +15,12 @@ import (
 func SavedConditionProfitabilityFor(saved SavedAnalysisCondition, symbol, period string) (*SavedConditionProfitability, bool) {
 	var selected *SavedConditionProfitability
 	matched := false
-	if !savedConditionPeriodAllowed(saved, period) {
+	if normalizeDataSource(saved.Request.DataSource) != "dukascopy" || !savedConditionPeriodAllowed(saved, period) {
 		return nil, false
 	}
 	if saved.Analysis != nil {
 		for _, row := range saved.Analysis.Assets {
-			if row.Symbol != symbol || row.Timeframe != period || row.Matches <= 0 {
+			if fileDataSource(row.FileName) != "dukascopy" || row.Symbol != symbol || row.Timeframe != period || row.Matches <= 0 {
 				continue
 			}
 			if row.ProfitabilityUnavailable {
@@ -85,11 +85,11 @@ func savedConditionPeriodAllowed(saved SavedAnalysisCondition, period string) bo
 // A nil value denotes recorded matches whose profitability was unavailable.
 func savedConditionEligiblePairs(saved SavedAnalysisCondition) map[string]*SavedConditionProfitability {
 	pairs := map[string]*SavedConditionProfitability{}
-	if saved.Analysis == nil {
+	if saved.Analysis == nil || normalizeDataSource(saved.Request.DataSource) != "dukascopy" {
 		return pairs
 	}
 	for _, row := range saved.Analysis.Assets {
-		if row.Matches <= 0 || !savedConditionPeriodAllowed(saved, row.Timeframe) {
+		if fileDataSource(row.FileName) != "dukascopy" || row.Matches <= 0 || !savedConditionPeriodAllowed(saved, row.Timeframe) {
 			continue
 		}
 		if _, known := catalogAssets[row.Symbol]; !known {
@@ -177,6 +177,9 @@ func liveConditionScope(saved SavedAnalysisCondition, assets []LiveAlertAsset) L
 }
 
 func missingLiveConditionTargets(saved SavedAnalysisCondition, period string) error {
+	if normalizeDataSource(saved.Request.DataSource) != "dukascopy" {
+		return fmt.Errorf("%s was saved using Hyperliquid Analysis data; Dukascopy alerts require recorded Dukascopy Analysis matches. Choose Hyperliquid for this alert or analyze and save a Dukascopy condition", saved.Name)
+	}
 	if saved.Analysis == nil {
 		return fmt.Errorf("%s has no recorded Analysis matching assets; apply this saved condition in Analysis before enabling its %s alerts", saved.Name, period)
 	}

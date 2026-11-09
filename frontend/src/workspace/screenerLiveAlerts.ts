@@ -53,9 +53,10 @@ export interface ScreenerLiveAlertsBackend {
  ConfigureScreenerLiveAlerts(config:LiveAlertsConfig):Promise<LiveAlertsInfo>;
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
 }
-export const liveAlertDataSources:ReadonlyArray<{source:LiveAlertDataSource;label:string}>=[{source:'dukascopy',label:'Dukascopy'},{source:'hyperliquid',label:'Hyperliquid'},{source:'binance',label:'Binance'},{source:'bybit',label:'Bybit'}];
+export const liveAlertDataSources:ReadonlyArray<{source:LiveAlertDataSource;label:string}>=[{source:'dukascopy',label:'Dukascopy'},{source:'hyperliquid',label:'Hyperliquid'}];
+export function defaultLiveAlertSource(condition:SavedAnalysisCondition|undefined):LiveAlertDataSource{return condition?.request.dataSource==='hyperliquid'?'hyperliquid':'dukascopy';}
 export function liveAlertConditionSource(config:LiveAlertsConfig,id:string):LiveAlertDataSource{return config.conditionSources?.find(row=>row.conditionId===id)?.source??'dukascopy';}
-export function liveAlertSourceLabel(source:LiveAlertDataSource):string{return liveAlertDataSources.find(row=>row.source===source)?.label??source;}
+export function liveAlertSourceLabel(source:LiveAlertDataSource):string{return ({dukascopy:'Dukascopy',hyperliquid:'Hyperliquid',binance:'Binance',bybit:'Bybit'})[source]??source;}
 export function withLiveAlertSource(config:LiveAlertsConfig,id:string,source:LiveAlertDataSource):LiveAlertsConfig {
  const conditionSources=(config.conditionSources??[]).filter(row=>row.conditionId!==id);
  if(source!=='dukascopy')conditionSources.push({conditionId:id,source});
@@ -65,8 +66,8 @@ export function withLiveAlertSource(config:LiveAlertsConfig,id:string,source:Liv
 export const initialLiveAlertsConfig=():LiveAlertsConfig=>({enabled:false,alerts:[]});
 /** Legacy entries keep their identity and enabled state until an explicit edit. */
 export function liveAlertDefinitions(config:LiveAlertsConfig,conditions:SavedAnalysisCondition[]):LiveAlertDefinition[]{
- if(config.alerts)return config.alerts;
- return (config.conditionIds??[]).map(id=>{const saved=conditions.find(condition=>condition.id===id),period=saved?.request.period;return{id,name:saved?.name??'Unavailable saved condition',conditionId:id,period:period==='h1'||period==='d1'||period==='w1'?period:'all',dataSource:liveAlertConditionSource(config,id),enabled:true};});
+ if(config.alerts)return config.alerts.map(entry=>entry.dataSource?entry:{...entry,dataSource:defaultLiveAlertSource(conditions.find(condition=>condition.id===entry.conditionId))});
+ return (config.conditionIds??[]).map(id=>{const saved=conditions.find(condition=>condition.id===id),period=saved?.request.period;return{id,name:saved?.name??'Unavailable saved condition',conditionId:id,period:period==='h1'||period==='d1'||period==='w1'?period:'all',dataSource:config.conditionSources?.find(row=>row.conditionId===id)?.source??defaultLiveAlertSource(saved),enabled:true};});
 }
 export const configWithLiveAlerts=(config:LiveAlertsConfig,alerts:LiveAlertDefinition[]):LiveAlertsConfig=>({enabled:config.enabled,alerts});
 /** Follow copied condition names while retaining independently named alerts. */

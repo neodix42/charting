@@ -1,5 +1,5 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
-import {errorText} from '../types';
+import {errorText,type ScreenerDataSource} from '../types';
 import type {AnalysisCatalog,AnalysisInfo,AnalysisPeriod,AnalysisRequest,SavedConditionRename,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisDate,analysisInputError,initialAnalysisView,newAnalysisCondition} from '../workspace/screenerAnalysis';
 import {ScreenerAnalysisCondition} from './ScreenerAnalysisCondition';
@@ -16,6 +16,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const [page,setPage]=useState(0),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[resultCategory,setResultCategory]=useState(''),[selection,setSelection]=useState<AnalysisSelection|null>(null);
  const [simulationInputError,setSimulationInputError]=useState('');
  const [profitableSort,setProfitableSort]=useState<''|'asc'|'desc'>('desc');
+ const dataSource=view.dataSource||'dukascopy';
  const draft=useRef(view),mounted=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false),selectionRef=useRef(selection),chartEpoch=useRef(0),writer=useRef<AnalysisViewWriter|null>(null);
  const panelVisible=useRef(visible);panelVisible.current=visible;
  const savedConditions=useRef<ScreenerSavedConditionsHandle>(null);
@@ -31,23 +32,23 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  },[api,visible,ready,reload]);
  useEffect(()=>{
   if(!visible)return;
-  let current=true;
-  void api.GetScreenerAnalysisCatalog().then(value=>{if(current){setCatalog(value);setCatalogError('');}}).catch(error=>{if(current)setCatalogError(errorText(error));});
+  let current=true;setCatalog(null);setCatalogError('');
+  void api.GetScreenerAnalysisCatalogForSource(dataSource).then(value=>{if(current){if(value.dataSource&&value.dataSource!==dataSource)throw Error('Downloaded fields do not match the selected data source.');setCatalog(value);setCatalogError('');}}).catch(error=>{if(current)setCatalogError(errorText(error));});
   return ()=>{current=false;};
- },[api,visible,reload]);
+ },[api,visible,reload,dataSource]);
  useEffect(()=>{
   if(!visible)return;
   let current=true,timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{
    const revision=epoch.current;
    try{
-    if(!actionBusy.current){const value=await api.GetScreenerAnalysisFiltered(page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort,profitabilityFilter:view.profitabilityFilter??0});if(current&&revision===epoch.current){setInfo(value);setScanError('');if(page>0&&page*pageSize>=value.totalResults)setPage(Math.max(0,Math.ceil(value.totalResults/pageSize)-1));}}
+    if(!actionBusy.current){const value=await api.GetScreenerAnalysisFiltered(page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort,profitabilityFilter:view.profitabilityFilter??0});if(current&&revision===epoch.current){setInfo((value.dataSource||'dukascopy')===dataSource?value:null);setScanError('');if(page>0&&page*pageSize>=value.totalResults)setPage(Math.max(0,Math.ceil(value.totalResults/pageSize)-1));}}
    }catch(error){if(current&&revision===epoch.current)setScanError(errorText(error));}
    finally{if(current)timer=setTimeout(()=>void poll(),750);}
   };
   void poll();return ()=>{current=false;if(timer)clearTimeout(timer);};
- },[api,visible,page,reload,resultCategory,profitableSort,view.profitabilityFilter]);
- const change=(next:AnalysisRequest)=>{if((draft.current.profitabilityFilter??0)!==(next.profitabilityFilter??0))resetResults();draft.current=next;setView(next);setSaveError('');writer.current!.edit(next);};
+ },[api,visible,page,reload,resultCategory,profitableSort,view.profitabilityFilter,dataSource]);
+ const change=(next:AnalysisRequest)=>{if((draft.current.dataSource||'dukascopy')!==(next.dataSource||'dukascopy')){resetResults();setInfo(null);setCatalog(null);setResultCategory('');}else if((draft.current.profitabilityFilter??0)!==(next.profitabilityFilter??0))resetResults();draft.current=next;setView(next);setSaveError('');writer.current!.edit(next);};
  const closeChart=()=>{chartEpoch.current++;selectionRef.current=null;setSelection(null);};
  useEffect(()=>{if(!visible)closeChart();},[visible]);
  const run=async(operation:()=>Promise<AnalysisInfo>,apply=false)=>{
@@ -55,7 +56,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   const session=lifetime.current;actionBusy.current=true;epoch.current++;setBusy(true);setActionError('');
   try{
    if(apply){await writer.current!.flush();closeChart();}
-   await operation();const value=await api.GetScreenerAnalysisFiltered(apply?0:page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort,profitabilityFilter:view.profitabilityFilter??0});if(mounted.current&&session===lifetime.current){setInfo(value);setScanError('');if(apply)setPage(0);setReload(previous=>previous+1);}
+   await operation();const value=await api.GetScreenerAnalysisFiltered(apply?0:page*pageSize,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort,profitabilityFilter:view.profitabilityFilter??0});if(mounted.current&&session===lifetime.current){setInfo((value.dataSource||'dukascopy')===dataSource?value:null);setScanError('');if(apply)setPage(0);setReload(previous=>previous+1);}
   }catch(error){if(mounted.current&&session===lifetime.current)setActionError(errorText(error));}
   finally{actionBusy.current=false;if(mounted.current&&session===lifetime.current)setBusy(false);}
  };
@@ -67,6 +68,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
   while(index>=0){
    const offset=Math.floor(index/pageSize)*pageSize,chunk=await api.GetScreenerAnalysisFiltered(offset,pageSize,{categories:resultCategory?[resultCategory]:null,includeEmpty:false,profitableSort,profitabilityFilter:view.profitabilityFilter??0});
    if(revision!==chartEpoch.current||!mounted.current||!panelVisible.current)return;
+   if((chunk.dataSource||'dukascopy')!==dataSource)throw new Error('Apply conditions for the selected data source before opening matches.');
    if(index>=chunk.totalResults)break;
    for(;index>=offset&&index<offset+chunk.results.length;index+=direction){
     const result=chunk.results[index-offset];
@@ -98,7 +100,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
      <div className="analysis-add-actions"><button type="button" className="analysis-add" disabled={view.conditions.length>=32} title={view.conditions.length>=32?'Maximum 32 conditions':'Add another AND condition'} onClick={()=>change({...draft.current,conditions:[...draft.current.conditions,newAnalysisCondition()]})}>＋ Add condition</button><button type="button" className="analysis-add" aria-expanded={!!view.tradeSimulation} disabled={!!view.tradeSimulation} onClick={()=>{setSimulationInputError('');change({...draft.current,tradeSimulation:{stopLoss:'',takeProfit:'',duration:20}});}}>Simulate trade</button></div>
      {view.tradeSimulation&&<ScreenerTradeSimulation value={view.tradeSimulation} catalog={catalog} onInputError={setSimulationInputError} onChange={tradeSimulation=>change({...draft.current,tradeSimulation})} onRemove={()=>{setSimulationInputError('');change({...draft.current,tradeSimulation:null});}}/>}
     </fieldset>
-    <fieldset className="analysis-period" disabled={!ready||working||busy}><label>Period of data<select aria-label="Analysis period of data" value={view.period||'all'} onChange={event=>change({...draft.current,period:event.target.value as AnalysisPeriod})}><option value="all">All periods</option><option value="w1">w1 · Weekly</option><option value="d1">d1 · Daily</option><option value="h1">h1 · Hourly</option></select></label><label>Minimum profitability, %<select aria-label="Analysis profitability filter" value={view.profitabilityFilter??0} onChange={event=>change({...draft.current,profitabilityFilter:Number(event.target.value)})}>{Array.from({length:21},(_,index)=>index*5).map(value=><option key={value} value={value}>{value===0?'0 · No filter':value}</option>)}</select></label><span>Choose which files to scan. Explicit operand timeframes still use their downloaded companion data.</span></fieldset>
+    <fieldset className="analysis-period" disabled={!ready||working||busy}><label>Data source<select aria-label="Analysis data source" value={dataSource} onChange={event=>change({...draft.current,dataSource:event.target.value as ScreenerDataSource,categories:null})}><option value="dukascopy">Dukascopy</option><option value="hyperliquid">Hyperliquid</option></select></label><label>Period of data<select aria-label="Analysis period of data" value={view.period||'all'} onChange={event=>change({...draft.current,period:event.target.value as AnalysisPeriod})}><option value="all">All periods</option><option value="w1">w1 · Weekly</option><option value="d1">d1 · Daily</option><option value="h1">h1 · Hourly</option></select></label><label>Minimum profitability, %<select aria-label="Analysis profitability filter" value={view.profitabilityFilter??0} onChange={event=>change({...draft.current,profitabilityFilter:Number(event.target.value)})}>{Array.from({length:21},(_,index)=>index*5).map(value=><option key={value} value={value}>{value===0?'0 · No filter':value}</option>)}</select></label><span>Choose which files to scan. Explicit operand timeframes still use their downloaded companion data.</span></fieldset>
     {(view.profitabilityFilter??0)>0&&!view.tradeSimulation&&<p className="analysis-profitability-help">Profitability filtering needs Simulate trade to calculate TP hits. Choose 0 to show matching files without a profitability filter.</p>}
     <div className="analysis-apply-row"><button type="submit" className="primary" disabled={!ready||!selectedFiles||working||busy||!!invalid}>{busy&&!working?'Starting scan…':'Apply conditions'}</button>{working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerAnalysis())}>Cancel analysis</button>}<button type="button" disabled={busy||working} onClick={()=>setReload(value=>value+1)}>Refresh fields</button><span>{invalid|| (catalog?`${selectedFiles.toLocaleString('en-US')} of ${catalog.files.length.toLocaleString('en-US')} files in selected categories`:'Loading downloaded fields…')}</span></div>
     <fieldset className="analysis-scan-categories" disabled={!ready||!catalog||working||busy}><legend>Asset categories to scan</legend><div className="analysis-category-actions"><button type="button" aria-label="Select all scan categories" onClick={()=>changeCategories(null)}>Select all</button><button type="button" aria-label="Deselect all scan categories" onClick={()=>changeCategories([])}>Deselect all</button><span>{selectedCategories.size} / {categories.length} categories selected</span></div><div className="analysis-category-options">{categories.map(category=><label key={category}><input type="checkbox" aria-label={`Scan ${category}`} checked={selectedCategories.has(category)} onChange={event=>{const next=new Set(draft.current.categories??categories);if(event.target.checked)next.add(category);else next.delete(category);changeCategories(categories.filter(item=>next.has(item)));}}/><span>{category}</span></label>)}</div></fieldset>
@@ -109,7 +111,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
    <header><div><h2>Matching assets</h2><p>{info?.totalMatches?`${info.totalMatches.toLocaleString('en-US')} scanned occurrences in ${info.matchedFiles.toLocaleString('en-US')} matching files · ${info.totalResults.toLocaleString('en-US')} result rows shown (matching files and file errors)`:'Apply conditions to find historical matches.'}</p></div><div className="analysis-result-filters"><label>Asset category<select aria-label="Result asset category" disabled={busy} value={resultCategory} onChange={event=>changeResultFilter(event.target.value)}><option value="">All categories</option>{categories.map(category=><option key={category} value={category}>{category}</option>)}</select></label></div></header>
    {resultSimulation&&<p className="analysis-simulation-summary">Simulated {resultSimulation.direction||'long'} trades · SL: {resultSimulation.stopLoss} ({resultSimulation.stopLossBarsAgo??0} bars ago) · TP: {resultSimulation.takeProfitMultiple?`${resultSimulation.takeProfitMultiple}xSL`:resultSimulation.takeProfit} · {resultSimulation.duration.toLocaleString('en-US')} bars. Profitable, % = TP hits ÷ all matching bars × 100.</p>}
    {info&&(working||info.total>0)&&<div className="analysis-scan-status" role="status"><div><strong>{working?(info.phase==='indexing'?'Indexing downloaded files':'Scanning closed bars'):info.phase==='cancelled'?'Analysis cancelled':'Analysis complete'}</strong><span>{info.completed} / {info.total} files · {info.rows.toLocaleString('en-US')} rows · {info.failed} failed</span></div><progress aria-label="Analysis scan progress" max={100} value={Math.max(0,Math.min(100,info.progress))}/>{info.currentFile&&<p>{info.currentFile}</p>}</div>}
-   {!catalog?.files.length&&catalog&&<p className="analysis-empty">No downloaded files. Download historical data, then enrich it with any indicators you want to compare.</p>}
+   {!catalog?.files.length&&catalog&&<p className="analysis-empty">No downloaded {dataSource==='hyperliquid'?'Hyperliquid':'Dukascopy'} files. Download historical data, then enrich it with any indicators you want to compare.</p>}
    {!groups.length&&!!info?.total&&<p className="analysis-empty">{working?'Waiting for matching files…':resultCategory?'No matching files in this asset category.':info.totalMatches?'No files match the current result filters.':'No closed bars matched all conditions.'}</p>}
    {!!groups.length&&<div className="analysis-table-scroll"><table><thead><tr><th>Asset / downloaded file</th><th>Timeframe</th><th>Matches</th>{resultSimulation&&<th aria-label="Profitable, %" aria-sort={profitableSort==='asc'?'ascending':profitableSort==='desc'?'descending':'none'}><button type="button" className="analysis-sort" aria-label="Sort by Profitable, %" disabled={busy} onClick={changeResultSort}>Profitable, % <span aria-hidden="true">{profitableSort==='asc'?'▲':profitableSort==='desc'?'▼':'↕'}</span></button></th>}<th>First match (UTC)</th><th>Last match (UTC)</th></tr></thead><tbody>{groups.map(({asset,entries})=>[
     <tr className="analysis-asset" key={`asset:${asset}:${entries[0].result.id}`}><th colSpan={resultSimulation?6:5}><strong>{asset.toUpperCase()}</strong><span>{entries[0].result.description||catalog?.files.find(file=>file.id===entries[0].result.fileId)?.description||'Description unavailable'}</span></th></tr>,

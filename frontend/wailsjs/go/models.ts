@@ -1084,6 +1084,7 @@ export namespace screener {
 	    }
 	}
 	export class AnalysisCatalog {
+	    dataSource: string;
 	    directory: string;
 	    fields: string[];
 	    timeframes: string[];
@@ -1096,6 +1097,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
 	        this.directory = source["directory"];
 	        this.fields = source["fields"];
 	        this.timeframes = source["timeframes"];
@@ -1407,6 +1409,7 @@ export namespace screener {
 		}
 	}
 	export class AnalysisInfo {
+	    dataSource: string;
 	    profitabilityFilter: number;
 	    active: boolean;
 	    phase: string;
@@ -1431,6 +1434,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
 	        this.profitabilityFilter = source["profitabilityFilter"];
 	        this.active = source["active"];
 	        this.phase = source["phase"];
@@ -1471,6 +1475,7 @@ export namespace screener {
 
 	export class AnalysisRequest {
 	    conditions: AnalysisCondition[];
+	    dataSource?: string;
 	    profitabilityFilter?: number;
 	    period?: string;
 	    categories: string[];
@@ -1483,6 +1488,7 @@ export namespace screener {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
+	        this.dataSource = source["dataSource"];
 	        this.profitabilityFilter = source["profitabilityFilter"];
 	        this.period = source["period"];
 	        this.categories = source["categories"];
