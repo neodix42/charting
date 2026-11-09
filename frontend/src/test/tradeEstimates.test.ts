@@ -22,4 +22,16 @@ describe('account-currency level estimates',()=>{
   expect(tradeLevelEstimate('buy','1e-308','1e308','1e308',{accountCurrency:'USD',profitPerPriceUnit:'1e308'})).toEqual({basisPoints:null,amount:null,currency:'USD'});
   expect(formatTradeLevelEstimate({basisPoints:10,amount:1.235,currency:'EUR'})).toBe('+10.00 bps · +1.24 EUR');
  });
+ it('retains the provider collateral denomination for linear Hyperliquid amounts',()=>{
+  for(const currency of ['USDC','USDT','USDH']){
+   const result=tradeLevelEstimate('sell','200','10','210',{accountCurrency:currency,profitPerPriceUnit:'1'});
+   expect(result).toEqual({basisPoints:-500,amount:-100,currency});
+   expect(formatTradeLevelEstimate(result,'Collateral amount unavailable')).toBe(`-500.00 bps · -100.00 ${currency}`);
+  }
+ });
+ it('discards an explicitly unavailable valuation even if stale numeric fields remain',()=>{
+  const result=tradeLevelEstimate('buy','100','4','95',{accountCurrency:'USDC',profitPerPriceUnit:'1',valuationError:'Collateral metadata unavailable'});
+  expect(result).toEqual({basisPoints:-500,amount:null,currency:'USDC'});
+  expect(formatTradeLevelEstimate(result,'Collateral amount unavailable')).toBe('-500.00 bps · Collateral amount unavailable');
+ });
 });

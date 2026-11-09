@@ -42,6 +42,7 @@ type Preview struct {
 	ProfitPerPriceUnit string         `json:"profitPerPriceUnit,omitempty"`
 	ValuationTime      int64          `json:"valuationTime,omitempty"`
 	ValuationError     string         `json:"valuationError,omitempty"`
+	MaxLeverage        int            `json:"maxLeverage,omitempty"`
 }
 
 // Estimate is read-only valuation metadata; it is never an order confirmation.
@@ -55,6 +56,7 @@ type Estimate struct {
 	ProfitPerPriceUnit string         `json:"profitPerPriceUnit"`
 	ValuationTime      int64          `json:"valuationTime"`
 	ValuationError     string         `json:"valuationError,omitempty"`
+	MaxLeverage        int            `json:"maxLeverage,omitempty"`
 }
 
 type Result struct {

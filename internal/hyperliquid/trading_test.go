@@ -25,11 +25,17 @@ type tradingMock struct {
 	price                       string
 	available                   string
 	filledQuantity              string
+	maxLeverage                 int
+	collateralToken             *int
+	spotQuote                   *int
+	spotMetaFailure             bool
+	beforeQuote                 func()
+	quoteTime                   *int64
 }
 
 func mockStore(t *testing.T) (*Store, *tradingMock) {
 	t.Helper()
-	mock := &tradingMock{price: "100", available: "2", filledQuantity: "1"}
+	mock := &tradingMock{price: "100", available: "2", filledQuantity: "1", maxLeverage: 20}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var input map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -85,15 +91,34 @@ func mockStore(t *testing.T) (*Store, *tradingMock) {
 			if dex != "" {
 				name = dex + ":" + name
 			}
-			fmt.Fprintf(w, `{"universe":[{"name":%q,"szDecimals":3,"maxLeverage":20}]}`, name)
+			meta := map[string]any{"universe": []any{map[string]any{"name": name, "szDecimals": 3, "maxLeverage": mock.maxLeverage}}}
+			if mock.collateralToken != nil {
+				meta["collateralToken"] = *mock.collateralToken
+			}
+			_ = json.NewEncoder(w).Encode(meta)
 		case "spotMeta":
-			fmt.Fprint(w, `{"tokens":[{"index":150,"name":"HYPE","szDecimals":2},{"index":0,"name":"USDC","szDecimals":6}],"universe":[{"name":"@107","index":107,"tokens":[150,0]}]}`)
+			if mock.spotMetaFailure {
+				w.WriteHeader(503)
+				return
+			}
+			quote := 0
+			if mock.spotQuote != nil {
+				quote = *mock.spotQuote
+			}
+			fmt.Fprintf(w, `{"tokens":[{"index":150,"name":"HYPE","szDecimals":2},{"index":0,"name":"USDC","szDecimals":6},{"index":1,"name":"USDT","szDecimals":6},{"index":360,"name":"USDH","szDecimals":6}],"universe":[{"name":"@107","index":107,"tokens":[150,%d]}]}`, quote)
 		case "spotClearinghouseState":
 			fmt.Fprintf(w, `{"balances":[{"token":150,"total":%q,"hold":"0.5"}]}`, mock.available)
 		case "l2Book":
 			var coin string
 			_ = json.Unmarshal(input["coin"], &coin)
-			fmt.Fprintf(w, `{"coin":%q,"time":%d,"levels":[[{"px":%q}],[{"px":%q}]]}`, coin, time.Now().UnixMilli(), mock.price, mock.price)
+			if mock.beforeQuote != nil {
+				mock.beforeQuote()
+			}
+			observedAt := time.Now().UnixMilli()
+			if mock.quoteTime != nil {
+				observedAt = *mock.quoteTime
+			}
+			fmt.Fprintf(w, `{"coin":%q,"time":%d,"levels":[[{"px":%q}],[{"px":%q}]]}`, coin, observedAt, mock.price, mock.price)
 		default:
 			t.Errorf("unexpected public request: %s", kind)
 			w.WriteHeader(400)

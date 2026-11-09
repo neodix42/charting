@@ -24,16 +24,29 @@ type OrderRequest struct {
 	TakeProfit string `json:"takeProfit"`
 	Leverage   int    `json:"leverage"`
 }
+type Estimate struct {
+	ReferencePrice     string `json:"referencePrice"`
+	AccountCurrency    string `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit string `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64  `json:"valuationTime"`
+	ValuationError     string `json:"valuationError,omitempty"`
+	MaxLeverage        int    `json:"maxLeverage"`
+}
+
 type Preview struct {
-	ID             string       `json:"id"`
-	Request        OrderRequest `json:"request"`
-	ReferencePrice string       `json:"referencePrice"`
-	LimitPrice     string       `json:"limitPrice"`
-	ExpiresAt      int64        `json:"expiresAt"`
-	Network        string       `json:"network"`
-	AccountAddress string       `json:"accountAddress"`
-	MaxLeverage    int          `json:"maxLeverage"`
-	Warnings       []string     `json:"warnings"`
+	AccountCurrency    string       `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit string       `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64        `json:"valuationTime"`
+	ValuationError     string       `json:"valuationError,omitempty"`
+	ID                 string       `json:"id"`
+	Request            OrderRequest `json:"request"`
+	ReferencePrice     string       `json:"referencePrice"`
+	LimitPrice         string       `json:"limitPrice"`
+	ExpiresAt          int64        `json:"expiresAt"`
+	Network            string       `json:"network"`
+	AccountAddress     string       `json:"accountAddress"`
+	MaxLeverage        int          `json:"maxLeverage"`
+	Warnings           []string     `json:"warnings"`
 }
 type OrderResult struct {
 	Status         string  `json:"status"`
@@ -46,6 +59,7 @@ type OrderResult struct {
 type instrument struct {
 	asset, szDecimals, maxLeverage, baseToken int
 	dex                                       string
+	accountCurrency, valuationError           string
 }
 type prepared struct {
 	Preview
@@ -56,10 +70,7 @@ type prepared struct {
 func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrument, error) {
 	if r.Market == "spot" {
 		var meta struct {
-			Tokens []struct {
-				Index      int `json:"index"`
-				SzDecimals int `json:"szDecimals"`
-			} `json:"tokens"`
+			Tokens   []spotToken `json:"tokens"`
 			Universe []struct {
 				Name   string `json:"name"`
 				Index  int    `json:"index"`
@@ -72,8 +83,9 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 		for _, pair := range meta.Universe {
 			if pair.Name == r.Instrument && len(pair.Tokens) == 2 {
 				for _, token := range meta.Tokens {
-					if token.Index == pair.Tokens[0] && token.SzDecimals >= 0 && token.SzDecimals <= 8 {
-						return instrument{asset: 10000 + pair.Index, szDecimals: token.SzDecimals, maxLeverage: 1, baseToken: token.Index}, nil
+					if token.Index != nil && *token.Index == pair.Tokens[0] && token.SzDecimals >= 0 && token.SzDecimals <= 8 {
+						currency, valuationErr := tokenCurrency(meta.Tokens, pair.Tokens[1])
+						return instrument{asset: 10000 + pair.Index, szDecimals: token.SzDecimals, maxLeverage: 1, baseToken: *token.Index, accountCurrency: currency, valuationError: valuationErr}, nil
 					}
 				}
 			}
@@ -104,7 +116,8 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 		}
 	}
 	var meta struct {
-		Universe []struct {
+		CollateralToken *int `json:"collateralToken"`
+		Universe        []struct {
 			Name        string `json:"name"`
 			SzDecimals  int    `json:"szDecimals"`
 			MaxLeverage int    `json:"maxLeverage"`
@@ -115,8 +128,9 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 		return instrument{}, err
 	}
 	for index, item := range meta.Universe {
-		if item.Name == r.Instrument && !item.Delisted && item.SzDecimals >= 0 && item.SzDecimals <= 6 && item.MaxLeverage > 0 {
-			return instrument{asset: offset + index, szDecimals: item.SzDecimals, maxLeverage: item.MaxLeverage, dex: dex}, nil
+		if item.Name == r.Instrument && !item.Delisted && item.SzDecimals >= 0 && item.SzDecimals <= 6 && item.MaxLeverage > 0 && item.MaxLeverage <= 1000 {
+			currency, valuationErr := s.collateralCurrency(ctx, v, meta.CollateralToken)
+			return instrument{asset: offset + index, szDecimals: item.SzDecimals, maxLeverage: item.MaxLeverage, dex: dex, accountCurrency: currency, valuationError: valuationErr}, nil
 		}
 	}
 	return instrument{}, errors.New("Perpetual instrument is not available on the selected network")
@@ -150,6 +164,10 @@ func checkPrice(value string, sz int, spot bool) (decimal.Decimal, error) {
 	return p, nil
 }
 func (s *Store) quote(ctx context.Context, v Settings, r OrderRequest) (decimal.Decimal, error) {
+	price, _, err := s.quoteWithTime(ctx, v, r)
+	return price, err
+}
+func (s *Store) quoteWithTime(ctx context.Context, v Settings, r OrderRequest) (decimal.Decimal, int64, error) {
 	var book struct {
 		Time   int64  `json:"time"`
 		Coin   string `json:"coin"`
@@ -158,16 +176,17 @@ func (s *Store) quote(ctx context.Context, v Settings, r OrderRequest) (decimal.
 		} `json:"levels"`
 	}
 	if err := s.post(ctx, v, "/info", map[string]string{"type": "l2Book", "coin": r.Instrument}, &book); err != nil {
-		return decimal.Zero, err
+		return decimal.Zero, 0, err
 	}
 	side := 0
 	if r.Side == "buy" {
 		side = 1
 	}
 	if book.Coin != r.Instrument || len(book.Levels) != 2 || len(book.Levels[side]) == 0 || book.Time < s.now().Add(-15*time.Second).UnixMilli() || book.Time > s.now().Add(5*time.Second).UnixMilli() {
-		return decimal.Zero, errors.New("No fresh executable Hyperliquid quote; try again")
+		return decimal.Zero, 0, errors.New("No fresh executable Hyperliquid quote; try again")
 	}
-	return positive(book.Levels[side][0].Px)
+	price, err := positive(book.Levels[side][0].Px)
+	return price, book.Time, err
 }
 func (s *Store) checkInventory(ctx context.Context, v Settings, r OrderRequest, m instrument) error {
 	if r.Market != "spot" || r.Side != "sell" {
@@ -230,7 +249,7 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if r.Market == "spot" && (r.StopLoss != "" || r.TakeProfit != "") {
 		return Preview{}, errors.New("Hyperliquid spot does not support the perpetual TP/SL bracket; clear SL/TP or choose a perpetual market")
 	}
-	reference, err := s.quote(ctx, v, r)
+	reference, valuationTime, err := s.quoteWithTime(ctx, v, r)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -257,7 +276,7 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	p := Preview{ID: id, Request: r, ReferencePrice: reference.String(), LimitPrice: cap.String(), ExpiresAt: s.now().Add(60 * time.Second).UnixMilli(), Network: v.Network, AccountAddress: v.AccountAddress, MaxLeverage: m.maxLeverage, Warnings: []string{"Market entry uses an immediate-or-cancel limit capped at 1% slippage; a partial fill is possible."}}
+	p := Preview{AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: valuationTime, ValuationError: m.valuationError, ID: id, Request: r, ReferencePrice: reference.String(), LimitPrice: cap.String(), ExpiresAt: s.now().Add(60 * time.Second).UnixMilli(), Network: v.Network, AccountAddress: v.AccountAddress, MaxLeverage: m.maxLeverage, Warnings: []string{"Market entry uses an immediate-or-cancel limit capped at 1% slippage; a partial fill is possible."}}
 	if r.Market == "perpetual" {
 		p.Warnings = append(p.Warnings, "Leverage uses isolated margin. Existing positions are netted by the exchange. SL/TP trigger on mark price, which can differ from the quoted entry, and reduce-only market execution can slip.")
 	}
@@ -362,6 +381,20 @@ func (s *Store) Submit(ctx context.Context, id string) (OrderResult, error) {
 	if err := s.checkAgent(ctx, v); err != nil {
 		return OrderResult{}, err
 	}
+	fresh, err := s.market(ctx, v, r)
+	if err != nil {
+		return OrderResult{}, err
+	}
+	if fresh.asset != m.asset || fresh.szDecimals != m.szDecimals {
+		return OrderResult{}, errors.New("Hyperliquid instrument metadata changed; preview again")
+	}
+	if r.Leverage < 1 || r.Leverage > fresh.maxLeverage {
+		return OrderResult{}, fmt.Errorf("Hyperliquid leverage limit changed to %d; preview again", fresh.maxLeverage)
+	}
+	if fresh.accountCurrency != "" && m.accountCurrency != "" && fresh.accountCurrency != m.accountCurrency {
+		return OrderResult{}, errors.New("Hyperliquid collateral currency changed; preview again")
+	}
+	m = fresh
 	quote, err := s.quote(ctx, v, r)
 	if err != nil {
 		return OrderResult{}, err

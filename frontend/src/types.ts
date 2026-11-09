@@ -40,7 +40,7 @@ export interface HyperliquidSettings {accountAddress:string;privateKey:string;ne
 export interface HyperliquidInfo {accountAddress:string;agentAddress:string;network:'mainnet'|'testnet';privateKeyConfigured:boolean;connected:boolean;error?:string}
 export interface TradingStatus {configured:boolean;enabled:boolean;environment:string;canBuy:boolean;canSell:boolean;leverageSupported:boolean;maxLeverage:number;protectiveOrdersSupported:boolean;quantityLabel:string;error?:string}
 export interface TradeRequest {feedKey:FeedKey;side:'buy'|'sell';quantity:string;stopLoss:string;takeProfit:string;leverage:number}
-export interface TradeValuation {accountCurrency?:string;profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string}
+export interface TradeValuation {maxLeverage?:number;accountCurrency?:string;profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string}
 export interface TradeEstimate extends TradeValuation {feedKey:FeedKey;side:'buy'|'sell';entryPrice:string}
 export interface TradePreview extends TradeValuation {id:string;feedKey:FeedKey;side:'buy'|'sell';quantity:string;entryPrice:string;stopLoss:string;takeProfit:string;leverage:number;environment:string;expiresAt:number;warnings:string[]}
 export interface TradeResult {status:'submitted'|'rejected'|'uncertain'|'partial';orderIds:string[];message:string}

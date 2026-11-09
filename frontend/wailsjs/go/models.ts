@@ -2666,6 +2666,7 @@ export namespace trading {
 	    profitPerPriceUnit?: string;
 	    valuationTime?: number;
 	    valuationError?: string;
+	    maxLeverage?: number;
 
 	    static createFrom(source: any = {}) {
 	        return new Preview(source);
@@ -2688,6 +2689,7 @@ export namespace trading {
 	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
 	        this.valuationTime = source["valuationTime"];
 	        this.valuationError = source["valuationError"];
+	        this.maxLeverage = source["maxLeverage"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2804,6 +2806,7 @@ export namespace trading {
 	    profitPerPriceUnit: string;
 	    valuationTime: number;
 	    valuationError?: string;
+	    maxLeverage?: number;
 
 	    static createFrom(source: any = {}) {
 	        return new Estimate(source);
@@ -2818,6 +2821,7 @@ export namespace trading {
 	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
 	        this.valuationTime = source["valuationTime"];
 	        this.valuationError = source["valuationError"];
+	        this.maxLeverage = source["maxLeverage"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

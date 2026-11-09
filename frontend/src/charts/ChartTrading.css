@@ -5,3 +5,5 @@
 .trade-ticket:has(.trade-valuation){max-width:700px}.trade-level-control{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.trade-level-control input{width:170px}.trade-level-control small{min-width:200px;color:var(--muted);font-variant-numeric:tabular-nums}.trade-valuation{margin:12px 0}.trade-valuation p{margin-bottom:6px}.trade-valuation .muted{font-size:.85em}
 
 .trade-review-estimate{display:inline-block;margin-left:8px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.trade-leverage-control{display:flex;align-items:center;gap:10px}.trade-leverage-control select{min-width:110px}.trade-leverage-control small{color:var(--muted);white-space:nowrap}

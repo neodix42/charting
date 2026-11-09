@@ -132,6 +132,8 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 		result.ID, result.EntryPrice, result.Quantity = "hyperliquid:"+preview.ID, preview.ReferencePrice, preview.Request.Quantity
 		result.Leverage, result.Environment, result.ExpiresAt = float64(preview.Request.Leverage), preview.Network, preview.ExpiresAt
 		result.Warnings = append(result.Warnings, preview.Warnings...)
+		result.MaxLeverage = preview.MaxLeverage
+		result.AccountCurrency, result.ProfitPerPriceUnit, result.ValuationTime, result.ValuationError = preview.AccountCurrency, preview.ProfitPerPriceUnit, preview.ValuationTime, preview.ValuationError
 	case "dukascopy":
 		if a.jforex == nil {
 			return result, errors.New("configure Dukascopy in Settings")
@@ -248,15 +250,15 @@ func hyperliquidTradeResult(order hyperliquid.OrderResult) trading.Result {
 	return result
 }
 
-// EstimateTrade retrieves only current Dukascopy quote/currency metadata.
+// EstimateTrade retrieves current provider quote, settlement and leverage metadata.
 // It neither creates a confirmation token nor submits an order.
 func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, error) {
 	result := trading.Estimate{FeedKey: key, Side: side}
 	if err := key.Validate(); err != nil {
 		return result, err
 	}
-	if key.Exchange != "dukascopy" || a.jforex == nil {
-		return result, errors.New("account-currency estimates are available only for configured Dukascopy charts")
+	if key.Exchange != "dukascopy" && key.Exchange != "hyperliquid" {
+		return result, errors.New("trade estimates are available only for Hyperliquid and Dukascopy charts")
 	}
 	if side != "buy" && side != "sell" {
 		return result, errors.New("choose Buy or Sell")
@@ -267,6 +269,21 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 	defer a.tradingWG.Done()
 	ctx, cancel := a.tradingContext()
 	defer cancel()
+	if key.Exchange == "hyperliquid" {
+		if a.hyperliquid == nil {
+			return result, errors.New("Hyperliquid trading is unavailable")
+		}
+		value, err := a.hyperliquid.Estimate(ctx, key.Market, key.Instrument, side)
+		if err != nil {
+			return result, err
+		}
+		result.EntryPrice, result.MaxLeverage = value.ReferencePrice, value.MaxLeverage
+		result.AccountCurrency, result.ProfitPerPriceUnit, result.ValuationTime, result.ValuationError = value.AccountCurrency, value.ProfitPerPriceUnit, value.ValuationTime, value.ValuationError
+		return result, nil
+	}
+	if a.jforex == nil {
+		return result, errors.New("Dukascopy trading is unavailable")
+	}
 	value, err := a.jforex.EstimateTrade(ctx, key.Instrument, side)
 	if err != nil {
 		return result, err

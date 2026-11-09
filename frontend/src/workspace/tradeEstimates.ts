@@ -3,7 +3,7 @@ import type {TradeValuation} from '../types';
 export interface TradeLevelEstimate {basisPoints:number|null;amount:number|null;currency:string|null}
 const positive=(value:string|undefined)=>{if(!value?.trim())return null;const number=Number(value);return Number.isFinite(number)&&number>0?number:null;};
 
-/** Account conversion is supplied by JForex, never inferred from a symbol name. */
+/** Providers supply the denomination and conversion; never infer it from a symbol name. */
 export function tradeLevelEstimate(side:'buy'|'sell',entryPrice:string,quantity:string,exitPrice:string,valuation:TradeValuation={}):TradeLevelEstimate {
  const entry=positive(entryPrice),exit=positive(exitPrice),units=positive(quantity),conversion=valuation.valuationError?null:positive(valuation.profitPerPriceUnit),currency=valuation.accountCurrency?.trim()||null;
  if(entry===null||exit===null)return {basisPoints:null,amount:null,currency};
@@ -13,8 +13,8 @@ export function tradeLevelEstimate(side:'buy'|'sell',entryPrice:string,quantity:
 }
 
 const signed=new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2,signDisplay:'always'});
-export function formatTradeLevelEstimate(value:TradeLevelEstimate):string {
+export function formatTradeLevelEstimate(value:TradeLevelEstimate,unavailable='Account amount unavailable'):string {
  const bps=value.basisPoints===null?'bps unavailable':`${signed.format(value.basisPoints)} bps`;
- const amount=value.amount===null||!value.currency?'Account amount unavailable':`${signed.format(value.amount)} ${value.currency}`;
+ const amount=value.amount===null||!value.currency?unavailable:`${signed.format(value.amount)} ${value.currency}`;
  return `${bps} · ${amount}`;
 }
