@@ -52,6 +52,7 @@ export interface ScreenerLiveAlertsBackend {
  GetScreenerLiveAlertsProgress():Promise<LiveAlertsInfo>;
  ConfigureScreenerLiveAlerts(config:LiveAlertsConfig):Promise<LiveAlertsInfo>;
  CheckScreenerLiveAlerts():Promise<LiveAlertsInfo>;
+ CheckScreenerLiveAlert(alertID:string):Promise<LiveAlertsInfo>;
 }
 export const liveAlertDataSources:ReadonlyArray<{source:LiveAlertDataSource;label:string}>=[{source:'dukascopy',label:'Dukascopy'},{source:'hyperliquid',label:'Hyperliquid'}];
 export function defaultLiveAlertSource(condition:SavedAnalysisCondition|undefined):LiveAlertDataSource{return condition?.request.dataSource==='hyperliquid'?'hyperliquid':'dukascopy';}

@@ -13,7 +13,7 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
  const restored:LiveAlertsConfig=stored?structuredClone(stored):initialLiveAlertsConfig();
  let info:LiveAlertsInfo={checks:history?.checks??[],savedConditionsRevision:0,conditionScopes:[],config:restored,running:false,lastRun:history?.lastRun??0,nextRun:0,sent:history?.sent??0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:history?.recent??[]};
  let reads=0,checks=0,statusDelay=0,gate:Promise<void>|undefined,release:(()=>void)|undefined;
- const writes:LiveAlertsConfig[]=[];let errors:Partial<Record<'read'|'save'|'check',string>>={};
+ const writes:LiveAlertsConfig[]=[],rowCheckRequests:string[]=[];let errors:Partial<Record<'read'|'save'|'check',string>>={};
  const savedConditions=()=>(window as unknown as {__testSavedAnalysisConditions?:()=>SavedAnalysisCondition[]}).__testSavedAnalysisConditions?.()??[];
  const persistHistory=()=>sessionStorage.setItem(historyKey,JSON.stringify({checks:info.checks,recent:info.recent,sent:info.sent,lastRun:info.lastRun}));
  const assets=():LiveAlertAsset[]=>{
@@ -57,6 +57,10 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
   });
   return structuredClone({...info,config:{enabled:info.config.enabled,alerts:entries},checks,savedConditionsRevision:(window as unknown as {__testSavedAnalysisConditionsRevision?:()=>number}).__testSavedAnalysisConditionsRevision?.()??0,conditionScopes,assets:assets()});
  };
+ const queueChecks=(selected:Set<string>,status:string)=>{
+  const attempts=snapshot().checks.filter(check=>selected.has(check.alertId??check.conditionId)).map(check=>({...check,progress:0,progressState:'queued' as const,progressMode:'manual' as const,phase:'Queued',currentAsset:''}));
+  info={...info,checks:[...info.checks.filter(check=>!selected.has(check.alertId??check.conditionId)),...attempts],running:true,status,currentAsset:'',progress:0};persistHistory();return snapshot();
+ };
  const api:ScreenerLiveAlertsBackend={
   async GetScreenerLiveAlertsProgress(){
    if(errors.read)throw Error(errors.read);
@@ -72,10 +76,18 @@ export function screenerLiveAlertsBridge(catalog:()=>ScreenerCatalog):ScreenerLi
    info={...info,checks:info.checks.map(check=>check.progressState==='queued'||check.progressState==='running'?{...check,progressState:'cancelled' as const,phase:'Cancelled',currentAsset:''}:check),config:{enabled:value.enabled,alerts:structuredClone(entries)},error:'',running:false,status:value.enabled?'Waiting for next closed bar':'Disabled',nextRun:value.enabled?nextRun:0};
    sessionStorage.setItem(key,JSON.stringify(info.config));return snapshot();
   },
-  async CheckScreenerLiveAlerts(){checks++;if(errors.check)throw Error(errors.check);if(!info.config.enabled)throw Error('Start Live Alerts before checking.');const selected=new Set(definitions().filter(entry=>entry.enabled).map(entry=>entry.id)),attempts=snapshot().checks.filter(check=>selected.has(check.conditionId)).map(check=>({...check,progress:0,progressState:'queued' as const,progressMode:'manual' as const,phase:'Queued',currentAsset:''}));info={...info,checks:[...info.checks.filter(check=>!selected.has(check.conditionId)),...attempts],running:true,status:'Checking enabled alerts',currentAsset:'',progress:0};persistHistory();return snapshot();},
+  async CheckScreenerLiveAlerts(){checks++;if(errors.check)throw Error(errors.check);if(!info.config.enabled)throw Error('Start Live Alerts before checking.');return queueChecks(new Set(definitions().filter(entry=>entry.enabled).map(entry=>entry.id)),'Checking enabled alerts');},
+  async CheckScreenerLiveAlert(alertID){
+   rowCheckRequests.push(alertID);if(errors.check)throw Error(errors.check);
+   if(!info.config.enabled)throw Error('Start Live Alerts before checking.');
+   if(info.running||info.checks.some(check=>check.progressState==='queued'||check.progressState==='running'))throw Error('Wait for the current check before checking again.');
+   const entry=definitions().find(entry=>entry.id===alertID);
+   if(!entry?.enabled)throw Error('Choose an enabled alert to check.');
+   return queueChecks(new Set([alertID]),`Checking ${entry.name}`);
+  },
  };
  Object.assign(window,{
-  __testLiveAlertsInfo:()=>snapshot(),__testLiveAlertsWrites:()=>structuredClone(writes),__testLiveAlertsReads:()=>reads,__testLiveAlertsChecks:()=>checks,
+  __testLiveAlertsInfo:()=>snapshot(),__testLiveAlertsWrites:()=>structuredClone(writes),__testLiveAlertsReads:()=>reads,__testLiveAlertsChecks:()=>checks,__testLiveAlertCheckRequests:()=>[...rowCheckRequests],
   __testSetLiveAlertsInfo:(value:Partial<LiveAlertsInfo>)=>{info={...info,...structuredClone(value)};if(value.config)sessionStorage.setItem(key,JSON.stringify(value.config));persistHistory();},
   __testLiveAlertsErrors:(value:typeof errors)=>{errors=structuredClone(value);},
   __testHoldLiveAlertsSaves:()=>{gate=new Promise(resolve=>{release=resolve;});},__testReleaseLiveAlertsSaves:()=>{release?.();gate=undefined;},

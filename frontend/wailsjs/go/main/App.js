@@ -30,6 +30,10 @@ export function CancelScreenerRefresh() {
   return window['go']['main']['App']['CancelScreenerRefresh']();
 }
 
+export function CheckScreenerLiveAlert(arg1) {
+  return window['go']['main']['App']['CheckScreenerLiveAlert'](arg1);
+}
+
 export function CheckScreenerLiveAlerts() {
   return window['go']['main']['App']['CheckScreenerLiveAlerts']();
 }

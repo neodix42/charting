@@ -18,6 +18,14 @@ func (l *LiveAlerts) stopAlerts(config LiveAlertsConfig) (LiveAlertsInfo, error)
 		l.cycleCancel()
 	}
 	l.cancelCheckProgressLocked("Cancelled")
+	l.clearRequestedCheckLocked()
+	if l.retryTargeted {
+		// A failed durable Stop still cancels this explicit one-row operation.
+		// The unchanged enabled setting can retain its ordinary calendar, but
+		// must not resurrect a cancelled manual retry in the background.
+		l.retryConfig, l.retryTargeted, l.retryManual, l.retryAsOf = nil, false, false, 0
+		l.nextRun = l.nextBoundary
+	}
 	previous := l.state.Config
 	l.state.Config = copyLiveAlertsConfig(config)
 	if err := writeState(l.path, l.state); err != nil {
@@ -27,10 +35,10 @@ func (l *LiveAlerts) stopAlerts(config LiveAlertsConfig) (LiveAlertsInfo, error)
 	l.watermarksDirty = false
 	l.configRevision++
 	l.configureRevision++
-	l.requested = false
 	l.nextRun, l.nextBoundary, l.retryAsOf = 0, 0, 0
 	l.retryConfig = nil
 	l.retryManual = false
+	l.retryTargeted = false
 	l.scheduleScope = nil
 	l.scheduleCalendar = ""
 	l.errorText = ""

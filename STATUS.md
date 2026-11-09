@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-11-09
 
+## Check one Live Alert from its table row — 2026-11-09
+
+The Alerts table now has Check after Actions, with Check now for each named alert. It flushes pending settings before requesting the exact alert ID; rows sharing a saved condition remain independent. Only the selected row shows the initial save/request phases and check progress. The existing list-wide action still checks every enabled row. Both use the existing enabled-monitor/enabled-row and no-overlap rules, with tooltips explaining disabled row buttons.
+
+Backend requests retain the full stored configuration and automatic calendar while executing a coherent row subset through resolution, indexing, provider work, evaluation and delivery claims. Request generations fence idle saved-rule reads; scoped retries cannot merge unrelated due rows or spin on a past schedule boundary. Natural due work runs separately afterward. Stop and relevant edits clear transient targets. Even a failed durable Stop cancels the manual target/retry, and completion-generation checks prevent an interrupted worker from recreating it. Persistent enabled state, history and claims remain truthful when saving Stop fails.
+
+Verification: frontend typecheck/lint/241unit tests and30 related browser cases pass, including shared-condition rows, exact-ID calls, unchanged sibling history/configuration, flush-before-check, scoped pending states, double-click guards, disabled controls and the unchanged global action. Focused provider/scheduler/Stop race tests, three repeated targeted runs, facade tests and vet pass. Root bindings/native production race tests and the complete Screener race/vet suite pass (190.209s). Linux build/checksums pass, and the archive includes this final verification record. Logs are ignored `.tools/verification/live-alert-row-*.log`. Native desktop interaction, real provider refreshes and Telegram delivery remain UNRUN. No installed profiles, credentials or dependencies were changed, and no real messages were sent.
+
 ## Analysis data source and Live Alert defaults — 2026-11-09
 
 Analysis now places Data source before Period of data, with Dukascopy as the default and Hyperliquid as the other choice. Catalog fields/categories, file counts, base scans and companion histories are limited to that source. Source changes clear previous-source results/charts and fence late catalog/status replies; newly selected sources start with all categories. Drafts and named save/load/update/restart retain source, and semantic comparison treats legacy missing values as Dukascopy. Historical results/profitability cannot be reused across source changes.

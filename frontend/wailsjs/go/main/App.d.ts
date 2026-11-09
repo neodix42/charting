@@ -25,6 +25,8 @@ export function CancelScreenerEnrichment():Promise<screener.EnrichmentInfo>;
 
 export function CancelScreenerRefresh():Promise<screener.RefreshInfo>;
 
+export function CheckScreenerLiveAlert(arg1:string):Promise<screener.LiveAlertsInfo>;
+
 export function CheckScreenerLiveAlerts():Promise<screener.LiveAlertsInfo>;
 
 export function ChooseCandleStorageDirectory():Promise<string>;

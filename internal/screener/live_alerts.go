@@ -156,11 +156,14 @@ type LiveAlerts struct {
 	state                           liveAlertsState
 	blocked, started, closed        bool
 	running, requested              bool
+	requestedIDs                    []string
+	requestRevision                 uint64
 	watermarksDirty                 bool
 	lastRun, nextRun, nextBoundary  int64
 	retryConfig                     *LiveAlertsConfig
 	retryAsOf                       int64
 	retryManual                     bool
+	retryTargeted                   bool
 	configRevision                  uint64
 	configureRevision               uint64
 	scheduleScope                   []LiveAlertConditionPeriod
@@ -643,6 +646,8 @@ func (l *LiveAlerts) pruneDeletedConditions(saved []SavedAnalysisCondition) erro
 	l.configRevision++
 	if !l.state.Config.Enabled {
 		l.requested, l.nextRun, l.nextBoundary, l.retryConfig = false, 0, 0, nil
+		l.clearRequestedCheckLocked()
+		l.retryTargeted = false
 		l.status = "Disabled"
 		if l.cycleCancel != nil {
 			l.cycleCancel()
@@ -771,6 +776,8 @@ func (l *LiveAlerts) Configure(config LiveAlertsConfig) (LiveAlertsInfo, error) 
 		return l.Info(), nil
 	}
 	l.configRevision++
+	l.clearRequestedCheckLocked()
+	l.retryTargeted = false
 	l.errorText = ""
 	if config.Enabled {
 		l.scheduleScope = append([]LiveAlertConditionPeriod{}, resolved.scope...)
@@ -829,18 +836,53 @@ func (l *LiveAlerts) Start(parent context.Context) {
 }
 
 func (l *LiveAlerts) CheckNow() (LiveAlertsInfo, error) {
+	return l.requestCheckNow("")
+}
+
+// CheckAlertNow queues one named alert without changing the saved selection or
+// its automatic schedule. The ID belongs to the alert row, not its reusable rule.
+func (l *LiveAlerts) CheckAlertNow(id string) (LiveAlertsInfo, error) {
+	if !validLiveAlertID(id) {
+		return l.ProgressInfo(), errors.New("choose a valid alert to check")
+	}
+	return l.requestCheckNow(id)
+}
+
+func (l *LiveAlerts) requestCheckNow(id string) (LiveAlertsInfo, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.closed || l.blocked || !l.state.Config.Enabled || l.running || l.requested || len(l.state.Config.ConditionIDs) == 0 {
+	if l.closed || l.blocked || !l.state.Config.Enabled || l.running || l.requested || l.checkExecuting || len(l.state.Config.ConditionIDs) == 0 {
 		return l.stopInfoLocked(), errors.New("enable Live Alerts and wait for the current check before checking again")
 	}
+	ids := append([]string{}, l.state.Config.ConditionIDs...)
+	if id != "" {
+		if entry, exists := liveAlertEntry(l.state.Config, id); l.state.Config.Alerts != nil && (!exists || !entry.Enabled) || !containsLiveValue(ids, id) {
+			return l.stopInfoLocked(), errors.New("choose an enabled alert before checking it")
+		}
+		// A retry owns its queue even while no worker is running. A row action
+		// must not replace it or mark another row's queued attempt as skipped.
+		if l.retryConfig != nil {
+			return l.stopInfoLocked(), errors.New("wait for the pending alert check before checking again")
+		}
+		for _, progress := range l.checkProgress {
+			if progress.state == "queued" || progress.state == "running" {
+				return l.stopInfoLocked(), errors.New("wait for the pending alert check before checking again")
+			}
+		}
+		ids = []string{id}
+	}
+	l.requestedIDs = nil
+	if id != "" {
+		l.requestedIDs = ids
+	}
+	l.requestRevision++
 	l.requested, l.status = true, "Waiting for scheduler"
-	l.queueCheckProgressLocked(l.state.Config.ConditionIDs, true)
+	l.queueCheckProgressLocked(ids, true)
 	phase := l.resolutionPhase
 	if phase == "" {
 		phase = "Waiting for scheduler"
 	}
-	l.prepareCheckProgressLocked(l.state.Config.ConditionIDs, phase)
+	l.prepareCheckProgressLocked(ids, phase)
 	l.signal()
 	return l.stopInfoLocked(), nil
 }
@@ -939,11 +981,17 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			return
 		}
 		l.mu.Lock()
-		current, revision := copyLiveAlertsConfig(l.state.Config), l.configRevision
+		current, revision, requestRevision := copyLiveAlertsConfig(l.state.Config), l.configRevision, l.requestRevision
 		preparing := current.Enabled && (l.requested || (l.nextRun > 0 && l.now().UnixMilli() >= l.nextRun))
 		if preparing {
-			l.queueCheckProgressLocked(current.ConditionIDs, l.requested)
-			l.prepareCheckProgressLocked(current.ConditionIDs, "Preparing saved conditions")
+			ids := current.ConditionIDs
+			if l.requested && l.requestedIDs != nil {
+				ids = l.requestedIDs
+			} else if l.retryConfig != nil && l.retryTargeted {
+				ids = l.retryConfig.ConditionIDs
+			}
+			l.queueCheckProgressLocked(ids, l.requested || l.retryConfig != nil && l.retryManual)
+			l.prepareCheckProgressLocked(ids, "Preparing saved conditions")
 		}
 		l.mu.Unlock()
 		var resolved LiveAlertsConfig
@@ -954,7 +1002,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		}
 		now := l.now()
 		l.mu.Lock()
-		if revision != l.configRevision {
+		if revision != l.configRevision || requestRevision != l.requestRevision {
 			l.mu.Unlock()
 			continue
 		}
@@ -975,11 +1023,16 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		config := copyLiveAlertsConfig(resolved)
 		if run {
 			manual := l.requested
+			targeted := manual && l.requestedIDs != nil
+			if targeted {
+				config = subsetLiveAlertsConfig(config, l.requestedIDs)
+			}
 			asOf := now.UnixMilli()
 			if l.retryConfig != nil && !manual {
 				config = copyLiveAlertsConfig(*l.retryConfig)
 				asOf, manual = l.retryAsOf, l.retryManual
-				if l.nextBoundary <= now.UnixMilli() {
+				targeted = l.retryTargeted
+				if !targeted && l.nextBoundary <= now.UnixMilli() {
 					due := dueLiveAlertsConfig(resolved, time.UnixMilli(l.nextBoundary), now)
 					for _, rule := range due.scope {
 						if !liveAlertsScopeAllows(config, rule.ConditionID, rule.Period) {
@@ -1004,16 +1057,19 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				l.mu.Unlock()
 				continue
 			}
-			l.running, l.requested, l.lastRun = true, false, now.UnixMilli()
+			l.running, l.lastRun = true, now.UnixMilli()
+			l.clearRequestedCheckLocked()
 			l.progress, l.errorText, l.status = 0, "", "Refreshing selected data and indicators"
 			// Retain the next original boundary even if this cycle takes a long time.
-			if l.nextBoundary <= now.UnixMilli() {
+			if !targeted && l.nextBoundary <= now.UnixMilli() {
 				l.nextBoundary = nextLiveAlertsConfigCheck(now, resolved)
 			}
 			l.nextRun = l.nextBoundary
 			l.retryConfig = nil
+			l.retryTargeted = false
 			cycle, cancel := context.WithCancel(ctx)
 			executionRevision := l.configRevision
+			executionRequestRevision := l.requestRevision
 			l.cycleCancel = cancel
 			l.queueCheckProgressLocked(config.ConditionIDs, manual)
 			l.mu.Unlock()
@@ -1021,7 +1077,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			cancel()
 			l.mu.Lock()
 			l.running, l.cycleCancel, l.currentAsset = false, nil, ""
-			if executionRevision != l.configRevision {
+			if executionRevision != l.configRevision || executionRequestRevision != l.requestRevision {
 				// A newer edit/Stop owns its scheduler and presentation. The
 				// cancelled older cycle cannot resurrect its pending retry.
 				if !l.state.Config.Enabled {
@@ -1039,8 +1095,9 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				if errors.Is(err, errLiveAlertsBusy) || (errors.Is(err, errLiveAlertsPendingBar) && l.now().Sub(time.UnixMilli(asOf)) < liveAlertPublicationWindow) {
 					retry := copyLiveAlertsConfig(config)
 					l.retryConfig, l.retryAsOf, l.retryManual = &retry, asOf, manual
+					l.retryTargeted = targeted
 					retryAt := l.now().Add(liveAlertRetryDelay).UnixMilli()
-					if l.nextRun <= 0 {
+					if targeted || l.nextRun <= 0 {
 						l.nextRun = retryAt
 					} else {
 						l.nextRun = min(l.nextRun, retryAt)

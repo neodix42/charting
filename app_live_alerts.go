@@ -54,6 +54,13 @@ func (a *App) CheckScreenerLiveAlerts() (screener.LiveAlertsInfo, error) {
 	return a.liveAlerts.CheckNow()
 }
 
+func (a *App) CheckScreenerLiveAlert(alertID string) (screener.LiveAlertsInfo, error) {
+	if a.liveAlerts == nil || a.liveAlertsError != "" {
+		return a.GetScreenerLiveAlerts(), errors.New("Live Alerts settings are unavailable; saved data was preserved")
+	}
+	return a.liveAlerts.CheckAlertNow(alertID)
+}
+
 func (a *App) sendScreenerLiveAlert(ctx context.Context, alert screener.LiveAlert) error {
 	return a.telegram.SendAlert(ctx, formatScreenerLiveAlert(alert))
 }

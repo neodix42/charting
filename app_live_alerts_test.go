@@ -47,6 +47,46 @@ func TestLiveAlertsCannotEnableWithoutConfiguredTelegram(t *testing.T) {
 	}
 }
 
+func TestSingleLiveAlertFacadeQueuesOnlyTheNamedAlertIdentity(t *testing.T) {
+	app := &App{}
+	if _, err := app.CheckScreenerLiveAlert(strings.Repeat("a", 32)); err == nil {
+		t.Fatal("unavailable Live Alerts facade accepted a row check")
+	}
+	manager := screener.New(t.TempDir())
+	defer manager.Close()
+	request, err := manager.AnalysisView()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.DataSource, request.Period = "hyperliquid", "d1"
+	saved, err := manager.SaveAnalysisCondition("Shared reusable rule", request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alerts, err := screener.NewLiveAlerts(manager, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer alerts.Close()
+	entries := []screener.LiveAlertDefinition{
+		{ID: strings.Repeat("a", 32), Name: "First row", ConditionID: saved.ID, Period: "d1", DataSource: "hyperliquid", Enabled: true},
+		{ID: strings.Repeat("b", 32), Name: "Second row", ConditionID: saved.ID, Period: "d1", DataSource: "hyperliquid", Enabled: true},
+	}
+	// No scheduler or delivery transport is started: exercise the real queue and
+	// bound routing contract without network calls or messages.
+	if _, err = alerts.Configure(screener.LiveAlertsConfig{Enabled: true, Alerts: entries}); err != nil {
+		t.Fatal(err)
+	}
+	app.liveAlerts = alerts
+	if _, err = app.CheckScreenerLiveAlert(saved.ID); err == nil {
+		t.Fatal("facade treated the reusable rule ID as an alert row")
+	}
+	queued, err := app.CheckScreenerLiveAlert(entries[1].ID)
+	if err != nil || len(queued.Checks) != 2 || queued.Checks[0].ProgressState != "" || queued.Checks[1].ProgressState != "queued" || queued.Checks[1].AlertID != entries[1].ID || len(queued.Config.Alerts) != 2 {
+		t.Fatal("bound row check widened or rewrote alert configuration", queued, err)
+	}
+}
+
 func TestLiveAlertMessageIncludesRecordedAnalysisProfitability(t *testing.T) {
 	alert := screener.LiveAlert{Symbol: "eurusd", AssetName: "Euro vs US Dollar", Timeframe: "h1", ConditionName: "Saved strategy", EntryPrice: 1.1, Profitability: &screener.SavedConditionProfitability{Symbol: "eurusd", Timeframe: "h1", Matches: 11, TakeProfitHits: 10, ProfitablePercent: 1000.0 / 11}}
 	message := formatScreenerLiveAlert(alert)

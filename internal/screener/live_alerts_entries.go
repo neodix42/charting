@@ -325,6 +325,9 @@ func (l *LiveAlerts) pruneNamedEntriesLocked(saved []SavedAnalysisCondition) (bo
 	}
 	if !sameActiveLiveAlertEntries(previous.Config, l.state.Config) {
 		l.configRevision++
+		l.clearRequestedCheckLocked()
+		l.retryConfig = nil
+		l.retryTargeted = false
 		if l.cycleCancel != nil {
 			l.cycleCancel()
 		}
