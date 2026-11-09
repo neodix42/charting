@@ -98,6 +98,10 @@ export function DetachChart(arg1) {
   return window['go']['main']['App']['DetachChart'](arg1);
 }
 
+export function EstimateTrade(arg1, arg2) {
+  return window['go']['main']['App']['EstimateTrade'](arg1, arg2);
+}
+
 export function ExportWorkspace() {
   return window['go']['main']['App']['ExportWorkspace']();
 }

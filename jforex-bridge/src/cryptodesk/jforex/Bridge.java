@@ -182,9 +182,10 @@ public final class Bridge implements AutoCloseable {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1");
+                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1");
                 case "instruments" -> instruments();
                 case "tradePreview" -> tradePreview(request);
+                case "tradeEstimate" -> tradeEstimate(request);
                 case "tradeSubmit" -> tradeSubmit(request);
                 case "history" -> history(request);
                 case "subscribe" -> subscribe(request);
@@ -672,7 +673,96 @@ public final class Bridge implements AutoCloseable {
         BigDecimal remainder = BigDecimal.valueOf(value).remainder(BigDecimal.valueOf(step)).abs();
         return remainder.compareTo(BigDecimal.valueOf(step).multiply(new BigDecimal("0.00000001"))) <= 0;
     }
-    private Map<String, Object> tradePreview(JsonObject request) throws Exception {
+    private ITick freshTradeQuote(Instrument instrument) throws Exception {
+        ensureInstrument(instrument);
+        ITick tick = context.getHistory().getLastTick(instrument);
+        if (tick == null || nowMillis.getAsLong() - tick.getTime() > 30_000 || tick.getTime() > nowMillis.getAsLong() + 5_000
+                || !Double.isFinite(tick.getBid()) || !Double.isFinite(tick.getAsk()) || tick.getBid() <= 0 || tick.getAsk() < tick.getBid())
+            throw new Failure("restricted", "A fresh JForex Bid/Ask quote is required; wait for the market to open");
+        return tick;
+    }
+    private static record CurrencyRoute(String currency, List<Instrument> instruments) { }
+    private List<Instrument> conversionRoute(String from, String to) {
+        if (from.equals(to)) return List.of();
+        ArrayDeque<CurrencyRoute> queue = new ArrayDeque<>();
+        Set<String> visited = new HashSet<>(); queue.add(new CurrencyRoute(from, List.of())); visited.add(from);
+        while (!queue.isEmpty()) {
+            CurrencyRoute current = queue.remove();
+            if (current.instruments().size() >= 2) continue;
+            for (Instrument item : available) {
+                if (!isFiatForex(item)) continue;
+                String base = item.getPrimaryJFCurrency().getCurrencyCode(), quote = item.getSecondaryJFCurrency().getCurrencyCode();
+                String next = current.currency().equals(base) ? quote : current.currency().equals(quote) ? base : "";
+                if (next.isEmpty() || !visited.add(next)) continue;
+                List<Instrument> route = new ArrayList<>(current.instruments()); route.add(item);
+                if (next.equals(to)) return route;
+                queue.add(new CurrencyRoute(next, route));
+            }
+        }
+        throw new Failure("restricted", "No current account-currency conversion market is available");
+    }
+    private Map<String, Object> tradeValuation(Instrument instrument, long entryTime) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("accountCurrency", ""); result.put("profitPerPriceUnit", 0); result.put("valuationTime", 0);
+        Set<Instrument> conversions = new HashSet<>();
+        synchronized (instrumentLock) { historyUsers.merge(instrument, 1, Integer::sum); }
+        try {
+            ICurrency currency = context.getAccount().getAccountCurrency();
+            if (currency == null || currency.getCurrencyCode() == null || !currency.getCurrencyCode().matches("[A-Z][A-Z0-9]{2,7}"))
+                throw new Failure("restricted", "The JForex account currency is unavailable");
+            result.put("accountCurrency", currency.getCurrencyCode());
+            long valuedAt = entryTime;
+            double lowerRate = 1, upperRate = 1;
+            String sourceCurrency = instrument.getSecondaryJFCurrency().getCurrencyCode();
+            for (Instrument conversion : conversionRoute(instrument.getSecondaryJFCurrency().getCurrencyCode(), currency.getCurrencyCode())) {
+                if (!conversion.equals(instrument) && conversions.add(conversion)) synchronized (instrumentLock) { historyUsers.merge(conversion, 1, Integer::sum); }
+                ITick current = freshTradeQuote(conversion);
+                valuedAt = Math.min(valuedAt, current.getTime());
+                if (sourceCurrency.equals(conversion.getPrimaryJFCurrency().getCurrencyCode())) {
+                    lowerRate *= current.getBid(); upperRate *= current.getAsk(); sourceCurrency = conversion.getSecondaryJFCurrency().getCurrencyCode();
+                } else {
+                    lowerRate /= current.getAsk(); upperRate /= current.getBid(); sourceCurrency = conversion.getPrimaryJFCurrency().getCurrencyCode();
+                }
+            }
+            double pip = instrument.getPipValue();
+            // SDK returns the converted cost of one instrument pip for one base
+            // unit. No FX-lot, CFD contract or leverage multiplier belongs here.
+            double converted = context.getUtils().convertPipToCurrency(instrument, currency);
+            double factor = converted / pip;
+            if (!Double.isFinite(pip) || pip <= 0 || !Double.isFinite(factor) || factor <= 0)
+                throw new Failure("restricted", "JForex currency conversion is unavailable");
+            if (factor < lowerRate * (1 - 1e-8) || factor > upperRate * (1 + 1e-8))
+                throw new Failure("restricted", "SDK currency conversion does not match the fresh conversion quotes");
+            if (nowMillis.getAsLong() - valuedAt > 30_000) throw new Failure("restricted", "JForex currency conversion is stale");
+            result.put("profitPerPriceUnit", factor); result.put("valuationTime", valuedAt);
+        } catch (Exception error) {
+            result.put("valuationError", "Account-currency P/L estimate unavailable: no verified fresh SDK currency conversion. No 1:1 rate was assumed.");
+        } finally {
+            synchronized (instrumentLock) {
+                for (Instrument conversion : conversions) historyUsers.computeIfPresent(conversion, (key, count) -> count == 1 ? null : count - 1);
+                // Keep the entry subscription through the surrounding trade
+                // operation; only temporary conversion dependencies are released.
+                try { releaseInstruments(); } catch (Exception ignored) { }
+                historyUsers.computeIfPresent(instrument, (key, count) -> count == 1 ? null : count - 1);
+            }
+        }
+        return result;
+    }
+    private Map<String, Object> tradeEstimate(JsonObject request) throws Exception {
+        requireConnected();
+        Instrument instrument = tradeInstrument(request);
+        String side = text(request, "side", 4);
+        if (!side.equals("buy") && !side.equals("sell")) throw new Failure("restricted", "Select Buy or Sell");
+        try {
+            ITick quote = freshTradeQuote(instrument);
+            Map<String, Object> result = tradeValuation(instrument, quote.getTime());
+            result.put("instrument", instrument.name()); result.put("side", side);
+            result.put("entryPrice", side.equals("buy") ? quote.getAsk() : quote.getBid());
+            return result;
+        } finally { releaseInstruments(); }
+    }
+    private Map<String, Object> tradePreview(JsonObject request) throws Exception { return tradePreview(request, true); }
+    private Map<String, Object> tradePreview(JsonObject request, boolean includeValuation) throws Exception {
         requireConnected();
         Instrument instrument = tradeInstrument(request);
         String side = text(request, "side", 4);
@@ -687,10 +777,7 @@ public final class Bridge implements AutoCloseable {
         double priceStep = Math.pow(10, -instrument.getTickScale());
         if ((sl > 0 && !multiple(sl, priceStep)) || (tp > 0 && !multiple(tp, priceStep)))
             throw new Failure("restricted", "SL and TP must respect the instrument price increment");
-        ensureInstrument(instrument);
-        ITick quote = context.getHistory().getLastTick(instrument);
-        if (quote == null || nowMillis.getAsLong() - quote.getTime() > 30_000 || quote.getTime() > nowMillis.getAsLong() + 5_000)
-            throw new Failure("restricted", "A fresh JForex Bid/Ask quote is required; wait for the market to open");
+        ITick quote = freshTradeQuote(instrument);
         double entry = side.equals("buy") ? quote.getAsk() : quote.getBid();
         if (!Double.isFinite(entry) || entry <= 0) throw new Failure("restricted", "The current JForex market price is unavailable");
         boolean buy = side.equals("buy");
@@ -702,6 +789,7 @@ public final class Bridge implements AutoCloseable {
         Map<String, Object> result = new HashMap<>();
         result.put("instrument", instrument.name()); result.put("side", side); result.put("quantity", quantity);
         result.put("stopLoss", sl); result.put("takeProfit", tp); result.put("entryPrice", entry);
+        if (includeValuation) result.putAll(tradeValuation(instrument, quote.getTime()));
         result.put("accountLeverage", leverage); result.put("minQuantity", minimum); result.put("quantityStep", increment); result.put("priceStep", priceStep);
         result.put("message", "Market entry uses the execution-time quote. Account leverage is fixed by Dukascopy; quantity is base units, not lots.");
         return result;
@@ -712,14 +800,14 @@ public final class Bridge implements AutoCloseable {
         if (!intent.matches("[a-f0-9]{32}")) throw new Failure("restricted", "Invalid trade confirmation");
         // Never submit a confirmation twice, including when an earlier reply timed out.
         if (!tradeClaims.add(intent)) throw new Failure("restricted", "This trade confirmation was already used; inspect the account before submitting another trade");
-        Map<String, Object> preview = tradePreview(request);
+        Map<String, Object> preview = tradePreview(request, false);
         Instrument instrument = tradeInstrument(request);
         String side = (String) preview.get("side");
         double quantity = (Double) preview.get("quantity"), sl = (Double) preview.get("stopLoss"), tp = (Double) preview.get("takeProfit");
         IContext active = context;
         Future<IOrder> submission = active.executeTask(() -> {
             if (closing || context != active || client == null || !client.isConnected()) throw new Failure("offline", "JForex disconnected before order submission");
-            tradePreview(request); // revalidate fresh price/levels on the SDK strategy thread
+            tradePreview(request, false); // revalidate fresh price/levels on the SDK strategy thread
             return active.getEngine().submitOrder("CD_" + intent, instrument, side.equals("buy") ? IEngine.OrderCommand.BUY : IEngine.OrderCommand.SELL,
                 quantity / 1_000_000.0, 0, 5, sl, tp);
         });

@@ -24,21 +24,35 @@ type TradeRequest struct {
 	TakeProfit float64 `json:"takeProfit"`
 	Leverage   float64 `json:"leverage"`
 }
+type TradeEstimate struct {
+	Instrument         string  `json:"instrument"`
+	Side               string  `json:"side"`
+	EntryPrice         float64 `json:"entryPrice"`
+	AccountCurrency    string  `json:"accountCurrency"`
+	ProfitPerPriceUnit float64 `json:"profitPerPriceUnit"`
+	ValuationTime      int64   `json:"valuationTime"`
+	ValuationError     string  `json:"valuationError,omitempty"`
+}
+
 type TradePreview struct {
-	ID              string  `json:"id"`
-	Instrument      string  `json:"instrument"`
-	Side            string  `json:"side"`
-	Quantity        float64 `json:"quantity"`
-	StopLoss        float64 `json:"stopLoss"`
-	TakeProfit      float64 `json:"takeProfit"`
-	EntryPrice      float64 `json:"entryPrice"`
-	AccountLeverage float64 `json:"accountLeverage"`
-	MinQuantity     float64 `json:"minQuantity"`
-	QuantityStep    float64 `json:"quantityStep"`
-	PriceStep       float64 `json:"priceStep"`
-	ExpiresAt       int64   `json:"expiresAt"`
-	Environment     string  `json:"environment"`
-	Message         string  `json:"message"`
+	AccountCurrency    string  `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit float64 `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64   `json:"valuationTime,omitempty"`
+	ValuationError     string  `json:"valuationError,omitempty"`
+	ID                 string  `json:"id"`
+	Instrument         string  `json:"instrument"`
+	Side               string  `json:"side"`
+	Quantity           float64 `json:"quantity"`
+	StopLoss           float64 `json:"stopLoss"`
+	TakeProfit         float64 `json:"takeProfit"`
+	EntryPrice         float64 `json:"entryPrice"`
+	AccountLeverage    float64 `json:"accountLeverage"`
+	MinQuantity        float64 `json:"minQuantity"`
+	QuantityStep       float64 `json:"quantityStep"`
+	PriceStep          float64 `json:"priceStep"`
+	ExpiresAt          int64   `json:"expiresAt"`
+	Environment        string  `json:"environment"`
+	Message            string  `json:"message"`
 }
 type TradeResult struct {
 	Status              string  `json:"status"`
@@ -83,6 +97,59 @@ func verifyTradingBridge(ctx context.Context, process *bridgeProcess) error {
 	}
 	return nil
 }
+
+// EstimateTrade reads a current executable quote and SDK account-currency
+// valuation without creating a confirmation token, claim or order.
+func (m *Manager) EstimateTrade(ctx context.Context, instrument, side string) (TradeEstimate, error) {
+	if err := validateTradeRequest(TradeRequest{Instrument: instrument, Side: side, Quantity: 1}); err != nil {
+		return TradeEstimate{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
+	defer cancel()
+	process, release, err := m.begin(ctx, true, "")
+	if err != nil {
+		return TradeEstimate{}, err
+	}
+	defer release()
+	var version bridgeVersion
+	if err = process.call(ctx, map[string]any{"op": "version"}, &version); err != nil {
+		return TradeEstimate{}, err
+	}
+	if version.TradeEstimates != "account-currency-pnl-v1" {
+		return TradeEstimate{}, errors.New("The installed JForex bridge does not support account-currency trade estimates. Install this build's matching jforex-runtime, then restart CryptoDesk")
+	}
+	m.mu.Lock()
+	config := m.config
+	m.mu.Unlock()
+	var estimate TradeEstimate
+	if err = process.call(ctx, map[string]any{"op": "tradeEstimate", "instrument": instrument, "side": side}, &estimate); err != nil {
+		return TradeEstimate{}, err
+	}
+	if estimate.Instrument != instrument || estimate.Side != side || estimate.EntryPrice <= 0 || math.IsNaN(estimate.EntryPrice) || math.IsInf(estimate.EntryPrice, 0) {
+		return TradeEstimate{}, errors.New("The JForex bridge returned an invalid trade estimate")
+	}
+	normalizeValuation(&estimate.AccountCurrency, &estimate.ProfitPerPriceUnit, &estimate.ValuationTime, &estimate.ValuationError)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed || m.config != config {
+		return TradeEstimate{}, errors.New("Dukascopy account changed during valuation; refresh the estimate")
+	}
+	return estimate, nil
+}
+func normalizeValuation(currency *string, factor *float64, at *int64, problem *string) {
+	if *problem != "" {
+		*factor = 0
+		*at = 0
+		return
+	}
+	now := time.Now().UnixMilli()
+	if len(*currency) < 3 || len(*currency) > 8 || strings.Trim(*currency, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") != "" || *factor <= 0 || math.IsNaN(*factor) || math.IsInf(*factor, 0) || *at < now-30000 || *at > now+5000 {
+		*factor = 0
+		*at = 0
+		*problem = "Account-currency valuation is unavailable or stale; no conversion estimate was assumed"
+	}
+}
+
 func (m *Manager) PreviewTrade(ctx context.Context, request TradeRequest) (TradePreview, error) {
 	if err := validateTradeRequest(request); err != nil {
 		return TradePreview{}, err
@@ -107,6 +174,7 @@ func (m *Manager) PreviewTrade(ctx context.Context, request TradeRequest) (Trade
 	if preview.Instrument != request.Instrument || preview.Side != request.Side || preview.Quantity != request.Quantity || preview.StopLoss != request.StopLoss || preview.TakeProfit != request.TakeProfit || preview.EntryPrice <= 0 || math.IsNaN(preview.EntryPrice) || math.IsInf(preview.EntryPrice, 0) || preview.AccountLeverage <= 0 || preview.MinQuantity <= 0 || preview.QuantityStep <= 0 || preview.PriceStep <= 0 {
 		return TradePreview{}, errors.New("The JForex bridge returned an invalid trade preview")
 	}
+	normalizeValuation(&preview.AccountCurrency, &preview.ProfitPerPriceUnit, &preview.ValuationTime, &preview.ValuationError)
 	var token [16]byte
 	if _, err = rand.Read(token[:]); err != nil {
 		return TradePreview{}, err

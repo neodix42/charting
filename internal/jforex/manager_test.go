@@ -738,6 +738,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 			version := bridgeVersion{Protocol: 1, SDKVersion: "3.6.51", JavaVersion: 17, InstrumentCatalog: bridgeInstrumentCatalog}
 			if strings.HasPrefix(scenario, "trade") {
 				version.Trading = "market-bracket-v1"
+				if strings.HasPrefix(scenario, "trade-estimate") {
+					version.TradeEstimates = "account-currency-pnl-v1"
+				}
 			}
 			switch scenario {
 			case "version-legacy":
@@ -753,6 +756,21 @@ func TestBridgeHelperProcess(t *testing.T) {
 				select {}
 			}
 			respond(id, version)
+		case "tradeEstimate":
+			var estimate TradeEstimate
+			_ = json.Unmarshal(scanner.Bytes(), &estimate)
+			estimate.EntryPrice = 1.1002
+			estimate.AccountCurrency = "EUR"
+			estimate.ProfitPerPriceUnit = 0.9
+			estimate.ValuationTime = time.Now().UnixMilli()
+			if scenario == "trade-estimate-stale" {
+				estimate.ValuationTime = time.Now().Add(-time.Minute).UnixMilli()
+			}
+			if scenario == "trade-estimate-unavailable" {
+				estimate.ProfitPerPriceUnit = 0
+				estimate.ValuationError = "SDK conversion unavailable"
+			}
+			respond(id, estimate)
 		case "tradePreview":
 			var preview TradePreview
 			_ = json.Unmarshal(scanner.Bytes(), &preview)

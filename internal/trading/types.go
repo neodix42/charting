@@ -27,17 +27,34 @@ type Request struct {
 }
 
 type Preview struct {
-	ID          string         `json:"id"`
-	FeedKey     domain.FeedKey `json:"feedKey"`
-	Side        string         `json:"side"`
-	Quantity    string         `json:"quantity"`
-	EntryPrice  string         `json:"entryPrice"`
-	StopLoss    string         `json:"stopLoss"`
-	TakeProfit  string         `json:"takeProfit"`
-	Leverage    float64        `json:"leverage"`
-	Environment string         `json:"environment"`
-	ExpiresAt   int64          `json:"expiresAt"`
-	Warnings    []string       `json:"warnings"`
+	ID                 string         `json:"id"`
+	FeedKey            domain.FeedKey `json:"feedKey"`
+	Side               string         `json:"side"`
+	Quantity           string         `json:"quantity"`
+	EntryPrice         string         `json:"entryPrice"`
+	StopLoss           string         `json:"stopLoss"`
+	TakeProfit         string         `json:"takeProfit"`
+	Leverage           float64        `json:"leverage"`
+	Environment        string         `json:"environment"`
+	ExpiresAt          int64          `json:"expiresAt"`
+	Warnings           []string       `json:"warnings"`
+	AccountCurrency    string         `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit string         `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64          `json:"valuationTime,omitempty"`
+	ValuationError     string         `json:"valuationError,omitempty"`
+}
+
+// Estimate is read-only valuation metadata; it is never an order confirmation.
+// ProfitPerPriceUnit converts a unit price move for one base unit into the
+// account currency. Quantity and direction are applied by the ticket calculator.
+type Estimate struct {
+	FeedKey            domain.FeedKey `json:"feedKey"`
+	Side               string         `json:"side"`
+	EntryPrice         string         `json:"entryPrice"`
+	AccountCurrency    string         `json:"accountCurrency"`
+	ProfitPerPriceUnit string         `json:"profitPerPriceUnit"`
+	ValuationTime      int64          `json:"valuationTime"`
+	ValuationError     string         `json:"valuationError,omitempty"`
 }
 
 type Result struct {

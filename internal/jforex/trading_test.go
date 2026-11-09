@@ -118,3 +118,47 @@ func TestTradeValidationAndClaimFailurePlaceNoOrder(t *testing.T) {
 		t.Fatal("failed claimed confirmation retried")
 	}
 }
+
+func TestTradeEstimatesDoNotCreateConfirmationOrClaim(t *testing.T) {
+	trace := filepath.Join(t.TempDir(), "trace")
+	t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
+	m, _ := testManager(t, "trade-estimate")
+	for _, side := range []string{"buy", "sell"} {
+		estimate, err := m.EstimateTrade(context.Background(), "EURUSD", side)
+		if err != nil || estimate.EntryPrice != 1.1002 || estimate.AccountCurrency != "EUR" || estimate.ProfitPerPriceUnit != 0.9 || estimate.ValuationTime <= 0 || estimate.ValuationError != "" {
+			t.Fatal(estimate, err)
+		}
+	}
+	m.mu.Lock()
+	count := len(m.tradePreviews)
+	m.mu.Unlock()
+	if count != 0 {
+		t.Fatal("valuation allocated confirmation tokens")
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(m.path), "dukascopy-trade-claims")); !os.IsNotExist(err) {
+		t.Fatal("valuation created order claims")
+	}
+	calls, _ := os.ReadFile(trace)
+	if strings.Contains(string(calls), "tradePreview") || strings.Contains(string(calls), "tradeSubmit") {
+		t.Fatal("valuation used a trading RPC", string(calls))
+	}
+}
+func TestTradeValuationUnavailableKeepsEntryAndDoesNotInventRates(t *testing.T) {
+	for _, scenario := range []string{"trade-estimate-stale", "trade-estimate-unavailable"} {
+		t.Run(scenario, func(t *testing.T) {
+			m, _ := testManager(t, scenario)
+			estimate, err := m.EstimateTrade(context.Background(), "EURUSD", "buy")
+			if err != nil || estimate.EntryPrice <= 0 || estimate.ProfitPerPriceUnit != 0 || estimate.ValuationError == "" {
+				t.Fatal(estimate, err)
+			}
+		})
+	}
+	m, _ := testManager(t, "trade")
+	if _, err := m.EstimateTrade(context.Background(), "EURUSD", "buy"); err == nil || !strings.Contains(err.Error(), "installed JForex bridge") {
+		t.Fatal("missing estimate capability accepted", err)
+	}
+	preview, err := m.PreviewTrade(context.Background(), sampleTrade())
+	if err != nil || preview.ValuationError == "" || preview.ProfitPerPriceUnit != 0 {
+		t.Fatal("old bridge preview was blocked or invented valuation", preview, err)
+	}
+}

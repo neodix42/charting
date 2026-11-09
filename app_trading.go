@@ -156,6 +156,10 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 		result.Quantity = strconv.FormatFloat(preview.Quantity, 'f', -1, 64)
 		result.Leverage, result.Environment, result.ExpiresAt = preview.AccountLeverage, preview.Environment, preview.ExpiresAt
 		result.Warnings = append(result.Warnings, preview.Message)
+		result.AccountCurrency, result.ValuationTime, result.ValuationError = preview.AccountCurrency, preview.ValuationTime, preview.ValuationError
+		if preview.ProfitPerPriceUnit > 0 && !math.IsNaN(preview.ProfitPerPriceUnit) && !math.IsInf(preview.ProfitPerPriceUnit, 0) {
+			result.ProfitPerPriceUnit = strconv.FormatFloat(preview.ProfitPerPriceUnit, 'f', -1, 64)
+		}
 	default:
 		return result, errors.New("trading is available only on Hyperliquid and Dukascopy charts")
 	}
@@ -242,4 +246,35 @@ func hyperliquidTradeResult(order hyperliquid.OrderResult) trading.Result {
 		result.OrderIDs = append(result.OrderIDs, strconv.FormatInt(id, 10))
 	}
 	return result
+}
+
+// EstimateTrade retrieves only current Dukascopy quote/currency metadata.
+// It neither creates a confirmation token nor submits an order.
+func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, error) {
+	result := trading.Estimate{FeedKey: key, Side: side}
+	if err := key.Validate(); err != nil {
+		return result, err
+	}
+	if key.Exchange != "dukascopy" || a.jforex == nil {
+		return result, errors.New("account-currency estimates are available only for configured Dukascopy charts")
+	}
+	if side != "buy" && side != "sell" {
+		return result, errors.New("choose Buy or Sell")
+	}
+	if err := a.beginTradeWork(); err != nil {
+		return result, err
+	}
+	defer a.tradingWG.Done()
+	ctx, cancel := a.tradingContext()
+	defer cancel()
+	value, err := a.jforex.EstimateTrade(ctx, key.Instrument, side)
+	if err != nil {
+		return result, err
+	}
+	result.EntryPrice = strconv.FormatFloat(value.EntryPrice, 'f', -1, 64)
+	result.AccountCurrency, result.ValuationTime, result.ValuationError = value.AccountCurrency, value.ValuationTime, value.ValuationError
+	if value.ProfitPerPriceUnit > 0 && !math.IsNaN(value.ProfitPerPriceUnit) && !math.IsInf(value.ProfitPerPriceUnit, 0) {
+		result.ProfitPerPriceUnit = strconv.FormatFloat(value.ProfitPerPriceUnit, 'f', -1, 64)
+	}
+	return result, nil
 }

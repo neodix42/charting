@@ -8,8 +8,8 @@ import {screener} from '../models';
 import {candlestorage} from '../models';
 import {hyperliquid} from '../models';
 import {telegram} from '../models';
-import {storage} from '../models';
 import {trading} from '../models';
+import {storage} from '../models';
 
 export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:number,arg5:number):Promise<market.Snapshot>;
 
@@ -58,6 +58,8 @@ export function DeletePredictionForecast(arg1:string):Promise<predictions.Info>;
 export function DeleteScreenerAnalysisCondition(arg1:string):Promise<void>;
 
 export function DetachChart(arg1:string):Promise<void>;
+
+export function EstimateTrade(arg1:domain.FeedKey,arg2:string):Promise<trading.Estimate>;
 
 export function ExportWorkspace():Promise<string>;
 

@@ -2662,6 +2662,10 @@ export namespace trading {
 	    environment: string;
 	    expiresAt: number;
 	    warnings: string[];
+	    accountCurrency?: string;
+	    profitPerPriceUnit?: string;
+	    valuationTime?: number;
+	    valuationError?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Preview(source);
@@ -2680,6 +2684,10 @@ export namespace trading {
 	        this.environment = source["environment"];
 	        this.expiresAt = source["expiresAt"];
 	        this.warnings = source["warnings"];
+	        this.accountCurrency = source["accountCurrency"];
+	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
+	        this.valuationTime = source["valuationTime"];
+	        this.valuationError = source["valuationError"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2787,4 +2795,47 @@ export namespace trading {
 	    }
 	}
 
+
+	export class Estimate {
+	    feedKey: domain.FeedKey;
+	    side: string;
+	    entryPrice: string;
+	    accountCurrency: string;
+	    profitPerPriceUnit: string;
+	    valuationTime: number;
+	    valuationError?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Estimate(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.feedKey = this.convertValues(source["feedKey"], domain.FeedKey);
+	        this.side = source["side"];
+	        this.entryPrice = source["entryPrice"];
+	        this.accountCurrency = source["accountCurrency"];
+	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
+	        this.valuationTime = source["valuationTime"];
+	        this.valuationError = source["valuationError"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 }

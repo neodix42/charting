@@ -40,9 +40,11 @@ export interface HyperliquidSettings {accountAddress:string;privateKey:string;ne
 export interface HyperliquidInfo {accountAddress:string;agentAddress:string;network:'mainnet'|'testnet';privateKeyConfigured:boolean;connected:boolean;error?:string}
 export interface TradingStatus {configured:boolean;enabled:boolean;environment:string;canBuy:boolean;canSell:boolean;leverageSupported:boolean;maxLeverage:number;protectiveOrdersSupported:boolean;quantityLabel:string;error?:string}
 export interface TradeRequest {feedKey:FeedKey;side:'buy'|'sell';quantity:string;stopLoss:string;takeProfit:string;leverage:number}
-export interface TradePreview {id:string;feedKey:FeedKey;side:'buy'|'sell';quantity:string;entryPrice:string;stopLoss:string;takeProfit:string;leverage:number;environment:string;expiresAt:number;warnings:string[]}
+export interface TradeValuation {accountCurrency?:string;profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string}
+export interface TradeEstimate extends TradeValuation {feedKey:FeedKey;side:'buy'|'sell';entryPrice:string}
+export interface TradePreview extends TradeValuation {id:string;feedKey:FeedKey;side:'buy'|'sell';quantity:string;entryPrice:string;stopLoss:string;takeProfit:string;leverage:number;environment:string;expiresAt:number;warnings:string[]}
 export interface TradeResult {status:'submitted'|'rejected'|'uncertain'|'partial';orderIds:string[];message:string}
-export interface TradingBackend {OpenHyperliquidHelp(kind:'api'|'testnetApi'|'docs'):Promise<void>;GetHyperliquid():Promise<HyperliquidInfo>;ConfigureHyperliquid(settings:HyperliquidSettings):Promise<HyperliquidInfo>;TestHyperliquidConnection():Promise<HyperliquidInfo>;GetTradingStatus(key:FeedKey):Promise<TradingStatus>;PreviewTrade(request:TradeRequest):Promise<TradePreview>;SubmitTrade(previewID:string):Promise<TradeResult>}
+export interface TradingBackend {OpenHyperliquidHelp(kind:'api'|'testnetApi'|'docs'):Promise<void>;GetHyperliquid():Promise<HyperliquidInfo>;ConfigureHyperliquid(settings:HyperliquidSettings):Promise<HyperliquidInfo>;TestHyperliquidConnection():Promise<HyperliquidInfo>;GetTradingStatus(key:FeedKey):Promise<TradingStatus>;EstimateTrade(key:FeedKey,side:'buy'|'sell'):Promise<TradeEstimate>;PreviewTrade(request:TradeRequest):Promise<TradePreview>;SubmitTrade(previewID:string):Promise<TradeResult>}
 export type ScreenerDataSource='dukascopy'|'hyperliquid';
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
