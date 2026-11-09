@@ -15,7 +15,7 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
   npm run catalog -- --check
 )
 go test -race ./internal/... ./cmd/...
-go test -tags bindings .
+go test -race -tags bindings .
 go vet ./internal/... ./cmd/...
 cd "$APP_ROOT/frontend"
 npm ci

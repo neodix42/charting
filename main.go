@@ -3,8 +3,8 @@
 package main
 
 import (
+	"context"
 	"embed"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -58,27 +58,15 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	store, err := storage.Open(paths.workspacePath)
-	if err != nil {
-		fatal(err)
-	}
-	defer store.Close()
-	if err := desktopSmokePrepare(store); err != nil {
-		fatal(err)
-	}
-	loaded, err := store.Load()
-	var recovery *storage.RecoveryError
-	if err != nil && !errors.As(err, &recovery) {
-		fatal(err)
-	}
-	a := newApp(store, loaded)
-	defer a.candles.Close() // Also drain if native startup fails before OnShutdown.
+	a := newBootstrapApp(paths.workspacePath)
+	defer a.shutdown(context.Background()) // Also drain if native startup fails.
 	stopSignals := watchTermination(termination, a.requestClose)
 	defer stopSignals()
 	width, height := a.window.Width, a.window.Height
 	// Match the light HTML background before the webview loads its first frame.
 	err = wails.Run(&options.App{Title: "CryptoDesk", Width: width, Height: height, MinWidth: 1100, MinHeight: 720, BackgroundColour: &options.RGBA{R: 238, G: 242, B: 245, A: 255}, AssetServer: &assetserver.Options{Assets: assets}, OnStartup: a.startup, OnDomReady: a.domready, OnBeforeClose: a.beforeClose, OnShutdown: a.shutdown, Bind: []interface{}{a}, Linux: &linux.Options{Icon: appIcon, ProgramName: "cryptodesk", WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand}, Windows: windowsOptions})
 	if err != nil {
+		a.shutdown(context.Background())
 		fatal(err)
 	}
 }

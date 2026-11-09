@@ -140,7 +140,7 @@ func (a *App) DesktopSmokeSignalRetryRequested() bool {
 	info, err := os.Stat(marker)
 	return err == nil && info.Mode().IsRegular()
 }
-func desktopSmokePrepare(store *storage.Store) error {
+func desktopSmokePrepare(ctx context.Context, store *storage.Store) error {
 	if os.Getenv("CRYPTODESK_SMOKE_PHASE") == "signal-early" {
 		release := os.Getenv("CRYPTODESK_SMOKE_EARLY_RELEASE")
 		if !filepath.IsAbs(release) {
@@ -154,12 +154,17 @@ func desktopSmokePrepare(store *storage.Store) error {
 			return errors.New("early signal smoke requires an isolated one-chart workspace")
 		}
 		chart := loaded.Workspace.Tabs[0].Charts[0]
-		report, _ := json.Marshal(map[string]any{"phase": "signal-early", "passed": true, "signalReady": true, "earlyBeforeUI": true, "workerPID": os.Getpid(), "workspaceId": loaded.Workspace.ID, "chartId": chart.ID, "originalTimeframe": chart.Timeframe, "expectedTimeframe": chart.Timeframe, "baselineRevision": loaded.Revision, "checks": []map[string]any{{"name": "early signal gate precedes desktop UI startup", "passed": true}}})
+		report, _ := json.Marshal(map[string]any{"phase": "signal-early", "passed": true, "signalReady": true, "earlyBeforeWorkspace": true, "workerPID": os.Getpid(), "workspaceId": loaded.Workspace.ID, "chartId": chart.ID, "originalTimeframe": chart.Timeframe, "expectedTimeframe": chart.Timeframe, "baselineRevision": loaded.Revision, "checks": []map[string]any{{"name": "early signal gate precedes workspace initialization", "passed": true}}})
 		if err := writeDesktopSmokeReport(string(report)); err != nil {
 			return err
 		}
 		deadline := time.Now().Add(15 * time.Second)
+		wait := time.NewTicker(10 * time.Millisecond)
+		defer wait.Stop()
 		for time.Now().Before(deadline) {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if info, err := os.Stat(release); err == nil {
 				if !info.Mode().IsRegular() {
 					return errors.New("early signal release marker must be a regular file")
@@ -168,7 +173,11 @@ func desktopSmokePrepare(store *storage.Store) error {
 			} else if !os.IsNotExist(err) {
 				return err
 			}
-			time.Sleep(10 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-wait.C:
+			}
 		}
 		return errors.New("early signal smoke timed out waiting for the harness release marker")
 	}

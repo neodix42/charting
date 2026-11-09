@@ -32,6 +32,7 @@ public final class BridgeResponsivenessTest {
         final AtomicReference<ISystemListener> listener = new AtomicReference<>();
         final AtomicBoolean connected = new AtomicBoolean();
         final AtomicBoolean acknowledge = new AtomicBoolean(true);
+        final AtomicBoolean offline = new AtomicBoolean();
         final AtomicInteger blockingCacheReads = new AtomicInteger();
         final Bridge bridge;
         Fixture(long timeout) throws Exception { this(timeout, System::currentTimeMillis); }
@@ -50,7 +51,7 @@ public final class BridgeResponsivenessTest {
                 case "readBars" -> { check(subscribed.contains((Instrument) args[0]), "history waits for actual subscription acknowledgement"); loads.add(new Load(args)); yield null; }
                 default -> null;
             });
-            IDataService service = fake(IDataService.class, (method, args) -> false);
+            IDataService service = fake(IDataService.class, (method, args) -> method.equals("isOfflineTime") ? offline.get() : false);
             IContext context = fake(IContext.class, (method, args) -> switch (method) {
                 case "getHistory" -> history;
                 case "getDataService" -> service;

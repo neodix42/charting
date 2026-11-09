@@ -51,6 +51,9 @@ test('grouped Screener indicator menus keep options readable, scrollable and act
 
 test('async options, disabled groups and removed controls never select stale entries or retain menus',async({page})=>{
  await page.goto('/');
+ // This standalone DOM control relies on the application's delegated menu
+ // listeners. Navigation can finish while the charting UI is still loading.
+ await expect(page.getByRole('button',{name:'Open settings',exact:true})).toBeVisible();
  await page.evaluate(()=>{
   const select=document.createElement('select');select.setAttribute('aria-label','Async choices');select.style.cssText='position:fixed;left:25px;top:150px;z-index:90';
   select.innerHTML='<option value="alpha">Alpha</option><optgroup label="Unavailable" disabled><option value="beta">Beta</option></optgroup><option value="gamma">Gamma</option>';

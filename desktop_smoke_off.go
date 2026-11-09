@@ -9,4 +9,4 @@ import (
 
 func desktopSmoke(context.Context, *App) {}
 
-func desktopSmokePrepare(*storage.Store) error { return nil }
+func desktopSmokePrepare(context.Context, *storage.Store) error { return nil }

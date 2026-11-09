@@ -107,7 +107,7 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertLess(driver.index("require_node"), driver.index("python3 -m unittest"))
         self.assertLess(driver.index("npm ci --ignore-scripts"), driver.index("python3 -m unittest"))
         for suite in ("npm test", "npm run catalog -- --check", "go test -race ./internal/... ./cmd/...",
-                      "go test -tags bindings .", "go vet ./internal/... ./cmd/...", "npm run typecheck",
+                      "go test -race -tags bindings .", "go vet ./internal/... ./cmd/...", "npm run typecheck",
                       "npm run lint", "npm run build"):
             self.assertIn(suite, driver)
 

@@ -231,11 +231,11 @@ def run_case(binary, evidence, name, mode):
                 for _ in range(3):
                     child.send_signal(signal.SIGINT)
             elif mode == "early":
-                if not ready.get("earlyBeforeUI"):
-                    raise RuntimeError("Early signal readiness did not precede UI startup")
+                if not ready.get("earlyBeforeWorkspace"):
+                    raise RuntimeError("Early signal readiness did not precede workspace initialization")
                 child.interrupt_terminal()
-                # The explicit gate keeps GTK/WebKit unstarted while the
-                # foreground supervisor receives and forwards the terminal byte.
+                # The explicit gate holds workspace initialization while the
+                # already-visible window receives the forwarded terminal byte.
                 time.sleep(.05)
                 early_release.touch()
             elif mode == "failure":
@@ -287,7 +287,7 @@ def run_case(binary, evidence, name, mode):
             raise RuntimeError("Restart did not release its workspace lock")
         return {"name": name, "passed": True, "signal": mode, "exitCode": 0, "shutdownSeconds": elapsed,
                 "signalDelivery": "terminal Ctrl+C byte" if mode in ("terminal", "early", "failure") else "direct process signal",
-                "signalCount": 4 if mode == "failure" else 3 if mode == "repeated" else 1, "earlyBeforeUI": mode == "early",
+                "signalCount": 4 if mode == "failure" else 3 if mode == "repeated" else 1, "earlyBeforeWorkspace": mode == "early",
                 "syntheticSaveFailure": mode == "failure", "realBackendRetryVerified": mode == "failure",
                 "closeStayedOpenDuringSaveFailure": mode == "failure",
                 "originalTimeframe": ready["originalTimeframe"], "savedTimeframe": ready["expectedTimeframe"],

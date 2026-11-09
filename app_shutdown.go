@@ -23,8 +23,18 @@ func closeAppWorkers(workers ...func()) {
 }
 
 func (a *App) shutdown(context.Context) {
-	if a.cancel != nil {
-		a.cancel()
+	a.shutdownOnce.Do(a.closeServices)
+}
+
+func (a *App) closeServices() {
+	a.mu.Lock()
+	cancel := a.cancel
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if a.bootstrap != nil {
+		a.bootstrap.stop()
 	}
 	workers := []func(){a.closeTrading}
 	if a.liveAlerts != nil {

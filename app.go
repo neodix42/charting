@@ -45,6 +45,8 @@ type App struct {
 	liveAlerts      *screener.LiveAlerts
 	liveAlertsError string
 	chartRenderer   *chartimage.Renderer
+	bootstrap       *appBootstrap
+	shutdownOnce    sync.Once
 	mu              sync.Mutex
 	revision        int64
 	closeToken      string
@@ -59,20 +61,56 @@ type App struct {
 
 func newApp(store *storage.Store, loaded storage.Loaded) *App {
 	a := &App{store: store, revision: loaded.Revision, window: loaded.Workspace.Window}
-	a.screener = screener.New(store.Directory())
-	a.predictions = predictions.New(store.Directory(), a.predictionDatasets, predictions.NewRuntime(store.Directory()))
-	a.jforex = jforex.New(store.Directory())
-	a.hyperliquid = hyperliquid.NewStore(store.Directory())
-	a.telegram = telegram.NewStore(store.Directory())
-	alerts, err := screener.NewLiveAlerts(a.screener, a.sendScreenerLiveAlert)
+	if a.window.Width < 400 {
+		a.window = domain.Window{Width: 1600, Height: 1000}
+	}
+	_ = a.initializeServices(context.Background())
+	return a
+}
+
+// Constructors may inspect files, recover journals or open local databases.
+// Production runs this only after the native window and loading UI exist.
+func (a *App) initializeServices(ctx context.Context) error {
+	profile := a.store.Directory()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	scanner := screener.New(profile)
+	a.mu.Lock()
+	a.screener = scanner
+	a.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	forecasts := predictions.New(profile, a.predictionDatasets, predictions.NewRuntime(profile))
+	a.mu.Lock()
+	a.predictions = forecasts
+	a.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	forex := jforex.New(profile)
+	trader := hyperliquid.NewStore(profile)
+	messenger := telegram.NewStore(profile)
+	a.mu.Lock()
+	a.jforex = forex
+	a.hyperliquid = trader
+	a.telegram = messenger
+	a.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	alerts, err := screener.NewLiveAlerts(scanner, a.sendScreenerLiveAlert)
+	a.mu.Lock()
 	a.liveAlerts = alerts
 	if err != nil {
 		a.liveAlertsError = "Could not restore Live Alerts settings; saved data was preserved: " + err.Error()
 	}
-	if a.window.Width < 400 {
-		a.window = domain.Window{Width: 1600, Height: 1000}
+	a.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	a.candles = candlestorage.New(store.Directory(), func(message string) {
+	candles := candlestorage.New(profile, func(message string) {
 		a.mu.Lock()
 		ctx := a.ctx
 		a.mu.Unlock()
@@ -80,9 +118,12 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 			runtime.EventsEmit(ctx, "candle-storage-error", message)
 		}
 	})
-	a.market = market.New(market.Options{Cache: chartCandleCache{manager: a.candles, forex: a.jforex, screener: a.screener}, Factory: func(provider string) (exchange.Adapter, error) {
+	a.mu.Lock()
+	a.candles = candles
+	a.mu.Unlock()
+	feeds := market.New(market.Options{Cache: chartCandleCache{manager: candles, forex: forex, screener: scanner}, Factory: func(provider string) (exchange.Adapter, error) {
 		if provider == "dukascopy" {
-			return a.jforex, nil
+			return forex, nil
 		}
 		return exchange.New(provider)
 	}, Emit: func(e market.Event) {
@@ -93,7 +134,10 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 			runtime.EventsEmit(ctx, "market:update", e)
 		}
 	}})
-	return a
+	a.mu.Lock()
+	a.market = feeds
+	a.mu.Unlock()
+	return ctx.Err()
 }
 
 func (a *App) GetCandleStorage() (candlestorage.Info, error) { return a.candles.Info() }
@@ -122,7 +166,7 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Lock()
 	a.ctx, a.cancel = context.WithCancel(ctx)
 	a.mu.Unlock()
-	if a.liveAlerts != nil && a.liveAlertsError == "" {
+	if a.bootstrap == nil && a.liveAlerts != nil && a.liveAlertsError == "" {
 		a.liveAlerts.Start(a.ctx)
 	}
 }
@@ -133,6 +177,11 @@ func (a *App) domready(ctx context.Context) {
 	a.applyWindowLocked(w)
 	pending := a.closeRequested
 	a.mu.Unlock()
+	if pending {
+		a.requestClose()
+		return
+	}
+	a.beginBootstrap()
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -232,6 +281,9 @@ func (a *App) captureWindowLocked() {
 	a.window.Maximized = max
 }
 func (a *App) LoadWorkspace() (storage.Loaded, error) {
+	if err := a.awaitBootstrap(true); err != nil {
+		return storage.Loaded{}, err
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	loaded, err := a.store.Load()
@@ -244,6 +296,9 @@ func (a *App) LoadWorkspace() (storage.Loaded, error) {
 	return loaded, err
 }
 func (a *App) SaveWorkspace(expectedRevision int64, session string, sequence int64, w domain.Workspace) (storage.Ack, error) {
+	if err := a.awaitBootstrap(false); err != nil {
+		return storage.Ack{}, err
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := domain.Validate(w); err != nil {
@@ -281,6 +336,9 @@ func (a *App) GetDiagnostics() map[string]any {
 	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "mode": "read-only market data", "version": applicationVersion}
 }
 func (a *App) ExportWorkspace() (string, error) {
+	if err := a.awaitBootstrap(false); err != nil {
+		return "", err
+	}
 	data, err := a.store.Export()
 	if err != nil {
 		return "", err
@@ -313,6 +371,9 @@ func (a *App) ExportWorkspace() (string, error) {
 	return path, nil
 }
 func (a *App) ImportWorkspace() (storage.Loaded, error) {
+	if err := a.awaitBootstrap(false); err != nil {
+		return storage.Loaded{}, err
+	}
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: "Import CryptoDesk workspace", Filters: []runtime.FileFilter{{DisplayName: "Workspace JSON", Pattern: "*.json"}}})
 	if err != nil {
 		return storage.Loaded{}, err
@@ -354,6 +415,9 @@ func (a *App) ImportWorkspace() (storage.Loaded, error) {
 	return loaded, err
 }
 func (a *App) ResetWorkspace() (storage.Loaded, error) {
+	if err := a.awaitBootstrap(false); err != nil {
+		return storage.Loaded{}, err
+	}
 	answer, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{Type: runtime.WarningDialog, Title: "Reset workspace?", Message: "Return to exactly one tab and one chart? Your current committed workspace will be backed up.", Buttons: []string{"Cancel", "Reset"}, DefaultButton: "Cancel", CancelButton: "Cancel"})
 	if err != nil {
 		return storage.Loaded{}, err
@@ -370,8 +434,16 @@ func (a *App) ResetWorkspace() (storage.Loaded, error) {
 	}
 	return loaded, err
 }
-func (a *App) GetBackups() ([]storage.Backup, error) { return a.store.Backups() }
+func (a *App) GetBackups() ([]storage.Backup, error) {
+	if err := a.awaitBootstrap(false); err != nil {
+		return nil, err
+	}
+	return a.store.Backups()
+}
 func (a *App) RecoverWorkspace(backupID int64) (storage.Loaded, error) {
+	if err := a.awaitBootstrap(false); err != nil {
+		return storage.Loaded{}, err
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	loaded, err := a.store.Recover(a.revision, backupID)
@@ -393,6 +465,13 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	if !a.domReady {
 		a.mu.Unlock()
 		return true
+	}
+	// Until the workspace mounts there is no editable draft or save listener to
+	// acknowledge a close. Cancel background restoration and keep saved data.
+	if a.bootstrap != nil && !a.frontendReady {
+		a.allowCloseLocked()
+		a.mu.Unlock()
+		return false
 	}
 	// A preserved invalid workspace has no interactive draft to flush.
 	if loaded, err := a.store.Load(); err != nil && loaded.Recovery != "" {
