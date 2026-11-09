@@ -7,3 +7,7 @@
 .trade-review-estimate{display:inline-block;margin-left:8px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 .trade-leverage-control{display:flex;align-items:center;gap:10px}.trade-leverage-control select{min-width:110px}.trade-leverage-control small{color:var(--muted);white-space:nowrap}
+
+.trade-account-metrics{margin:12px 0;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--elevated)}.trade-metrics-heading{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:8px}.trade-metrics-heading small{color:var(--muted)}.trade-account-metrics dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0}.trade-account-metrics dt{font-size:.85em;color:var(--muted);margin-bottom:5px}.trade-account-metrics dd{font-weight:650;font-variant-numeric:tabular-nums;margin:0}.trade-account-metrics p,.trade-account-metrics small{font-size:.8em;color:var(--muted);overflow-wrap:anywhere}.trade-account-details{display:flex;flex-direction:column;gap:3px;margin-top:6px}@media(max-width:700px){.trade-account-metrics dl{grid-template-columns:1fr}}
+
+.trade-metrics-entry{display:block;margin:-2px 0 8px}

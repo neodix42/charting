@@ -182,10 +182,11 @@ public final class Bridge implements AutoCloseable {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1");
+                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1");
                 case "instruments" -> instruments();
                 case "tradePreview" -> tradePreview(request);
                 case "tradeEstimate" -> tradeEstimate(request);
+                case "tradeMetrics" -> tradeMetrics(request);
                 case "tradeSubmit" -> tradeSubmit(request);
                 case "history" -> history(request);
                 case "subscribe" -> subscribe(request);
@@ -701,51 +702,131 @@ public final class Bridge implements AutoCloseable {
         }
         throw new Failure("restricted", "No current account-currency conversion market is available");
     }
+    private ICurrency accountCurrency() {
+        IAccount account = context.getAccount();
+        if (account == null) throw new Failure("restricted", "The connected JForex account snapshot is unavailable");
+        ICurrency currency = null;
+        try { currency = account.getAccountCurrency(); } catch (Exception ignored) { }
+        if (currency == null) {
+            // Both values are supplied by the SDK. Older account implementations
+            // can populate the original Java Currency accessor only.
+            try { if (account.getCurrency() != null) currency = JFCurrency.getInstance(account.getCurrency().getCurrencyCode()); } catch (Exception ignored) { }
+        }
+        if (currency == null || currency.getCurrencyCode() == null || !currency.getCurrencyCode().matches("[A-Z][A-Z0-9]{2,7}"))
+            throw new Failure("restricted", "JForex returned no account currency through either supported account accessor");
+        return currency;
+    }
+    private static boolean boundedConversion(double rate, double lower, double upper) {
+        return Double.isFinite(rate) && rate > 0 && rate >= lower * (1 - 1e-8) && rate <= upper * (1 + 1e-8);
+    }
     private Map<String, Object> tradeValuation(Instrument instrument, long entryTime) {
         Map<String, Object> result = new HashMap<>();
         result.put("accountCurrency", ""); result.put("profitPerPriceUnit", 0); result.put("valuationTime", 0);
         Set<Instrument> conversions = new HashSet<>();
         synchronized (instrumentLock) { historyUsers.merge(instrument, 1, Integer::sum); }
+        String stage = "Account currency";
         try {
-            ICurrency currency = context.getAccount().getAccountCurrency();
-            if (currency == null || currency.getCurrencyCode() == null || !currency.getCurrencyCode().matches("[A-Z][A-Z0-9]{2,7}"))
-                throw new Failure("restricted", "The JForex account currency is unavailable");
+            ICurrency currency = accountCurrency();
             result.put("accountCurrency", currency.getCurrencyCode());
+            ICurrency quoteCurrency = instrument.getSecondaryJFCurrency();
+            if (quoteCurrency == null) throw new Failure("restricted", "The instrument quote currency is unavailable");
+            String sourceCurrency = quoteCurrency.getCurrencyCode();
+            stage = "Conversion " + sourceCurrency + " to " + currency.getCurrencyCode();
             long valuedAt = entryTime;
-            double lowerRate = 1, upperRate = 1;
-            String sourceCurrency = instrument.getSecondaryJFCurrency().getCurrencyCode();
-            for (Instrument conversion : conversionRoute(instrument.getSecondaryJFCurrency().getCurrencyCode(), currency.getCurrencyCode())) {
+            double lowerRate = 1, upperRate = 1, midpointRate = 1;
+            for (Instrument conversion : conversionRoute(sourceCurrency, currency.getCurrencyCode())) {
                 if (!conversion.equals(instrument) && conversions.add(conversion)) synchronized (instrumentLock) { historyUsers.merge(conversion, 1, Integer::sum); }
-                ITick current = freshTradeQuote(conversion);
+                ITick current;
+                try { current = freshTradeQuote(conversion); }
+                catch (Exception error) { throw new Failure("restricted", "No fresh conversion quote for " + conversion.name() + "; wait for the FX market or its subscription to update"); }
                 valuedAt = Math.min(valuedAt, current.getTime());
+                double mid = current.getBid() + (current.getAsk() - current.getBid()) / 2;
                 if (sourceCurrency.equals(conversion.getPrimaryJFCurrency().getCurrencyCode())) {
-                    lowerRate *= current.getBid(); upperRate *= current.getAsk(); sourceCurrency = conversion.getSecondaryJFCurrency().getCurrencyCode();
+                    lowerRate *= current.getBid(); upperRate *= current.getAsk(); midpointRate *= mid; sourceCurrency = conversion.getSecondaryJFCurrency().getCurrencyCode();
                 } else {
-                    lowerRate /= current.getAsk(); upperRate /= current.getBid(); sourceCurrency = conversion.getPrimaryJFCurrency().getCurrencyCode();
+                    lowerRate /= current.getAsk(); upperRate /= current.getBid(); midpointRate /= mid; sourceCurrency = conversion.getPrimaryJFCurrency().getCurrencyCode();
                 }
             }
-            double pip = instrument.getPipValue();
-            // SDK returns the converted cost of one instrument pip for one base
-            // unit. No FX-lot, CFD contract or leverage multiplier belongs here.
-            double converted = context.getUtils().convertPipToCurrency(instrument, currency);
-            double factor = converted / pip;
-            if (!Double.isFinite(pip) || pip <= 0 || !Double.isFinite(factor) || factor <= 0)
-                throw new Failure("restricted", "JForex currency conversion is unavailable");
-            if (factor < lowerRate * (1 - 1e-8) || factor > upperRate * (1 + 1e-8))
-                throw new Failure("restricted", "SDK currency conversion does not match the fresh conversion quotes");
-            if (nowMillis.getAsLong() - valuedAt > 30_000) throw new Failure("restricted", "JForex currency conversion is stale");
-            result.put("profitPerPriceUnit", factor); result.put("valuationTime", valuedAt);
+            double factor = 0;
+            String source = "";
+            if (quoteCurrency.getCurrencyCode().equals(currency.getCurrencyCode())) {
+                factor = 1; source = "Same quote and account currency";
+            } else {
+                // CFDs need a quote-currency conversion, not an FX-instrument
+                // pip implementation. Prefer the SDK currency rate, validating
+                // it against actual fresh conversion ticks before using it.
+                try { factor = context.getUtils().getRate(quoteCurrency, currency); } catch (Exception ignored) { }
+                if (boundedConversion(factor, lowerRate, upperRate)) source = "SDK currency rate, verified against fresh FX quotes";
+                else {
+                    try { factor = context.getUtils().convertPipToCurrency(instrument, currency) / instrument.getPipValue(); } catch (Exception ignored) { factor = 0; }
+                    if (boundedConversion(factor, lowerRate, upperRate)) source = "SDK pip conversion, verified against fresh FX quotes";
+                    else {
+                        factor = midpointRate; source = "Fresh SDK FX quote midpoint";
+                        result.put("valuationNotice", "The SDK rate/pip helper could not value this instrument; conversion uses the verified live FX route.");
+                    }
+                }
+            }
+            if (!boundedConversion(factor, lowerRate, upperRate)) throw new Failure("restricted", "The fresh currency conversion rate is invalid");
+            if (nowMillis.getAsLong() - valuedAt > 30_000) throw new Failure("restricted", "The quote or currency conversion is stale");
+            result.put("profitPerPriceUnit", factor); result.put("valuationTime", valuedAt); result.put("valuationSource", source);
         } catch (Exception error) {
-            result.put("valuationError", "Account-currency P/L estimate unavailable: no verified fresh SDK currency conversion. No 1:1 rate was assumed.");
+            String detail = error instanceof Failure ? error.getMessage() : "JForex could not read the required SDK data";
+            result.put("valuationError", stage + " unavailable: " + detail);
         } finally {
             synchronized (instrumentLock) {
                 for (Instrument conversion : conversions) historyUsers.computeIfPresent(conversion, (key, count) -> count == 1 ? null : count - 1);
-                // Keep the entry subscription through the surrounding trade
-                // operation; only temporary conversion dependencies are released.
                 try { releaseInstruments(); } catch (Exception ignored) { }
                 historyUsers.computeIfPresent(instrument, (key, count) -> count == 1 ? null : count - 1);
             }
         }
+        return result;
+    }
+    private static void accountNumber(Map<String, Object> result, String field, Supplier<Double> value, List<String> failures, boolean nonnegative) {
+        try {
+            double number = value.get();
+            if (!Double.isFinite(number) || nonnegative && number < 0) throw new IllegalArgumentException();
+            result.put(field, number);
+        } catch (Exception error) { failures.add("JForex " + field + " is unavailable"); }
+    }
+    private Map<String, Object> accountMetrics() {
+        Map<String, Object> result = new HashMap<>(); List<String> failures = new ArrayList<>();
+        result.put("accountTime", nowMillis.getAsLong());
+        result.put("accountNote", "SDK balance is from the previous end-of-day processing. Equity and used margin update asynchronously; available balance is equity minus used margin, not withdrawable cash.");
+        try { result.put("accountCurrency", accountCurrency().getCurrencyCode()); }
+        catch (Exception error) { failures.add("JForex account currency is unavailable; check the installed bridge and the connected account"); }
+        IAccount account = null;
+        try { account = context == null ? null : context.getAccount(); } catch (Exception ignored) { }
+        if (account != null) {
+            accountNumber(result, "balance", account::getBalance, failures, false);
+            accountNumber(result, "equity", account::getEquity, failures, false);
+            accountNumber(result, "usedMargin", account::getUsedMargin, failures, true);
+            accountNumber(result, "accountLeverage", account::getLeverage, failures, true);
+            if (result.containsKey("equity") && result.containsKey("usedMargin")) {
+                double free = (Double)result.get("equity") - (Double)result.get("usedMargin");
+                if (Double.isFinite(free)) result.put("availableBalance", free);
+            }
+        } else failures.add("The connected JForex account snapshot is unavailable");
+        if (!failures.isEmpty()) result.put("accountError", String.join("; ", failures));
+        result.put("marginError", "This JForex SDK does not expose a pre-trade required-margin quote. Margin depends on instrument/account rules and existing exposure; check the broker's order preview.");
+        result.put("liquidationError", "Dukascopy applies account-wide margin/stop-out rules; a standalone liquidation price for this proposed order is not supplied by the SDK.");
+        return result;
+    }
+    private Map<String, Object> tradeMetrics(JsonObject request) throws Exception {
+        requireConnected();
+        Instrument instrument = tradeInstrument(request);
+        String side = text(request, "side", 4);
+        if (!side.equals("buy") && !side.equals("sell")) throw new Failure("restricted", "Select Buy or Sell");
+        Map<String, Object> result = accountMetrics();
+        result.put("instrument", instrument.name()); result.put("side", side);
+        try {
+            ITick quote = freshTradeQuote(instrument);
+            // Account metrics intentionally do not run P/L conversion. The
+            // separate estimate RPC owns FX subscriptions and valuation; a
+            // missing FX quote cannot delay this independent balance snapshot.
+            result.put("entryPrice", side.equals("buy") ? quote.getAsk() : quote.getBid());
+        } catch (Exception error) {
+            result.put("entryError", error instanceof Failure ? error.getMessage() : "JForex could not read a current entry quote");
+        } finally { releaseInstruments(); }
         return result;
     }
     private Map<String, Object> tradeEstimate(JsonObject request) throws Exception {
@@ -789,7 +870,14 @@ public final class Bridge implements AutoCloseable {
         Map<String, Object> result = new HashMap<>();
         result.put("instrument", instrument.name()); result.put("side", side); result.put("quantity", quantity);
         result.put("stopLoss", sl); result.put("takeProfit", tp); result.put("entryPrice", entry);
-        if (includeValuation) result.putAll(tradeValuation(instrument, quote.getTime()));
+        if (includeValuation) {
+            Map<String, Object> metrics = accountMetrics();
+            Map<String, Object> valuation = tradeValuation(instrument, quote.getTime());
+            result.putAll(valuation);
+            if (Objects.equals(valuation.get("accountCurrency"), "")) valuation.remove("accountCurrency");
+            metrics.putAll(valuation); metrics.put("entryPrice", entry); metrics.put("instrument", instrument.name()); metrics.put("side", side);
+            result.put("metrics", metrics);
+        }
         result.put("accountLeverage", leverage); result.put("minQuantity", minimum); result.put("quantityStep", increment); result.put("priceStep", priceStep);
         result.put("message", "Market entry uses the execution-time quote. Account leverage is fixed by Dukascopy; quantity is base units, not lots.");
         return result;

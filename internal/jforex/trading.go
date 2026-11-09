@@ -32,27 +32,32 @@ type TradeEstimate struct {
 	ProfitPerPriceUnit float64 `json:"profitPerPriceUnit"`
 	ValuationTime      int64   `json:"valuationTime"`
 	ValuationError     string  `json:"valuationError,omitempty"`
+	ValuationSource    string  `json:"valuationSource,omitempty"`
+	ValuationNotice    string  `json:"valuationNotice,omitempty"`
 }
 
 type TradePreview struct {
-	AccountCurrency    string  `json:"accountCurrency,omitempty"`
-	ProfitPerPriceUnit float64 `json:"profitPerPriceUnit,omitempty"`
-	ValuationTime      int64   `json:"valuationTime,omitempty"`
-	ValuationError     string  `json:"valuationError,omitempty"`
-	ID                 string  `json:"id"`
-	Instrument         string  `json:"instrument"`
-	Side               string  `json:"side"`
-	Quantity           float64 `json:"quantity"`
-	StopLoss           float64 `json:"stopLoss"`
-	TakeProfit         float64 `json:"takeProfit"`
-	EntryPrice         float64 `json:"entryPrice"`
-	AccountLeverage    float64 `json:"accountLeverage"`
-	MinQuantity        float64 `json:"minQuantity"`
-	QuantityStep       float64 `json:"quantityStep"`
-	PriceStep          float64 `json:"priceStep"`
-	ExpiresAt          int64   `json:"expiresAt"`
-	Environment        string  `json:"environment"`
-	Message            string  `json:"message"`
+	Metrics            *TradeMetrics `json:"metrics,omitempty"`
+	AccountCurrency    string        `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit float64       `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64         `json:"valuationTime,omitempty"`
+	ValuationError     string        `json:"valuationError,omitempty"`
+	ValuationSource    string        `json:"valuationSource,omitempty"`
+	ValuationNotice    string        `json:"valuationNotice,omitempty"`
+	ID                 string        `json:"id"`
+	Instrument         string        `json:"instrument"`
+	Side               string        `json:"side"`
+	Quantity           float64       `json:"quantity"`
+	StopLoss           float64       `json:"stopLoss"`
+	TakeProfit         float64       `json:"takeProfit"`
+	EntryPrice         float64       `json:"entryPrice"`
+	AccountLeverage    float64       `json:"accountLeverage"`
+	MinQuantity        float64       `json:"minQuantity"`
+	QuantityStep       float64       `json:"quantityStep"`
+	PriceStep          float64       `json:"priceStep"`
+	ExpiresAt          int64         `json:"expiresAt"`
+	Environment        string        `json:"environment"`
+	Message            string        `json:"message"`
 }
 type TradeResult struct {
 	Status              string  `json:"status"`
@@ -175,6 +180,9 @@ func (m *Manager) PreviewTrade(ctx context.Context, request TradeRequest) (Trade
 		return TradePreview{}, errors.New("The JForex bridge returned an invalid trade preview")
 	}
 	normalizeValuation(&preview.AccountCurrency, &preview.ProfitPerPriceUnit, &preview.ValuationTime, &preview.ValuationError)
+	if preview.Metrics != nil {
+		normalizeTradeMetrics(preview.Metrics)
+	}
 	var token [16]byte
 	if _, err = rand.Read(token[:]); err != nil {
 		return TradePreview{}, err

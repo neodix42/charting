@@ -2547,7 +2547,6 @@ export namespace storage {
 
 }
 
-
 export namespace telegram {
 
 	export class BotIdentity {
@@ -2651,6 +2650,22 @@ export namespace hyperliquid {
 export namespace trading {
 
 	export class Preview {
+	    availableBalance?: string;
+	    availableBalanceCurrency?: string;
+	    availableBalanceError?: string;
+	    availableBalanceBasis?: string;
+	    accountBalance?: string;
+	    equity?: string;
+	    usedMargin?: string;
+	    marginRequired?: string;
+	    marginRequiredCurrency?: string;
+	    marginError?: string;
+	    marginBasis?: string;
+	    liquidationPrice?: string;
+	    liquidationError?: string;
+	    liquidationBasis?: string;
+	    liquidationKind?: string;
+	    metricsTime?: number;
 	    id: string;
 	    feedKey: domain.FeedKey;
 	    side: string;
@@ -2666,6 +2681,8 @@ export namespace trading {
 	    profitPerPriceUnit?: string;
 	    valuationTime?: number;
 	    valuationError?: string;
+	    valuationSource?: string;
+	    valuationNotice?: string;
 	    maxLeverage?: number;
 
 	    static createFrom(source: any = {}) {
@@ -2674,6 +2691,22 @@ export namespace trading {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.availableBalance = source["availableBalance"];
+	        this.availableBalanceCurrency = source["availableBalanceCurrency"];
+	        this.availableBalanceError = source["availableBalanceError"];
+	        this.availableBalanceBasis = source["availableBalanceBasis"];
+	        this.accountBalance = source["accountBalance"];
+	        this.equity = source["equity"];
+	        this.usedMargin = source["usedMargin"];
+	        this.marginRequired = source["marginRequired"];
+	        this.marginRequiredCurrency = source["marginRequiredCurrency"];
+	        this.marginError = source["marginError"];
+	        this.marginBasis = source["marginBasis"];
+	        this.liquidationPrice = source["liquidationPrice"];
+	        this.liquidationError = source["liquidationError"];
+	        this.liquidationBasis = source["liquidationBasis"];
+	        this.liquidationKind = source["liquidationKind"];
+	        this.metricsTime = source["metricsTime"];
 	        this.id = source["id"];
 	        this.feedKey = this.convertValues(source["feedKey"], domain.FeedKey);
 	        this.side = source["side"];
@@ -2689,6 +2722,8 @@ export namespace trading {
 	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
 	        this.valuationTime = source["valuationTime"];
 	        this.valuationError = source["valuationError"];
+	        this.valuationSource = source["valuationSource"];
+	        this.valuationNotice = source["valuationNotice"];
 	        this.maxLeverage = source["maxLeverage"];
 	    }
 
@@ -2710,6 +2745,7 @@ export namespace trading {
 		    return a;
 		}
 	}
+
 	export class Request {
 	    feedKey: domain.FeedKey;
 	    side: string;
@@ -2750,6 +2786,7 @@ export namespace trading {
 		    return a;
 		}
 	}
+
 	export class Result {
 	    status: string;
 	    orderIds: string[];
@@ -2766,6 +2803,7 @@ export namespace trading {
 	        this.message = source["message"];
 	    }
 	}
+
 	export class Status {
 	    configured: boolean;
 	    enabled: boolean;
@@ -2797,7 +2835,6 @@ export namespace trading {
 	    }
 	}
 
-
 	export class Estimate {
 	    feedKey: domain.FeedKey;
 	    side: string;
@@ -2806,6 +2843,8 @@ export namespace trading {
 	    profitPerPriceUnit: string;
 	    valuationTime: number;
 	    valuationError?: string;
+	    valuationSource?: string;
+	    valuationNotice?: string;
 	    maxLeverage?: number;
 
 	    static createFrom(source: any = {}) {
@@ -2821,6 +2860,8 @@ export namespace trading {
 	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
 	        this.valuationTime = source["valuationTime"];
 	        this.valuationError = source["valuationError"];
+	        this.valuationSource = source["valuationSource"];
+	        this.valuationNotice = source["valuationNotice"];
 	        this.maxLeverage = source["maxLeverage"];
 	    }
 
@@ -2842,4 +2883,76 @@ export namespace trading {
 		    return a;
 		}
 	}
+
+	export class Metrics {
+	    availableBalance?: string;
+	    availableBalanceCurrency?: string;
+	    availableBalanceError?: string;
+	    availableBalanceBasis?: string;
+	    accountBalance?: string;
+	    equity?: string;
+	    usedMargin?: string;
+	    marginRequired?: string;
+	    marginRequiredCurrency?: string;
+	    marginError?: string;
+	    marginBasis?: string;
+	    liquidationPrice?: string;
+	    liquidationError?: string;
+	    liquidationBasis?: string;
+	    liquidationKind?: string;
+	    metricsTime?: number;
+	    feedKey: domain.FeedKey;
+	    side: string;
+	    quantity: string;
+	    leverage: number;
+	    entryPrice: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Metrics(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.availableBalance = source["availableBalance"];
+	        this.availableBalanceCurrency = source["availableBalanceCurrency"];
+	        this.availableBalanceError = source["availableBalanceError"];
+	        this.availableBalanceBasis = source["availableBalanceBasis"];
+	        this.accountBalance = source["accountBalance"];
+	        this.equity = source["equity"];
+	        this.usedMargin = source["usedMargin"];
+	        this.marginRequired = source["marginRequired"];
+	        this.marginRequiredCurrency = source["marginRequiredCurrency"];
+	        this.marginError = source["marginError"];
+	        this.marginBasis = source["marginBasis"];
+	        this.liquidationPrice = source["liquidationPrice"];
+	        this.liquidationError = source["liquidationError"];
+	        this.liquidationBasis = source["liquidationBasis"];
+	        this.liquidationKind = source["liquidationKind"];
+	        this.metricsTime = source["metricsTime"];
+	        this.feedKey = this.convertValues(source["feedKey"], domain.FeedKey);
+	        this.side = source["side"];
+	        this.quantity = source["quantity"];
+	        this.leverage = source["leverage"];
+	        this.entryPrice = source["entryPrice"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 }

@@ -234,6 +234,10 @@ export function GetTelegramBotSettings() {
   return window['go']['main']['App']['GetTelegramBotSettings']();
 }
 
+export function GetTradeMetrics(arg1) {
+  return window['go']['main']['App']['GetTradeMetrics'](arg1);
+}
+
 export function GetTradingStatus(arg1) {
   return window['go']['main']['App']['GetTradingStatus'](arg1);
 }

@@ -34,6 +34,7 @@ type Estimate struct {
 }
 
 type Preview struct {
+	Metrics
 	AccountCurrency    string       `json:"accountCurrency,omitempty"`
 	ProfitPerPriceUnit string       `json:"profitPerPriceUnit,omitempty"`
 	ValuationTime      int64        `json:"valuationTime"`
@@ -60,6 +61,11 @@ type instrument struct {
 	asset, szDecimals, maxLeverage, baseToken int
 	dex                                       string
 	accountCurrency, valuationError           string
+	collateralToken                           *int
+	balanceToken                              int
+	balanceCurrency                           string
+	marginTiers                               []marginTier
+	marginTableError                          string
 }
 type prepared struct {
 	Preview
@@ -85,7 +91,12 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 				for _, token := range meta.Tokens {
 					if token.Index != nil && *token.Index == pair.Tokens[0] && token.SzDecimals >= 0 && token.SzDecimals <= 8 {
 						currency, valuationErr := tokenCurrency(meta.Tokens, pair.Tokens[1])
-						return instrument{asset: 10000 + pair.Index, szDecimals: token.SzDecimals, maxLeverage: 1, baseToken: *token.Index, accountCurrency: currency, valuationError: valuationErr}, nil
+						balanceToken, balanceCurrency := pair.Tokens[1], currency
+						if r.Side == "sell" {
+							balanceToken = pair.Tokens[0]
+							balanceCurrency, _ = tokenCurrency(meta.Tokens, pair.Tokens[0])
+						}
+						return instrument{asset: 10000 + pair.Index, szDecimals: token.SzDecimals, maxLeverage: 1, baseToken: *token.Index, accountCurrency: currency, valuationError: valuationErr, balanceToken: balanceToken, balanceCurrency: balanceCurrency, collateralToken: &pair.Tokens[1]}, nil
 					}
 				}
 			}
@@ -116,12 +127,14 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 		}
 	}
 	var meta struct {
-		CollateralToken *int `json:"collateralToken"`
+		CollateralToken *int              `json:"collateralToken"`
+		MarginTables    []json.RawMessage `json:"marginTables"`
 		Universe        []struct {
-			Name        string `json:"name"`
-			SzDecimals  int    `json:"szDecimals"`
-			MaxLeverage int    `json:"maxLeverage"`
-			Delisted    bool   `json:"isDelisted"`
+			Name          string `json:"name"`
+			SzDecimals    int    `json:"szDecimals"`
+			MaxLeverage   int    `json:"maxLeverage"`
+			MarginTableID *int   `json:"marginTableId"`
+			Delisted      bool   `json:"isDelisted"`
 		} `json:"universe"`
 	}
 	if err := s.post(ctx, v, "/info", map[string]string{"type": "meta", "dex": dex}, &meta); err != nil {
@@ -130,7 +143,8 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 	for index, item := range meta.Universe {
 		if item.Name == r.Instrument && !item.Delisted && item.SzDecimals >= 0 && item.SzDecimals <= 6 && item.MaxLeverage > 0 && item.MaxLeverage <= 1000 {
 			currency, valuationErr := s.collateralCurrency(ctx, v, meta.CollateralToken)
-			return instrument{asset: offset + index, szDecimals: item.SzDecimals, maxLeverage: item.MaxLeverage, dex: dex, accountCurrency: currency, valuationError: valuationErr}, nil
+			tiers, tableErr := tableFor(item.MarginTableID, item.MaxLeverage, meta.MarginTables)
+			return instrument{asset: offset + index, szDecimals: item.SzDecimals, maxLeverage: item.MaxLeverage, dex: dex, accountCurrency: currency, valuationError: valuationErr, collateralToken: meta.CollateralToken, marginTiers: tiers, marginTableError: tableErr}, nil
 		}
 	}
 	return instrument{}, errors.New("Perpetual instrument is not available on the selected network")
@@ -276,7 +290,14 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	p := Preview{AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: valuationTime, ValuationError: m.valuationError, ID: id, Request: r, ReferencePrice: reference.String(), LimitPrice: cap.String(), ExpiresAt: s.now().Add(60 * time.Second).UnixMilli(), Network: v.Network, AccountAddress: v.AccountAddress, MaxLeverage: m.maxLeverage, Warnings: []string{"Market entry uses an immediate-or-cancel limit capped at 1% slippage; a partial fill is possible."}}
+	metrics := s.orderMetrics(ctx, v, r, m, reference, valuationTime)
+	if err := ctx.Err(); err != nil {
+		return Preview{}, err
+	}
+	if !s.freshObservation(valuationTime) {
+		return Preview{}, errors.New("The entry quote became stale while retrieving account metrics; preview again")
+	}
+	p := Preview{Metrics: metrics, AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: valuationTime, ValuationError: m.valuationError, ID: id, Request: r, ReferencePrice: reference.String(), LimitPrice: cap.String(), ExpiresAt: s.now().Add(60 * time.Second).UnixMilli(), Network: v.Network, AccountAddress: v.AccountAddress, MaxLeverage: m.maxLeverage, Warnings: []string{"Market entry uses an immediate-or-cancel limit capped at 1% slippage; a partial fill is possible."}}
 	if r.Market == "perpetual" {
 		p.Warnings = append(p.Warnings, "Leverage uses isolated margin. Existing positions are netted by the exchange. SL/TP trigger on mark price, which can differ from the quoted entry, and reduce-only market execution can slip.")
 	}

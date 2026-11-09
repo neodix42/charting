@@ -740,6 +740,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 				version.Trading = "market-bracket-v1"
 				if strings.HasPrefix(scenario, "trade-estimate") {
 					version.TradeEstimates = "account-currency-pnl-v1"
+					if strings.HasPrefix(scenario, "trade-estimate-metrics") {
+						version.TradeMetrics = "account-metrics-v1"
+					}
 				}
 			}
 			switch scenario {
@@ -756,6 +759,24 @@ func TestBridgeHelperProcess(t *testing.T) {
 				select {}
 			}
 			respond(id, version)
+		case "tradeMetrics":
+			zero, balance, equity, used, free := 0.0, 1000.0, 1100.0, 100.0, 1000.0
+			var metrics TradeMetrics
+			_ = json.Unmarshal(scanner.Bytes(), &metrics)
+			metrics.AccountCurrency = "EUR"
+			metrics.Balance = &balance
+			metrics.Equity = &equity
+			metrics.UsedMargin = &used
+			metrics.AvailableBalance = &free
+			metrics.AccountTime = time.Now().UnixMilli()
+			metrics.AccountLeverage = 100
+			metrics.EntryPrice = 100.2
+			if scenario == "trade-estimate-metrics-unavailable" {
+				metrics.EntryPrice = 0
+				metrics.EntryError = "Market quote is stale"
+				metrics.Balance = &zero
+			}
+			respond(id, metrics)
 		case "tradeEstimate":
 			var estimate TradeEstimate
 			_ = json.Unmarshal(scanner.Bytes(), &estimate)

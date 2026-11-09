@@ -162,3 +162,40 @@ func TestTradeValuationUnavailableKeepsEntryAndDoesNotInventRates(t *testing.T) 
 		t.Fatal("old bridge preview was blocked or invented valuation", preview, err)
 	}
 }
+
+func TestOrderMetricsKeepAccountMoneyIndependentOfQuoteAndConversion(t *testing.T) {
+	for _, scenario := range []string{"trade-estimate-metrics", "trade-estimate-metrics-unavailable"} {
+		t.Run(scenario, func(t *testing.T) {
+			trace := filepath.Join(t.TempDir(), "trace")
+			t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
+			m, _ := testManager(t, scenario)
+			metrics, err := m.OrderMetrics(context.Background(), TradeRequest{Instrument: "AAPLUSUSD", Side: "buy"})
+			if err != nil || metrics.AccountCurrency != "EUR" || metrics.Balance == nil || metrics.Equity == nil || metrics.UsedMargin == nil || metrics.AvailableBalance == nil || *metrics.AvailableBalance != 1000 {
+				t.Fatal(metrics, err)
+			}
+			if scenario == "trade-estimate-metrics-unavailable" && (*metrics.Balance != 0 || metrics.EntryError == "" || metrics.ValuationError != "" || metrics.ProfitPerPriceUnit != 0) {
+				t.Fatal("balance lost when quote/conversion unavailable", metrics)
+			}
+			if metrics.ProfitPerPriceUnit != 0 || metrics.ValuationError != "" || metrics.ValuationTime != 0 {
+				t.Fatal("account metrics unexpectedly included FX valuation", metrics)
+			}
+			if metrics.MarginRequired != nil || metrics.LiquidationPrice != nil || metrics.MarginError == "" || metrics.LiquidationError == "" {
+				t.Fatal("unsupported financial values invented", metrics)
+			}
+			calls, _ := os.ReadFile(trace)
+			if strings.Contains(string(calls), "tradeSubmit") || strings.Contains(string(calls), "tradePreview") {
+				t.Fatal("read-only account metrics placed/prepared order", string(calls))
+			}
+			m.mu.Lock()
+			tokens := len(m.tradePreviews)
+			m.mu.Unlock()
+			if tokens != 0 {
+				t.Fatal("metrics allocated confirmation")
+			}
+		})
+	}
+	legacy, _ := testManager(t, "trade-estimate")
+	if _, err := legacy.OrderMetrics(context.Background(), TradeRequest{Instrument: "EURUSD", Side: "buy"}); err == nil || !strings.Contains(err.Error(), "installed JForex bridge") {
+		t.Fatal("missing metrics capability not explained", err)
+	}
+}

@@ -30,6 +30,7 @@ type bridgeVersion struct {
 	InstrumentCatalog string `json:"instrumentCatalog"`
 	Trading           string `json:"trading"`
 	TradeEstimates    string `json:"tradeEstimates"`
+	TradeMetrics      string `json:"tradeMetrics"`
 }
 
 func verifyBridge(ctx context.Context, process *bridgeProcess) error {

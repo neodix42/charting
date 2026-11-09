@@ -127,6 +127,8 @@ export function GetTelegramBotIdentity(arg1:string):Promise<telegram.BotIdentity
 
 export function GetTelegramBotSettings():Promise<telegram.Settings>;
 
+export function GetTradeMetrics(arg1:trading.Request):Promise<trading.Metrics>;
+
 export function GetTradingStatus(arg1:domain.FeedKey):Promise<trading.Status>;
 
 export function ImportWorkspace():Promise<storage.Loaded>;

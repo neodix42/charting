@@ -89,6 +89,9 @@ func (s *Store) Estimate(ctx context.Context, market, native, side string) (Esti
 	if err != nil {
 		return Estimate{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return Estimate{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.settings != v {

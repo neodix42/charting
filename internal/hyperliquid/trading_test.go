@@ -31,11 +31,21 @@ type tradingMock struct {
 	spotMetaFailure             bool
 	beforeQuote                 func()
 	quoteTime                   *int64
+	accountMode                 string
+	withdrawable                string
+	accountTime                 *int64
+	positions                   json.RawMessage
+	marginTableID               *int
+	marginTables                json.RawMessage
+	metricsFailure              bool
+	spotBalances                json.RawMessage
+	beforeAccount               func()
+	requests                    []map[string]json.RawMessage
 }
 
 func mockStore(t *testing.T) (*Store, *tradingMock) {
 	t.Helper()
-	mock := &tradingMock{price: "100", available: "2", filledQuantity: "1", maxLeverage: 20}
+	mock := &tradingMock{price: "100", available: "2", filledQuantity: "1", maxLeverage: 20, accountMode: "disabled", withdrawable: "1000", positions: json.RawMessage(`[]`), marginTableID: intPointer(20)}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var input map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -45,6 +55,7 @@ func mockStore(t *testing.T) (*Store, *tradingMock) {
 		}
 		mock.mu.Lock()
 		defer mock.mu.Unlock()
+		mock.requests = append(mock.requests, input)
 		if r.URL.Path == "/exchange" {
 			var action map[string]any
 			_ = json.Unmarshal(input["action"], &action)
@@ -91,7 +102,14 @@ func mockStore(t *testing.T) (*Store, *tradingMock) {
 			if dex != "" {
 				name = dex + ":" + name
 			}
-			meta := map[string]any{"universe": []any{map[string]any{"name": name, "szDecimals": 3, "maxLeverage": mock.maxLeverage}}}
+			item := map[string]any{"name": name, "szDecimals": 3, "maxLeverage": mock.maxLeverage}
+			if mock.marginTableID != nil {
+				item["marginTableId"] = *mock.marginTableID
+			}
+			meta := map[string]any{"universe": []any{item}}
+			if mock.marginTables != nil {
+				meta["marginTables"] = mock.marginTables
+			}
 			if mock.collateralToken != nil {
 				meta["collateralToken"] = *mock.collateralToken
 			}
@@ -106,7 +124,30 @@ func mockStore(t *testing.T) (*Store, *tradingMock) {
 				quote = *mock.spotQuote
 			}
 			fmt.Fprintf(w, `{"tokens":[{"index":150,"name":"HYPE","szDecimals":2},{"index":0,"name":"USDC","szDecimals":6},{"index":1,"name":"USDT","szDecimals":6},{"index":360,"name":"USDH","szDecimals":6}],"universe":[{"name":"@107","index":107,"tokens":[150,%d]}]}`, quote)
+		case "userAbstraction":
+			if mock.metricsFailure {
+				w.WriteHeader(503)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(mock.accountMode)
+		case "clearinghouseState":
+			if mock.beforeAccount != nil {
+				mock.beforeAccount()
+			}
+			if mock.metricsFailure {
+				w.WriteHeader(503)
+				return
+			}
+			observed := time.Now().UnixMilli()
+			if mock.accountTime != nil {
+				observed = *mock.accountTime
+			}
+			fmt.Fprintf(w, `{"time":%d,"withdrawable":%q,"assetPositions":%s,"marginSummary":{"accountValue":"1000","totalRawUsd":"1000","totalMarginUsed":"0"}}`, observed, mock.withdrawable, mock.positions)
 		case "spotClearinghouseState":
+			if mock.spotBalances != nil {
+				fmt.Fprintf(w, `{"balances":%s}`, mock.spotBalances)
+				return
+			}
 			fmt.Fprintf(w, `{"balances":[{"token":150,"total":%q,"hold":"0.5"}]}`, mock.available)
 		case "l2Book":
 			var coin string

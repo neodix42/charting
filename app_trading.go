@@ -133,6 +133,7 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 		result.Leverage, result.Environment, result.ExpiresAt = float64(preview.Request.Leverage), preview.Network, preview.ExpiresAt
 		result.Warnings = append(result.Warnings, preview.Warnings...)
 		result.MaxLeverage = preview.MaxLeverage
+		result.AccountMetrics = hyperliquidAccountMetrics(preview.Metrics)
 		result.AccountCurrency, result.ProfitPerPriceUnit, result.ValuationTime, result.ValuationError = preview.AccountCurrency, preview.ProfitPerPriceUnit, preview.ValuationTime, preview.ValuationError
 	case "dukascopy":
 		if a.jforex == nil {
@@ -159,6 +160,8 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 		result.Leverage, result.Environment, result.ExpiresAt = preview.AccountLeverage, preview.Environment, preview.ExpiresAt
 		result.Warnings = append(result.Warnings, preview.Message)
 		result.AccountCurrency, result.ValuationTime, result.ValuationError = preview.AccountCurrency, preview.ValuationTime, preview.ValuationError
+		result.ValuationSource, result.ValuationNotice = preview.ValuationSource, preview.ValuationNotice
+		result.AccountMetrics = dukascopyAccountMetrics(preview.Metrics)
 		if preview.ProfitPerPriceUnit > 0 && !math.IsNaN(preview.ProfitPerPriceUnit) && !math.IsInf(preview.ProfitPerPriceUnit, 0) {
 			result.ProfitPerPriceUnit = strconv.FormatFloat(preview.ProfitPerPriceUnit, 'f', -1, 64)
 		}
@@ -290,6 +293,7 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 	}
 	result.EntryPrice = strconv.FormatFloat(value.EntryPrice, 'f', -1, 64)
 	result.AccountCurrency, result.ValuationTime, result.ValuationError = value.AccountCurrency, value.ValuationTime, value.ValuationError
+	result.ValuationSource, result.ValuationNotice = value.ValuationSource, value.ValuationNotice
 	if value.ProfitPerPriceUnit > 0 && !math.IsNaN(value.ProfitPerPriceUnit) && !math.IsInf(value.ProfitPerPriceUnit, 0) {
 		result.ProfitPerPriceUnit = strconv.FormatFloat(value.ProfitPerPriceUnit, 'f', -1, 64)
 	}
