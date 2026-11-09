@@ -1,4 +1,4 @@
-import type {IChartApi, IPrimitivePaneRenderer, IPrimitivePaneView, ISeriesApi, ISeriesPrimitive, SeriesAttachedParameter, UTCTimestamp} from 'lightweight-charts';
+import type {AutoscaleInfo, IChartApi, IPrimitivePaneRenderer, IPrimitivePaneView, ISeriesApi, ISeriesPrimitive, Logical, SeriesAttachedParameter, UTCTimestamp} from 'lightweight-charts';
 import type {CloudPoint} from './math';
 
 export interface CloudCoordinate {x:number;a:number;b:number}
@@ -32,6 +32,19 @@ export class CloudPrimitive implements ISeriesPrimitive {
  detached(){this.chart=null;this.series=null;this.requestUpdate=null;this.coordinates=[];this.points=[];}
  paneViews(){return this.views;}
  setData(points:readonly CloudPoint[]){this.points=points;this.updateAllViews();this.requestUpdate?.();}
+ autoscaleInfo(start:Logical,end:Logical):AutoscaleInfo|null{
+  const range=this.series?.barsInLogicalRange({from:start,to:end});
+  if(range?.from===undefined||range.to===undefined||!this.points.length)return null;
+  const from=Number(range.from),to=Number(range.to);
+  // The carrier contains only span A when both outlines are hidden. Include
+  // span B explicitly so the visible fill is never clipped by a hidden line.
+  let minValue=Infinity,maxValue=-Infinity,left=0,right=this.points.length;
+  while(left<right){const middle=(left+right)>>>1;if(this.points[middle].time<from)left=middle+1;else right=middle;}
+  for(let i=left;i<this.points.length&&this.points[i].time<=to;i++){
+   const {a,b}=this.points[i];minValue=Math.min(minValue,a,b);maxValue=Math.max(maxValue,a,b);
+  }
+  return Number.isFinite(minValue)?{priceRange:{minValue,maxValue}}:null;
+ }
  updateAllViews(){
   const chart=this.chart,series=this.series;if(!chart||!series){this.coordinates=[];return;}
   const scale=chart.timeScale();this.coordinates=this.points.map(point=>{const x=scale.timeToCoordinate(point.time as UTCTimestamp),a=series.priceToCoordinate(point.a),b=series.priceToCoordinate(point.b);return x===null||a===null||b===null?null:{x,a,b};});

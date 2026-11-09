@@ -11,7 +11,9 @@ export const intervalSeconds: Record<Interval,number> = {'1m':60,'5m':300,'15m':
 export type IndicatorType = 'sma'|'ema'|'low'|'high'|'ichimoku'|'macd';
 export interface IndicatorParameters {period?:number;conversion?:number;base?:number;spanB?:number;displacement?:number;fast?:number;slow?:number;signal?:number}
 export type IndicatorLineWidth = 1|2|3|4;
-export interface IndicatorConfig {id:string;type:IndicatorType;parameters:IndicatorParameters;color?:string;lineWidth?:IndicatorLineWidth;paneStretchFactor?:number}
+export type IndicatorComponent = 'conversion'|'base'|'spanA'|'spanB'|'lagging'|'cloud'|'macd'|'signal'|'histogram'|'zero';
+export type IndicatorVisibility = Partial<Record<IndicatorComponent,boolean>>;
+export interface IndicatorConfig {id:string;type:IndicatorType;parameters:IndicatorParameters;color?:string;lineWidth?:IndicatorLineWidth;paneStretchFactor?:number;visibility?:IndicatorVisibility}
 export interface FeedKey {exchange:Exchange; market:Market; instrument:string; timeframe:Interval}
 export type DrawingType = 'arrowUp'|'arrowDown'|'horizontal'|'trendline';
 export interface DrawingPoint {time:number;price:number}

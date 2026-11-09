@@ -1,9 +1,10 @@
-import {HistogramSeries,LineSeries,LineStyle,type IChartApi,type IPaneApi,type ISeriesApi,type LineWidth,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {HistogramSeries,LineSeries,LineStyle,type AutoscaleInfo,type IChartApi,type IPaneApi,type IPriceLine,type ISeriesApi,type LineWidth,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
+import {indicatorComponents,indicatorComponentVisible} from '../indicatorVisibility';
 import {CloudPrimitive} from './CloudPrimitive';
 import {ema,ichimoku,macd,sma,rollingExtrema,type IndicatorPoint,type MACDValues} from './math';
 
-interface Layer {type:IndicatorConfig['type'];lines:ISeriesApi<'Line'>[];histogram?:ISeriesApi<'Histogram'>;cloud?:CloudPrimitive;pane?:IPaneApi<Time>}
+interface Layer {type:IndicatorConfig['type'];lines:ISeriesApi<'Line'>[];histogram?:ISeriesApi<'Histogram'>;cloud?:CloudPrimitive;pane?:IPaneApi<Time>;zero?:IPriceLine}
 const defaultPaneRatio=.15; // LWC starts the main pane at factor 2; the original MACD factor was .3.
 const colors={sma:'#e9af55',ema:'#48a9f8',low:'#26a69a',high:'#ef5350',ichimoku:'#4387ef',macd:'#48a9f8'};
 const lineData=(points:readonly IndicatorPoint[])=>points.map(point=>({time:point.time as UTCTimestamp,value:point.value}));
@@ -65,9 +66,9 @@ export class IndicatorLayer {
   const pane=this.chart.addPane(),index=pane.paneIndex();pane.setStretchFactor(this.chart.panes()[0].getStretchFactor()*(config.paneStretchFactor??defaultPaneRatio));
   const histogram=this.chart.addSeries(HistogramSeries,{title:'MACD histogram',base:0,priceLineVisible:false,lastValueVisible:false,priceFormat:macdFormat({macd:[],signal:[],histogram:[]})},index);
   const lines=[this.addLine(color,'MACD',index),this.addLine('#e9af55','MACD signal',index)];
-  lines[0].createPriceLine({price:0,color:'#81909e',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
+  const zero=lines[0].createPriceLine({price:0,color:'#81909e',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
   histogram.priceScale().applyOptions({mode:0,autoScale:true,scaleMargins:{top:.12,bottom:.12}});
-  return {type:config.type,lines,histogram,pane};
+  return {type:config.type,lines,histogram,pane,zero};
  }
  private remove(id:string){
   const layer=this.layers.get(id);if(!layer)return;
@@ -78,7 +79,7 @@ export class IndicatorLayer {
  }
  update(bars:readonly Candle[],configs:readonly IndicatorConfig[],timeframe:Interval,preserveViewport=true):void{
   if(this.disposed)return;
-  const nextKey=JSON.stringify(configs.map(config=>({id:config.id,type:config.type,parameters:config.parameters,color:config.color,lineWidth:config.type==='sma'||config.type==='ema'?config.lineWidth??2:undefined}))),changed=nextKey!==this.configKey;
+  const nextKey=JSON.stringify(configs.map(config=>({id:config.id,type:config.type,parameters:config.parameters,color:config.color,lineWidth:config.type==='sma'||config.type==='ema'?config.lineWidth??2:undefined,visibility:indicatorComponents[config.type].map(({key})=>indicatorComponentVisible(config,key))}))),changed=nextKey!==this.configKey;
   if(!changed&&bars===this.previousBars&&timeframe===this.previousTimeframe)return;
   // Historical charts preserve their absolute time window. Live charts keep their zoom and re-anchor the workspace gap.
   const range=changed&&preserveViewport?this.chart.timeScale().getVisibleRange():null;
@@ -99,12 +100,31 @@ export class IndicatorLayer {
     }
     case 'ichimoku':{
      const values=ichimoku(bars,params.conversion??9,params.base??26,params.spanB??52,params.displacement??26,intervalSeconds[timeframe]);
-     [values.conversion,values.base,values.leadingA,values.leadingB,values.lagging].forEach((points,index)=>layer!.lines[index].setData(lineData(points)));layer.cloud!.setData(values.cloud);break;
+     const keys=['conversion','base','spanA','spanB','lagging'] as const,cloudVisible=indicatorComponentVisible(config,'cloud');
+     [values.conversion,values.base,values.leadingA,values.leadingB,values.lagging].forEach((points,index)=>{
+      const visible=indicatorComponentVisible(config,keys[index]),carrier=index===2&&cloudVisible;
+      // A primitive needs a visible host series, but its hidden span must not
+      // leave a stroke or unrelated projected timestamps on the chart.
+      layer!.lines[index].applyOptions({visible:visible||carrier,lineVisible:visible});
+      layer!.lines[index].setData(lineData(visible?points:carrier?values.cloud.map(point=>({time:point.time,value:point.a})):[]));
+     });
+     layer.cloud!.setData(cloudVisible?values.cloud:[]);break;
     }
     case 'macd':{
      const values=macd(bars,params.fast??12,params.slow??26,params.signal??9);
-     const priceFormat=macdFormat(values);for(const series of layer.lines)series.applyOptions({priceFormat});layer.histogram!.applyOptions({priceFormat});
-     layer.lines[0].setData(lineData(values.macd));layer.lines[1].setData(lineData(values.signal));layer.histogram!.setData(values.histogram.map(point=>({time:point.time as UTCTimestamp,value:point.value,color:point.value>=0?'#26a69a':'#ef5350'})));break;
+     const macdVisible=indicatorComponentVisible(config,'macd'),signalVisible=indicatorComponentVisible(config,'signal'),histogramVisible=indicatorComponentVisible(config,'histogram'),zeroVisible=indicatorComponentVisible(config,'zero');
+     const displayed={macd:macdVisible?values.macd:[],signal:signalVisible?values.signal:[],histogram:histogramVisible?values.histogram:[]};
+     const priceFormat=macdFormat(displayed);for(const series of layer.lines)series.applyOptions({priceFormat});layer.histogram!.applyOptions({priceFormat});
+     layer.lines[0].applyOptions({visible:macdVisible||zeroVisible,lineVisible:macdVisible,autoscaleInfoProvider:(original:()=>AutoscaleInfo|null)=>{
+      const info=original();if(!zeroVisible||!info?.priceRange)return info;
+      return {...info,priceRange:{minValue:Math.min(0,info.priceRange.minValue),maxValue:Math.max(0,info.priceRange.maxValue)}};
+     }});
+     layer.zero!.applyOptions({lineVisible:zeroVisible});
+     // Keep the independent baseline when its MACD stroke is hidden, without
+     // letting hidden MACD magnitudes influence the pane's price scale.
+     layer.lines[0].setData(lineData(macdVisible?values.macd:zeroVisible?values.macd.map(point=>({time:point.time,value:0})):[]));
+     layer.lines[1].applyOptions({visible:signalVisible});layer.lines[1].setData(lineData(displayed.signal));
+     layer.histogram!.applyOptions({visible:histogramVisible});layer.histogram!.setData(displayed.histogram.map(point=>({time:point.time as UTCTimestamp,value:point.value,color:point.value>=0?'#26a69a':'#ef5350'})));break;
     }
    }
   }

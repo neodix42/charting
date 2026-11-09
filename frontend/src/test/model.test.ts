@@ -5,6 +5,22 @@ import {tickPrecision} from '../charts/format';
 import intermediate from '../../../examples/intermediate-two-tabs.json';
 import maximum from '../../../examples/capacity-20-tabs-180-charts.json';
 describe('workspace production reducer',()=>{
+ it('duplicates chart and tab visibility maps independently without adding flags to legacy indicators',()=>{
+  let w=firstWorkspace();const first=w.tabs[0].charts[0];
+  const cloud:IndicatorConfig={id:crypto.randomUUID(),type:'ichimoku',parameters:{conversion:9,base:26,spanB:52,displacement:26},visibility:{conversion:false,spanA:false,spanB:false,lagging:false,cloud:false}};
+  const legacy:IndicatorConfig={id:crypto.randomUUID(),type:'macd',parameters:{fast:12,slow:26,signal:9}};
+  w=reduceWorkspace(w,{type:'chart',id:first.id,patch:{indicators:[cloud,legacy]}});
+  w=reduceWorkspace(w,{type:'addChart',sourceId:first.id});
+  w.tabs[0].charts[1].indicators![0].visibility!.conversion=true;
+  expect(w.tabs[0].charts[0].indicators![0].visibility!.conversion).toBe(false);
+  expect(cloud.visibility!.conversion).toBe(false);
+  w=reduceWorkspace(w,{type:'duplicateTab',id:w.activeTabId});
+  w.tabs[1].charts[0].indicators![0].visibility!.cloud=true;
+  expect(w.tabs[0].charts[0].indicators![0].visibility!.cloud).toBe(false);
+  expect(w.tabs[1].charts[1].indicators![0].visibility!.cloud).toBe(false);
+  expect(w.tabs.every(tab=>tab.charts.every(chart=>!Object.hasOwn(chart.indicators![1],'visibility')))).toBe(true);
+  expect(JSON.parse(JSON.stringify(w))).toEqual(w);
+ });
  it('first launch and new tabs create exactly one actual chart',()=>{let w=firstWorkspace();expect(w.tabs).toHaveLength(1);expect(w.tabs[0].charts).toHaveLength(1);expect(w.tabs[0].grid).toEqual(grid());w=reduceWorkspace(w,{type:'grid',rows:3,columns:3});expect(w.tabs[0].charts).toHaveLength(1);for(let i=0;i<8;i++)w=reduceWorkspace(w,{type:'addChart'});expect(w.tabs[0].charts).toHaveLength(9);expect(()=>reduceWorkspace(w,{type:'addChart'})).toThrow('Maximum 9');w=reduceWorkspace(w,{type:'addTab'});expect(w.tabs[1].charts).toHaveLength(1);expect(w.tabs[1].grid).toEqual(grid());});
  it('larger layouts only change geometry; shrinking cannot drop charts',()=>{let w=firstWorkspace();const id=w.tabs[0].charts[0].id;w=reduceWorkspace(w,{type:'grid',rows:3,columns:3});expect(w.tabs[0].charts.map(c=>c.id)).toEqual([id]);w=reduceWorkspace(w,{type:'addChart'});expect(()=>reduceWorkspace(w,{type:'grid',rows:1,columns:1})).toThrow('Remove charts');expect(w.tabs[0].charts).toHaveLength(2);});
  it('enforces twenty tabs and keeps at least one tab/chart',()=>{let w=firstWorkspace();expect(()=>reduceWorkspace(w,{type:'removeTab',id:w.activeTabId})).toThrow('at least one tab');expect(()=>reduceWorkspace(w,{type:'removeChart',id:w.tabs[0].charts[0].id})).toThrow('at least one chart');for(let i=1;i<20;i++)w=reduceWorkspace(w,{type:'addTab'});expect(w.tabs).toHaveLength(20);expect(()=>reduceWorkspace(w,{type:'addTab'})).toThrow('Maximum 20');expect(()=>reduceWorkspace(w,{type:'duplicateTab',id:w.activeTabId})).toThrow('Maximum 20');});
@@ -17,7 +33,7 @@ describe('workspace production reducer',()=>{
 
 describe('active tab controls',()=>{
  function workspace(){let w=firstWorkspace();for(let i=1;i<9;i++)w=reduceWorkspace(w,{type:'addChart'});const active=w.activeTabId;w=reduceWorkspace(w,{type:'addTab'});return reduceWorkspace(w,{type:'selectTab',id:active});}
- const indicator:IndicatorConfig={id:'dialog-template',type:'ichimoku',parameters:{conversion:9,base:26,spanB:52,displacement:26},color:'#61b6ef'};
+ const indicator:IndicatorConfig={id:'dialog-template',type:'ichimoku',parameters:{conversion:9,base:26,spanB:52,displacement:26},color:'#61b6ef',visibility:{cloud:false,lagging:false}};
  it('normalizes mixed periods on all nine actual charts and resets views while preserving independent preferences and hidden tabs',()=>{
   const w=workspace();w.tabs[0].charts=w.tabs[0].charts.map((chart,i)=>({...chart,timeframe:intervals[i%intervals.length],instrument:i%2?'ETHUSDT':'BTCUSDT',showVolume:i%2===0,chartType:i%2?'line':'candlestick',priceScale:{mode:i%2?'log':'linear',autoScale:false,manualRange:{min:1+i,max:50+i}},view:{mode:'historical',fromSec:100+i,toSec:200+i,barSpacing:7+i,rightOffset:-10-i},indicators:[{id:crypto.randomUUID(),type:'ema',parameters:{period:20+i}}]}));
   const original=structuredClone(w),hidden=w.tabs[1],next=reduceWorkspace(w,{type:'tabTimeframe',tabId:w.activeTabId,timeframe:'1w'});
@@ -31,7 +47,7 @@ describe('active tab controls',()=>{
   expect(next.tabs[0].charts).toHaveLength(9);expect(next.tabs[1]).toBe(hidden);
   next.tabs[0].charts.forEach((chart,i)=>{const previous=w.tabs[0].charts[i],added=chart.indicators!.at(-1)!;expect(chart.indicators!.slice(0,-1)).toEqual(previous.indicators??[]);expect(added).toEqual({...indicator,id:added.id});expect(added.id).not.toBe(indicator.id);expect(added.parameters).not.toBe(indicator.parameters);expect({...chart,indicators:previous.indicators}).toEqual(previous);});
   const ids=[next.id,...next.tabs.flatMap(tab=>[tab.id,...tab.charts.flatMap(chart=>[chart.id,...(chart.indicators??[]).map(item=>item.id)])])];expect(new Set(ids).size).toBe(ids.length);
-  next.tabs[0].charts[0].indicators!.at(-1)!.parameters.base=10;expect(next.tabs[0].charts[1].indicators!.at(-1)!.parameters.base).toBe(26);expect(indicator).toEqual(template);expect(w).toEqual(original);
+  next.tabs[0].charts[0].indicators!.at(-1)!.parameters.base=10;expect(next.tabs[0].charts[1].indicators!.at(-1)!.parameters.base).toBe(26);next.tabs[0].charts[0].indicators!.at(-1)!.visibility!.cloud=true;expect(next.tabs[0].charts[1].indicators!.at(-1)!.visibility!.cloud).toBe(false);expect(indicator).toEqual(template);expect(w).toEqual(original);
  });
  it('rejects a full chart atomically before changing any of the other eight charts',()=>{
   const w=workspace();w.tabs[0].charts[8].indicators=Array.from({length:MAX_INDICATORS},()=>({...structuredClone(indicator),id:crypto.randomUUID()}));const before=structuredClone(w);

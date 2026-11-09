@@ -18,6 +18,9 @@ type Indicator struct {
 	// PaneStretchFactor is a MACD pane's height relative to the main chart pane.
 	// Omission keeps the default layout and the original shape of legacy exports.
 	PaneStretchFactor *float64 `json:"paneStretchFactor,omitempty"`
+	// Visibility controls plotted components without changing their calculation.
+	// Omitted keys remain visible, preserving the appearance of legacy charts.
+	Visibility map[string]bool `json:"visibility,omitempty"`
 }
 
 var indicatorColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -33,6 +36,18 @@ func validateIndicator(i Indicator) error {
 		names = []string{"fast", "slow", "signal"}
 	default:
 		return fmt.Errorf("unsupported indicator %q", i.Type)
+	}
+	for plot := range i.Visibility {
+		allowed := false
+		switch i.Type {
+		case "ichimoku":
+			allowed = member(plot, "conversion", "base", "spanA", "spanB", "lagging", "cloud")
+		case "macd":
+			allowed = member(plot, "macd", "signal", "histogram", "zero")
+		}
+		if !allowed {
+			return fmt.Errorf("unsupported %s visibility component %q", i.Type, plot)
+		}
 	}
 	if i.Color != nil && !indicatorColor.MatchString(*i.Color) {
 		return fmt.Errorf("indicator color must be a six-digit hex color")

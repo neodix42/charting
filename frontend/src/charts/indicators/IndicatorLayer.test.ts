@@ -2,14 +2,16 @@ import {describe,it,expect,vi} from 'vitest';
 import type {IChartApi,ISeriesApi} from 'lightweight-charts';
 import type {Candle,IndicatorConfig} from '../../types';
 import {IndicatorLayer} from './IndicatorLayer';
+import {ichimoku,macd} from './math';
 
 function chartHarness(){
- type FakeSeries={data:{time:number;value:number;color?:string}[];options:Record<string,unknown>;setData:ReturnType<typeof vi.fn>;applyOptions:ReturnType<typeof vi.fn>;createPriceLine:ReturnType<typeof vi.fn>;priceScale:()=>{applyOptions:ReturnType<typeof vi.fn>};attachPrimitive:ReturnType<typeof vi.fn>;detachPrimitive:ReturnType<typeof vi.fn>;priceToCoordinate:(price:number)=>number};
+ type PriceLine={options:Record<string,unknown>;applyOptions:ReturnType<typeof vi.fn>};
+ type FakeSeries={data:{time:number;value:number;color?:string}[];options:Record<string,unknown>;priceLines:PriceLine[];setData:ReturnType<typeof vi.fn>;applyOptions:ReturnType<typeof vi.fn>;createPriceLine:ReturnType<typeof vi.fn>;priceScale:()=>{applyOptions:ReturnType<typeof vi.fn>};attachPrimitive:ReturnType<typeof vi.fn>;detachPrimitive:ReturnType<typeof vi.fn>;priceToCoordinate:(price:number)=>number};
  type Pane={series:Set<FakeSeries>;factor:number;paneIndex:()=>number;setStretchFactor:ReturnType<typeof vi.fn>;getStretchFactor:()=>number;getHTMLElement:()=>null};
  const panes:Pane[]=[],removed:unknown[]=[],range={from:1000,to:4500},restore=vi.fn(),scale={getVisibleRange:()=>range,setVisibleRange:restore,timeToCoordinate:(time:number)=>time};
  function makePane():Pane{const pane:Pane={series:new Set(),factor:panes.length?1:2,paneIndex:()=>panes.indexOf(pane),setStretchFactor:vi.fn((factor:number)=>{pane.factor=factor;}),getStretchFactor:()=>pane.factor,getHTMLElement:()=>null};panes.push(pane);return pane;}
  function makeSeries(options:unknown,pane:Pane):FakeSeries{
-  const series:FakeSeries={data:[],options:options as Record<string,unknown>,setData:vi.fn((data:{time:number;value:number;color?:string}[])=>{series.data=data;}),applyOptions:vi.fn(),createPriceLine:vi.fn(),priceScale:()=>({applyOptions:vi.fn()}),attachPrimitive:vi.fn((primitive:{attached:(value:unknown)=>void})=>primitive.attached({chart,series,requestUpdate:vi.fn()})),detachPrimitive:vi.fn((primitive:{detached:()=>void})=>primitive.detached()),priceToCoordinate:(price:number)=>price};pane.series.add(series);return series;
+  const series:FakeSeries={data:[],options:options as Record<string,unknown>,priceLines:[],setData:vi.fn((data:{time:number;value:number;color?:string}[])=>{series.data=data;}),applyOptions:vi.fn((options:Record<string,unknown>)=>Object.assign(series.options,options)),createPriceLine:vi.fn((options:Record<string,unknown>)=>{const line:PriceLine={options,applyOptions:vi.fn((value:Record<string,unknown>)=>Object.assign(line.options,value))};series.priceLines.push(line);return line;}),priceScale:()=>({applyOptions:vi.fn()}),attachPrimitive:vi.fn((primitive:{attached:(value:unknown)=>void})=>primitive.attached({chart,series,requestUpdate:vi.fn()})),detachPrimitive:vi.fn((primitive:{detached:()=>void})=>primitive.detached()),priceToCoordinate:(price:number)=>price};pane.series.add(series);return series;
  }
  const first=makePane(),main=makeSeries({},first);
  const chart={timeScale:()=>scale,panes:()=>panes,addPane:makePane,addSeries:vi.fn((_definition:unknown,options:unknown,index=0)=>makeSeries(options,panes[index])),removeSeries:vi.fn((series:ReturnType<typeof makeSeries>)=>{removed.push(series);const index=panes.findIndex(pane=>pane.series.has(series));if(index<0)throw Error('Removing an already removed series');panes[index].series.delete(series);if(index>0&&!panes[index].series.size)panes.splice(index,1);})};
@@ -19,6 +21,59 @@ const candles:Candle[]=Array.from({length:80},(_,i)=>({time:1000+i*60,open:i+10,
 const config=(id:string,type:IndicatorConfig['type'],parameters:IndicatorConfig['parameters']={}):IndicatorConfig=>({id,type,parameters});
 
 describe('indicator series ownership',()=>{
+ it('keeps only the selected Ichimoku line and removes hidden projections from the timeline',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),original=config('cloud','ichimoku'),baseOnly={...original,visibility:{conversion:false,spanA:false,spanB:false,lagging:false,cloud:false}};
+  layer.update(candles,[original],'1m');const lines=[...h.panes[0].series].slice(1),cloud=lines[2].attachPrimitive.mock.calls[0][0],updates=vi.spyOn(cloud,'setData');
+  const baseValues=ichimoku(candles).base.map(point=>({time:point.time,value:point.value}));
+  layer.update(candles,[baseOnly],'1m');expect(lines[1].data).toEqual(baseValues);expect(lines[1].options).toMatchObject({visible:true,lineVisible:true});
+  for(const index of [0,2,3,4]){expect(lines[index].data).toEqual([]);expect(lines[index].options).toMatchObject({visible:false,lineVisible:false});}
+  expect(updates).toHaveBeenLastCalledWith([]);expect(h.chart.addSeries).toHaveBeenCalledTimes(5);expect(h.removed).toEqual([]);
+  expect(lines.flatMap(line=>line.data).every(point=>point.time<=candles.at(-1)!.time)).toBe(true);
+  const conversionOnly={...original,visibility:{base:false,spanA:false,spanB:false,lagging:false,cloud:false}};
+  layer.update(candles,[conversionOnly],'1m');expect(lines[0].data).toEqual(ichimoku(candles).conversion);expect(lines[1].data).toEqual([]);
+  const allHidden={...baseOnly,visibility:{...baseOnly.visibility,base:false}};
+  layer.update(candles,[allHidden],'1m');expect(lines.every(line=>line.data.length===0&&line.options.visible===false)).toBe(true);expect(updates).toHaveBeenLastCalledWith([]);
+  const correction=[...candles.slice(0,-1),{...candles.at(-1)!,high:200,low:0,close:199,sourceRevision:2}];
+  layer.update(correction,[allHidden],'1m');expect(lines.every(line=>line.data.length===0)).toBe(true);
+  layer.update(correction,[original],'1m');const values=ichimoku(correction);
+  expect(lines.map(line=>line.data)).toEqual([values.conversion,values.base,values.leadingA,values.leadingB,values.lagging]);expect(updates).toHaveBeenLastCalledWith(values.cloud);
+  expect(lines.every(line=>line.options.visible===true&&line.options.lineVisible===true)).toBe(true);expect(h.removed).toEqual([]);
+  expect([...h.panes[0].series].slice(1)).toEqual(lines);layer.dispose();expect(h.removed).toEqual(lines);expect(lines[2].detachPrimitive).toHaveBeenCalledOnce();
+ });
+ it('renders the cloud fill independently of both span outlines using only its actual projected points',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),cloudOnly={...config('cloud','ichimoku'),visibility:{conversion:false,base:false,spanA:false,spanB:false,lagging:false}};
+  layer.update(candles,[cloudOnly],'1m');const lines=[...h.panes[0].series].slice(1),values=ichimoku(candles),carrier=lines[2];
+  expect(carrier.options).toMatchObject({visible:true,lineVisible:false});expect(carrier.data).toEqual(values.cloud.map(point=>({time:point.time,value:point.a})));
+  expect(carrier.data[0].time).toBeGreaterThan(values.leadingA[0].time);expect(carrier.data.at(-1)!.time).toBeGreaterThan(candles.at(-1)!.time);
+  for(const index of [0,1,3,4])expect(lines[index].data).toEqual([]);
+  const cloud=carrier.attachPrimitive.mock.calls[0][0],updates=vi.spyOn(cloud,'setData');
+  layer.update(candles,[{...cloudOnly,visibility:{...cloudOnly.visibility,cloud:false}}],'1m');expect(carrier.data).toEqual([]);expect(carrier.options).toMatchObject({visible:false,lineVisible:false});expect(updates).toHaveBeenLastCalledWith([]);
+  layer.update(candles,[cloudOnly],'1m');expect(carrier.data).toEqual(values.cloud.map(point=>({time:point.time,value:point.a})));expect(updates).toHaveBeenLastCalledWith(values.cloud);expect(h.chart.addSeries).toHaveBeenCalledTimes(5);
+ });
+ it('switches MACD outputs and its zero baseline independently without retaining hidden scale values',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),original=config('momentum','macd');
+  layer.update(candles,[original],'1m');const pane=h.panes[1],series=[...pane.series],histogram=series[0],line=series[1],signal=series[2],zero=line.priceLines[0],originalData=line.data;
+  const allHidden={...original,visibility:{macd:false,signal:false,histogram:false,zero:false}};pane.factor=1.7;
+  layer.update(candles,[allHidden],'1m');expect(series.every(item=>item.data.length===0&&item.options.visible===false)).toBe(true);expect(zero.options.lineVisible).toBe(false);expect(pane.factor).toBe(1.7);
+  layer.update(candles,[{...allHidden,visibility:{...allHidden.visibility,zero:true}}],'1m');expect(line.options).toMatchObject({visible:true,lineVisible:false});expect(line.data).toEqual(originalData.map(point=>({...point,value:0})));expect(zero.options.lineVisible).toBe(true);expect(signal.data).toEqual([]);expect(histogram.data).toEqual([]);
+  layer.update(candles,[{...allHidden,visibility:{...allHidden.visibility,histogram:true}}],'1m');expect(line.data).toEqual([]);expect(line.options.visible).toBe(false);expect(zero.options.lineVisible).toBe(false);expect(histogram.data.length).toBeGreaterThan(0);expect(histogram.options.visible).toBe(true);
+  expect((histogram.options.priceFormat as {minMove:number}).minMove).toBeLessThanOrEqual(1e-8);
+  layer.update(candles,[{...allHidden,visibility:{...allHidden.visibility,signal:true}}],'1m');expect(histogram.data).toEqual([]);expect(signal.data).toEqual(macd(candles).signal);expect(signal.options.visible).toBe(true);expect(line.data).toEqual([]);
+  layer.update(candles,[{...allHidden,visibility:{...allHidden.visibility,macd:true}}],'1m');expect(line.data).toEqual(originalData);expect(line.options).toMatchObject({visible:true,lineVisible:true});expect(signal.data).toEqual([]);expect(histogram.data).toEqual([]);
+  const provider=line.options.autoscaleInfoProvider as (original:()=>{priceRange:{minValue:number;maxValue:number}})=>unknown;
+  expect(provider(()=>({priceRange:{minValue:5,maxValue:10}}))).toEqual({priceRange:{minValue:5,maxValue:10}});
+  layer.update(candles,[original],'1m');const zeroProvider=line.options.autoscaleInfoProvider as typeof provider;
+  expect(zeroProvider(()=>({priceRange:{minValue:5,maxValue:10}}))).toEqual({priceRange:{minValue:0,maxValue:10}});expect(zeroProvider(()=>({priceRange:{minValue:-10,maxValue:-5}}))).toEqual({priceRange:{minValue:-10,maxValue:0}});
+  expect(pane.factor).toBe(1.7);expect([...pane.series]).toEqual(series);expect(h.removed).toEqual([]);expect(h.chart.addSeries).toHaveBeenCalledTimes(3);
+  const correction=[...candles.slice(0,-1),{...candles.at(-1)!,close:200,sourceRevision:2}];layer.update(correction,[allHidden],'1m');layer.update(correction,[original],'1m');expect(line.data).toEqual(macd(correction).macd);expect(signal.data).toEqual(macd(correction).signal);expect(zero.options.lineVisible).toBe(true);
+  layer.dispose();expect(h.removed).toEqual(expect.arrayContaining(series));expect(h.panes).toHaveLength(1);
+ });
+ it('treats omitted or explicitly enabled plots equally without mutating legacy configs',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('cloud','ichimoku'),config('momentum','macd')];
+  layer.update(candles,configs,'1m');const series=h.panes.flatMap(pane=>[...pane.series]).slice(1),writes=series.map(item=>item.setData.mock.calls.length);
+  layer.update(candles,[{...configs[0],visibility:{cloud:true,base:true,conversion:true,spanB:true,spanA:true,lagging:true}},{...configs[1],visibility:{zero:true,histogram:true,signal:true,macd:true}}],'1m');
+  expect(series.map(item=>item.setData.mock.calls.length)).toEqual(writes);expect(configs.every(item=>!Object.hasOwn(item,'visibility'))).toBe(true);expect(h.restore).toHaveBeenCalledTimes(1);
+ });
  it.each(['low','high'] as const)('renders %s on the price pane and reuses/removes its series after corrections and edits',type=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),configs=[config('range',type,{period:3})];
   layer.update(candles.slice(0,2),configs,'1m');const line=[...h.panes[0].series][1];expect(line.data).toEqual([]);

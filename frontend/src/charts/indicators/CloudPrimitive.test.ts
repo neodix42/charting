@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import type {IChartApi,ISeriesApi,SeriesAttachedParameter} from 'lightweight-charts';
+import type {IChartApi,ISeriesApi,Logical,SeriesAttachedParameter} from 'lightweight-charts';
 import {CloudPrimitive,drawCloud} from './CloudPrimitive';
 
 function context(){
@@ -8,6 +8,17 @@ function context(){
  return {ctx:ctx as unknown as CanvasRenderingContext2D,paths};
 }
 describe('Ichimoku cloud canvas',()=>{
+ it('autoscales both visible cloud edges within the carrier range, including when outlines are hidden',()=>{
+  let range:{from?:number;to?:number}|null={from:110,to:120};
+  const chart={timeScale:()=>({timeToCoordinate:(time:number)=>time})} as unknown as IChartApi;
+  const series={priceToCoordinate:(price:number)=>price,barsInLogicalRange:()=>range} as unknown as ISeriesApi<'Line'>;
+  const cloud=new CloudPrimitive();cloud.attached({chart,series,requestUpdate:vi.fn()} as unknown as SeriesAttachedParameter);cloud.setData([{time:110,a:80,b:60},{time:120,a:75,b:65},{time:130,a:1000,b:2000}]);
+  expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toEqual({priceRange:{minValue:60,maxValue:80}});
+  range={from:120,to:130};expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toEqual({priceRange:{minValue:65,maxValue:2000}});
+  range={from:140,to:150};expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toBeNull();
+  range=null;expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toBeNull();range={to:120};expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toBeNull();
+  range={from:110,to:130};cloud.setData([]);expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toBeNull();cloud.detached();expect(cloud.autoscaleInfo(0 as Logical,1 as Logical)).toBeNull();
+ });
  it('fills only between span lines, clips to the pane and splits bull/bear intersections',()=>{
   const {ctx,paths}=context();drawCloud(ctx,[{x:10,a:20,b:40},{x:30,a:40,b:20}],100,80);
   expect(ctx.rect).toHaveBeenCalledWith(0,0,100,80);expect(ctx.clip).toHaveBeenCalledOnce();expect(ctx.save).toHaveBeenCalledOnce();expect(ctx.restore).toHaveBeenCalledOnce();

@@ -112,11 +112,12 @@ export namespace domain {
 	    color?: string;
 	    lineWidth?: number;
 	    paneStretchFactor?: number;
-	
+	    visibility?: Record<string, boolean>;
+
 	    static createFrom(source: any = {}) {
 	        return new Indicator(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -125,6 +126,7 @@ export namespace domain {
 	        this.color = source["color"];
 	        this.lineWidth = source["lineWidth"];
 	        this.paneStretchFactor = source["paneStretchFactor"];
+	        this.visibility = source["visibility"];
 	    }
 	}
 	export class View {

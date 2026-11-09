@@ -169,6 +169,10 @@ Each chart has an **Indicators** dropdown. Select SMA, EMA, Low, High, Ichimoku 
 | Ichimoku Cloud | Conversion 9, base 26, leading span B 52, displacement 26 | Conversion/base/leading/lagging lines and green/red cloud between the leading spans |
 | MACD | Fast 12, slow 26, signal 9 | Separate pane with MACD/signal lines, histogram and zero baseline |
 
+**Visible components** in the Ichimoku and MACD parameter dialogs controls each plotted component independently. Ichimoku offers conversion, base, leading span A, leading span B, lagging line and cloud fill: to show only the base or conversion line, leave only that checkbox selected. MACD offers the MACD line, signal line, histogram and zero line. Its Fast/Slow periods remain calculation inputs; their values still apply when a plot is hidden.
+
+Visibility choices apply when you press **OK**; Cancel or Escape discards them. They persist per indicator through restart, duplication and JSON export/import, and the shared Indicators dialog applies the chosen visibility to every chart in the current tab. Existing indicators start with every component visible. Hiding every component keeps its configuration available for later editing. Hidden plots do not affect autoscaling or leave projected Ichimoku timestamps on the chart. Calculations, chart subscriptions and MACD pane sizes are retained.
+
 Drag the separator above a MACD pane to resize it. Each MACD instance saves its own height relative to the main price pane, restoring the same proportions after tab switches, parameter edits, restart and JSON export/import. The proportions adapt when the chart or window is resized.
 
 New SMA instances default to red and 200 bars; saved periods and colors remain unchanged. Low/High wait for a full period, then update their rolling wick extrema on each candle correction.
