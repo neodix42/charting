@@ -5,6 +5,11 @@ import {analysisDate} from '../workspace/screenerAnalysis';
 // A winning trade stays green in every theme, including themes with non-green up candles.
 export const profitableMatchColor='#16a34a';
 export function analysisTradePriceLines(data:AnalysisChart):string[] {
+ const signal=data.signal;
+ if(signal){
+  const format=(price:number)=>price.toLocaleString('en-US',{maximumSignificantDigits:15});
+  return [Number.isFinite(signal.entry)?`Entry ${format(signal.entry)}`:'',Number.isFinite(signal.stopLoss)?`SL ${format(signal.stopLoss!)}`:'',Number.isFinite(signal.takeProfit)?`TP ${format(signal.takeProfit!)}`:''].filter(Boolean);
+ }
  const trade=data.trade;
  if(!trade||![trade.entry,trade.stopLoss,trade.takeProfit].every(Number.isFinite))return [];
  const format=(price:number)=>price.toLocaleString('en-US',{maximumSignificantDigits:15});

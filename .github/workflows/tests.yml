@@ -91,6 +91,12 @@ jobs:
           python3 scripts/screener_bundle.py --target linux-amd64 --destination "$RUNNER_TEMP/screener-runtime"
       - name: Verify packaged indicators, downloads and provider pacing offline
         run: python3 scripts/smoke-enrichment-runtime.py "$RUNNER_TEMP/screener-runtime" --report "$RUNNER_TEMP/test-checks/enrichment-runtime.json"
+      - name: Verify the Telegram signal chart with the packaged browser offline
+        env:
+          CRYPTODESK_TEST_CHART_RENDER: '1'
+          CRYPTODESK_CHART_RUNTIME: ${{ runner.temp }}/screener-runtime
+          CRYPTODESK_CHART_SAMPLE: ${{ runner.temp }}/test-checks/telegram-signal-chart.png
+        run: go test -race ./internal/chartimage -run '^TestHeadlessSharedAnalysisPlot$' -count=1 -v
       - name: Preserve packaged runtime diagnostics on success or failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

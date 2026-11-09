@@ -1171,6 +1171,7 @@ export namespace screener {
 	    profitableMatches?: AnalysisProfitableMatch[];
 	    trade?: AnalysisTradeLevels;
 	    tradeExecution?: AnalysisTradeExecution;
+	    signal?: AnalysisSignalLevels;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisChart(source);
@@ -1192,6 +1193,7 @@ export namespace screener {
 	        this.profitableMatches = this.convertValues(source["profitableMatches"], AnalysisProfitableMatch);
 	        this.trade = this.convertValues(source["trade"], AnalysisTradeLevels);
 	        this.tradeExecution = this.convertValues(source["tradeExecution"], AnalysisTradeExecution);
+	        this.signal = this.convertValues(source["signal"], AnalysisSignalLevels);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2479,6 +2481,23 @@ export namespace screener {
 		    }
 		    return a;
 		}
+	}
+
+	export class AnalysisSignalLevels {
+	    entry: number;
+	    stopLoss?: number;
+	    takeProfit?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisSignalLevels(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entry = source["entry"];
+	        this.stopLoss = source["stopLoss"];
+	        this.takeProfit = source["takeProfit"];
+	    }
 	}
 }
 

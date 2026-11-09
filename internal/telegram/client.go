@@ -46,6 +46,9 @@ type DeliveryError struct {
 }
 
 func (e *DeliveryError) Error() string {
+	if e.Code == "chartUnavailable" {
+		return fmt.Sprintf("Telegram signal text delivered to %d of %d recipients without a chart image; no automatic resend (chartUnavailable)", e.ConfirmedCount, e.TotalRecipients)
+	}
 	return fmt.Sprintf("Telegram alert delivery: %d of %d recipients confirmed; no automatic resend: %s", e.ConfirmedCount, e.TotalRecipients, fail(e.Code))
 }
 
@@ -59,21 +62,27 @@ func newClient(transport http.RoundTripper) *client {
 }
 
 func (c *client) call(ctx context.Context, token, method string, input, output any) error {
-	if token == "" {
-		return fail("auth")
-	}
 	body, err := json.Marshal(input)
 	if err != nil {
 		return fail("response")
+	}
+	return c.request(ctx, token, method, "application/json", body, output)
+}
+
+func isWrite(method string) bool { return method == "sendMessage" || method == "sendPhoto" }
+
+func (c *client) request(ctx context.Context, token, method, contentType string, body []byte, output any) error {
+	if token == "" {
+		return fail("auth")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.telegram.org/bot"+url.PathEscape(token)+"/"+method, bytes.NewReader(body))
 	if err != nil {
 		return fail("auth")
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	response, err := c.http.Do(req)
 	if err != nil {
-		if method == "sendMessage" {
+		if isWrite(method) {
 			return fail("uncertain")
 		}
 		return fail("network")
@@ -86,7 +95,7 @@ func (c *client) call(ctx context.Context, token, method string, input, output a
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, 2*1024*1024+1))
 	if err != nil || len(data) > 2*1024*1024 || json.Unmarshal(data, &envelope) != nil {
-		if method == "sendMessage" {
+		if isWrite(method) {
 			return fail("uncertain")
 		}
 		return fail("response")
@@ -109,15 +118,18 @@ func (c *client) call(ctx context.Context, token, method string, input, output a
 			if method == "getMe" {
 				return fail("auth")
 			}
+			if method == "sendPhoto" {
+				return fail("photo")
+			}
 			return fail("recipientNotFound")
 		}
-		if method == "sendMessage" {
+		if isWrite(method) {
 			return fail("uncertain")
 		}
 		return fail("response")
 	}
 	if json.Unmarshal(envelope.Result, output) != nil {
-		if method == "sendMessage" {
+		if isWrite(method) {
 			return fail("uncertain")
 		}
 		return fail("response")
@@ -271,6 +283,18 @@ func individualFailure(code string) bool {
 }
 
 func (s *Store) sendMessage(ctx context.Context, message string, wait bool) (TestResult, error) {
+	return s.sendBatch(ctx, wait, false, func(ctx context.Context, config configuration, recipient string, bot BotIdentity, id int64, messageID *int64) (bool, error) {
+		err := s.sendRecipient(ctx, config, recipient, bot, id, message, messageID)
+		return err == nil, err
+	})
+}
+
+// recipientSender reports whether any part of this signal was acknowledged.
+// This prevents a successful photo followed by an uncertain text from being
+// counted as completely unsent, or from being retried as a whole signal.
+type recipientSender func(context.Context, configuration, string, BotIdentity, int64, *int64) (bool, error)
+
+func (s *Store) sendBatch(ctx context.Context, wait, retainCounts bool, send recipientSender) (TestResult, error) {
 	queueCtx, stopWaiting := context.WithTimeout(ctx, deliveryTimeout)
 	defer stopWaiting()
 	if wait {
@@ -308,7 +332,7 @@ func (s *Store) sendMessage(ctx context.Context, message string, wait bool) (Tes
 	total, delivered := len(recipients), 0
 	finish := func() (TestResult, error) {
 		result.Sent = result.Code == "" && delivered == total
-		if multi {
+		if multi || retainCounts {
 			result.SentCount, result.TotalRecipients = delivered, total
 		}
 		return result, nil
@@ -354,7 +378,11 @@ func (s *Store) sendMessage(ctx context.Context, message string, wait bool) (Tes
 			continue
 		}
 		seen[id] = true
-		if sendErr := s.sendRecipient(ctx, config, recipient, bot, id, message, &result.MessageID); sendErr != nil {
+		confirmed, sendErr := send(ctx, config, recipient, bot, id, &result.MessageID)
+		if confirmed {
+			delivered++
+		}
+		if sendErr != nil {
 			code := operationCode(sendErr)
 			if !individualFailure(code) {
 				result.Code = code
@@ -365,12 +393,22 @@ func (s *Store) sendMessage(ctx context.Context, message string, wait bool) (Tes
 			}
 			continue
 		}
-		delivered++
 	}
 	return finish()
 }
 
 func (s *Store) sendRecipient(ctx context.Context, config configuration, recipient string, bot BotIdentity, id int64, message string, messageID *int64) error {
+	return s.sendVerified(ctx, config, recipient, bot, id, messageID, func(sent *sentMessage) error {
+		return s.client.call(ctx, config.APIToken, "sendMessage", map[string]any{"chat_id": id, "text": message}, sent)
+	})
+}
+
+type sentMessage struct {
+	MessageID int64 `json:"message_id"`
+	Chat      chat  `json:"chat"`
+}
+
+func (s *Store) sendVerified(ctx context.Context, config configuration, recipient string, bot BotIdentity, id int64, messageID *int64, write func(*sentMessage) error) error {
 	if delay := time.Until(s.nextSend); delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
@@ -390,12 +428,9 @@ func (s *Store) sendRecipient(ctx context.Context, config configuration, recipie
 	if err := s.publishRecipientLocked(config, recipient, bot, id); err != nil {
 		return err
 	}
-	var sent struct {
-		MessageID int64 `json:"message_id"`
-		Chat      chat  `json:"chat"`
-	}
+	var sent sentMessage
 	s.nextSend = time.Now().Add(time.Second)
-	if err := s.client.call(ctx, config.APIToken, "sendMessage", map[string]any{"chat_id": id, "text": message}, &sent); err != nil {
+	if err := write(&sent); err != nil {
 		return err
 	}
 	if sent.MessageID <= 0 || sent.Chat.ID != id || sent.Chat.Type != "private" {

@@ -175,6 +175,9 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 									failure = e
 								} else {
 									value.Symbol, value.AssetName, value.DataSource, value.Market, value.Profitability = asset.NativeID, asset.Name, source, asset.Market, nil
+									if e = attachLiveAlertChart(ctx, a, s, closed-1, &value); e != nil {
+										return e
+									}
 									alert = &value
 								}
 							}

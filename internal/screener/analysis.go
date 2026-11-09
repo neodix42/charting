@@ -116,6 +116,14 @@ type AnalysisTradeLevels struct {
 	TakeProfit float64 `json:"takeProfit"`
 }
 
+// Signal levels are indicative values known when a live candle closes. Unlike
+// historical trades, a live signal can have only one of its optional exits.
+type AnalysisSignalLevels struct {
+	Entry      float64  `json:"entry"`
+	StopLoss   *float64 `json:"stopLoss,omitempty"`
+	TakeProfit *float64 `json:"takeProfit,omitempty"`
+}
+
 // Execution timestamps identify source bars, never the unknown intrabar touch time.
 type AnalysisTradeExecution struct {
 	EntryTime int64  `json:"entryTime"`
@@ -142,6 +150,7 @@ type AnalysisChart struct {
 	ProfitableMatches []AnalysisProfitableMatch `json:"profitableMatches,omitempty"`
 	Trade             *AnalysisTradeLevels      `json:"trade,omitempty"`
 	TradeExecution    *AnalysisTradeExecution   `json:"tradeExecution,omitempty"`
+	Signal            *AnalysisSignalLevels     `json:"signal,omitempty"`
 }
 type analysisState struct {
 	active                                     bool

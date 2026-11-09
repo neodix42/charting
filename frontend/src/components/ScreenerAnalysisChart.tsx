@@ -16,7 +16,9 @@ const value=(row:AnalysisBar,field:string)=>Object.entries(row.values).find(([ke
 const price=(row:AnalysisBar)=>value(row,'close')??value(row,'price')??value(row,'bidprice')??value(row,'askprice');
 const format=(number:number|undefined)=>number===undefined?'—':number.toLocaleString('en-US',{maximumSignificantDigits:10});
 
-function AnalysisPlot({data}:{data:AnalysisChart}){
+// The desktop match inspector and background signal-image renderer share this
+// exact plot, including candles, indicator panes, price labels and match markers.
+export function AnalysisPlot({data}:{data:AnalysisChart}){
  const fontSize=useAppearanceFontSize(),[theme,setTheme]=useState(()=>document.documentElement.dataset.theme??'light'),chartRef=useRef<IChartApi|null>(null),applyTheme=useRef<(theme:string)=>void>(()=>{});
  const host=useRef<HTMLDivElement>(null),[shown,setShown]=useState<string[]>(()=>data.fields.filter(field=>!rawFields.has(field.toLowerCase()))),[hover,setHover]=useState<AnalysisBar|null>(null),[chartError,setChartError]=useState('');
  const plotFields=data.fields.filter(field=>!rawFields.has(field.toLowerCase())),selected=shown.filter(field=>plotFields.includes(field));

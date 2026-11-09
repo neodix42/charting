@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cryptodesk/internal/candlestorage"
+	"cryptodesk/internal/chartimage"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/exchange"
 	"cryptodesk/internal/hyperliquid"
@@ -43,6 +44,7 @@ type App struct {
 	telegram        *telegram.Store
 	liveAlerts      *screener.LiveAlerts
 	liveAlertsError string
+	chartRenderer   *chartimage.Renderer
 	mu              sync.Mutex
 	revision        int64
 	closeToken      string

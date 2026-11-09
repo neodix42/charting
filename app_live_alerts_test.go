@@ -3,6 +3,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +13,98 @@ import (
 	"cryptodesk/internal/screener"
 	"cryptodesk/internal/telegram"
 )
+
+func TestLiveAlertChartDeliveryPreservesSignalAndDoesNotRetryUpload(t *testing.T) {
+	chart := &screener.AnalysisChart{Symbol: "@268", MatchTime: 123}
+	alert := screener.LiveAlert{Symbol: "@268", AssetName: "AAPL/USDC", DataSource: "hyperliquid", Chart: chart}
+	image := []byte("rendered PNG")
+	renders, sends := 0, 0
+	uploadError := errors.New("upload outcome uncertain")
+	err := deliverScreenerLiveAlert(context.Background(), alert, func(ctx context.Context, got screener.LiveAlert) ([]byte, error) {
+		renders++
+		if got.Chart != chart || got.Symbol != "@268" || ctx.Err() != nil {
+			t.Fatal("renderer lost the immutable matched snapshot", got)
+		}
+		return image, nil
+	}, func(_ context.Context, text string, got []byte, reason string) error {
+		sends++
+		if text != formatScreenerLiveAlert(alert) || !bytes.Equal(got, image) || reason != "" {
+			t.Fatal("photo changed the signal or added a false fallback", text, reason)
+		}
+		return uploadError
+	})
+	if !errors.Is(err, uploadError) || renders != 1 || sends != 1 {
+		t.Fatal("uncertain upload retried or replaced", renders, sends, err)
+	}
+}
+
+func TestLiveAlertChartFailureUsesSafeExplicitTextFallback(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		chart       *screener.AnalysisChart
+		chartError  string
+		renderError error
+		image       []byte
+		wantReason  string
+		wantRenders int
+	}{
+		{name: "no snapshot", wantReason: "Chart data for the matched bar could not be prepared."},
+		{name: "snapshot error", chart: &screener.AnalysisChart{}, chartError: "/private/path/provider?token=secret", wantReason: "Chart data for the matched bar could not be prepared."},
+		{name: "renderer error", chart: &screener.AnalysisChart{}, renderError: errors.New("/private/runtime token=secret"), image: []byte("partial PNG"), wantReason: "The signal chart could not be rendered.", wantRenders: 1},
+		{name: "empty image", chart: &screener.AnalysisChart{}, wantReason: "The signal chart could not be rendered.", wantRenders: 1},
+		{name: "missing runtime", chart: &screener.AnalysisChart{}, renderError: errSignalChartRuntime, wantReason: "The chart renderer is unavailable; install the complete matching CryptoDesk package.", wantRenders: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			alert := screener.LiveAlert{Symbol: "eurusd", Chart: test.chart, ChartError: test.chartError}
+			renders, sends := 0, 0
+			err := deliverScreenerLiveAlert(context.Background(), alert, func(context.Context, screener.LiveAlert) ([]byte, error) {
+				renders++
+				return test.image, test.renderError
+			}, func(_ context.Context, text string, image []byte, reason string) error {
+				sends++
+				if len(image) != 0 || text != formatScreenerLiveAlert(alert) || reason != test.wantReason {
+					t.Fatal("unsafe or ambiguous fallback", text, reason, len(image))
+				}
+				return nil
+			})
+			if err != nil || sends != 1 || renders != test.wantRenders {
+				t.Fatal("fallback delivery failed", renders, sends, err)
+			}
+		})
+	}
+}
+
+func TestLiveAlertChartCancellationDoesNotSendFallback(t *testing.T) {
+	for _, cancelBefore := range []bool{true, false} {
+		ctx, cancel := context.WithCancel(context.Background())
+		if cancelBefore {
+			cancel()
+		}
+		renders, sends := 0, 0
+		err := deliverScreenerLiveAlert(ctx, screener.LiveAlert{Chart: &screener.AnalysisChart{}}, func(context.Context, screener.LiveAlert) ([]byte, error) {
+			renders++
+			cancel()
+			return nil, context.Canceled
+		}, func(context.Context, string, []byte, string) error {
+			sends++
+			return nil
+		})
+		cancel()
+		if !errors.Is(err, context.Canceled) || sends != 0 || cancelBefore && renders != 0 || !cancelBefore && renders != 1 {
+			t.Fatal("cancelled render sent a notification", cancelBefore, renders, sends, err)
+		}
+	}
+}
+
+func TestLiveAlertChartUnavailableFacadeDoesNotPanic(t *testing.T) {
+	app := &App{}
+	if err := app.sendScreenerLiveAlert(context.Background(), screener.LiveAlert{}); err == nil {
+		t.Fatal("accepted missing Telegram settings")
+	}
+	if _, err := app.renderScreenerLiveAlert(context.Background(), screener.LiveAlert{}); !errors.Is(err, errSignalChartRuntime) {
+		t.Fatal("missing chart runtime was not classified", err)
+	}
+}
 
 func TestLiveAlertMessageIncludesAssetConditionClosedTimeAndPrices(t *testing.T) {
 	stop, target := 90.0, 135.0

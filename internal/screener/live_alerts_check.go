@@ -454,6 +454,9 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 					run.failed(saved.ID, e)
 					continue
 				}
+				if e = attachLiveAlertChart(ctx, a, s, closed-1, &value); e != nil {
+					return e
+				}
 				alert = &value
 			}
 			claimed, claimErr := l.claimCurrentCondition(ctx, saved, s.metadata.Symbol, s.metadata.Timeframe, key, latest.timestamp, alert)

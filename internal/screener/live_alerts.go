@@ -90,6 +90,10 @@ type LiveAlert struct {
 	StopLoss           *float64                     `json:"stopLoss,omitempty"`
 	TakeProfit         *float64                     `json:"takeProfit,omitempty"`
 	Profitability      *SavedConditionProfitability `json:"profitability,omitempty"`
+	// A delivery owns its small immutable chart snapshot. Media is never part
+	// of persisted alert history or the periodically polled application state.
+	Chart      *AnalysisChart `json:"-"`
+	ChartError string         `json:"-"`
 }
 
 type LiveAlertOutcome struct {

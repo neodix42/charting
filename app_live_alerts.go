@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"cryptodesk/internal/chartimage"
 	"cryptodesk/internal/screener"
 )
 
@@ -62,7 +63,75 @@ func (a *App) CheckScreenerLiveAlert(alertID string) (screener.LiveAlertsInfo, e
 }
 
 func (a *App) sendScreenerLiveAlert(ctx context.Context, alert screener.LiveAlert) error {
-	return a.telegram.SendAlert(ctx, formatScreenerLiveAlert(alert))
+	if a.telegram == nil {
+		return errors.New("Telegram settings are unavailable")
+	}
+	return deliverScreenerLiveAlert(ctx, alert, a.renderScreenerLiveAlert, a.telegram.SendAlertWithChart)
+}
+
+var errSignalChartRuntime = errors.New("signal chart runtime unavailable")
+
+// Keep rendering failures separate from uncertain Telegram writes. A chart can
+// fall back to text before delivery starts; an attempted upload is never retried.
+func deliverScreenerLiveAlert(ctx context.Context, alert screener.LiveAlert, render func(context.Context, screener.LiveAlert) ([]byte, error), send func(context.Context, string, []byte, string) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var image []byte
+	reason := ""
+	if alert.Chart == nil || alert.ChartError != "" {
+		reason = "Chart data for the matched bar could not be prepared."
+	} else {
+		var err error
+		image, err = render(ctx, alert)
+		if err != nil || len(image) == 0 {
+			image, reason = nil, "The signal chart could not be rendered."
+			if errors.Is(err, errSignalChartRuntime) {
+				reason = "The chart renderer is unavailable; install the complete matching CryptoDesk package."
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return send(ctx, formatScreenerLiveAlert(alert), image, reason)
+}
+
+func (a *App) renderScreenerLiveAlert(ctx context.Context, alert screener.LiveAlert) ([]byte, error) {
+	if a.screener == nil {
+		return nil, errSignalChartRuntime
+	}
+	node, directory, browser, err := a.screener.SignalChartRuntime()
+	if err != nil {
+		return nil, errSignalChartRuntime
+	}
+	theme, fontSize := "light", 15
+	if a.store != nil {
+		if loaded, err := a.store.Load(); err == nil {
+			theme = loaded.Workspace.Theme
+			if loaded.Workspace.FontSize != nil {
+				fontSize = *loaded.Workspace.FontSize
+			}
+		}
+	}
+	a.mu.Lock()
+	if a.chartRenderer == nil {
+		a.chartRenderer = chartimage.New()
+	}
+	renderer := a.chartRenderer
+	a.mu.Unlock()
+	source := alert.DataSource
+	if source == "" {
+		source = "dukascopy"
+	}
+	condition := alert.SavedConditionName
+	if condition == "" {
+		condition = alert.ConditionName
+	}
+	return renderer.Render(ctx, chartimage.Runtime{Node: node, Directory: directory, Browser: browser}, chartimage.Request{
+		Chart: alert.Chart, Title: alert.Symbol + " — " + alert.AssetName,
+		Source: source, Market: alert.Market, Condition: condition, Theme: theme, FontSize: fontSize,
+	})
 }
 
 func formatScreenerLiveAlert(alert screener.LiveAlert) string {

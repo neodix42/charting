@@ -159,6 +159,14 @@ describe('Profitable match chart markers',()=>{
   for(const field of ['entry','stopLoss','takeProfit'])for(const invalid of [NaN,Infinity])expect(analysisMatchMarkers({...chart,trade:{entry:105,stopLoss:90,takeProfit:135,[field]:invalid}},'blue')).toHaveLength(1);
   expect(analysisMatchMarkers({...chart,trade:{entry:0,stopLoss:-1,takeProfit:1}},'blue')[1].text).toBe('Entry 0');
  });
+ it('labels only available live signal levels without inventing a protective exit or future outcome',()=>{
+  for(const signal of [{entry:105},{entry:105,stopLoss:90},{entry:105,takeProfit:135},{entry:105,stopLoss:90,takeProfit:135}]){
+   const data={...chart,signal};
+   const expected=['Match','Entry 105',...('stopLoss' in signal?['SL 90']:[]),...('takeProfit' in signal?['TP 135']:[])];
+   expect(analysisMatchMarkers(data,'orange').map(marker=>marker.text)).toEqual(expected);
+   expect(analysisTradeExecutionDetails(data)).toEqual([]);
+  }
+ });
 });
 
 describe('Selected simulated trade timing and outcome',()=>{

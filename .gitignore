@@ -54,6 +54,8 @@ release/
 *.lockfile
 __pycache__/
 /docs/verification/
+/internal/chartimage/assets/chart.js
+/internal/chartimage/assets/chart.css
 telegram-bot.json
 .telegram-bot-*
 screener-live-alerts.json
