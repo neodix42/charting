@@ -41,8 +41,8 @@ func validHyperliquidJob(job Job) bool {
 	return validHyperliquidDownloadID(job.Symbol) && job.Symbol == "hyperliquid-"+publicAlertSymbol(job.Market, job.NativeID) && (domain.FeedKey{Exchange: "hyperliquid", Market: job.Market, Instrument: job.NativeID, Timeframe: "1d"}).Validate() == nil
 }
 func validateHyperliquidRequest(r Request, now time.Time) error {
-	if r.Timeframe != "d1" && r.Timeframe != "w1" {
-		return errors.New("Hyperliquid downloader supports D1 and W1 derived from D1")
+	if r.Timeframe != "h1" && r.Timeframe != "d1" && r.Timeframe != "w1" {
+		return errors.New("Hyperliquid downloader supports H1, D1 and W1 derived from D1")
 	}
 	if len(r.Symbols) == 0 || len(r.Symbols) > 20000 {
 		return errors.New("select at least one Hyperliquid instrument")
@@ -91,7 +91,7 @@ func (m *Manager) CatalogForSource(ctx context.Context, source string) (Catalog,
 	if err != nil {
 		return Catalog{}, err
 	}
-	catalog := Catalog{Version: "hyperliquid-public", Timeframes: []string{"d1", "w1"}, Groups: []Group{}}
+	catalog := Catalog{Version: "hyperliquid-public", Timeframes: []string{"h1", "d1", "w1"}, Groups: []Group{}}
 	groups := map[string][]Instrument{}
 	for _, item := range items {
 		if warning := item.ProviderMetadata["catalogWarning"]; warning != "" {
@@ -205,7 +205,7 @@ func (m *Manager) runHyperliquidDownloads(ctx context.Context, directory string,
 							continue
 						}
 					}
-					m.jobs[i].Status, m.jobs[i].Message = "running", "Preparing Hyperliquid daily history"
+					m.jobs[i].Status, m.jobs[i].Message = "running", "Preparing Hyperliquid "+strings.ToUpper(job.Timeframe)+" history"
 					m.mu.Unlock()
 					_, _, err := m.downloadHyperliquid(ctx, i, job, directory)
 					m.mu.Lock()
@@ -248,7 +248,7 @@ func (m *Manager) downloadHyperliquid(ctx context.Context, index int, job Job, d
 	asset := publicAlertAsset{Market: job.Market, NativeID: job.NativeID, Symbol: strings.TrimPrefix(job.Symbol, "hyperliquid-")}
 	var incoming []domain.Candle
 	coverage := []dataRange{}
-	if job.Timeframe == "d1" {
+	if job.Timeframe == "h1" || job.Timeframe == "d1" {
 		m.hyperliquidMu.Lock()
 		a := m.hyperliquidAdapter
 		if a == nil {
@@ -259,12 +259,13 @@ func (m *Manager) downloadHyperliquid(ctx context.Context, index int, job Job, d
 		if err != nil {
 			return "", "", err
 		}
-		key := domain.FeedKey{Exchange: "hyperliquid", Market: job.Market, Instrument: job.NativeID, Timeframe: "1d"}
+		key := domain.FeedKey{Exchange: "hyperliquid", Market: job.Market, Instrument: job.NativeID, Timeframe: publicAlertIntervals[job.Timeframe]}
+		step := exchange.TimeframeSeconds(key.Timeframe)
 		// candleSnapshot itself returns the newest retained 5,000 bars in this
 		// range. Calendar-day clipping would lose sparse older candles.
 		end := min(to.Unix(), job.AsOf/1000+1)
 		requested := dataRange{From: max(int64(0), from.UnixMilli()), To: end * 1000}
-		covered, e := hyperliquidCoveredRanges(plan.Inputs, job.AsOf)
+		covered, e := hyperliquidCoveredRanges(plan.Inputs, job.AsOf, step)
 		if e != nil {
 			return "", "", e
 		}
@@ -280,17 +281,17 @@ func (m *Manager) downloadHyperliquid(ctx context.Context, index int, job Job, d
 				}
 			}
 		}
-		closedEnd := exchange.BucketStart(job.AsOf/1000-2, 86400) * 1000
+		closedEnd := exchange.BucketStart(job.AsOf/1000-2, step) * 1000
 		coverage = append(covered, dataRange{From: requested.From, To: min(requested.To, closedEnd)})
 		coverage = hyperliquidUnionRanges(coverage)
 
 		m.mu.Lock()
 		m.jobs[index].Progress = 80
-		m.jobs[index].Message = "Downloaded available Hyperliquid D1 candles"
+		m.jobs[index].Message = "Downloaded available Hyperliquid " + strings.ToUpper(job.Timeframe) + " candles"
 		m.mu.Unlock()
 
 		if len(incoming) > 0 {
-			if err = mergeHyperliquidHistory(ctx, m.profile, asset, "d1", incoming); err != nil {
+			if err = mergeHyperliquidHistory(ctx, m.profile, asset, job.Timeframe, incoming); err != nil {
 				return "", "", err
 			}
 		}
@@ -344,7 +345,7 @@ func (m *Manager) downloadHyperliquid(ctx context.Context, index int, job Job, d
 		all[c.Time] = c
 	}
 	if len(all) == 0 {
-		return "", "", errors.New("no Hyperliquid candles are available in the requested dates; history begins at listing and only the latest 5,000 D1 candles are retained")
+		return "", "", fmt.Errorf("no Hyperliquid candles are available in the requested dates; history begins at listing and only the latest 5,000 %s candles are retained", strings.ToUpper(job.Timeframe))
 	}
 	ordered := make([]domain.Candle, 0, len(all))
 	for _, c := range all {
@@ -395,7 +396,7 @@ func (m *Manager) downloadHyperliquid(ctx context.Context, index int, job Job, d
 	}
 	// Recover applied recipes from headers too, retaining legacy enriched data.
 	if len(plan.Inputs) > 0 {
-		data, recipes, err = m.replayHyperliquidIndicators(ctx, work, partial, plan.Inputs, recipes)
+		data, recipes, err = m.replayHyperliquidIndicators(ctx, work, partial, job.Timeframe, plan.Inputs, recipes)
 		if err != nil {
 			return "", "", err
 		}
@@ -576,9 +577,9 @@ func hyperliquidMissingRanges(requested dataRange, covered []dataRange) []dataRa
 	}
 	return out
 }
-func hyperliquidCoveredRanges(sources []downloadSource, asOf int64) ([]dataRange, error) {
+func hyperliquidCoveredRanges(sources []downloadSource, asOf, step int64) ([]dataRange, error) {
 	covered := []dataRange{}
-	closed := exchange.BucketStart(asOf/1000-2, 86400) * 1000
+	closed := exchange.BucketStart(asOf/1000-2, step) * 1000
 	for _, source := range sources {
 		data, err := publicAlertReadBounded(source.Input, 32<<20)
 		if err != nil {
@@ -595,7 +596,7 @@ func hyperliquidCoveredRanges(sources []downloadSource, asOf int64) ([]dataRange
 	return hyperliquidUnionRanges(covered), nil
 }
 
-func (m *Manager) replayHyperliquidIndicators(ctx context.Context, work, input string, sources []downloadSource, recipes []EnrichmentRequest) ([]byte, []EnrichmentRequest, error) {
+func (m *Manager) replayHyperliquidIndicators(ctx context.Context, work, input, period string, sources []downloadSource, recipes []EnrichmentRequest) ([]byte, []EnrichmentRequest, error) {
 	if recipes == nil {
 		recipes = []EnrichmentRequest{}
 	}
@@ -630,7 +631,7 @@ func (m *Manager) replayHyperliquidIndicators(ctx context.Context, work, input s
 	}
 	defer os.RemoveAll(replayWork)
 	output := filepath.Join(replayWork, "replayed.csv")
-	request, _ := json.Marshal(map[string]any{"root": filepath.Dir(m.runtime.worker), "input": input, "output": output, "headers": headers, "recipes": recipes})
+	request, _ := json.Marshal(map[string]any{"root": filepath.Dir(m.runtime.worker), "input": input, "output": output, "headers": headers, "recipes": recipes, "period": period})
 	cmd := exec.CommandContext(ctx, m.runtime.node, "-e", hyperliquidReplayScript)
 	cmd.Stdin = bytes.NewReader(request)
 	configureProcess(cmd)
@@ -655,5 +656,5 @@ func (m *Manager) replayHyperliquidIndicators(ctx context.Context, work, input s
 
 const hyperliquidReplayScript = `
 'use strict';
-(async()=>{const fs=require('node:fs/promises'),path=require('node:path');let text='';for await(const chunk of process.stdin)text+=chunk;const r=JSON.parse(text),{recipesFor,records}=require(path.join(r.root,'refresh-worker.cjs')),{calculator,line,writeAll}=require(path.join(r.root,'enrich-worker.cjs')),base=['timestamp','open','high','low','close','volume'];const recipes=await recipesFor([...new Set([...base,...r.headers])],r.recipes,[],'d1'),calculators=[];for(const recipe of recipes)calculators.push(await calculator(recipe,base,'d1'));const columns=[...new Set([...base,...calculators.flatMap(c=>c.columns)])],handle=await fs.open(r.output,'wx',0o600);try{await writeAll(handle,line(columns));let count=0;for await(const row of records(r.input)){if(!count++)continue;const values=[...row];for(const c of calculators){const v=c.next(row,count);c.columns.forEach((name,i)=>values[columns.indexOf(name)]=v[i]);}await writeAll(handle,line(values));}await handle.sync();}finally{await handle.close();}process.stdout.write(JSON.stringify(recipes));})().catch(e=>{process.stderr.write(String(e));process.exitCode=1;});
+(async()=>{const fs=require('node:fs/promises'),path=require('node:path');let text='';for await(const chunk of process.stdin)text+=chunk;const r=JSON.parse(text),{recipesFor,records}=require(path.join(r.root,'refresh-worker.cjs')),{calculator,line,writeAll}=require(path.join(r.root,'enrich-worker.cjs')),base=['timestamp','open','high','low','close','volume'];const recipes=await recipesFor([...new Set([...base,...r.headers])],r.recipes,[],r.period),calculators=[];for(const recipe of recipes)calculators.push(await calculator(recipe,base,r.period));const columns=[...new Set([...base,...calculators.flatMap(c=>c.columns)])],handle=await fs.open(r.output,'wx',0o600);try{await writeAll(handle,line(columns));let count=0;for await(const row of records(r.input)){if(!count++)continue;const values=[...row];for(const c of calculators){const v=c.next(row,count);c.columns.forEach((name,i)=>values[columns.indexOf(name)]=v[i]);}await writeAll(handle,line(values));}await handle.sync();}finally{await handle.close();}process.stdout.write(JSON.stringify(recipes));})().catch(e=>{process.stderr.write(String(e));process.exitCode=1;});
 `

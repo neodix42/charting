@@ -1695,6 +1695,7 @@ export namespace screener {
 	export class EnrichmentRequest {
 	    dataSource?: string;
 	    indicator: string;
+	    group?: string;
 	    parameters: Record<string, number>;
 	    source: string;
 	    period?: string;
@@ -1707,6 +1708,7 @@ export namespace screener {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.dataSource = source["dataSource"];
 	        this.indicator = source["indicator"];
+	        this.group = source["group"];
 	        this.parameters = source["parameters"];
 	        this.source = source["source"];
 	        this.period = source["period"];

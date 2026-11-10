@@ -71,6 +71,9 @@ func (m *Manager) enrichmentInfoLocked(fileIDs []string) EnrichmentInfo {
 	errorText := m.enrichmentRuntimeError()
 	info := EnrichmentInfo{Directory: m.directory, Active: m.enrichmentActive, RuntimeAvailable: errorText == "", RuntimeError: errorText,
 		Indicator: m.enrichmentRequest.Indicator, Total: len(m.enrichmentJobs), Jobs: []EnrichmentJob{}}
+	if m.enrichmentRequest.Group != "" {
+		info.Indicator = m.enrichmentRequest.Group
+	}
 	wanted := map[string]bool{}
 	for _, id := range fileIDs {
 		wanted[id] = true
@@ -147,9 +150,10 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 		return m.enrichmentInfoLocked(nil), err
 	}
 	selectedNames := names[:0]
+	intradayOnly := m.enrichmentIntradayOnly(request)
 	for _, name := range names {
 		if request.DataSource == "all" || fileDataSource(name) == normalizeDataSource(request.DataSource) {
-			if indicatorDefinitions()[request.Indicator].IntradayOnly {
+			if intradayOnly {
 				match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
 				if match == nil || !intradayEnrichmentPeriod(match[2]) {
 					continue
@@ -267,6 +271,14 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	// replay during Refresh identical whether enrichment selected all or one period.
 	request.Period = ""
 	request.DataSource = ""
+	members, err := m.enrichmentMembers(request)
+	if err != nil {
+		return err
+	}
+	var groupRecipes []EnrichmentRequest
+	if request.Group != "" {
+		groupRecipes = members
+	}
 	source := filepath.Join(directory, job.Name)
 	original, err := os.Lstat(source)
 	if err != nil || !original.Mode().IsRegular() {
@@ -298,11 +310,12 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	cmd.Stderr = &stderr
 	input, err := json.Marshal(struct {
 		EnrichmentRequest
-		Input     string `json:"input"`
-		Output    string `json:"output"`
-		OwnerPipe bool   `json:"ownerPipe"`
-		Timeframe string `json:"timeframe"`
-	}{request, source, output, true, describeFileName(directory, job.Name).Timeframe})
+		Input     string              `json:"input"`
+		Output    string              `json:"output"`
+		OwnerPipe bool                `json:"ownerPipe"`
+		Timeframe string              `json:"timeframe"`
+		Members   []EnrichmentRequest `json:"members,omitempty"`
+	}{request, source, output, true, describeFileName(directory, job.Name).Timeframe, groupRecipes})
 	if err != nil {
 		return err
 	}
@@ -396,9 +409,10 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 		return fmt.Errorf("preserve original CSV backup: %w", err)
 	}
 	metadata, _ := json.Marshal(struct {
-		Filename string            `json:"filename"`
-		Request  EnrichmentRequest `json:"request"`
-	}{job.Name, request})
+		Filename string              `json:"filename"`
+		Request  EnrichmentRequest   `json:"request"`
+		Recipes  []EnrichmentRequest `json:"recipes,omitempty"`
+	}{job.Name, request, groupRecipes})
 	if err = writeSyncedExclusive(filepath.Join(backupDirectory, job.ID+".json"), append(metadata, '\n')); err != nil {
 		return fmt.Errorf("save original CSV backup metadata: %w", err)
 	}
@@ -423,7 +437,9 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	}
 	metadataState.Bytes, metadataState.Modified = outputInfo.Size(), outputInfo.ModTime().UnixNano()
 	metadataState.Checksum = result.Checksum
-	metadataState.Recipes = addRecipe(metadataState.Recipes, request)
+	for _, member := range members {
+		metadataState.Recipes = addRecipe(metadataState.Recipes, member)
+	}
 	if err = writeFileMetadata(directory, job.Name, metadataState); err != nil {
 		return fmt.Errorf("save applied indicator recipe (original kept): %w", err)
 	}

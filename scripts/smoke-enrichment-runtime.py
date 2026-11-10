@@ -340,10 +340,19 @@ def day_week_smoke(runtime, node, directory):
     for indicator, values in expected.items():
         if [row[indicator] for row in rows] != values:
             raise ValueError(f"Packaged {indicator} returned incorrect UTC ranges")
+    grouped = directory / "range-group.csv"
+    request = {"input": str(source), "output": str(grouped), "group": "Day / Week ranges",
+               "indicator": "", "parameters": {}, "source": "auto", "timeframe": "h1"}
+    subprocess.run([str(node), str(runtime / "enrich-worker.cjs")],
+                   input=json.dumps(request) + "\n", text=True, capture_output=True,
+                   cwd=directory, timeout=20, check=True)
+    with grouped.open(newline="") as stream:
+        if list(csv.DictReader(stream)) != rows:
+            raise ValueError("Packaged grouped range enrichment differs from individual calculations")
     if source.read_text() != original:
         raise ValueError("Packaged day/week ranges changed their original input")
     return {"passed": True, "columns": list(expected), "utc": True, "causal": True,
-            "previousWarmupBlank": True, "networkRequired": False}
+            "previousWarmupBlank": True, "groupMatchesIndividual": True, "networkRequired": False}
 
 
 def smoke(runtime):

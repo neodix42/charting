@@ -35,12 +35,12 @@ test('pointer-opened menus use every saved palette and restore normal focus on d
 test('grouped Screener indicator menus keep options readable, scrollable and actionable',async({page})=>{
  await page.setViewportSize({width:1000,height:800});await page.goto('/');
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
- const indicator=page.getByLabel('Enrichment indicator',{exact:true});await expect(indicator.locator('option')).toHaveCount(52);
- await indicator.click();await expect(menu(page).getByRole('option')).toHaveCount(52);expect(await menu(page).getByRole('group').count()).toBeGreaterThan(1);
+ const indicator=page.getByLabel('Enrichment indicator',{exact:true});await expect(indicator.locator('option')).toHaveCount(60);
+ await indicator.click();await expect(menu(page).getByRole('option')).toHaveCount(60);expect(await menu(page).getByRole('group').count()).toBeGreaterThan(1);
  await expect(menu(page)).toHaveCSS('background-color',rgb(getThemePalette('light').elevated));
- const range=menu(page).getByRole('group',{name:'Price range',exact:true});await expect(range.getByRole('option')).toHaveText(['Lowest low (Low)','Highest high (High)']);
+ const range=menu(page).getByRole('group',{name:'Price range',exact:true});await expect(range.getByRole('option')).toHaveText(['All Price range indicators','Lowest low (Low)','Highest high (High)']);
  for(const [id,label,required] of [['low','Lowest low (Low)','Requires: low.'],['high','Highest high (High)','Requires: high.']]){
-  await range.getByRole('option',{name:label,exact:true}).click();await expect(menu(page)).toHaveCount(0);await expect(indicator).toHaveValue(id);await expect(indicator).toBeFocused();await expect(page.getByRole('spinbutton',{name:'Period',exact:true})).toHaveValue('10');await expect(page.getByLabel('Enrichment price source',{exact:true})).toBeDisabled();await expect(page.locator('.enrichment-help')).toContainText(required);await indicator.click();await expect(menu(page).getByRole('option')).toHaveCount(52);
+  await range.getByRole('option',{name:label,exact:true}).click();await expect(menu(page)).toHaveCount(0);await expect(indicator).toHaveValue(id);await expect(indicator).toBeFocused();await expect(page.getByRole('spinbutton',{name:'Period',exact:true})).toHaveValue('10');await expect(page.getByLabel('Enrichment price source',{exact:true})).toBeDisabled();await expect(page.locator('.enrichment-help')).toContainText(required);await indicator.click();await expect(menu(page).getByRole('option')).toHaveCount(60);
  }
  const bounds=await menu(page).boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(8);expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(792);
  await indicator.press('End');await expect(menu(page).locator('[data-active=true]')).toBeInViewport();await indicator.press('Enter');

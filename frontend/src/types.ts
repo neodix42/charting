@@ -69,7 +69,7 @@ export interface ScreenerIndicator {id:string;name:string;category:string;input:
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
 export interface ScreenerDataFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
 export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;allTotal?:number;offset:number;limit:number;periodCounts?:Record<string,number>}
-export interface ScreenerEnrichmentRequest {dataSource?:ScreenerDataSource;indicator:string;parameters:Record<string,number>;source:string;period?:string}
+export interface ScreenerEnrichmentRequest {dataSource?:ScreenerDataSource;indicator:string;group?:string;parameters:Record<string,number>;source:string;period?:string}
 export interface ScreenerEnrichmentJob {id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}
 export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;indicator:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerEnrichmentJob[]}
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}

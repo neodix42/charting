@@ -172,8 +172,33 @@ async function writeAll(handle, data) {
   }
 }
 
+function enrichmentMembers(request) {
+  if(!request.group)return [request];
+  if(request.indicator||Object.keys(request.parameters??{}).length)throw Error('Choose one indicator or one group; groups use default parameters.');
+  // Go snapshots the reviewed defaults used for the saved recipes. Calculate
+  // those exact inputs even if a separately updated worker catalog differs.
+  if(request.members!==undefined){
+    if(!Array.isArray(request.members)||!request.members.length||request.members.length>catalog.indicators.length)throw Error('Invalid group member snapshot.');
+    return request.members.map(member=>({...member,timeframe:request.timeframe}));
+  }
+  const definitions=catalog.indicators.filter(item=>item.category===request.group);
+  if(!definitions.length)throw Error('Unsupported indicator group.');
+  return definitions.map(definition=>({...request,group:undefined,indicator:definition.id,parameters:{}}));
+}
+
+async function enrichmentCalculator(members,headers){
+  const calculations=await Promise.all(members.map(member=>calculator(member,headers)));
+  const columns=[...new Set(calculations.flatMap(calculate=>calculate.columns))];
+  const indexes=calculations.map(calculate=>calculate.columns.map(column=>columns.indexOf(column)));
+  return {columns,next(row,rowNumber){
+    const result=Array(columns.length).fill('');
+    calculations.forEach((calculate,index)=>calculate.next(row,rowNumber).forEach((value,field)=>{result[indexes[index][field]]=value;}));
+    return result;
+  }};
+}
+
 async function enrich(request, options = {}) {
-  validate(request);
+  const members=enrichmentMembers(request);members.forEach(validate);
   const report = options.emit ?? emit;
   if (!path.isAbsolute(request.input) || !path.isAbsolute(request.output) || request.input === request.output) throw new Error('Separate absolute input and output paths are required.');
   const info = await fsp.lstat(request.input);
@@ -194,7 +219,7 @@ async function enrich(request, options = {}) {
     for await (const {record, info:recordInfo} of parser) {
       if (!headers) {
         headers = record;
-        calculate = await calculator(request, headers);
+        calculate = await enrichmentCalculator(members, headers);
         const normalized = headers.map(key);
         timestampIndex = normalized.indexOf('timestamp');
         positions = calculate.columns.map(name => normalized.indexOf(name));
@@ -246,4 +271,4 @@ if (require.main === module) main(enrich).catch(error => {
   process.exitCode=1;
 });
 
-module.exports = {enrich,calculator,validate,catalog,key,line,writeAll};
+module.exports = {enrich,calculator,validate,catalog,key,line,writeAll,enrichmentMembers};

@@ -156,15 +156,27 @@ func legacyRecipes(ctx context.Context, directory string) map[string][]Enrichmen
 		}
 		data, err := os.ReadFile(filepath.Join(folder, entry.Name()))
 		var metadata struct {
-			Filename string            `json:"filename"`
-			Request  EnrichmentRequest `json:"request"`
+			Filename string              `json:"filename"`
+			Request  EnrichmentRequest   `json:"request"`
+			Recipes  []EnrichmentRequest `json:"recipes"`
 		}
 		if err != nil || json.Unmarshal(data, &metadata) != nil || metadata.Filename == "" || filepath.Base(metadata.Filename) != metadata.Filename {
 			continue
 		}
-		request, err := (&Manager{}).validateEnrichment(metadata.Request)
-		if err == nil {
-			result[metadata.Filename] = addRecipe(result[metadata.Filename], request)
+		requests := metadata.Recipes
+		if len(requests) == 0 {
+			requests = []EnrichmentRequest{metadata.Request}
+		}
+		if len(requests) > len(indicatorDefinitions()) {
+			continue
+		}
+		for _, request := range requests {
+			members, err := (&Manager{}).enrichmentMembers(request)
+			if err == nil {
+				for _, member := range members {
+					result[metadata.Filename] = addRecipe(result[metadata.Filename], member)
+				}
+			}
 		}
 	}
 	return result

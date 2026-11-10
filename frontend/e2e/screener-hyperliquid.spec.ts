@@ -15,8 +15,8 @@ test('Hyperliquid starts with all spot and perpetual assets enabled and retains 
  await page.getByLabel('Download timeframe',{exact:true}).selectOption('h1');
  await page.getByLabel('Download data source',{exact:true}).selectOption('hyperliquid');
  await expect(page.getByLabel('Selected symbol count',{exact:true})).toHaveText('3 / 3 selected');
- await expect(page.getByLabel('Download timeframe',{exact:true})).toHaveValue('d1');
- await expect(page.getByLabel('Download timeframe',{exact:true}).locator('option')).toHaveText(['d1','w1']);
+ await expect(page.getByLabel('Download timeframe',{exact:true})).toHaveValue('h1');
+ await expect(page.getByLabel('Download timeframe',{exact:true}).locator('option')).toHaveText(['h1','d1','w1']);
  await page.getByRole('searchbox',{name:'Search Hyperliquid instruments',exact:true}).fill('xyz:');
  await expect(page.locator('.screener-instrument')).toHaveCount(1);
  await page.locator('.screener-instrument input').uncheck();

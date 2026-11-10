@@ -62,6 +62,7 @@ func (m *Manager) Indicators() IndicatorCatalog {
 type EnrichmentRequest struct {
 	DataSource string             `json:"dataSource,omitempty"`
 	Indicator  string             `json:"indicator"`
+	Group      string             `json:"group,omitempty"`
 	Parameters map[string]float64 `json:"parameters"`
 	Source     string             `json:"source"`
 	// Period limits the batch inventory, never the stored indicator recipe.
@@ -84,6 +85,21 @@ func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentReque
 		if !known {
 			return request, fmt.Errorf("unsupported enrichment period %q", request.Period)
 		}
+	}
+	if request.Group != "" {
+		members, err := m.enrichmentMembers(request)
+		if err != nil {
+			return request, err
+		}
+		request.Parameters = map[string]float64{}
+		request.Source = "auto"
+		for _, member := range members {
+			if indicatorDefinitions()[member.Indicator].Input == "price" {
+				request.Source = member.Source
+				break
+			}
+		}
+		return request, nil
 	}
 	indicator, known := indicatorDefinitions()[request.Indicator]
 	if !known {
@@ -123,6 +139,47 @@ func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentReque
 	}
 	request.Parameters = parameters
 	return request, nil
+}
+
+// Groups are expanded to ordinary recipes with reviewed defaults. Files and
+// backups persist those individual recipes so replay never depends on a later
+// change to group membership or default parameter values.
+func (m *Manager) enrichmentMembers(request EnrichmentRequest) ([]EnrichmentRequest, error) {
+	if request.Group == "" {
+		member, err := m.validateEnrichment(request)
+		return []EnrichmentRequest{member}, err
+	}
+	if request.Indicator != "" || len(request.Parameters) != 0 {
+		return nil, errors.New("choose one indicator or one group; groups use each indicator's default parameters")
+	}
+	members := []EnrichmentRequest{}
+	for _, definition := range m.Indicators().Indicators {
+		if definition.Category != request.Group {
+			continue
+		}
+		member := request
+		member.Group = ""
+		member.Indicator = definition.ID
+		canonical, err := m.validateEnrichment(member)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, canonical)
+	}
+	if len(members) == 0 {
+		return nil, errors.New("choose a supported indicator group")
+	}
+	return members, nil
+}
+
+func (m *Manager) enrichmentIntradayOnly(request EnrichmentRequest) bool {
+	members, _ := m.enrichmentMembers(request)
+	for _, member := range members {
+		if indicatorDefinitions()[member.Indicator].IntradayOnly {
+			return true
+		}
+	}
+	return false
 }
 
 func intradayEnrichmentPeriod(period string) bool {

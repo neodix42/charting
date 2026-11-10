@@ -74,8 +74,8 @@ func mergeHyperliquidHistory(ctx context.Context, profile string, asset publicAl
 	if err := key.Validate(); err != nil {
 		return err
 	}
-	if period != "d1" && period != "w1" {
-		return errors.New("downloaded Hyperliquid history supports D1 and W1")
+	if period != "h1" && period != "d1" && period != "w1" {
+		return errors.New("downloaded Hyperliquid history supports H1, D1 and W1")
 	}
 	root := hyperliquidHistoryRoot(profile)
 	release, err := hyperliquidHistoryLock(ctx, root, asset, period)
@@ -179,13 +179,13 @@ func hyperliquidWeeklyFromDaily(daily []domain.Candle) []domain.Candle {
 	return out
 }
 
-// HyperliquidHistory exposes only the matching native market's downloaded D1
+// HyperliquidHistory exposes only the matching native market's downloaded H1/D1
 // bars or Monday-UTC W1 derivatives. It never synthesizes intraday candles.
 func (m *Manager) HyperliquidHistory(key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
 	return readHyperliquidHistory(context.Background(), m.profile, key, from, to, limit)
 }
 func readHyperliquidHistory(ctx context.Context, profile string, key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
-	if key.Exchange != "hyperliquid" || (key.Timeframe != "1d" && key.Timeframe != "1w") {
+	if key.Exchange != "hyperliquid" || (key.Timeframe != "1h" && key.Timeframe != "1d" && key.Timeframe != "1w") {
 		return nil, nil
 	}
 	if err := key.Validate(); err != nil {
@@ -196,7 +196,11 @@ func readHyperliquidHistory(ctx context.Context, profile string, key domain.Feed
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	daily, _, _, err := readHyperliquidRaw(root, asset, "d1")
+	period := "d1"
+	if key.Timeframe == "1h" {
+		period = "h1"
+	}
+	daily, _, _, err := readHyperliquidRaw(root, asset, period)
 	if err != nil {
 		return nil, err
 	}

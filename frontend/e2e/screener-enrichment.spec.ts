@@ -28,7 +28,7 @@ test('Enrichment loads CSV periods and comma separated headers only when opened,
  await expect(panel(page).locator('tbody tr')).toContainText('Available bar open times');
  await expect(panel(page).locator('tbody tr code')).toHaveText(fields.join(', '));
  await expect(panel(page).getByText('/explicit-test/screener',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(52);
+ await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(60);
  await expect(page.getByLabel('Period',{exact:true})).toHaveValue('200');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);
 });
@@ -84,7 +84,7 @@ test('UTC Weekday and Hour use timestamps without price parameters and become An
  await openTestApp(page);
  await page.evaluate(value=>(window as any).__testSetEnrichmentFiles([value]),{...file(0),fields:['timestamp']});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
- await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['Weekday','Hour']);
+ await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['All Time indicators','Weekday','Hour']);
  await expect(panel(page)).toContainText('42 indicators + 2 UTC calendar fields');
  await page.getByLabel('Enrichment price source',{exact:true}).selectOption('askprice');
  for(const indicator of ['weekday','hour']){

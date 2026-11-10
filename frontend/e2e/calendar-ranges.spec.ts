@@ -12,7 +12,7 @@ async function screener(page:Page,tab:string){await page.getByRole('tab',{name:'
 test('Enrichment offers all eight parameterless UTC ranges only below D1 and All periods targets only intraday candles',async({page})=>{
  await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[file('eurusd','h1'),file('btcusd','m5'),file('eurusd','d1'),file('eurusd','w1'),file('eurusd','mn1'),file('eurusd','tick'),{...file('custom',''),name:'custom.csv'},file('btc','d1','hyperliquid')]);
  await screener(page,'Enrichment');const indicator=control(page,'Enrichment indicator'),period=control(page,'Enrichment period');
- await expect(indicator.locator('optgroup[label="Day / Week ranges"] option')).toHaveText(names);
+ await expect(indicator.locator('optgroup[label="Day / Week ranges"] option')).toHaveText(['All Day / Week ranges indicators',...names]);
  for(const id of ids){
   await indicator.selectOption(id);await expect(control(page,'Period')).toHaveCount(0);await expect(control(page,'Enrichment price source')).toBeDisabled();
   await expect(page.getByRole('button',{name:'Enrich 2 files',exact:true})).toBeEnabled();

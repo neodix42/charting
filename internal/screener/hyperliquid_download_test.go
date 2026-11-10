@@ -19,6 +19,7 @@ type hyperliquidDownloadAdapter struct {
 	mu      sync.Mutex
 	calls   int
 	spans   []dataRange
+	keys    []domain.FeedKey
 	hold    chan struct{}
 	started chan struct{}
 	empty   bool
@@ -35,6 +36,7 @@ func (a *hyperliquidDownloadAdapter) Instruments(context.Context) ([]domain.Inst
 func (a *hyperliquidDownloadAdapter) History(ctx context.Context, k domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
 	a.mu.Lock()
 	a.calls++
+	a.keys = append(a.keys, k)
 	a.spans = append(a.spans, dataRange{From: from, To: to})
 	a.mu.Unlock()
 	if a.hold != nil {
@@ -53,13 +55,17 @@ func (a *hyperliquidDownloadAdapter) History(ctx context.Context, k domain.FeedK
 	if a.empty {
 		return nil, nil
 	}
-	if k.Exchange != "hyperliquid" || k.Timeframe != "1d" {
+	if k.Exchange != "hyperliquid" || (k.Timeframe != "1d" && k.Timeframe != "1h") {
 		return nil, errors.New("wrong download source/interval")
 	}
 	start := time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC).Unix()
 	out := []domain.Candle{}
-	for i := range 30 {
-		ts := start + int64(i)*86400
+	count, step := 30, int64(86400)
+	if k.Timeframe == "1h" {
+		count, step = 400, 3600
+	}
+	for i := range count {
+		ts := start + int64(i)*step
 		if ts >= from && ts < to {
 			v := float64(i + 1)
 			out = append(out, domain.Candle{Time: ts, Open: v, High: v + 2, Low: v, Close: v + 1, Volume: float64(i + 2), Closed: true, Quality: "authoritative"})
@@ -240,7 +246,7 @@ func TestHyperliquidSelectionValidationAndCancel(t *testing.T) {
 	if saved.DataSource != "hyperliquid" || len(saved.HyperliquidSymbols) != 1 || !saved.HyperliquidSelectionInitialized {
 		t.Fatal(saved)
 	}
-	if _, err := m.Start(Request{DataSource: "hyperliquid", Symbols: []string{id}, Timeframe: "h1", From: "2024-01-01", To: "2024-01-20"}); err == nil {
+	if _, err := m.Start(Request{DataSource: "hyperliquid", Symbols: []string{id}, Timeframe: "h4", From: "2024-01-01", To: "2024-01-20"}); err == nil {
 		t.Fatal("unsupported timeframe accepted")
 	}
 	a := m.hyperliquidAdapter.(*hyperliquidDownloadAdapter)
@@ -331,7 +337,7 @@ func TestHyperliquidVisibleCoverageNeverPromotesUnverifiedSnapshots(t *testing.T
 	if rows[0].Closed || rows[1].Closed {
 		t.Fatal("unverified timestamps were certified")
 	}
-	spans, err := hyperliquidCoveredRanges([]downloadSource{{Input: path, Name: name}}, asOf)
+	spans, err := hyperliquidCoveredRanges([]downloadSource{{Input: path, Name: name}}, asOf, 86400)
 	if err != nil || len(spans) != 0 {
 		t.Fatalf("unverified CSV suppressed download: %+v %v", spans, err)
 	}
@@ -410,7 +416,7 @@ func TestHyperliquidReplayResumesWithInterruptedScratch(t *testing.T) {
 	if err := os.WriteFile(interrupted, []byte("old interrupted replay"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	data, recipes, err := m.replayHyperliquidIndicators(context.Background(), work, input, []downloadSource{{Input: source, Name: filepath.Base(source)}}, nil)
+	data, recipes, err := m.replayHyperliquidIndicators(context.Background(), work, input, "d1", []downloadSource{{Input: source, Name: filepath.Base(source)}}, nil)
 	if err != nil || len(recipes) != 1 || !strings.Contains(string(data), "1704240000000,3,4,3,4,1,3\n") {
 		t.Fatalf("retry after interrupted replay: %s %+v %v", data, recipes, err)
 	}
@@ -438,7 +444,7 @@ func TestHyperliquidBaseOnlyExtensionNeedsNoIndicatorRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := &Manager{runtimeError: "explicitly unavailable"}
-	got, recipes, err := m.replayHyperliquidIndicators(context.Background(), work, input, []downloadSource{{Input: source, Name: filepath.Base(source)}}, nil)
+	got, recipes, err := m.replayHyperliquidIndicators(context.Background(), work, input, "d1", []downloadSource{{Input: source, Name: filepath.Base(source)}}, nil)
 	if err != nil || len(recipes) != 0 || string(got) != string(data) {
 		t.Fatalf("base-only extension required Node: %s %+v %v", got, recipes, err)
 	}
@@ -447,7 +453,7 @@ func TestHyperliquidBaseOnlyExtensionNeedsNoIndicatorRuntime(t *testing.T) {
 	if err := os.WriteFile(source, []byte(unknown), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = m.replayHyperliquidIndicators(context.Background(), work, input, []downloadSource{{Input: source, Name: filepath.Base(source)}}, nil); err == nil {
+	if _, _, err = m.replayHyperliquidIndicators(context.Background(), work, input, "d1", []downloadSource{{Input: source, Name: filepath.Base(source)}}, nil); err == nil {
 		t.Fatal("unknown derived column was silently discarded")
 	}
 }
