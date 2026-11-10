@@ -42,6 +42,22 @@ func copyAnalysisTradeSimulation(config *AnalysisTradeSimulation) *AnalysisTrade
 	return &copy
 }
 
+// Chart annotations describe the applied rule, never a guessed price bracket or
+// a subsequently edited draft. Legacy simulations without a direction are Long.
+func analysisChartDirection(config *AnalysisTradeSimulation) string {
+	if config == nil {
+		return ""
+	}
+	switch config.Direction {
+	case "", "long":
+		return "long"
+	case "short":
+		return "short"
+	default:
+		return ""
+	}
+}
+
 func validateAnalysisTradeSimulation(config *AnalysisTradeSimulation, draft bool) error {
 	if config == nil {
 		return nil

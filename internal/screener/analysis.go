@@ -140,6 +140,7 @@ type AnalysisChart struct {
 	Name              string                    `json:"name"`
 	Symbol            string                    `json:"symbol"`
 	Timeframe         string                    `json:"timeframe"`
+	Direction         string                    `json:"direction,omitempty"`
 	Occurrence        int                       `json:"occurrence"`
 	TotalMatches      int64                     `json:"totalMatches"`
 	MatchTime         int64                     `json:"matchTime"`
@@ -1033,7 +1034,7 @@ func (m *Manager) AnalysisChart(resultID string, occurrence, before, after int) 
 	matchTime := int64(binary.LittleEndian.Uint64(b[8:]))
 	start := max(int64(0), matchIndex-int64(before))
 	end := min(s.count, matchIndex+int64(after)+1)
-	chart := AnalysisChart{ResultID: resultID, Name: result.Name, Symbol: result.Symbol, Timeframe: result.Timeframe, Occurrence: occurrence, TotalMatches: result.Matches, MatchTime: matchTime, MatchIndex: matchIndex, StartIndex: start, Fields: append([]string{}, s.headers...), Bars: []AnalysisBar{}}
+	chart := AnalysisChart{ResultID: resultID, Name: result.Name, Symbol: result.Symbol, Timeframe: result.Timeframe, Direction: analysisChartDirection(a.request.TradeSimulation), Occurrence: occurrence, TotalMatches: result.Matches, MatchTime: matchTime, MatchIndex: matchIndex, StartIndex: start, Fields: append([]string{}, s.headers...), Bars: []AnalysisBar{}}
 	qualified := map[string]*analysisOperandReader{}
 	for _, condition := range compiled {
 		for _, reader := range []*analysisOperandReader{condition.left, condition.right, condition.upper, condition.distance} {

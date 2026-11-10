@@ -56,6 +56,23 @@ func TestAnalysisTradeExecutionRecordsFirstExitForLongAndShortOutsideChartWindow
 				if err != nil || len(chart.Bars) != 1 || chart.Trade == nil {
 					t.Fatalf("missing selected trade: %+v %v", chart, err)
 				}
+				if chart.Direction != direction {
+					t.Fatalf("chart lost applied direction: %q, want %q", chart.Direction, direction)
+				}
+				// Editing the draft after Apply must not relabel the scanned trade.
+				other := copyAnalysisRequest(request)
+				if direction == "long" {
+					other.TradeSimulation.Direction = "short"
+				} else {
+					other.TradeSimulation.Direction = "long"
+				}
+				if _, err = m.SaveAnalysisView(other); err != nil {
+					t.Fatal(err)
+				}
+				unchanged, e := m.AnalysisChart(result.ID, 0, 0, 0)
+				if e != nil || unchanged.Direction != direction {
+					t.Fatal("draft changed applied chart direction", unchanged.Direction, e)
+				}
 				want := &AnalysisTradeExecution{EntryTime: start + 60000, Outcome: test.outcome}
 				if test.exitBar > 0 {
 					want.ExitTime = start + test.exitBar*60000

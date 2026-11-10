@@ -115,6 +115,7 @@ func prepareLiveAlertChart(ctx context.Context, a *analysisState, s *analysisSer
 	fields = append(fields, qualifiedNames...)
 	start := max(int64(0), index-liveAlertChartPreviousBars)
 	chart := AnalysisChart{ResultID: alert.ConditionID, Name: alert.AssetName, Symbol: alert.Symbol, Timeframe: alert.Timeframe,
+		Direction:    analysisChartDirection(a.request.TradeSimulation),
 		TotalMatches: 1, MatchTime: alert.Time, MatchIndex: index, StartIndex: start,
 		Fields: fields, Bars: make([]AnalysisBar, 0, index-start+1),
 		Signal: &AnalysisSignalLevels{Entry: alert.EntryPrice, StopLoss: copyLiveAlertChartLevel(alert.StopLoss), TakeProfit: copyLiveAlertChartLevel(alert.TakeProfit)}}

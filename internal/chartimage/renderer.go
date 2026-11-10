@@ -139,6 +139,9 @@ func validate(request Request) error {
 	if c == nil || len(c.Bars) == 0 || len(c.Bars) > 121 || len(c.Fields) > 64 || c.MatchTime <= 0 || len(request.Title) > 512 || len(request.Condition) > 4096 || len(request.Source) > 64 || len(request.Market) > 64 {
 		return errors.New("signal chart snapshot is invalid")
 	}
+	if c.Direction != "" && c.Direction != "long" && c.Direction != "short" {
+		return errors.New("signal chart direction must be long or short")
+	}
 	// encoding/json escapes a string byte into at most six ASCII bytes. Count
 	// repeated map keys before marshaling so imported field names cannot cause
 	// a large allocation even when bars/fields are individually bounded.

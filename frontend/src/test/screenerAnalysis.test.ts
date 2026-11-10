@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest';
-import {analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
+import {analysisEntryLabel,analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
 import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 
@@ -188,21 +188,32 @@ describe('Profitable match chart markers',()=>{
   expect(analysisMatchMarkers(chart,'blue')).toEqual([{time:2,position:'belowBar',color:'blue',shape:'arrowUp',text:'Match'}]);
   expect(analysisMatchMarkers({...chart,profitableMatches:[]},'blue')).toHaveLength(1);
  });
- it('stacks recorded Entry, SL and TP below Match without adding visible shapes or requiring a win',()=>{
-  const markers=analysisMatchMarkers({...chart,trade:{entry:105,stopLoss:90,takeProfit:135}},'orange');
-  expect(markers.map(marker=>marker.text)).toEqual(['Match','Entry 105','SL 90','TP 135']);
-  for(const marker of markers.slice(1))expect(marker).toMatchObject({time:2,position:'belowBar',size:0,color:'orange'});
-  expect(analysisMatchMarkers({...chart,trade:{entry:0.0000002,stopLoss:0.000000123456789,takeProfit:0.000000234567891}},'blue').slice(1).map(marker=>marker.text)).toEqual(['Entry 0.0000002','SL 0.000000123456789','TP 0.000000234567891']);
-  for(const field of ['entry','stopLoss','takeProfit'])for(const invalid of [NaN,Infinity])expect(analysisMatchMarkers({...chart,trade:{entry:105,stopLoss:90,takeProfit:135,[field]:invalid}},'blue')).toHaveLength(1);
-  expect(analysisMatchMarkers({...chart,trade:{entry:0,stopLoss:-1,takeProfit:1}},'blue')[1].text).toBe('Entry 0');
+ it('replaces the old price stack with one Long or Short entry label on the signal arrow',()=>{
+  for(const direction of ['long','short'] as const){
+   const data={...chart,direction,trade:{entry:105,stopLoss:90,takeProfit:135}},markers=analysisMatchMarkers(data,'orange');
+   expect(markers).toEqual([{time:2,position:'belowBar',color:'orange',shape:'arrowUp',text:`${direction==='short'?'Short':'Long'} at 105`}]);
+   expect(data.trade).toEqual({entry:105,stopLoss:90,takeProfit:135});
+  }
+  expect(analysisEntryLabel({...chart,direction:'long',trade:{entry:0.0000002,stopLoss:0.000000123456789,takeProfit:0.000000234567891}})).toBe('Long at 0.0000002');
+  expect(analysisEntryLabel({...chart,direction:'short',trade:{entry:12345.6789012345,stopLoss:12350,takeProfit:12000}})).toBe('Short at 12,345.6789012345');
  });
- it('labels only available live signal levels without inventing a protective exit or future outcome',()=>{
+ it('keeps unknown direction or unavailable entry as a generic match without guessing a trade',()=>{
+  const trade={entry:105,stopLoss:90,takeProfit:135};
+  for(const data of [{...chart,trade},{...chart,direction:'long' as const},{...chart,direction:'long' as const,trade:{...trade,entry:NaN}},{...chart,direction:'short' as const,signal:{entry:Infinity}}]){
+   expect(analysisEntryLabel(data)).toBeUndefined();
+   expect(analysisMatchMarkers(data,'blue')).toEqual([{time:2,position:'belowBar',color:'blue',shape:'arrowUp',text:'Match'}]);
+  }
+ });
+ it('uses the live signal entry without inventing protective exits or a future fill',()=>{
   for(const signal of [{entry:105},{entry:105,stopLoss:90},{entry:105,takeProfit:135},{entry:105,stopLoss:90,takeProfit:135}]){
-   const data={...chart,signal};
-   const expected=['Match','Entry 105',...('stopLoss' in signal?['SL 90']:[]),...('takeProfit' in signal?['TP 135']:[])];
-   expect(analysisMatchMarkers(data,'orange').map(marker=>marker.text)).toEqual(expected);
+   const data={...chart,direction:'short' as const,signal};
+   expect(analysisMatchMarkers(data,'orange').map(marker=>marker.text)).toEqual(['Short at 105']);
    expect(analysisTradeExecutionDetails(data)).toEqual([]);
   }
+  expect(analysisEntryLabel({...chart,direction:'long',signal:{entry:105},trade:{entry:999,stopLoss:900,takeProfit:1100}})).toBe('Long at 105');
+ });
+ it('does not require hidden protective levels to display a verified directional entry',()=>{
+  expect(analysisEntryLabel({...chart,direction:'long',trade:{entry:0,stopLoss:NaN,takeProfit:Infinity}})).toBe('Long at 0');
  });
 });
 

@@ -1165,6 +1165,7 @@ export namespace screener {
 	    name: string;
 	    symbol: string;
 	    timeframe: string;
+	    direction?: string;
 	    occurrence: number;
 	    totalMatches: number;
 	    matchTime: number;
@@ -1187,6 +1188,7 @@ export namespace screener {
 	        this.name = source["name"];
 	        this.symbol = source["symbol"];
 	        this.timeframe = source["timeframe"];
+	        this.direction = source["direction"];
 	        this.occurrence = source["occurrence"];
 	        this.totalMatches = source["totalMatches"];
 	        this.matchTime = source["matchTime"];

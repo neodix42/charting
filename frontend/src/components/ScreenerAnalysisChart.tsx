@@ -6,7 +6,7 @@ import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
-import {analysisMatchMarkers,analysisTradeExecutionDetails,analysisTradePriceLines} from '../charts/analysisMarkers';
+import {analysisEntryLabel,analysisMatchMarkers,analysisTradeExecutionDetails} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -27,7 +27,7 @@ export function AnalysisPlot({data}:{data:AnalysisChart}){
  const signature=selected.join('|');
  const row=hover??data.bars.find(bar=>bar.index===data.matchIndex)??data.bars.find(bar=>bar.time===data.matchTime);
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
- const tradePrices=analysisTradePriceLines(data);
+ const entryLabel=analysisEntryLabel(data);
  const executionDetails=analysisTradeExecutionDetails(data);
  useEffect(()=>{
   const update=()=>setTheme(document.documentElement.dataset.theme??'light');update();
@@ -52,10 +52,9 @@ export function AnalysisPlot({data}:{data:AnalysisChart}){
    if(candle)main.setData(ordered.map(bar=>({...timed(bar),open:value(bar,'open')!,high:value(bar,'high')!,low:value(bar,'low')!,close:value(bar,'close')!})));
    else main.setData(ordered.map(bar=>Number.isFinite(price(bar))?{...timed(bar),value:price(bar)!}:timed(bar)));
    const tradeAutoscale:AutoscaleInfoProvider=original=>{
-    const info=original();if(!info||!tradePrices.length)return info;
-    // Marker autoscaling does not include stacked text heights. Reserve room
-    // for Match plus each price, using the current global chart font size.
-    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4*(tradePrices.length+1)+20)}};
+    const info=original();if(!info||!entryLabel)return info;
+    // Keep the single directional entry label inside the chart at every font size.
+    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4+20)}};
    };
    main.applyOptions({autoscaleInfoProvider:tradeAutoscale});
    main.priceScale().applyOptions({scaleMargins:{top:0.08,bottom:0.08}});
@@ -122,7 +121,7 @@ export function AnalysisPlot({data}:{data:AnalysisChart}){
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(10,fontSize)}});},[fontSize]);
  return <>
   <div className="analysis-chart-readout" aria-label="Match bar values"><strong>{hover?'Hovered bar':'Signal bar'}: {analysisDate(row?.time??data.matchTime)}</strong>{row&&Object.entries(row.values).filter(([field])=>rawFields.has(field.toLowerCase())&&field.toLowerCase()!=='timestamp').map(([field,number])=><span key={field}>{analysisFieldLabel(field)} <b>{format(number)}</b></span>)}</div>
-  {!!executionDetails.length&&<div className="analysis-chart-note analysis-trade-execution" aria-label="Selected trade timing and outcome"><dl>{executionDetails.map(({label,value})=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p>Match marks the signal bar; entry uses the next available bar’s open. Times identify UTC bars, not the exact intrabar exit time.</p></div>}
+  {!!executionDetails.length&&<div className="analysis-chart-note analysis-trade-execution" aria-label="Selected trade timing and outcome"><dl>{executionDetails.map(({label,value})=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p>The arrow marks the signal bar; entry uses the next available bar’s open. Times identify UTC bars, not the exact intrabar exit time.</p></div>}
   {chartError&&<p className="analysis-error" role="alert">{chartError}</p>}
   <div className="analysis-plot-scroll"><div className="analysis-plot" data-testid="analysis-chart" data-chart-font-size={chartFontSize(10,fontSize)} data-pane-count={groups.length+1} data-indicator-count={selected.length} style={{height}} ref={host}/></div>
   {duplicates&&<p className="analysis-chart-note">Each observation is evaluated. Ticks sharing an identical timestamp display their last price on the chart.</p>}
