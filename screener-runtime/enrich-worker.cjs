@@ -36,10 +36,23 @@ function validate(request) {
   return {definition, parameters, source};
 }
 
-async function calculator(request, headers) {
+async function calculator(request, headers, timeframe=request.timeframe) {
   const {definition, parameters: p, source} = validate(request);
   const normalized = headers.map(key);
   if (normalized.some(value => !value) || new Set(normalized).size !== headers.length) throw new Error('CSV contains empty or duplicate field names.');
+  if(definition.intradayOnly){
+    const {calendarRange,isIntradayPeriod}=await import('./calendar-ranges.mjs');
+    if(!isIntradayPeriod(timeframe))throw Error('Day/week range indicators require candle periods below D1 (s1 through h4).');
+    const timestamp=normalized.indexOf('timestamp'),price=normalized.indexOf(definition.input);
+    if(timestamp<0||price<0)throw Error(`Requires timestamp, ${definition.input} fields. Tick prices are not converted into candles.`);
+    const next=calendarRange(definition.id);
+    return {columns:[definition.id],next(row,rowNumber){
+      const time=String(row[timestamp]??'').trim(),value=String(row[price]??'').trim();
+      if(!time||!value)throw Error(`Row ${rowNumber}: timestamp and ${definition.input} must be finite numbers.`);
+      const result=next(Number(time),Number(value));
+      return [result===undefined?'':String(result)];
+    }};
+  }
   if(definition.input==='timestamp'){
     const timestampIndex=normalized.indexOf('timestamp');
     if(timestampIndex<0)throw new Error('Requires timestamp field containing numeric Dukascopy Unix milliseconds.');

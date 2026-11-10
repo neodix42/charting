@@ -954,6 +954,40 @@
             "type",
             "parameters"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/uuid"
+            },
+            "type": {
+              "enum": [
+                "today_low",
+                "today_high",
+                "previous_day_low",
+                "previous_day_high",
+                "week_low",
+                "week_high",
+                "previous_week_low",
+                "previous_week_high"
+              ]
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "parameters"
+          ]
         }
       ]
     }

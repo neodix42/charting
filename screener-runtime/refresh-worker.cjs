@@ -33,7 +33,7 @@ function parameterRequest(indicator,values,source='close') {
 
 // Old CryptoDesk CSVs predate recipe manifests. Their names encode all reviewed
 // parameters. Backup requests also disambiguate a MACD line with no signal column.
-async function recipesFor(headers,saved=[],requiredFields=[]) {
+async function recipesFor(headers,saved=[],requiredFields=[],timeframe) {
   const normalized=headers.map(key), base=new Set([...candleFields,...tickFields]);
   if(normalized.some(value=>!value)||new Set(normalized).size!==normalized.length)throw Error('CSV contains empty or duplicate field names.');
   if(!Array.isArray(requiredFields)||requiredFields.length>512||requiredFields.some(value=>typeof value!=='string'||!key(value)||value.length>1024))throw Error('Required condition fields must be a bounded list of field names.');
@@ -43,7 +43,7 @@ async function recipesFor(headers,saved=[],requiredFields=[]) {
     const checked=validate(request);
     const canonical={indicator:request.indicator,parameters:checked.parameters,source:checked.source};
     let calculate;
-    try{calculate=await calculator(canonical,headers);}
+    try{calculate=await calculator(canonical,headers,timeframe);}
     catch(error){if(/Requires .* fields/.test(error.message))return;throw error;}
     const columns=calculate.columns.filter(name=>wanted.has(name));
     if(!columns.length)return;
@@ -55,6 +55,8 @@ async function recipesFor(headers,saved=[],requiredFields=[]) {
   const simple=new Set(catalog.indicators.filter(item=>item.parameters.length===1&&item.parameters[0].key==='period').map(item=>item.id));
   for(const column of derived){
     if(covered.has(column))continue;
+    const calendar=catalog.indicators.find(item=>item.intradayOnly&&item.id===column);
+    if(calendar){await add(parameterRequest(calendar.id,[],'auto'));if(!covered.has(column))throw Error(`Cannot reproduce derived column "${column}"; timestamp and candle ${calendar.input} are required.`);continue;}
     let name=column,source='close';
     const suffix=name.match(/_(bidprice|askprice|open|high|low)$/);
     if(suffix){source=suffix[1];name=name.slice(0,-suffix[0].length);}
@@ -161,9 +163,9 @@ async function refresh(request,options={}) {
   if(!Array.isArray(savedRecipes)||savedRecipes.length>2000)throw Error('Applied indicator recipe list is invalid.');
   if(request.timeframe==='w1')return require('./weekly-worker.cjs').weeklyRefresh(request,savedRecipes,scanned,{...options,now,emit:report});
   const requiredFields=request.requiredFields??[];
-  const recipes=await recipesFor(scanned.headers,savedRecipes,requiredFields);
+  const recipes=await recipesFor(scanned.headers,savedRecipes,requiredFields,request.timeframe);
   const headers=[...scanned.headers],normalized=headers.map(key);
-  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers)));
+  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,request.timeframe)));
   const available=new Set(calculations.flatMap(calculate=>calculate.columns));
   for(const field of requiredFields.map(key)){
     if(normalized.includes(field))continue;

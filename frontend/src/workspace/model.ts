@@ -1,6 +1,7 @@
 import {DEFAULT_FONT_SIZE,MIN_FONT_SIZE,MAX_FONT_SIZE} from './appearance';
 import {isThemeName} from './themes';
 import type {ChartConfig, ChartRightGap, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
+import {isCalendarRange,isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 export const MAX_TABS=20, MAX_CHARTS=9, MAX_INDICATORS=12, MAX_DRAWINGS=100;
 export const DEFAULT_CHART_RIGHT_GAP:ChartRightGap={unit:'bars',value:10};
 export const presets = [[1,1],[1,2],[2,1],[2,2],[2,3],[3,2],[3,3]] as const;
@@ -38,6 +39,7 @@ export function reduceWorkspace(w:Workspace,a:Action):Workspace {
  }
  case 'tabIndicator':{
   if(a.tabId!==w.activeTabId||!current)throw Error('The target tab is no longer active');
+  if(isCalendarRange(a.indicator.type)&&current.charts.some(chart=>!isIntradayPeriod(chart.timeframe)))throw Error('Day/week ranges require intraday periods on every chart in this tab.');
   if(current.charts.some(chart=>(chart.indicators?.length??0)>=MAX_INDICATORS))throw Error('Maximum 12 indicators per chart; remove an indicator before applying to the whole tab');
   return change({...current,charts:current.charts.map(chart=>({...chart,indicators:[...(chart.indicators??[]),{...structuredClone(a.indicator),id:uuid()}]}))});
  }

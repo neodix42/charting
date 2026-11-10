@@ -759,6 +759,78 @@
         }
       ],
       "note": "Rolling highest high of the last N bars, including the current row. Warm-up rows stay blank."
+    },
+    {
+      "id": "today_low",
+      "name": "Today's low",
+      "category": "Day / Week ranges",
+      "input": "low",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Current UTC day so far, including this bar; no future candles. Intraday candle periods only."
+    },
+    {
+      "id": "today_high",
+      "name": "Today's high",
+      "category": "Day / Week ranges",
+      "input": "high",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Current UTC day so far, including this bar; no future candles. Intraday candle periods only."
+    },
+    {
+      "id": "previous_day_low",
+      "name": "Previous day low",
+      "category": "Day / Week ranges",
+      "input": "low",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Previous available completed UTC day; blank until a preceding period is present. Intraday candle periods only."
+    },
+    {
+      "id": "previous_day_high",
+      "name": "Previous day high",
+      "category": "Day / Week ranges",
+      "input": "high",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Previous available completed UTC day; blank until a preceding period is present. Intraday candle periods only."
+    },
+    {
+      "id": "week_low",
+      "name": "Week's low",
+      "category": "Day / Week ranges",
+      "input": "low",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Current week so far, including this bar; no future candles. Weeks start Monday 00:00 UTC. Intraday candle periods only."
+    },
+    {
+      "id": "week_high",
+      "name": "Week's high",
+      "category": "Day / Week ranges",
+      "input": "high",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Current week so far, including this bar; no future candles. Weeks start Monday 00:00 UTC. Intraday candle periods only."
+    },
+    {
+      "id": "previous_week_low",
+      "name": "Previous week low",
+      "category": "Day / Week ranges",
+      "input": "low",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Previous available completed week; blank until a preceding period is present. Weeks start Monday 00:00 UTC. Intraday candle periods only."
+    },
+    {
+      "id": "previous_week_high",
+      "name": "Previous week high",
+      "category": "Day / Week ranges",
+      "input": "high",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Previous available completed week; blank until a preceding period is present. Weeks start Monday 00:00 UTC. Intraday candle periods only."
     }
   ]
 }

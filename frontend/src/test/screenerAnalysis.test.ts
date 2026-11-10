@@ -1,7 +1,7 @@
 import {describe,expect,it,vi} from 'vitest';
 import {analysisEntryLabel,analysisExitLabels,analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
-import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,analysisRollingField,analysisRollingFieldMessage,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
+import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,analysisRollingField,analysisEnrichmentMessage,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 import type {AnalysisCatalog} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
@@ -96,23 +96,23 @@ describe('Analysis field selection and validation',()=>{
   {id:'hyper-d1',name:'hyper-d1.csv',symbol:'btc',timeframe:'d1',category:'Forex',dataSource:'hyperliquid',fields:['close','high_20'],bytes:100},
  ]};
  it('checks exact enriched parameters per source, selected period and categories rather than the field union',()=>{
-  const message=analysisRollingFieldMessage(fieldOperand('low_10'),rangeCatalog,{period:'d1',categories:['Forex']});
+  const message=analysisEnrichmentMessage(fieldOperand('low_10'),rangeCatalog,{period:'d1',categories:['Forex']});
   expect(message).toContain('missing from 1 of 2 selected Dukascopy d1 files');expect(message).toContain('add Low with Period 10');expect(message).toContain('Enrichment');expect(message).toContain('Refresh fields');
-  expect(analysisRollingFieldMessage(fieldOperand('low_10'),rangeCatalog,{period:'d1',categories:['Commodities']})).toBe('');
-  expect(analysisRollingFieldMessage(fieldOperand('high_20'),rangeCatalog,{period:'d1',categories:['Forex']})).toContain('missing from 2 of 2');
+  expect(analysisEnrichmentMessage(fieldOperand('low_10'),rangeCatalog,{period:'d1',categories:['Commodities']})).toBe('');
+  expect(analysisEnrichmentMessage(fieldOperand('high_20'),rangeCatalog,{period:'d1',categories:['Forex']})).toContain('missing from 2 of 2');
  });
  it('uses an explicit companion timeframe and recomputes availability after field refresh',()=>{
   const operand={...fieldOperand('high_20'),timeframe:'w1',offset:1};
-  expect(analysisRollingFieldMessage(operand,rangeCatalog,{period:'d1',categories:['Forex']})).toBe('');
+  expect(analysisEnrichmentMessage(operand,rangeCatalog,{period:'d1',categories:['Forex']})).toBe('');
   const refreshed={...rangeCatalog,files:rangeCatalog.files.map(file=>({...file,fields:[...file.fields,'low_10']}))};
-  expect(analysisRollingFieldMessage(fieldOperand('low_10'),refreshed,{period:'d1',categories:['Forex']})).toBe('');
-  expect(analysisRollingFieldMessage(fieldOperand('low_10'),{...rangeCatalog,dataSource:'hyperliquid'})).toContain('missing from 1 of 1 selected Hyperliquid files');
+  expect(analysisEnrichmentMessage(fieldOperand('low_10'),refreshed,{period:'d1',categories:['Forex']})).toBe('');
+  expect(analysisEnrichmentMessage(fieldOperand('low_10'),{...rangeCatalog,dataSource:'hyperliquid'})).toContain('missing from 1 of 1 selected Hyperliquid files');
  });
  it('reports unavailable files without claiming missing enrichment during catalog loading or for ordinary fields',()=>{
-  expect(analysisRollingFieldMessage(fieldOperand('low_10'),null)).toBe('');
-  expect(analysisRollingFieldMessage(fieldOperand('close'),rangeCatalog)).toBe('');expect(analysisRollingFieldMessage(numberOperand(),rangeCatalog)).toBe('');
-  expect(analysisRollingFieldMessage({...fieldOperand('low_10'),timeframe:'h1'},rangeCatalog)).toContain('not available in downloaded Dukascopy h1 files');
-  expect(analysisRollingFieldMessage(fieldOperand('low_10'),{...rangeCatalog,files:[]})).toContain('not available');
+  expect(analysisEnrichmentMessage(fieldOperand('low_10'),null)).toBe('');
+  expect(analysisEnrichmentMessage(fieldOperand('close'),rangeCatalog)).toBe('');expect(analysisEnrichmentMessage(numberOperand(),rangeCatalog)).toBe('');
+  expect(analysisEnrichmentMessage({...fieldOperand('low_10'),timeframe:'h1'},rangeCatalog)).toContain('not available in downloaded Dukascopy h1 files');
+  expect(analysisEnrichmentMessage(fieldOperand('low_10'),{...rangeCatalog,files:[]})).toContain('not available');
  });
  it('accepts downloaded source choices and rejects other providers',()=>{
   const draft=initialAnalysisView();

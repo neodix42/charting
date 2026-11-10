@@ -140,14 +140,14 @@ async function extendDownload(request,options={}){
     await writeCheckpoint(snapshotFile,snapshot);
   }
   let recipes;
-  if(localOnly)recipes=await recipesFor(headers,savedRecipes);
+  if(localOnly)recipes=await recipesFor(headers,savedRecipes,[],request.timeframe);
   if(!snapshot.ranges.length&&plan.inputs.length===1){
     const coverage=union(covered);
     emit({type:'done',rows:scanned[0].rows,noChange:true,checksum:scanned[0].checksum,firstTimestamp:scanned[0].first,lastTimestamp:scanned[0].last,
       ...(localOnly?{coverage,recipes,checkedThrough:coverage.length===1?coverage[0].to:0}:{}),message:'Requested data is already available; no download needed'});
     return scanned[0].rows;
   }
-  recipes??=await recipesFor(headers,savedRecipes);
+  recipes??=await recipesFor(headers,savedRecipes,[],request.timeframe);
   const downloaded=[];
   for(let index=0;index<snapshot.ranges.length;index++){
     const range=snapshot.ranges[index],folder=path.join(directory,`range-${index}`),output=path.join(folder,'data.part');
@@ -174,7 +174,7 @@ async function extendDownload(request,options={}){
   const merged=path.join(directory,'merge-0.csv');
   // Fetched data has priority only where an open boundary candle overlaps.
   await mergeFiles([...downloaded,...plan.inputs.map(source=>source.input)],merged,headers,request.timeframe,directory);
-  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers))),normalized=headers.map(key),positions=calculations.map(calculate=>calculate.columns.map(name=>normalized.indexOf(name)));
+  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,request.timeframe))),normalized=headers.map(key),positions=calculations.map(calculate=>calculate.columns.map(name=>normalized.indexOf(name)));
   const source=records(merged),estimated=scanned.reduce((sum,data)=>sum+data.rows,0);let output,rows=0,buffer='',bytes=0;
   try{
     await source.next();output=await fs.open(request.output,'wx',0o600);await writeAll(output,line(headers));

@@ -22,18 +22,18 @@ async function fixture(t, csv) {
   await fs.writeFile(input,csv);
   return {input,output};
 }
-const request=(indicator,parameters={})=>({indicator,parameters,source:'auto'});
+const request=(indicator,parameters={})=>({indicator,parameters,source:'auto',timeframe:'h1'});
 
-test('all 42 reviewed indicators and 2 UTC time fields produce finite, aligned values',async()=>{
+test('all 42 reviewed indicators, 2 UTC time fields and 8 intraday ranges produce finite, aligned values',async()=>{
   assert.equal(catalog.version,'8.3.0');
-  assert.equal(catalog.indicators.length,44);
+  assert.equal(catalog.indicators.length,52);
   assert.equal(catalog.indicators.filter(item=>item.input==='timestamp').length,2);
   const rows=candles(500);
   for (const item of catalog.indicators) {
     const calculate=await calculator(request(item.id),header);
     assert.ok(calculate.columns.every(name=>/^[a-z0-9_.]+$/.test(name)),item.id);
     let populated=0;
-    for (const [index,row] of rows.entries()) {
+    for (const [index,row] of (item.intradayOnly?rows.map((row,i)=>[String(1704067200000+i*3600000),...row.slice(1)]):rows).entries()) {
       const result=calculate.next(row,index+2);
       assert.equal(result.length,calculate.columns.length,item.id);
       assert.ok(result.every(value=>value===''||Number.isFinite(Number(value))),item.id);
@@ -49,7 +49,7 @@ test('every indicator also works at its minimum supported period instead of acce
     if('fast' in parameters)parameters.slow=parameters.fast+1;
     const calculate=await calculator(request(item.id,parameters),header);
     let populated=0;
-    for(const [i,row] of candles(100).entries())if(calculate.next(row,i+2).every(value=>value!==''))populated++;
+    for(const [i,row] of (item.intradayOnly?candles(500).map((row,i)=>[String(1704067200000+i*3600000),...row.slice(1)]):candles(100)).entries())if(calculate.next(row,i+2).every(value=>value!==''))populated++;
     assert.ok(populated>0,`${item.id} minimum period must produce defined values`);
   }
   for(const indicator of ['hma','rsi','cci','stochrsi','obv'])assert.throws(()=>validate(request(indicator,{period:1})),/must be between 2/);

@@ -449,6 +449,9 @@ func TestPublicAlertWarmupSupportsEveryReviewedIndicator(t *testing.T) {
 	m := sourceEnrichmentManager(t, false)
 	plans := map[string]publicAlertPlan{}
 	for _, indicator := range m.Indicators().Indicators {
+		if indicator.IntradayOnly {
+			continue // Calendar ranges are checked with actual intraday period keys below.
+		}
 		parts := []string{indicator.ID}
 		for _, parameter := range indicator.Parameters {
 			parts = append(parts, strconv.FormatFloat(parameter.Default, 'g', -1, 64))

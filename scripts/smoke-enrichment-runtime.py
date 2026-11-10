@@ -313,6 +313,39 @@ const {EventEmitter}=require('node:events');
     return json.loads(result.stdout)
 
 
+def day_week_smoke(runtime, node, directory):
+    """Exercise the shared range module from the actual packaged worker offline."""
+    source = directory / "range-original.csv"
+    original = ("timestamp,open,high,low,close,volume\n"
+                "1704067200000,10,12,8,10,1\n1704150000000,10,15,6,10,1\n"
+                "1704153600000,8,13,3,8,1\n1704672000000,14,18,10,14,1\n")
+    source.write_text(original)
+    expected = {
+        "today_low": ["8", "6", "3", "10"], "today_high": ["12", "15", "13", "18"],
+        "previous_day_low": ["", "", "6", "3"], "previous_day_high": ["", "", "15", "13"],
+        "week_low": ["8", "6", "3", "10"], "week_high": ["12", "15", "15", "18"],
+        "previous_week_low": ["", "", "", "3"], "previous_week_high": ["", "", "", "15"],
+    }
+    current = source
+    for indicator in expected:
+        output = directory / f"range-{indicator}.csv"
+        request = {"input": str(current), "output": str(output), "indicator": indicator,
+                   "parameters": {}, "source": "auto", "timeframe": "h1"}
+        subprocess.run([str(node), str(runtime / "enrich-worker.cjs")],
+                       input=json.dumps(request) + "\n", text=True, capture_output=True,
+                       cwd=directory, env={**os.environ, "TZ": "Pacific/Honolulu"}, timeout=20, check=True)
+        current = output
+    with current.open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    for indicator, values in expected.items():
+        if [row[indicator] for row in rows] != values:
+            raise ValueError(f"Packaged {indicator} returned incorrect UTC ranges")
+    if source.read_text() != original:
+        raise ValueError("Packaged day/week ranges changed their original input")
+    return {"passed": True, "columns": list(expected), "utc": True, "causal": True,
+            "previousWarmupBlank": True, "networkRequired": False}
+
+
 def smoke(runtime):
     runtime = runtime.resolve()
     node = runtime / ("node.exe" if os.name == "nt" else "node")
@@ -339,6 +372,7 @@ def smoke(runtime):
             raise ValueError("Packaged enrichment changed original data fields")
         refresh = refresh_smoke(runtime, node, directory, output)
         calendar = calendar_smoke(runtime, node, directory)
+        ranges = day_week_smoke(runtime, node, directory)
         if source.read_bytes() != original.encode():
             raise ValueError("Packaged Refresh changed the original raw CSV")
         incremental = incremental_smoke(runtime, node, directory, output)
@@ -346,7 +380,7 @@ def smoke(runtime):
         return {"passed": True, "runtime": str(runtime), "columns": ["sma_3"], "rows": 4,
                 "warmupBlank": True, "exactValues": True, "originalFieldsPreserved": True,
                 "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar,
-                "incremental": incremental, "providerSession": provider}
+                "incremental": incremental, "providerSession": provider, "dayWeekRanges": ranges}
 
 
 def main():

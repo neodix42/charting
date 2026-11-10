@@ -1,3 +1,4 @@
+import {isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 import catalog from '../../../internal/screener/indicators.json' with {type:'json'};
 import type {Backend,ScreenerDataFile,ScreenerEnrichmentInfo,ScreenerEnrichmentRequest,ScreenerIndicators,ScreenerRefreshInfo} from '../types';
 
@@ -23,7 +24,7 @@ export function screenerEnrichmentBridge(directory:()=>string){
   async StartScreenerEnrichment(value){
    if(startError)throw Error(startError);
    request=structuredClone(value);
-   const selected=files.filter(file=>(file.dataSource??'dukascopy')===(value.dataSource??'dukascopy')&&(!value.period||value.period==='all'||file.timeframe===value.period));
+   const selected=files.filter(file=>(file.dataSource??'dukascopy')===(value.dataSource??'dukascopy')&&(!value.period||value.period==='all'||file.timeframe===value.period)&&(!catalog.indicators.find(item=>item.id===value.indicator)?.intradayOnly||isIntradayPeriod(file.timeframe??'')));
    info={...info,active:true,indicator:value.indicator,total:selected.length,completed:0,failed:0,cancelled:0,jobs:selected.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,message:'Queued in explicit test mode',columns:[]}))};
    return structuredClone({...info,jobs:[]});
   },

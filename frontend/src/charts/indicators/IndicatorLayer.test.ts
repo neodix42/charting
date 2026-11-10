@@ -2,7 +2,8 @@ import {describe,it,expect,vi} from 'vitest';
 import type {IChartApi,ISeriesApi} from 'lightweight-charts';
 import type {Candle,IndicatorConfig} from '../../types';
 import {IndicatorLayer} from './IndicatorLayer';
-import {ichimoku,macd} from './math';
+import {calendarRangeValues,ichimoku,macd} from './math';
+import {calendarRangeNames,type CalendarRangeType} from '../../../../screener-runtime/calendar-ranges.mjs';
 
 function chartHarness(){
  type PriceLine={options:Record<string,unknown>;applyOptions:ReturnType<typeof vi.fn>};
@@ -21,6 +22,18 @@ const candles:Candle[]=Array.from({length:80},(_,i)=>({time:1000+i*60,open:i+10,
 const config=(id:string,type:IndicatorConfig['type'],parameters:IndicatorConfig['parameters']={}):IndicatorConfig=>({id,type,parameters});
 
 describe('indicator series ownership',()=>{
+ it('renders all day/week overlays on the price pane, updates corrections, suspends D1/W1 and disposes without rebuilding other series',()=>{
+  const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),ids=Object.keys(calendarRangeNames) as CalendarRangeType[],configs=ids.map(id=>config(id,id));
+  const bars=Array.from({length:400},(_,i)=>({...candles[0],time:1704067200+i*3600,high:20+i%10,low:5-i%5}));
+  layer.update(bars,configs,'1h');const lines=[...h.panes[0].series].slice(1);
+  expect(h.panes).toHaveLength(1);expect(lines).toHaveLength(8);expect(h.chart.addSeries).toHaveBeenCalledTimes(8);
+  ids.forEach((id,index)=>expect(lines[index].data).toEqual(calendarRangeValues(bars,id,'1h')));
+  const corrected=[...bars.slice(0,-1),{...bars.at(-1)!,low:-1,high:100}];layer.update(corrected,configs,'1h');
+  ids.forEach((id,index)=>expect(lines[index].data).toEqual(calendarRangeValues(corrected,id,'1h')));
+  layer.update(corrected,configs,'1d');expect(lines.every(line=>!line.data.length)).toBe(true);
+  layer.update(corrected,configs,'1h');expect(h.chart.addSeries).toHaveBeenCalledTimes(8);expect(h.removed).toHaveLength(0);
+  layer.dispose();expect(h.removed).toHaveLength(8);expect(h.panes[0].series.size).toBe(1);
+ });
  it('keeps only the selected Ichimoku line and removes hidden projections from the timeline',()=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),original=config('cloud','ichimoku'),baseOnly={...original,visibility:{conversion:false,spanA:false,spanB:false,lagging:false,cloud:false}};
   layer.update(candles,[original],'1m');const lines=[...h.panes[0].series].slice(1),cloud=lines[2].attachPrimitive.mock.calls[0][0],updates=vi.spyOn(cloud,'setData');

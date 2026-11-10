@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
-import {CandlestickSeries,HistogramSeries,LineSeries,createChart,createSeriesMarkers,type AutoscaleInfoProvider,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {CandlestickSeries,HistogramSeries,LineSeries,LineType,createChart,createSeriesMarkers,type AutoscaleInfoProvider,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {isCalendarRange} from '../../../screener-runtime/calendar-ranges.mjs';
 import type {AnalysisBar,AnalysisChart,AnalysisResult,ScreenerAnalysisBackend} from '../workspace/screenerAnalysis';
 import {analysisDate,analysisFieldGroup,analysisFieldLabel,analysisPriceOverlay} from '../workspace/screenerAnalysis';
 import {errorText} from '../types';
@@ -79,7 +80,7 @@ export function AnalysisPlot({data}:{data:AnalysisChart}){
     if(/volume(?:\[|$)|histogram/i.test(field)){
      const series=chart.addSeries(HistogramSeries,options,pane);series.setData(histogramData(field,document.documentElement.dataset.theme??'light'));histograms.push({series,field});
     }else{
-     const series=chart.addSeries(LineSeries,{...options,lineWidth:1},pane);series.setData(ordered.map(bar=>{const number=value(bar,field);return Number.isFinite(number)?{...timed(bar),value:number!}:timed(bar);}));
+     const series=chart.addSeries(LineSeries,{...options,lineWidth:1,...(isCalendarRange(field)?{lineType:LineType.WithSteps}:{})},pane);series.setData(ordered.map(bar=>{const number=value(bar,field);return Number.isFinite(number)?{...timed(bar),value:number!}:timed(bar);}));
     }
    });
    applyTheme.current=theme=>{

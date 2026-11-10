@@ -1784,6 +1784,7 @@ export namespace screener {
 	    input: string;
 	    parameters: IndicatorParameter[];
 	    note?: string;
+	    intradayOnly?: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new Indicator(source);
@@ -1797,6 +1798,7 @@ export namespace screener {
 	        this.input = source["input"];
 	        this.parameters = this.convertValues(source["parameters"], IndicatorParameter);
 	        this.note = source["note"];
+	        this.intradayOnly = source["intradayOnly"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

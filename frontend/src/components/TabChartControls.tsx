@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {intervals,type ChartConfig,type IndicatorConfig,type IndicatorType,type Interval} from '../types';
 import {MAX_INDICATORS} from '../workspace/model';
 import {IndicatorDialog,indicatorNames} from '../charts/IndicatorDialog';
+import {isCalendarRange,isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 
 interface Props {
  charts:readonly ChartConfig[];
@@ -18,7 +19,7 @@ export function TabChartControls({charts,onTimeframe,onIndicator}:Props){
    {intervals.map(period=><button key={period} type="button" aria-label={`Apply ${period} to current tab`} aria-pressed={commonPeriod===period} title={`Use ${period} on every chart in this tab`} onClick={()=>{if(commonPeriod!==period)onTimeframe(period);}}>{period}</button>)}
   </div>
   <select aria-label="Indicators for current tab" value="" disabled={full} title={full?'A chart has 12 indicators. Remove an indicator before adding one to the whole tab.':'Add an indicator to every chart in this tab'} onChange={event=>{if(event.target.value)setIndicatorType(event.target.value as IndicatorType);}}>
-   <option value="">Indicators</option>{(Object.keys(indicatorNames) as IndicatorType[]).map(type=><option key={type} value={type}>{indicatorNames[type]}</option>)}
+   <option value="">Indicators</option>{(Object.keys(indicatorNames) as IndicatorType[]).map(type=><option key={type} value={type} disabled={isCalendarRange(type)&&charts.some(chart=>!isIntradayPeriod(chart.timeframe))}>{indicatorNames[type]}</option>)}
   </select>
   {indicatorType&&<IndicatorDialog type={indicatorType} scopeLabel={`Applies to all ${charts.length} chart${charts.length===1?'':'s'} in this tab.`} onClose={()=>setIndicatorType(null)} onSave={indicator=>{onIndicator(indicator);setIndicatorType(null);}}/>}
  </div>;

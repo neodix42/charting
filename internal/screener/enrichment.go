@@ -52,6 +52,9 @@ func (m *Manager) enrichmentRuntimeError() string {
 	if st, err := os.Stat(filepath.Join(directory, "enrich-worker.cjs")); err != nil || !st.Mode().IsRegular() {
 		return "Enrichment worker is missing; rebuild or reinstall the complete Screener runtime"
 	}
+	if st, err := os.Stat(filepath.Join(directory, "calendar-ranges.mjs")); err != nil || !st.Mode().IsRegular() {
+		return "Day/week range calculator is missing; rebuild or reinstall the complete Screener runtime"
+	}
 	for name, version := range map[string]string{"trading-signals": m.Indicators().Version, "csv-parse": "7.0.3"} {
 		data, err := os.ReadFile(filepath.Join(directory, "node_modules", name, "package.json"))
 		var pkg struct{ Version string }
@@ -146,12 +149,18 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 	selectedNames := names[:0]
 	for _, name := range names {
 		if request.DataSource == "all" || fileDataSource(name) == normalizeDataSource(request.DataSource) {
+			if indicatorDefinitions()[request.Indicator].IntradayOnly {
+				match := downloadFilename.FindStringSubmatch(strings.ToLower(name))
+				if match == nil || !intradayEnrichmentPeriod(match[2]) {
+					continue
+				}
+			}
 			selectedNames = append(selectedNames, name)
 		}
 	}
 	names = selectedNames
 	if len(names) == 0 {
-		return m.enrichmentInfoLocked(nil), errors.New("there are no downloaded CSV files to enrich")
+		return m.enrichmentInfoLocked(nil), errors.New("there are no compatible downloaded CSV files to enrich")
 	}
 	// Select before grouping or consolidation: unselected periods and custom
 	// filenames must never become jobs or be rewritten by this batch.
@@ -292,7 +301,8 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 		Input     string `json:"input"`
 		Output    string `json:"output"`
 		OwnerPipe bool   `json:"ownerPipe"`
-	}{request, source, output, true})
+		Timeframe string `json:"timeframe"`
+	}{request, source, output, true, describeFileName(directory, job.Name).Timeframe})
 	if err != nil {
 		return err
 	}

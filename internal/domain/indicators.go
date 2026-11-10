@@ -34,6 +34,9 @@ func validateIndicator(i Indicator) error {
 		names = []string{"conversion", "base", "spanB", "displacement"}
 	case "macd":
 		names = []string{"fast", "slow", "signal"}
+	case "today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high":
+		// UTC calendar ranges have no configurable row period. Configurations
+		// survive timeframe changes; rendering is suspended on D1/W1 charts.
 	default:
 		return fmt.Errorf("unsupported indicator %q", i.Type)
 	}
@@ -68,7 +71,7 @@ func validateIndicator(i Indicator) error {
 			return fmt.Errorf("MACD pane stretch factor must be 0.001–1000")
 		}
 	}
-	if len(i.Parameters) != len(names) {
+	if len(i.Parameters) != len(names) || i.Parameters == nil {
 		return fmt.Errorf("invalid %s parameter fields", i.Type)
 	}
 	for _, name := range names {

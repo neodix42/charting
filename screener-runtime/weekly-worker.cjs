@@ -96,8 +96,8 @@ async function weeklyDownload(request,options={}){
     for(const name of data.headers)if(!names.has(key(name))){names.add(key(name));headers.push(name);}
     savedRecipes.push(...(source.metadata?.recipes??[]));
   }
-  const recipes=await recipesFor(headers,savedRecipes,request.requiredFields??[]);
-  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers)));
+  const recipes=await recipesFor(headers,savedRecipes,request.requiredFields??[],'w1');
+  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,'w1')));
   for(const calculate of calculations)for(const name of calculate.columns)if(!names.has(key(name))){names.add(key(name));headers.push(name);}
   const normalized=headers.map(key),positions=calculations.map(calculate=>calculate.columns.map(name=>normalized.indexOf(name)));
   const scratch=await fs.mkdtemp(path.join(directory,'.weekly-'));

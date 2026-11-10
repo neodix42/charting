@@ -47,14 +47,14 @@ test('first refresh repairs an internal hole, revises overlap and enriches all a
   assert.equal(events.at(-1).type,'done');
 });
 
-test('all 44 indicator and time field headers can migrate their complete applied recipes and reproduce columns',async()=>{
+test('all 52 indicator, time and range field headers can migrate their complete applied recipes and reproduce columns',async()=>{
   for(const definition of catalog.indicators){
-    const original=await calculator({indicator:definition.id,source:'auto'},header);
-    const recipes=await recipesFor([...header,...original.columns]);
-    const restored=(await Promise.all(recipes.map(recipe=>calculator(recipe,header)))).flatMap(value=>value.columns);
+    const original=await calculator({indicator:definition.id,source:'auto'},header,'h1');
+    const recipes=await recipesFor([...header,...original.columns],[],[],'h1');
+    const restored=(await Promise.all(recipes.map(recipe=>calculator(recipe,header,'h1')))).flatMap(value=>value.columns);
     assert.ok(original.columns.every(column=>restored.includes(column)),definition.id);
-    const required=await recipesFor(header,[],original.columns);
-    const ensured=(await Promise.all(required.map(recipe=>calculator(recipe,header)))).flatMap(value=>value.columns);
+    const required=await recipesFor(header,[],original.columns,'h1');
+    const ensured=(await Promise.all(required.map(recipe=>calculator(recipe,header,'h1')))).flatMap(value=>value.columns);
     assert.ok(original.columns.every(column=>ensured.includes(column)),`${definition.id}: missing required columns`);
   }
   const tick=['timestamp','askPrice','bidPrice','askVolume','bidVolume'];
@@ -283,7 +283,7 @@ test('Refresh recovers Low/High recipes from columns and replays them on merged 
   const recipes=await recipesFor([...header,'low_3','high_3']);
   assert.deepEqual(recipes,[{indicator:'low',parameters:{period:3},source:'auto'},{indicator:'high',parameters:{period:3},source:'auto'}]);
   for(const recipe of recipes){
-    const calculate=await calculator(recipe,header);
+    const calculate=await calculator(recipe,header,'h1');
     const values=[10,4,20,15,12].map((price,i)=>calculate.next(row(start+i*day,price).map(String),i+2)[0]);
     assert.deepEqual(values,recipe.indicator==='low'?['','','3','3','11']:['','','21','21','21']);
   }

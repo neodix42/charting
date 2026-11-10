@@ -135,6 +135,7 @@ def fingerprint(path):
 def input_snapshot(root):
     paths = set(PUBLISH_FILES) | {"internal/screener/indicators.json"}
     paths |= {path.relative_to(root).as_posix() for path in (root / "screener-runtime").glob("*.cjs")}
+    paths |= {path.relative_to(root).as_posix() for path in (root / "screener-runtime").glob("*.mjs")}
     return {name: fingerprint(root / name) for name in sorted(paths)}
 
 
@@ -142,7 +143,7 @@ def stage_sources(root, stage):
     runtime = stage / "screener-runtime"
     runtime.mkdir(parents=True)
     (stage / "internal/screener").mkdir(parents=True)
-    for path in (root / "screener-runtime").glob("*.cjs"):
+    for path in [*(root / "screener-runtime").glob("*.cjs"), *(root / "screener-runtime").glob("*.mjs")]:
         shutil.copy2(path, runtime / path.name)
     for name in (*SOURCE_FILES, "internal/screener/indicators.json"):
         source = root / name

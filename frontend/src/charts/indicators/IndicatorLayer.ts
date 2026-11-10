@@ -1,12 +1,14 @@
-import {HistogramSeries,LineSeries,LineStyle,type AutoscaleInfo,type IChartApi,type IPaneApi,type IPriceLine,type ISeriesApi,type LineWidth,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {HistogramSeries,LineSeries,LineStyle,LineType,type AutoscaleInfo,type IChartApi,type IPaneApi,type IPriceLine,type ISeriesApi,type LineWidth,type PriceFormatCustom,type Time,type UTCTimestamp} from 'lightweight-charts';
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
 import {indicatorComponents,indicatorComponentVisible} from '../indicatorVisibility';
 import {CloudPrimitive} from './CloudPrimitive';
-import {ema,ichimoku,macd,sma,rollingExtrema,type IndicatorPoint,type MACDValues} from './math';
+import {calendarRangeValues,ema,ichimoku,macd,sma,rollingExtrema,type IndicatorPoint,type MACDValues} from './math';
+import {calendarRangeNames,isCalendarRange} from '../../../../screener-runtime/calendar-ranges.mjs';
 
 interface Layer {type:IndicatorConfig['type'];lines:ISeriesApi<'Line'>[];histogram?:ISeriesApi<'Histogram'>;cloud?:CloudPrimitive;pane?:IPaneApi<Time>;zero?:IPriceLine}
 const defaultPaneRatio=.15; // LWC starts the main pane at factor 2; the original MACD factor was .3.
-const colors={sma:'#e9af55',ema:'#48a9f8',low:'#26a69a',high:'#ef5350',ichimoku:'#4387ef',macd:'#48a9f8'};
+const colors:Partial<Record<IndicatorConfig['type'],string>>={sma:'#e9af55',ema:'#48a9f8',low:'#26a69a',high:'#ef5350',ichimoku:'#4387ef',macd:'#48a9f8'};
+const indicatorColor=(config:IndicatorConfig)=>config.color||colors[config.type]||(config.type.endsWith('_low')?'#26a69a':'#ef5350');
 const lineData=(points:readonly IndicatorPoint[])=>points.map(point=>({time:point.time as UTCTimestamp,value:point.value}));
 function macdFormat(values:MACDValues):PriceFormatCustom{
  let magnitude=0;for(const points of [values.macd,values.signal,values.histogram])for(const point of points)magnitude=Math.max(magnitude,Math.abs(point.value));
@@ -55,7 +57,10 @@ export class IndicatorLayer {
  }
  private addLine(color:string,title:string,paneIndex=0,lineWidth:LineWidth=1){return this.chart.addSeries(LineSeries,{color,title,lineWidth,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false},paneIndex);}
  private create(config:IndicatorConfig):Layer{
-  const color=config.color||colors[config.type];
+  const color=indicatorColor(config);
+  if(isCalendarRange(config.type)){
+   const line=this.addLine(color,calendarRangeNames[config.type],0,2);line.applyOptions({lineType:LineType.WithSteps});return {type:config.type,lines:[line]};
+  }
   if(config.type==='sma'||config.type==='ema')return {type:config.type,lines:[this.addLine(color,config.type.toUpperCase(),0,config.lineWidth??2)]};
   if(config.type==='low'||config.type==='high')return {type:config.type,lines:[this.addLine(color,config.type==='low'?'Low':'High',0,2)]};
   if(config.type==='ichimoku'){
@@ -87,7 +92,11 @@ export class IndicatorLayer {
   for(const [id,layer] of this.layers)if(!expected.has(id)||expected.get(id)!.type!==layer.type)this.remove(id);
   for(const config of configs){
    let layer=this.layers.get(config.id);if(!layer){layer=this.create(config);this.layers.set(config.id,layer);}
-   const params=config.parameters,color=config.color||colors[config.type];layer.lines[0].applyOptions({color});
+   const params=config.parameters,color=indicatorColor(config);layer.lines[0].applyOptions({color});
+   if(isCalendarRange(config.type)){
+    const values=calendarRangeValues(bars,config.type,timeframe);
+    layer.lines[0].applyOptions({pointMarkersVisible:values.length===1,pointMarkersRadius:3});layer.lines[0].setData(lineData(values));continue;
+   }
    switch(config.type){
     case 'sma':case 'ema':{
      const values=(config.type==='sma'?sma:ema)(bars,params.period??20);

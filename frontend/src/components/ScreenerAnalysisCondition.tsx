@@ -1,6 +1,7 @@
 import {memo,useEffect,useId,useMemo,useState,type ReactNode} from 'react';
 import type {AnalysisCatalog,AnalysisCondition,AnalysisFieldScope,AnalysisOperand,AnalysisOperator} from '../workspace/screenerAnalysis';
-import {analysisFieldGroups,analysisFieldLabel,analysisOperators,analysisRollingField,analysisRollingFieldMessage,fieldOperand,numberOperand} from '../workspace/screenerAnalysis';
+import {analysisEnrichmentMessage,analysisFieldGroups,analysisFieldLabel,analysisOperators,analysisRollingField,fieldOperand,numberOperand} from '../workspace/screenerAnalysis';
+import {calendarRangeNames} from '../../../screener-runtime/calendar-ranges.mjs';
 import {analysisOperatorHelp} from '../workspace/screenerOperatorHelp';
 import './ScreenerAnalysisCondition.css';
 
@@ -10,7 +11,7 @@ const emptyFields:string[]=[];
 const fieldMenus=new WeakMap<string[],{known:ReadonlySet<string>;options:ReactNode}>();
 function fieldMenu(fields:string[]){
  let menu=fieldMenus.get(fields);if(menu)return menu;
- const available=[...new Set(['price','close','low_10','high_10',...fields])];
+ const available=[...new Set(['price','close','low_10','high_10',...Object.keys(calendarRangeNames),...fields])];
  menu={known:new Set(available),options:analysisFieldGroups(available).map(([group,items])=><optgroup key={group} label={group}>{items.map(field=><option key={field} value={field}>{analysisFieldLabel(field)}</option>)}</optgroup>)};
  fieldMenus.set(fields,menu);return menu;
 }
@@ -40,7 +41,7 @@ function NumberInput({value,onChange,...props}:{value:number;onChange(value:numb
 export function AnalysisOperandEditor({label,value,catalog,scope,onChange}:{label:string;value:AnalysisOperand;catalog:AnalysisCatalog|null;scope?:AnalysisFieldScope;onChange(value:AnalysisOperand):void}){
  const fields=catalog?.fields??emptyFields,{known}=fieldMenu(fields);
  const rolling=value.kind==='field'?analysisRollingField(value.field??''):null,helpID=useId();
- const enrichmentMessage=useMemo(()=>analysisRollingFieldMessage(value,catalog,scope),[value.kind,value.field,value.timeframe,catalog,scope?.period,scope?.categories]);
+ const enrichmentMessage=useMemo(()=>analysisEnrichmentMessage(value,catalog,scope),[value.kind,value.field,value.timeframe,catalog,scope?.period,scope?.categories]);
  const timeframes=useMemo(()=>[...new Set([...(catalog?.timeframes??[]),...(value.timeframe&&value.timeframe!=='same'?[value.timeframe]:[])])],[catalog?.timeframes,value.timeframe]);
  return <div className="analysis-operand" role="group" aria-label={label}>
   <span className="analysis-operand-label">{label.endsWith(' left')?'Left value':label.endsWith(' right')?'Right value':label.endsWith(' upper')?'Upper value':'Distance value'}</span>

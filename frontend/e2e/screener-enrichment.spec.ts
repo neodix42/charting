@@ -28,7 +28,7 @@ test('Enrichment loads CSV periods and comma separated headers only when opened,
  await expect(panel(page).locator('tbody tr')).toContainText('Available bar open times');
  await expect(panel(page).locator('tbody tr code')).toHaveText(fields.join(', '));
  await expect(panel(page).getByText('/explicit-test/screener',{exact:true})).toBeVisible();
- await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(44);
+ await expect(page.getByLabel('Enrichment indicator',{exact:true}).locator('option')).toHaveCount(52);
  await expect(page.getByLabel('Period',{exact:true})).toHaveValue('200');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);
 });

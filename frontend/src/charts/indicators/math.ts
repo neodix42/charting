@@ -1,4 +1,5 @@
-import type {Candle,IndicatorConfig} from '../../types';
+import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
+import {calendarRange,isCalendarRange,isIntradayPeriod,type CalendarRangeType} from '../../../../screener-runtime/calendar-ranges.mjs';
 
 export interface IndicatorPoint {time:number;value:number}
 export interface CloudPoint {time:number;a:number;b:number}
@@ -7,7 +8,12 @@ export interface MACDValues {macd:IndicatorPoint[];signal:IndicatorPoint[];histo
 const validPeriod=(period:number)=>Number.isInteger(period)&&period>=1&&period<=2000;
 
 /** Required history for the complete indicator, including MACD's separate signal seed. */
-export function indicatorWarmupBars(config:IndicatorConfig):number{
+export function indicatorWarmupBars(config:IndicatorConfig,timeframe:Interval='1h'):number{
+ if(isCalendarRange(config.type)){
+  if(!isIntradayPeriod(timeframe))return 0;
+  const days=config.type.includes('week')?7:1,periods=config.type.startsWith('previous_')?2:1;
+  return Math.ceil(days*periods*86400/intervalSeconds[timeframe])+1;
+ }
  const p=config.parameters;
  switch(config.type){
   case 'sma':case 'ema':return p.period??20;
@@ -15,6 +21,18 @@ export function indicatorWarmupBars(config:IndicatorConfig):number{
   case 'ichimoku':return Math.max(p.conversion??9,p.base??26,p.spanB??52);
   case 'macd':return (p.slow??26)+(p.signal??9)-1;
  }
+}
+
+/** Keep ordinary windows at 10,000 bars; one-minute previous-week ranges need two weeks plus a boundary bar. */
+export function indicatorHistoryLimit(configs:readonly IndicatorConfig[],timeframe:Interval){
+ return Math.max(10000,...configs.filter(config=>isCalendarRange(config.type)).map(config=>indicatorWarmupBars(config,timeframe)));
+}
+
+export function calendarRangeValues(bars:readonly Candle[],type:CalendarRangeType,timeframe:Interval):IndicatorPoint[]{
+ if(!isIntradayPeriod(timeframe))return [];
+ const next=calendarRange(type),field=type.endsWith('_low')?'low':'high',result:IndicatorPoint[]=[];
+ for(const bar of bars){const value=next(bar.time*1000,Number(bar[field]));if(value!==undefined)result.push({time:bar.time,value});}
+ return result;
 }
 
 /** Averages use the close, include the open candle, and emit nothing before a complete seed window. */

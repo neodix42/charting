@@ -34,12 +34,13 @@ type IndicatorParameter struct {
 }
 
 type Indicator struct {
-	ID         string               `json:"id"`
-	Name       string               `json:"name"`
-	Category   string               `json:"category"`
-	Input      string               `json:"input"`
-	Parameters []IndicatorParameter `json:"parameters"`
-	Note       string               `json:"note,omitempty"`
+	ID           string               `json:"id"`
+	Name         string               `json:"name"`
+	Category     string               `json:"category"`
+	Input        string               `json:"input"`
+	Parameters   []IndicatorParameter `json:"parameters"`
+	Note         string               `json:"note,omitempty"`
+	IntradayOnly bool                 `json:"intradayOnly,omitempty"`
 }
 
 type IndicatorCatalog struct {
@@ -88,6 +89,9 @@ func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentReque
 	if !known {
 		return request, errors.New("choose a supported enrichment indicator or time field")
 	}
+	if indicator.IntradayOnly && request.Period != "" && request.Period != "all" && !intradayEnrichmentPeriod(request.Period) {
+		return request, errors.New("day/week range indicators require candle periods below D1 (s1 through h4)")
+	}
 	switch request.Source {
 	case "", "auto":
 		request.Source = "auto"
@@ -119,4 +123,12 @@ func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentReque
 	}
 	request.Parameters = parameters
 	return request, nil
+}
+
+func intradayEnrichmentPeriod(period string) bool {
+	switch period {
+	case "s1", "m1", "m5", "m15", "m30", "h1", "h4":
+		return true
+	}
+	return false
 }

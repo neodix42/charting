@@ -1118,8 +1118,10 @@ const root=process.argv[1],{calculator,line,writeAll}=require(path.join(root,'en
 const {recipesFor,records}=require(path.join(root,'refresh-worker.cjs'));
 const base=['timestamp','open','high','low','close','volume'];
 const emit=x=>process.stdout.write(JSON.stringify(x)+'\n');
-async function required(recipe,fields){
+async function required(recipe,fields,period){
  const api=await import(path.join(root,'node_modules/trading-signals/dist/index.js')),p=recipe.parameters,id=recipe.indicator;
+ const {isCalendarRange}=await import(path.join(root,'calendar-ranges.mjs'));
+ if(isCalendarRange(id)){const step={s1:1,m1:60,m5:300,m15:900,m30:1800,h1:3600,h4:14400}[period];return Math.ceil((id.includes('week')?7:1)*(id.startsWith('previous_')?2:1)*86400/step)+1;}
  if(['weekday','hour'].includes(id))return 1;
  if(['low','high','tenkan','kijun'].includes(id))return p.period;
  if(id==='ichimoku')return Math.max(...fields.map(f=>f.startsWith('tenkan_')?p.conversion:f.startsWith('kijun_')?p.base:f.startsWith('senkou_a_')?Math.max(p.conversion,p.base):f.startsWith('senkou_b_')?p.spanB:1));
@@ -1145,14 +1147,14 @@ async function required(recipe,fields){
    if(!plans){
     plans=request.plans;recipes={};
     for(const [period,plan]of Object.entries(plans)){
-     recipes[period]=await recipesFor(base,[],plan.fields);
-     let warm=1;for(const recipe of recipes[period])warm=Math.max(warm,await required(recipe,plan.fields));
+     recipes[period]=await recipesFor(base,[],plan.fields,period);
+     let warm=1;for(const recipe of recipes[period])warm=Math.max(warm,await required(recipe,plan.fields,period));
      plan.bars=warm+plan.extra;
     }
     emit({plans});continue;
    }
    const plan=plans[request.period],calculators=[];
-   for(const recipe of recipes[request.period])calculators.push(await calculator(recipe,base));
+   for(const recipe of recipes[request.period])calculators.push(await calculator(recipe,base,request.period));
    const columns=[...new Set([...base,...calculators.flatMap(c=>c.columns)])],positions=plan.fields.map(f=>columns.indexOf(f));
    if(positions.some(p=>p<0))throw Error('Required public condition field is unavailable.');
    const handle=await fs.open(request.output,'wx',0o600);let count=0,tail=[],buffer='';

@@ -99,7 +99,7 @@ one feed; revisions from different feeds cannot be compared.
 ## Bounds and diagnostics
 
 Initial engineering defaults, to be measured rather than advertised as performance claims:
-- 500 initial history bars; 10,000 loaded bars per active series with windowed historical loads.
+- 500 initial history bars; ordinarily 10,000 loaded bars per active series with windowed historical loads. Intraday calendar-range overlays can raise this to their bounded warm-up, at most 20,161 one-minute bars for a complete previous week plus the current week and a boundary bar. Only active charts load this optional history; provider limits remain visible.
 - 250,000 normalized candles total in the backend LRU cache, with correct ownership eviction.
 - 100 ms maximum ordinary UI update coalescing; preserve distinct bar changes and error states.
 - At most 2 concurrent history requests per provider initially, plus provider-specific pacing.
