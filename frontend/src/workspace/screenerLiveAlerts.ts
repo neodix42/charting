@@ -25,6 +25,26 @@ export function liveAlertCheckProgress(check:LiveAlertCheck):{state:string;phase
  const value=typeof reported==='number'&&Number.isFinite(reported)?Math.max(0,Math.min(100,reported)):state==='queued'?0:undefined;
  return{state,phase:check.phase||(state==='completed'&&check.error?'Completed with errors':labels[state])||state,value};
 }
+
+/** Suppressed recipient failures affect presentation only, never persisted results. */
+export function visibleLiveAlertCheck(check:LiveAlertCheck):LiveAlertCheck {
+ const error=liveAlertErrorText(check.error),ignored=!!check.error.trim()&&!error;
+ if(ignored&&(check.status==='completed'||check.status==='failed')){
+  const active=check.progressState==='running'||check.progressState==='queued';
+  return {...check,error:'',status:'completed',...(!active?{progressState:check.progressState?'completed' as const:undefined,phase:'Completed'}:{})};
+ }
+ return {...check,error};
+}
+
+export function liveAlertOutcomePresentation(outcome:LiveAlertOutcome):{label:string;message:string;className:string} {
+ const message=liveAlertErrorText(outcome.message),ignored=!!outcome.message.trim()&&!message;
+ const labels={sent:'Sent',failed:'Failed',claimed:'Delivery pending',uncertain:'Delivery uncertain — it may have arrived; no automatic retry'};
+ if(ignored){
+  const count=outcome.confirmedRecipients;
+  return {label:typeof count==='number'&&count>0?`Delivered to ${count} ${count===1?'recipient':'recipients'}`:count===0?'No delivery confirmed':'Delivery recorded',message:'',className:''};
+ }
+ return {label:labels[outcome.status],message,className:outcome.status};
+}
 export interface LiveAlertsInfo {checks:LiveAlertCheck[];savedConditionsRevision:number;conditionScopes:LiveAlertConditionScope[];config:LiveAlertsConfig;running:boolean;lastRun:number;nextRun:number;sent:number;error?:string;status:string;assets:LiveAlertAsset[];progress:number;currentAsset:string;recent:LiveAlertOutcome[]}
 /** Compact status carries no evidence/catalog metadata; retain the last full schedule. */
 export function mergeLiveAlertsProgress(previous:LiveAlertsInfo|null,next:LiveAlertsInfo):LiveAlertsInfo {
@@ -99,9 +119,15 @@ export class LiveAlertsConfigWriter {
  }
 }
 
-/** Also cleans old persisted checks whose joined errors were flattened to one line. */
+// Match only Telegram recipient-resolution delivery failures. A bounded prefix
+// prevents a flattened legacy line from swallowing an earlier, different alert.
+const ignoredRecipientFailure=/(?:Telegram alert for (?:(?!Telegram alert for |Telegram alert delivery:|Telegram operation failed|[0-9]+ of [0-9]+ recipients confirmed)[^\r\n])*?: )?(?:Telegram alert delivery: \d+ of \d+ recipients confirmed; no automatic resend: )?Telegram operation failed \(recipientNotFound\)(?:\. This bar will not be resent automatically; check Telegram before any manual action\.)?/g;
+const ignoredLegacyRecipientFailure=/Telegram alert for (?:(?!Telegram alert for |Telegram alert delivery:|Telegram operation failed|[0-9]+ of [0-9]+ recipients confirmed)[^\r\n])*?: \d+ of \d+ recipients confirmed; no automatic resend \(recipientNotFound\)(?:\. This bar will not be resent automatically; check Telegram before any manual action\.)?/g;
+
+/** Hide ignored delivery messages, including old joined checks, only in the UI. */
 export function liveAlertErrorText(message:string):string {
  const pending='the newly closed bar is not yet available from the provider';
+ message=message.replace(ignoredRecipientFailure,'').replace(ignoredLegacyRecipientFailure,'');
  let text=[...new Set(message.split(/\r?\n/).map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean))].join('\n');
  while(text.includes(`${pending} ${pending}`))text=text.replaceAll(`${pending} ${pending}`,pending);
  return text;

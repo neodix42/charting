@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-11-10
 
+## Hide Telegram recipientNotFound delivery errors — 2026-11-10
+
+Live Alerts filters recognized missing-recipient delivery messages from configuration notices, check-history details/progress and Recent alerts, including existing legacy records. Checks whose only error is ignored delivery display Completed; partial recent deliveries show their confirmed-recipient count with neutral styling. Other failures remain visible, including mixed provider/indicator errors and blocked/unauthorized Telegram delivery. The filter changes only presentation: original persisted results/errors, counts, configured recipients, claims and no-resend behavior remain intact. Explicit Telegram Settings tests retain their own diagnostics.
+
+Verification: frontend typecheck/lint and all261unit tests pass; all11Live Alerts browser cases pass. Cases cover the exact XYZ:KSTR/everyday message, legacy flattened messages, adjacent different delivery failures, missing indicator/provider errors, neutral partial/zero/unknown-confirmation displays, and unchanged private fixture records/counts. No actual Telegram messages, active profiles, installed runtime or credentials were touched. Evidence is ignored `.tools/verification/telegram-ignored-recipient-*.log`. Native desktop interaction, Windows and hosted CI remain UNRUN.
+
+The Linux executable/archive were rebuilt with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`; both SHA256 checks pass. The archive includes this final record.
+
 ## Directional chart entries with SL/TP restored — 2026-11-10
 
 The shared Analysis/Telegram marker now shows `Long <price>` or `Short <price>`, then `SL <price>` and `TP <price>` on separate rows. The entry heading omits “at”. Finite protective levels remain visible independently; missing levels are omitted, while zero and tiny prices preserve their meaning and precision. Marker autoscaling reserves room for the actual displayed row count. Applied trade direction, historical/live entry semantics, signal-bar anchoring, profitable dots and source data remain unchanged.

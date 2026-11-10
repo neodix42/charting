@@ -70,6 +70,27 @@ test('failed check status opens accessible error modal and recent delivery error
  await expect(page.locator('.live-alerts-recent')).toContainText('xyz:XYZ100');await expect(page.locator('.live-alerts-recent')).toContainText('Hyperliquid Perpetual');await expect(page.locator('.live-alerts-recent')).toContainText('Named signal');await expect(page.locator('.live-alerts-recent')).toContainText('Telegram delivery rejected');await expect(page.locator('.live-alerts-recent svg')).toHaveCount(0);
 });
 
+test('missing Telegram recipients are hidden in check history and recent alerts while other failures remain visible',async({page})=>{
+ await open(page);await add(page,'Everyday alert','Trend entry','d1','hyperliquid');await saved(page);
+ const delivery='Telegram alert delivery: 1 of 2 recipients confirmed; no automatic resend: Telegram operation failed (recipientNotFound)';
+ await page.evaluate(delivery=>{
+  const entry=(window as any).__testLiveAlertsInfo().config.alerts[0],error=`Telegram alert for XYZ:KSTR, everyday alert: ${delivery}`;
+  (window as any).__testSetLiveAlertsInfo({sent:1,error,checks:[{conditionId:entry.id,alertId:entry.id,name:entry.name,assetsScanned:7,lastChecked:Date.UTC(2026,10,4),nextCheck:Date.UTC(2026,10,5),sentAlerts:1,status:'completed',manual:false,error,phase:'Completed with errors',progressState:'completed',progress:100}],recent:[{alertId:entry.id,alertName:entry.name,dataSource:'hyperliquid',market:'perpetual',assetName:'KSTR',symbol:'xyz:KSTR',timeframe:'d1',time:Date.UTC(2026,10,4),conditionName:'Trend entry',status:'failed',confirmedRecipients:1,message:delivery+'. This bar will not be resent automatically; check Telegram before any manual action.'}]});
+ },delivery);
+ const history=page.getByRole('table',{name:'Alert check history',exact:true}),recent=page.locator('.live-alerts-recent');
+ await expect(history).toContainText('Scheduled · Completed');await expect(history).toContainText('7');
+ await expect(history.getByRole('button',{name:/Completed with errors|Failed/})).toHaveCount(0);
+ await expect(recent).toContainText('Delivered to 1 recipient');await expect(recent.locator('li.failed,.live-alerts-delivery-error')).toHaveCount(0);
+ await expect(page.getByRole('alert')).toHaveCount(0);await expect(page.locator('body')).not.toContainText('recipientNotFound');
+ const stored=await page.evaluate(()=>(window as any).__testLiveAlertsInfo());
+ expect(stored.sent).toBe(1);expect(stored.checks[0].error).toContain('recipientNotFound');expect(stored.recent[0]).toMatchObject({status:'failed',confirmedRecipients:1});
+ await page.evaluate(()=>{const info=(window as any).__testLiveAlertsInfo();(window as any).__testSetLiveAlertsInfo({error:info.error+'\nMissing indicator sma_20',checks:info.checks.map((check:any)=>({...check,error:check.error+'\nMissing indicator sma_20'})),recent:info.recent.map((outcome:any)=>({...outcome,message:outcome.message.replace('recipientNotFound','blocked')}))});});
+ const failure=history.getByRole('button',{name:'Scheduled · Completed with errors',exact:true});await failure.click();
+ const dialog=page.getByRole('dialog',{name:'Check for Everyday alert',exact:true});
+ await expect(dialog.getByLabel('Error details: Check for Everyday alert',{exact:true})).toHaveText('Missing indicator sma_20');
+ await expect(page.locator('body')).not.toContainText('recipientNotFound');await expect(recent).toContainText('Telegram operation failed (blocked)');
+});
+
 
 test('a failed queued edit cannot leave Stop stuck in its progress state',async({page})=>{
  await open(page);await add(page,'Recover stop','Trend entry','h1','hyperliquid');await page.getByRole('button',{name:'Start alerts',exact:true}).click();await page.evaluate(()=>(window as any).__testLiveAlertsErrors({save:'Queued alert settings failed'}));await page.getByRole('checkbox',{name:'Enable alert Recover stop',exact:true}).uncheck();await expect(page.getByRole('alert')).toBeVisible();await page.getByRole('button',{name:'Stop alerts',exact:true}).click();await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toBeEnabled();await expect(page.getByRole('status').filter({hasText:'Stopping...'})).toHaveCount(0);expect((await config(page)).enabled).toBe(true);await page.evaluate(()=>(window as any).__testLiveAlertsErrors({}));await page.getByRole('button',{name:'Stop alerts',exact:true}).click();await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeVisible();expect((await config(page)).enabled).toBe(false);

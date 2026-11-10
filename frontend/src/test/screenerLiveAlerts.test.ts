@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
-import type {LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import type {LiveAlertCheck,LiveAlertOutcome,LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
+import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -33,12 +33,41 @@ it('labels inherited weekly periods and reports the following Monday as the week
  expect(liveAlertBarClose(monday,'h1')).toBe(Date.UTC(2026,9,26,1));
 });
 
-it('cleans repeated joined and legacy publication errors without dropping delivery or asset context',()=>{
+it('cleans repeated publication errors and suppresses legacy missing-recipient delivery messages',()=>{
  const pending='the newly closed bar is not yet available from the provider',delivery='Telegram alert for RACEITEUR, safe 5: 1 of 2 recipients confirmed; no automatic resend (recipientNotFound)';
- expect(liveAlertErrorText(`${pending}\n${pending}\n${delivery}\n${delivery}`)).toBe(`${pending}\n${delivery}`);
- expect(liveAlertErrorText(`${pending} `.repeat(5)+delivery)).toBe(`${pending} ${delivery}`);
+ expect(liveAlertErrorText(`${pending}\n${pending}\n${delivery}\n${delivery}`)).toBe(pending);
+ expect(liveAlertErrorText(`${pending} `.repeat(5)+delivery)).toBe(pending);
  expect(liveAlertErrorText(`EURUSD: ${pending}\nGBPUSD: ${pending}`)).toBe(`EURUSD: ${pending}\nGBPUSD: ${pending}`);
  expect(liveAlertErrorText('   \n')).toBe('');
+});
+
+it('hides only missing-recipient Telegram delivery fragments while retaining unrelated failures',()=>{
+ const delivery='Telegram alert delivery: 1 of 2 recipients confirmed; no automatic resend: Telegram operation failed (recipientNotFound)';
+ const wrapped=`Telegram alert for XYZ:KSTR, everyday alert: ${delivery}`;
+ const blocked=wrapped.replaceAll('recipientNotFound','blocked');
+ const provider='XYZ:KSTR: provider history is unavailable';
+ expect(liveAlertErrorText(wrapped)).toBe('');
+ expect(liveAlertErrorText(delivery+'. This bar will not be resent automatically; check Telegram before any manual action.')).toBe('');
+ expect(liveAlertErrorText(`${provider}\n${wrapped}\n${blocked}`)).toBe(`${provider}\n${blocked}`);
+ expect(liveAlertErrorText(`${blocked} ${wrapped}`)).toBe(blocked);
+ expect(liveAlertErrorText(`${blocked} ${delivery}`)).toBe(blocked);
+ expect(liveAlertErrorText(`Unknown indicator recipientNotFound\n${wrapped}`)).toBe('Unknown indicator recipientNotFound');
+});
+
+it('suppresses recipient-only error styling without changing stored checks or confirmed delivery counts',()=>{
+ const delivery='Telegram alert delivery: 1 of 2 recipients confirmed; no automatic resend: Telegram operation failed (recipientNotFound)';
+ const check:LiveAlertCheck={conditionId:'rule',name:'Everyday',assetsScanned:7,lastChecked:1,nextCheck:2,sentAlerts:1,status:'completed',manual:false,error:delivery,progressState:'completed',phase:'Completed with errors',progress:100};
+ const visible=visibleLiveAlertCheck(check);
+ expect(visible).toMatchObject({error:'',phase:'Completed',sentAlerts:1,assetsScanned:7,progress:100});
+ expect(check.error).toBe(delivery);expect(check.phase).toBe('Completed with errors');
+ expect(visibleLiveAlertCheck({...check,status:'failed',progressState:'failed'})).toMatchObject({status:'completed',progressState:'completed',error:''});
+ expect(visibleLiveAlertCheck({...check,error:delivery+'\nMissing indicator sma_20'})).toMatchObject({error:'Missing indicator sma_20',phase:'Completed with errors'});
+ const outcome:LiveAlertOutcome={assetName:'KSTR',symbol:'xyz:KSTR',timeframe:'d1',time:1,conditionName:'Everyday',status:'failed',message:delivery,confirmedRecipients:1};
+ expect(liveAlertOutcomePresentation(outcome)).toEqual({label:'Delivered to 1 recipient',message:'',className:''});
+ expect(liveAlertOutcomePresentation({...outcome,confirmedRecipients:0}).label).toBe('No delivery confirmed');
+ expect(liveAlertOutcomePresentation({...outcome,confirmedRecipients:undefined}).label).toBe('Delivery recorded');
+ expect(liveAlertOutcomePresentation({...outcome,message:delivery.replace('recipientNotFound','unauthorized')})).toMatchObject({label:'Failed',className:'failed'});
+ expect(outcome.status).toBe('failed');expect(outcome.confirmedRecipients).toBe(1);expect(outcome.message).toBe(delivery);
 });
 
 
