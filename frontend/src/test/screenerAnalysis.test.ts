@@ -1,7 +1,8 @@
 import {describe,expect,it,vi} from 'vitest';
 import {analysisEntryLabel,analysisExitLabels,analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
-import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
+import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,analysisRollingField,analysisRollingFieldMessage,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
+import type {AnalysisCatalog} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
  it('defaults to Dukascopy and keeps source identity distinct while accepting legacy drafts',()=>{
@@ -72,6 +73,47 @@ describe('Analysis draft persistence',()=>{
 });
 
 describe('Analysis field selection and validation',()=>{
+ it('distinguishes rolling Low / High from single-bar OHLC and preserves timeframe qualifiers',()=>{
+  expect(analysisRollingField('low')).toBeNull();expect(analysisRollingField('high')).toBeNull();expect(analysisRollingField('rsi_10')).toBeNull();
+  expect(analysisRollingField('low_10')).toEqual({family:'low',period:10});expect(analysisRollingField('HIGH_2000')).toEqual({family:'high',period:2000});
+  expect(analysisFieldLabel('low')).toBe('Low');expect(analysisFieldLabel('high')).toBe('High');
+  expect(analysisFieldLabel('low_10')).toBe('Low (last 10 bars)');expect(analysisFieldLabel('d1:high_20[offset 1]')).toBe('High (last 20 bars) · d1 [offset 1]');
+  expect(analysisFieldGroup('low_10')).toBe('Price range');expect(analysisFieldGroup('high_20')).toBe('Price range');
+ });
+ it('requires whole Low / High periods within the Enrichment catalog limits',()=>{
+  for(const family of ['low','high']){
+   for(const period of [1,10,2000])expect(analysisInputError({conditions:[{...newAnalysisCondition('rolling'),left:fieldOperand(`${family}_${period}`)}]})).toBe('');
+   for(const period of [-1,0,1.5,2001])expect(analysisInputError({conditions:[{...newAnalysisCondition('rolling'),right:fieldOperand(`${family}_${period}`)}]})).toContain('1 to 2,000');
+   expect(analysisInputError({conditions:[{...newAnalysisCondition('rolling'),operator:'between',upper:fieldOperand(`${family}_2001`)}]})).toContain('1 to 2,000');
+   expect(analysisInputError({conditions:[{...newAnalysisCondition('rolling'),operator:'withinDistance',distance:fieldOperand(`${family}_0`)}]})).toContain('1 to 2,000');
+  }
+ });
+ const rangeCatalog:AnalysisCatalog={directory:'/isolated/fixtures',dataSource:'dukascopy',fields:['close','low_10','high_20'],timeframes:['d1','w1'],categories:['Forex','Commodities'],files:[
+  {id:'eur-d1',name:'eur-d1.csv',symbol:'eurusd',timeframe:'d1',category:'Forex',fields:['close','low_10'],bytes:100},
+  {id:'gbp-d1',name:'gbp-d1.csv',symbol:'gbpusd',timeframe:'d1',category:'Forex',fields:['close','low_20'],bytes:100},
+  {id:'eur-w1',name:'eur-w1.csv',symbol:'eurusd',timeframe:'w1',category:'Forex',fields:['close','high_20'],bytes:100},
+  {id:'gold-d1',name:'gold-d1.csv',symbol:'xauusd',timeframe:'d1',category:'Commodities',fields:['close','low_10'],bytes:100},
+  {id:'hyper-d1',name:'hyper-d1.csv',symbol:'btc',timeframe:'d1',category:'Forex',dataSource:'hyperliquid',fields:['close','high_20'],bytes:100},
+ ]};
+ it('checks exact enriched parameters per source, selected period and categories rather than the field union',()=>{
+  const message=analysisRollingFieldMessage(fieldOperand('low_10'),rangeCatalog,{period:'d1',categories:['Forex']});
+  expect(message).toContain('missing from 1 of 2 selected Dukascopy d1 files');expect(message).toContain('add Low with Period 10');expect(message).toContain('Enrichment');expect(message).toContain('Refresh fields');
+  expect(analysisRollingFieldMessage(fieldOperand('low_10'),rangeCatalog,{period:'d1',categories:['Commodities']})).toBe('');
+  expect(analysisRollingFieldMessage(fieldOperand('high_20'),rangeCatalog,{period:'d1',categories:['Forex']})).toContain('missing from 2 of 2');
+ });
+ it('uses an explicit companion timeframe and recomputes availability after field refresh',()=>{
+  const operand={...fieldOperand('high_20'),timeframe:'w1',offset:1};
+  expect(analysisRollingFieldMessage(operand,rangeCatalog,{period:'d1',categories:['Forex']})).toBe('');
+  const refreshed={...rangeCatalog,files:rangeCatalog.files.map(file=>({...file,fields:[...file.fields,'low_10']}))};
+  expect(analysisRollingFieldMessage(fieldOperand('low_10'),refreshed,{period:'d1',categories:['Forex']})).toBe('');
+  expect(analysisRollingFieldMessage(fieldOperand('low_10'),{...rangeCatalog,dataSource:'hyperliquid'})).toContain('missing from 1 of 1 selected Hyperliquid files');
+ });
+ it('reports unavailable files without claiming missing enrichment during catalog loading or for ordinary fields',()=>{
+  expect(analysisRollingFieldMessage(fieldOperand('low_10'),null)).toBe('');
+  expect(analysisRollingFieldMessage(fieldOperand('close'),rangeCatalog)).toBe('');expect(analysisRollingFieldMessage(numberOperand(),rangeCatalog)).toBe('');
+  expect(analysisRollingFieldMessage({...fieldOperand('low_10'),timeframe:'h1'},rangeCatalog)).toContain('not available in downloaded Dukascopy h1 files');
+  expect(analysisRollingFieldMessage(fieldOperand('low_10'),{...rangeCatalog,files:[]})).toContain('not available');
+ });
  it('accepts downloaded source choices and rejects other providers',()=>{
   const draft=initialAnalysisView();
   for(const dataSource of [undefined,'dukascopy','hyperliquid'] as const)expect(analysisInputError({...draft,dataSource})).toBe('');

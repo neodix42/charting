@@ -59,11 +59,29 @@ export const analysisOperators:Array<{id:AnalysisOperator;label:string}>=[
 ];
 const priceFields=new Set(['open','high','low','close','price','bidprice','askprice']);
 const fieldNames:Record<string,string>={open:'Open',high:'High',low:'Low',close:'Close',price:'Price',bidprice:'Bid price',askprice:'Ask price',volume:'Volume',askvolume:'Ask volume',bidvolume:'Bid volume',weekday:'Weekday',hour:'Hour'};
-const families:Record<string,string>={bb:'Bollinger Bands',bbw:'Bollinger Band Width',donchian:'Donchian Channels',stochastic:'Stochastic',tenkan:'Ichimoku',kijun:'Ichimoku',senkou:'Ichimoku',force:'Force Index'};
+const families:Record<string,string>={low:'Price range',high:'Price range',bb:'Bollinger Bands',bbw:'Bollinger Band Width',donchian:'Donchian Channels',stochastic:'Stochastic',tenkan:'Ichimoku',kijun:'Ichimoku',senkou:'Ichimoku',force:'Force Index'};
+/** Use the existing enriched-column format so drafts, saved rules and Live Alerts agree. */
+export function analysisRollingField(field:string){
+ const match=/^(low|high)_(.+)$/i.exec(field),period=Number(match?.[2]);
+ return match&&Number.isFinite(period)?{family:match[1].toLowerCase() as 'low'|'high',period}:null;
+}
+export type AnalysisFieldScope=Pick<AnalysisRequest,'period'|'categories'>;
+export function analysisRollingFieldMessage(operand:AnalysisOperand,catalog:AnalysisCatalog|null,scope:AnalysisFieldScope={}){
+ const rolling=operand.kind==='field'?analysisRollingField(operand.field??''):null;
+ if(!rolling||!catalog||!Number.isInteger(rolling.period)||rolling.period<1||rolling.period>2000)return'';
+ const timeframe=operand.timeframe&&operand.timeframe!=='same'?operand.timeframe:scope.period==='all'?'':scope.period;
+ const source=catalog.dataSource||'dukascopy',sourceName=source==='hyperliquid'?'Hyperliquid':'Dukascopy',categories=scope.categories?new Set(scope.categories):null;
+ const files=catalog.files.filter(file=>(file.dataSource||'dukascopy')===source&&(!categories||categories.has(file.category||'Other'))&&(!timeframe||file.timeframe===timeframe));
+ const missing=files.filter(file=>!file.fields.some(field=>field.toLowerCase()===operand.field?.toLowerCase())).length;
+ if(files.length&&!missing)return'';
+ const indicator=rolling.family==='low'?'Low':'High',unavailable=files.length?`is missing from ${missing} of ${files.length} selected ${sourceName}${timeframe?` ${timeframe}`:''} files`:`is not available in downloaded ${sourceName}${timeframe?` ${timeframe}`:''} files`;
+ return `${analysisFieldLabel(operand.field!)} (${operand.field}) ${unavailable}. Open Screener → Enrichment, add ${indicator} with Period ${rolling.period}, enrich those files, then click Refresh fields.`;
+}
 function fieldParts(field:string){const [qualified,qualifiers='']=field.split(/(?=\[)/,2),colon=qualified.indexOf(':');return{base:(colon<0?qualified:qualified.slice(colon+1)).trim(),timeframe:colon<0?'':qualified.slice(0,colon),qualifiers:field.includes('[')?field.slice(field.indexOf('[')):qualifiers};}
 export function analysisFieldGroup(field:string){const {base,timeframe}=fieldParts(field),key=base.toLowerCase(),family=key.split('_')[0];const group=priceFields.has(key)?'Price / OHLC':['weekday','hour'].includes(key)?'Time':/volume$/.test(key)?'Volume':families[family]??family.toUpperCase();return`${group}${timeframe?` · ${timeframe}`:''}`;}
 export function analysisFieldLabel(field:string){
  const {base,timeframe,qualifiers}=fieldParts(field),key=base.toLowerCase(),suffix=`${timeframe?` · ${timeframe}`:''}${qualifiers?` ${qualifiers}`:''}`;if(fieldNames[key])return fieldNames[key]+suffix;
+ const rolling=analysisRollingField(key);if(rolling)return`${rolling.family==='low'?'Low':'High'} (last ${rolling.period} bars)${suffix}`;
  const parts=key.split('_'),family=parts.shift()!,parameters=parts.filter(part=>/^\d+(?:\.\d+)?$/.test(part)),component=parts.filter(part=>!/^\d+(?:\.\d+)?$/.test(part)).map(part=>part.charAt(0).toUpperCase()+part.slice(1)).join(' ');
  return `${component||families[family]||family.toUpperCase()}${parameters.length?` (${parameters.join(', ')})`:''}${suffix}`;
 }
@@ -91,6 +109,7 @@ export function analysisInputError(view:AnalysisRequest){
   const operator=condition.operator==='occurredWithin'||condition.operator==='remainedFor'?condition.comparison||'above':condition.operator;
   const operands=[condition.left,condition.right,...(operator==='between'?[condition.upper]:[]),...(operator==='withinDistance'?[condition.distance]:[])];
   if(operands.some(operand=>!operand||!['field','number'].includes(operand.kind)||operand.kind==='number'&&!Number.isFinite(operand.value)||operand.kind==='field'&&(!operand.field||!Number.isInteger(operand.offset??0)||(operand.offset??0)<0||(operand.offset??0)>10000||operand.aggregate&&operand.aggregate!=='value'&&(!Number.isInteger(operand.window)||(operand.window??0)<1||(operand.window??0)>10000))))return'Choose a valid field or constant for every operand; bar windows and offsets cannot exceed 10,000.';
+  if(operands.some(operand=>{const rolling=operand?.kind==='field'?analysisRollingField(operand.field??''):null;return rolling&&(!Number.isInteger(rolling.period)||rolling.period<1||rolling.period>2000);}))return'Low / High lookback must be a whole number from 1 to 2,000 bars, matching Enrichment.';
   if((['highest','lowest','occurredWithin','remainedFor'].includes(condition.operator))&&(!Number.isInteger(condition.bars)||(condition.bars??0)<1||(condition.bars??0)>10000))return'Bar windows must be whole numbers from 1 to 10,000.';
   if(operator==='withinDistance'&&(!Number.isFinite(condition.multiplier)||(condition.multiplier??0)<0))return'Distance multiplier must be a non-negative number.';
  }
