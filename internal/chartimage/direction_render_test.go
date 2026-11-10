@@ -61,13 +61,14 @@ func TestHeadlessDirectionalEntryLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, sample := range []struct {
-		name, direction, expected string
-		entry, stop, target       float64
+		name, direction     string
+		expected            []string
+		entry, stop, target float64
 	}{
-		{"long", "long", "Long at 90,000", 90000, 88000, 94000},
-		{"short", "short", "Short at 90,000", 90000, 92000, 86000},
-		{"small-price", "long", "Long at 0.0000002", 0.0000002, 0.0000001, 0.0000003},
-		{"unknown-direction", "", "Match", 90000, 88000, 94000},
+		{"long", "long", []string{"Long 90,000", "SL 88,000", "TP 94,000"}, 90000, 88000, 94000},
+		{"short", "short", []string{"Short 90,000", "SL 92,000", "TP 86,000"}, 90000, 92000, 86000},
+		{"small-price", "long", []string{"Long 0.0000002", "SL 0.0000001", "TP 0.0000003"}, 0.0000002, 0.0000001, 0.0000003},
+		{"unknown-direction", "", []string{"Match", "SL 88,000", "TP 94,000"}, 90000, 88000, 94000},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
 			request := sampleRequest()
@@ -89,7 +90,7 @@ func TestHeadlessDirectionalEntryLabels(t *testing.T) {
 	}
 }
 
-func renderWithObservedCanvas(t *testing.T, paths Runtime, request Request, expected string) []byte {
+func renderWithObservedCanvas(t *testing.T, paths Runtime, request Request, expected []string) []byte {
 	t.Helper()
 	private, err := os.MkdirTemp("/tmp", "cd-label-")
 	if err != nil {
@@ -117,8 +118,8 @@ func renderWithObservedCanvas(t *testing.T, paths Runtime, request Request, expe
 	encodedExpected, _ := json.Marshal(expected)
 	assert := fmt.Sprintf(`    const texts = await page.evaluate(() => window.__observedChartTexts);
     const expected = %s;
-    const obsolete = texts.filter(text => /^(Entry|SL|TP)(?: |$)/.test(text) || expected !== 'Match' && text === 'Match');
-    if (!texts.includes(expected) || obsolete.length || expected === 'Match' && texts.some(text => /^(Long|Short) at /.test(text))) {
+    const obsolete = texts.filter(text => /^Entry(?: |$)/.test(text) || /^(Long|Short) at /.test(text) || expected[0] !== 'Match' && text === 'Match');
+    if (!expected.every(text => texts.includes(text)) || obsolete.length || expected[0] === 'Match' && texts.some(text => /^(Long|Short) /.test(text))) {
       process.stderr.write(JSON.stringify({expected, obsolete, observed:texts}) + '\n');
       throw Error('Directional marker text did not match');
     }

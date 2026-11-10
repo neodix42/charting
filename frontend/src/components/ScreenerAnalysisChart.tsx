@@ -6,7 +6,7 @@ import {errorText} from '../types';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
 import {getThemePalette} from '../workspace/themes';
 import {chartThemeOptions} from '../charts/theme';
-import {analysisEntryLabel,analysisMatchMarkers,analysisTradeExecutionDetails} from '../charts/analysisMarkers';
+import {analysisEntryLabel,analysisExitLabels,analysisMatchMarkers,analysisTradeExecutionDetails} from '../charts/analysisMarkers';
 
 export interface AnalysisSelection {result:AnalysisResult;offset:number;occurrence:number}
 export const analysisChartResources={charts:0,observers:0,listeners:0};
@@ -28,6 +28,7 @@ export function AnalysisPlot({data}:{data:AnalysisChart}){
  const row=hover??data.bars.find(bar=>bar.index===data.matchIndex)??data.bars.find(bar=>bar.time===data.matchTime);
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
  const entryLabel=analysisEntryLabel(data);
+ const exitLabels=analysisExitLabels(data);
  const executionDetails=analysisTradeExecutionDetails(data);
  useEffect(()=>{
   const update=()=>setTheme(document.documentElement.dataset.theme??'light');update();
@@ -52,9 +53,9 @@ export function AnalysisPlot({data}:{data:AnalysisChart}){
    if(candle)main.setData(ordered.map(bar=>({...timed(bar),open:value(bar,'open')!,high:value(bar,'high')!,low:value(bar,'low')!,close:value(bar,'close')!})));
    else main.setData(ordered.map(bar=>Number.isFinite(price(bar))?{...timed(bar),value:price(bar)!}:timed(bar)));
    const tradeAutoscale:AutoscaleInfoProvider=original=>{
-    const info=original();if(!info||!entryLabel)return info;
-    // Keep the single directional entry label inside the chart at every font size.
-    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4+20)}};
+    const info=original();if(!info||!entryLabel&&!exitLabels.length)return info;
+    // Reserve space for the directional entry and each available SL/TP row.
+    return {...info,margins:{above:info.margins?.above??0,below:Math.max(info.margins?.below??0,chart.options().layout.fontSize*1.4*(1+exitLabels.length)+20)}};
    };
    main.applyOptions({autoscaleInfoProvider:tradeAutoscale});
    main.priceScale().applyOptions({scaleMargins:{top:0.08,bottom:0.08}});

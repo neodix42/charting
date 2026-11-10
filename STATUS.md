@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-11-10
 
+## Directional chart entries with SL/TP restored — 2026-11-10
+
+The shared Analysis/Telegram marker now shows `Long <price>` or `Short <price>`, then `SL <price>` and `TP <price>` on separate rows. The entry heading omits “at”. Finite protective levels remain visible independently; missing levels are omitted, while zero and tiny prices preserve their meaning and precision. Marker autoscaling reserves room for the actual displayed row count. Applied trade direction, historical/live entry semantics, signal-bar anchoring, profitable dots and source data remain unchanged.
+
+Verification: typecheck/lint and all259frontend unit tests pass; three actual-canvas browser cases verify Long/Short navigation, SL/TP values/order, all themes, readability and cleanup. The production offline Telegram worker verifies entry and both protective labels in actual PNGs, including tiny prices and unknown direction; image decoding/theme/cancellation checks, chartimage race tests and vet pass. Analysis and Telegram screenshots were inspected. Evidence is ignored `.tools/verification/entry-exit-labels-*.log` and `entry-exit-label-images/`. No real Telegram message, active-profile change or installed-runtime replacement was performed; native desktop interaction, Windows and hosted CI remain UNRUN.
+
+The Linux executable/archive were rebuilt with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`; both SHA256 checks pass. The archive includes this final record.
+
 ## Shared Long/Short entry labels on matched charts — 2026-11-10
 
 Analysis and Telegram use one selected-arrow annotation, `Long at <price>` or `Short at <price>`, replacing the Match/Entry/SL/TP text stack. The chart DTO transports the applied simulation direction explicitly; configured legacy simulations default to Long, while unknown side/entry retains Match. Historical charts use the recorded next-bar open and keep their original direction after draft edits. Live snapshots use the evaluated saved rule and indicative signal-close entry, without future candles or simulated outcomes. Signal-bar anchoring, profitable dots, simulation prices/results and Telegram text values remain intact. The shared AnalysisPlot reserves one text row and supplies both the inspector and standalone PNG bundle.

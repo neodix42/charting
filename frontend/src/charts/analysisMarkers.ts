@@ -4,10 +4,15 @@ import {analysisDate} from '../workspace/screenerAnalysis';
 
 // A winning trade stays green in every theme, including themes with non-green up candles.
 export const profitableMatchColor='#16a34a';
+const formatPrice=(price:number)=>price.toLocaleString('en-US',{maximumSignificantDigits:15});
 export function analysisEntryLabel(data:AnalysisChart):string|undefined {
  const entry=(data.signal??data.trade)?.entry;
  if((data.direction!=='long'&&data.direction!=='short')||!Number.isFinite(entry))return undefined;
- return `${data.direction==='short'?'Short':'Long'} at ${entry!.toLocaleString('en-US',{maximumSignificantDigits:15})}`;
+ return `${data.direction==='short'?'Short':'Long'} ${formatPrice(entry!)}`;
+}
+export function analysisExitLabels(data:AnalysisChart):string[] {
+ const levels=data.signal??data.trade;
+ return [Number.isFinite(levels?.stopLoss)?`SL ${formatPrice(levels!.stopLoss!)}`:'',Number.isFinite(levels?.takeProfit)?`TP ${formatPrice(levels!.takeProfit!)}`:''].filter(Boolean);
 }
 export function analysisTradeExecutionDetails(data:AnalysisChart):Array<{label:string;value:string}> {
  const execution=data.tradeExecution;
@@ -22,5 +27,6 @@ export function analysisMatchMarkers(data:AnalysisChart,selectionColor:string):S
  const times=new Set((data.profitableMatches??[]).filter(match=>Number.isFinite(match.time)&&visible.has(`${match.index}:${match.time}`)).map(match=>match.time));
  const markers:SeriesMarkerBar<UTCTimestamp>[]=[...times].map(time=>({time:time/1000 as UTCTimestamp,position:'belowBar',color:profitableMatchColor,shape:'circle',size:0.75}));
  markers.push({time:data.matchTime/1000 as UTCTimestamp,position:'belowBar',color:selectionColor,shape:'arrowUp',text:analysisEntryLabel(data)??'Match'});
+ for(const text of analysisExitLabels(data))markers.push({time:data.matchTime/1000 as UTCTimestamp,position:'belowBar',color:selectionColor,shape:'circle',size:0,text});
  return markers.sort((left,right)=>Number(left.time)-Number(right.time));
 }

@@ -896,7 +896,7 @@ test('Take profit field names cannot collide with SL multiple choices',async({pa
  expect((await page.evaluate(()=>(window as any).__testAnalysisRequest())).tradeSimulation).toEqual({stopLoss:'low',takeProfit:'risk:1',duration:20});
 });
 
-test('Match Inspection shows one Long or Short entry label and triples the fitted bar width',async({page})=>{
+test('Match Inspection shows Long or Short, SL and TP labels and triples the fitted bar width',async({page})=>{
  await open(page,[file(0)]);await complete(page,[result(0,'btcusd',3)]);
  const start=Date.UTC(2024,0,1),bars=Array.from({length:201},(_,index)=>({index,time:start+index*86400000,values:{open:100,high:140,low:85,close:105}}));
  const base:AnalysisChart={resultId:'result-0',name:file(0).name,symbol:'btcusd',timeframe:'d1',occurrence:0,totalMatches:3,matchTime:bars[120].time,matchIndex:120,startIndex:0,fields:['open','high','low','close'],bars,direction:'long',trade:{entry:105,stopLoss:90,takeProfit:135},profitableMatches:[{index:120,time:bars[120].time}]};
@@ -905,7 +905,7 @@ test('Match Inspection shows one Long or Short entry label and triples the fitte
   const original=CanvasRenderingContext2D.prototype.fillText;
   (window as any).__analysisDrawnTexts=[];
   CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){
-   if(text==='Match'||/^(Entry|SL|TP) /.test(text)||/^(Long|Short) at /.test(text))(window as any).__analysisDrawnTexts.push({text,y,height:this.canvas.height});
+   if(text==='Match'||/^(Entry|SL|TP) /.test(text)||/^(Long|Short) /.test(text))(window as any).__analysisDrawnTexts.push({text,y,height:this.canvas.height});
    if(maxWidth===undefined)original.call(this,text,x,y);else original.call(this,text,x,y,maxWidth);
   };
  },{'result-0:0':base,'result-0:1':{...base,occurrence:1,matchIndex:121,matchTime:bars[121].time,direction:'short',trade:{entry:100,stopLoss:110,takeProfit:80},profitableMatches:[]},'result-0:2':{...base,occurrence:2,matchIndex:122,matchTime:bars[122].time,direction:undefined,trade:undefined,profitableMatches:[]}});
@@ -916,8 +916,8 @@ test('Match Inspection shows one Long or Short entry label and triples the fitte
  const widthRatio=()=>page.getByTestId('analysis-chart').evaluate(element=>Number((element as HTMLElement).dataset.initialBarSpacing)/Number((element as HTMLElement).dataset.fittedBarSpacing));
  await expect.poll(widthRatio).toBeCloseTo(3,5);
  await expect.poll(()=>page.evaluate(()=>{
-  const texts=(window as any).__analysisDrawnTexts,label=texts.findLast((item:any)=>item.text==='Long at 105');
-  return !!label&&label.y<label.height&&!texts.some((item:any)=>item.text==='Match'||/^(Entry|SL|TP) /.test(item.text));
+  const texts=(window as any).__analysisDrawnTexts,lines=['Long 105','SL 90','TP 135'].map(text=>texts.findLast((item:any)=>item.text===text));
+  return lines.every((line:any)=>line&&line.y<line.height)&&lines[0].y<lines[1].y&&lines[1].y<lines[2].y&&!texts.some((item:any)=>item.text==='Match'||/^Entry /.test(item.text));
  })).toBe(true);
  await page.screenshot({path:'../.tools/verification/analysis-long-entry-label.png',fullPage:true});
  const initialTheme=await page.evaluate(()=>document.documentElement.dataset.theme);
@@ -928,16 +928,16 @@ test('Match Inspection shows one Long or Short entry label and triples the fitte
  for(const theme of [...themeIds.slice(initialIndex+1),...themeIds.slice(0,initialIndex+1)]){
   expect(await page.evaluate(()=>document.documentElement.dataset.theme)).not.toBe(theme);
   await page.evaluate(theme=>{(window as any).__analysisDrawnTexts=[];document.documentElement.dataset.theme=theme;},theme);
-  await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='Long at 105'))).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='TP 135'))).toBe(true);
  }
- await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='Short at 100'))).toBe(true);
+ await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='Short 100')&&(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='SL 110')&&(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='TP 80'))).toBe(true);
  await expect.poll(widthRatio).toBeCloseTo(3,5);await expect(dialog.locator('.analysis-chart-legend')).toHaveCount(0);
  await page.screenshot({path:'../.tools/verification/analysis-short-entry-label.png',fullPage:true});
  await page.evaluate(()=>(window as any).__analysisDrawnTexts=[]);
  await dialog.getByRole('button',{name:'Next match →',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(widthRatio).toBeCloseTo(3,5);
  await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='Match'))).toBe(true);
- expect(await page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>/^(Long|Short) at /.test(item.text)))).toBe(false);
- await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='Short at 100'))).toBe(true);
+ expect(await page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>/^(Long|Short) /.test(item.text)))).toBe(false);
+ await dialog.getByRole('button',{name:'← Previous match',exact:true}).click();await expect(prices).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='Short 100')&&(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='SL 110')&&(window as any).__analysisDrawnTexts.some((item:any)=>item.text==='TP 80'))).toBe(true);
  await dialog.getByRole('button',{name:'Close analysis chart',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
 });
 
@@ -954,7 +954,7 @@ test('Match Inspection opens with readable candles despite distant price overlay
   (window as any).__testSetAnalysisCharts({'result-0:0':chart});
   const original=CanvasRenderingContext2D.prototype.fillText;(window as any).__analysisDrawnTexts=[];
   CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth){
-   if(text==='Match'||/^(Entry|SL|TP) /.test(text)||/^(Long|Short) at /.test(text))(window as any).__analysisDrawnTexts.push({text,y,height:this.canvas.height});
+   if(text==='Match'||/^(Entry|SL|TP) /.test(text)||/^(Long|Short) /.test(text))(window as any).__analysisDrawnTexts.push({text,y,height:this.canvas.height});
    if(maxWidth===undefined)original.call(this,text,x,y);else original.call(this,text,x,y,maxWidth);
   };
  },chart);
@@ -975,8 +975,8 @@ test('Match Inspection opens with readable candles despite distant price overlay
  });
  await expect.poll(candleFraction).toBeGreaterThan(0.4);
  await expect.poll(()=>page.evaluate(()=>{
-  const texts=(window as any).__analysisDrawnTexts,label=texts.findLast((item:any)=>item.text==='Long at 995');
-  return !!label&&label.y<label.height&&!texts.some((item:any)=>item.text==='Match'||/^(Entry|SL|TP) /.test(item.text));
+  const texts=(window as any).__analysisDrawnTexts,lines=['Long 995','SL 980','TP 1,025'].map(text=>texts.findLast((item:any)=>item.text===text));
+  return lines.every((line:any)=>line&&line.y<line.height)&&lines[0].y<lines[1].y&&lines[1].y<lines[2].y&&!texts.some((item:any)=>item.text==='Match'||/^Entry /.test(item.text));
  })).toBe(true);
  await page.screenshot({path:'../.tools/verification/analysis-vertical.png',fullPage:true});
  const before=await candleFraction(),canvas=await plot.locator('canvas').first().boundingBox(),host=await plot.boundingBox();expect(canvas).not.toBeNull();expect(host).not.toBeNull();
