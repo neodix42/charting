@@ -34,16 +34,19 @@ type Info struct {
 	Error                string `json:"error,omitempty"`
 }
 type Store struct {
-	mu        sync.Mutex
-	gate      chan struct{}
-	profile   string
-	settings  Settings
-	lastError string
-	connected bool
-	client    *http.Client
-	endpoint  string
-	now       func() time.Time
-	previews  map[string]prepared
+	mu               sync.Mutex
+	gate             chan struct{}
+	profile          string
+	settings         Settings
+	lastError        string
+	connected        bool
+	client           *http.Client
+	endpoint         string
+	now              func() time.Time
+	previews         map[string]prepared
+	transferPreviews map[string]preparedTransfer
+	fundingRevision  uint64
+	balanceReadGate  chan struct{}
 }
 
 func NewStore(profile string) *Store {
@@ -140,6 +143,8 @@ func (s *Store) Configure(v Settings) (Info, error) {
 	s.lastError = ""
 	s.connected = false
 	s.previews = map[string]prepared{}
+	s.transferPreviews = nil
+	s.fundingRevision++
 	return s.infoLocked(), nil
 }
 func atomicJSON(path string, v any) error {

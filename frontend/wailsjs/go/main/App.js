@@ -146,6 +146,10 @@ export function GetHyperliquid() {
   return window['go']['main']['App']['GetHyperliquid']();
 }
 
+export function GetHyperliquidBalances() {
+  return window['go']['main']['App']['GetHyperliquidBalances']();
+}
+
 export function GetPredictionDatasets() {
   return window['go']['main']['App']['GetPredictionDatasets']();
 }
@@ -274,6 +278,10 @@ export function PreparePredictionModel() {
   return window['go']['main']['App']['PreparePredictionModel']();
 }
 
+export function PreviewHyperliquidTransfer(arg1) {
+  return window['go']['main']['App']['PreviewHyperliquidTransfer'](arg1);
+}
+
 export function PreviewTrade(arg1) {
   return window['go']['main']['App']['PreviewTrade'](arg1);
 }
@@ -332,6 +340,10 @@ export function StartScreenerEnrichment(arg1) {
 
 export function StartScreenerRefresh() {
   return window['go']['main']['App']['StartScreenerRefresh']();
+}
+
+export function SubmitHyperliquidTransfer(arg1) {
+  return window['go']['main']['App']['SubmitHyperliquidTransfer'](arg1);
 }
 
 export function SubmitTrade(arg1) {

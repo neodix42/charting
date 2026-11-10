@@ -2672,6 +2672,212 @@ export namespace hyperliquid {
 	    }
 	}
 
+
+	export class TokenBalance {
+	    token: number;
+	    coin: string;
+	    tokenId: string;
+	    szDecimals: number;
+	    weiDecimals: number;
+	    total?: string;
+	    held?: string;
+	    available?: string;
+	    equity?: string;
+	    usedMargin?: string;
+	    observedAt: number;
+	    error?: string;
+	    availableError?: string;
+	    basis?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TokenBalance(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.token = source["token"];
+	        this.coin = source["coin"];
+	        this.tokenId = source["tokenId"];
+	        this.szDecimals = source["szDecimals"];
+	        this.weiDecimals = source["weiDecimals"];
+	        this.total = source["total"];
+	        this.held = source["held"];
+	        this.available = source["available"];
+	        this.equity = source["equity"];
+	        this.usedMargin = source["usedMargin"];
+	        this.observedAt = source["observedAt"];
+	        this.error = source["error"];
+	        this.availableError = source["availableError"];
+	        this.basis = source["basis"];
+	    }
+	}
+
+	export class VenueBalance {
+	    dex: string;
+	    name: string;
+	    market: string;
+	    collateralToken?: number;
+	    balances: TokenBalance[];
+	    shared: boolean;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new VenueBalance(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dex = source["dex"];
+	        this.name = source["name"];
+	        this.market = source["market"];
+	        this.collateralToken = source["collateralToken"];
+	        this.balances = this.convertValues(source["balances"], TokenBalance);
+	        this.shared = source["shared"];
+	        this.error = source["error"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class AccountBalances {
+	    accountAddress: string;
+	    network: string;
+	    accountMode: string;
+	    shared: boolean;
+	    observedAt: number;
+	    venues: VenueBalance[];
+	    tokens: TokenBalance[];
+	    notice?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AccountBalances(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accountAddress = source["accountAddress"];
+	        this.network = source["network"];
+	        this.accountMode = source["accountMode"];
+	        this.shared = source["shared"];
+	        this.observedAt = source["observedAt"];
+	        this.venues = this.convertValues(source["venues"], VenueBalance);
+	        this.tokens = this.convertValues(source["tokens"], TokenBalance);
+	        this.notice = source["notice"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class TransferPreview {
+	    id: string;
+	    sourceDex: string;
+	    sourceName: string;
+	    destinationDex: string;
+	    destinationName: string;
+	    token: number;
+	    coin: string;
+	    tokenId: string;
+	    amount: string;
+	    availableBefore: string;
+	    availableAfter: string;
+	    observedAt: number;
+	    expiresAt: number;
+	    accountAddress: string;
+	    network: string;
+	    warnings: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new TransferPreview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sourceDex = source["sourceDex"];
+	        this.sourceName = source["sourceName"];
+	        this.destinationDex = source["destinationDex"];
+	        this.destinationName = source["destinationName"];
+	        this.token = source["token"];
+	        this.coin = source["coin"];
+	        this.tokenId = source["tokenId"];
+	        this.amount = source["amount"];
+	        this.availableBefore = source["availableBefore"];
+	        this.availableAfter = source["availableAfter"];
+	        this.observedAt = source["observedAt"];
+	        this.expiresAt = source["expiresAt"];
+	        this.accountAddress = source["accountAddress"];
+	        this.network = source["network"];
+	        this.warnings = source["warnings"];
+	    }
+	}
+
+	export class TransferRequest {
+	    sourceDex: string;
+	    destinationDex: string;
+	    token: number;
+	    amount: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TransferRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourceDex = source["sourceDex"];
+	        this.destinationDex = source["destinationDex"];
+	        this.token = source["token"];
+	        this.amount = source["amount"];
+	    }
+	}
+
+	export class TransferResult {
+	    id: string;
+	    status: string;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TransferResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	    }
+	}
 }
 
 export namespace trading {

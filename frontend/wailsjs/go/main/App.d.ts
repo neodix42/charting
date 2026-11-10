@@ -83,6 +83,8 @@ export function GetHistory(arg1:string,arg2:domain.FeedKey,arg3:number,arg4:numb
 
 export function GetHyperliquid():Promise<hyperliquid.Info>;
 
+export function GetHyperliquidBalances():Promise<hyperliquid.AccountBalances>;
+
 export function GetPredictionDatasets():Promise<Array<predictions.Dataset>>;
 
 export function GetPredictionForecast(arg1:string):Promise<predictions.Forecast>;
@@ -147,6 +149,8 @@ export function OpenTradingView():Promise<void>;
 
 export function PreparePredictionModel():Promise<predictions.Info>;
 
+export function PreviewHyperliquidTransfer(arg1:hyperliquid.TransferRequest):Promise<hyperliquid.TransferPreview>;
+
 export function PreviewTrade(arg1:trading.Request):Promise<trading.Preview>;
 
 export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
@@ -176,6 +180,8 @@ export function StartScreenerDownload(arg1:screener.Request):Promise<screener.In
 export function StartScreenerEnrichment(arg1:screener.EnrichmentRequest):Promise<screener.EnrichmentInfo>;
 
 export function StartScreenerRefresh():Promise<screener.RefreshInfo>;
+
+export function SubmitHyperliquidTransfer(arg1:string):Promise<hyperliquid.TransferResult>;
 
 export function SubmitTrade(arg1:string):Promise<trading.Result>;
 

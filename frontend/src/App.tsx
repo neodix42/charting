@@ -72,7 +72,7 @@ function WorkspaceView({session,onReplace}:{session:Session;onReplace():void}){
  useLayoutEffect(()=>{document.documentElement.dataset.theme=workspace.theme;},[workspace.theme]);
  useEffect(()=>{document.documentElement.style.fontSize=`${workspace.fontSize??DEFAULT_FONT_SIZE}px`;},[workspace.fontSize]);
  useEffect(()=>{const selected=document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');selected?.scrollIntoView({block:'nearest',inline:'nearest'});if(selected===document.querySelector('[role="tablist"]')?.lastElementChild)document.querySelector<HTMLElement>('.add-tab')?.scrollIntoView({block:'nearest',inline:'nearest'});},[workspace.activeTabId,workspace.tabs.length]);
- useEffect(()=>{const keyboard=(e:KeyboardEvent)=>{const target=e.target as HTMLElement;if(target.matches('input,textarea,select,[contenteditable="true"]')||confirmation||settings||toolActive.current!=='charts')return;const ctrl=e.ctrlKey||e.metaKey;if(!ctrl)return;const w=current.current;
+ useEffect(()=>{const keyboard=(e:KeyboardEvent)=>{const target=e.target as HTMLElement;if(target.matches('input,textarea,select,[contenteditable="true"]')||confirmation||settings||document.querySelector('[role="dialog"][aria-modal="true"]')||toolActive.current!=='charts')return;const ctrl=e.ctrlKey||e.metaKey;if(!ctrl)return;const w=current.current;
  if(e.key==='Tab'){e.preventDefault();const i=w.tabs.findIndex(t=>t.id===w.activeTabId),direction=e.shiftKey?-1:1;void switchTab(w.tabs[(i+direction+w.tabs.length)%w.tabs.length].id);}
  else if(e.key.toLowerCase()==='t'){e.preventDefault();void addTab();}
  else if(e.key.toLowerCase()==='w'){e.preventDefault();closeTab();}

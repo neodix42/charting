@@ -69,8 +69,9 @@ type instrument struct {
 }
 type prepared struct {
 	Preview
-	settings   Settings
-	instrument instrument
+	settings        Settings
+	instrument      instrument
+	fundingRevision uint64
 }
 
 func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrument, error) {
@@ -239,6 +240,9 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
+	s.mu.Lock()
+	fundingRevision := s.fundingRevision
+	s.mu.Unlock()
 	if err = s.checkAgent(ctx, v); err != nil {
 		return Preview{}, err
 	}
@@ -306,11 +310,14 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if s.settings != v {
 		return Preview{}, errors.New("Hyperliquid settings changed; preview again")
 	}
+	if s.fundingRevision != fundingRevision {
+		return Preview{}, errors.New("Hyperliquid balances changed during an internal transfer review; preview the order again")
+	}
 	if len(s.previews) >= 32 {
 		s.previews = map[string]prepared{}
 	}
 	s.connected = true
-	s.previews[id] = prepared{Preview: p, settings: v, instrument: m}
+	s.previews[id] = prepared{Preview: p, settings: v, instrument: m, fundingRevision: fundingRevision}
 	return p, nil
 }
 func validateStops(r OrderRequest, m instrument, reference decimal.Decimal) error {
@@ -392,8 +399,9 @@ func (s *Store) Submit(ctx context.Context, id string) (OrderResult, error) {
 	p, ok := s.previews[id]
 	delete(s.previews, id)
 	current := s.settings
+	fundingRevision := s.fundingRevision
 	s.mu.Unlock()
-	if !ok || p.settings != current || s.now().UnixMilli() >= p.ExpiresAt {
+	if !ok || p.settings != current || p.fundingRevision != fundingRevision || s.now().UnixMilli() >= p.ExpiresAt {
 		return OrderResult{}, errors.New("Order preview expired or already used; preview again")
 	}
 	v := p.settings
