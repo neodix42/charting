@@ -435,7 +435,7 @@ func TestAnalysisSimulationCancellationDoesNotPublishPartialTrades(t *testing.T)
 	a := &analysisState{work: work, asOf: time.Now().UnixMilli(), request: simulationRequest(10000), results: []AnalysisResult{{ID: "test", Name: name}}, series: map[string]*analysisSeries{"test": series}, matchFiles: map[string]string{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err = m.scanAnalysisFile(ctx, a, 0); err != context.Canceled {
+	if err = m.scanAnalysisFile(ctx, a, 0, nil); err != context.Canceled {
 		t.Fatalf("cancelled scan continued: %v", err)
 	}
 	if a.results[0].Matches != 0 || a.results[0].Simulation != nil || len(a.matchFiles) != 0 {

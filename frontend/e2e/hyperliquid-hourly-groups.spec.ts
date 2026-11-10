@@ -21,11 +21,11 @@ test('Hyperliquid H1 downloads retain the selected dates/timeframe and queue onl
  await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
 });
 
-test('a Hyperliquid H1 range group submits one operation for all eight indicators and exposes the resulting Analysis fields',async({page})=>{
+test('a Hyperliquid H1 range group submits one operation for all twelve indicators and exposes the resulting Analysis fields',async({page})=>{
  await openTestApp(page);await page.evaluate(files=>{(window as any).__testSetEnrichmentFiles(files);(window as any).__testSetAnalysisView({...((window as any).__testAnalysisView()),profitabilityFilter:0});},[file('btc','h1'),file('hype','h1'),file('btc-daily','d1'),file('eurusd','h1','dukascopy')]);
  await screen(page,'Enrichment');await control(page,'Enrichment data source').selectOption('hyperliquid');await expect(control(page,'Enrichment period').locator('option')).toHaveText(['All periods','h1','d1','w1']);
  await control(page,'Enrichment period').selectOption('h1');await control(page,'Enrichment indicator').selectOption('group:Day / Week ranges');
- await expect(control(page,'Period')).toHaveCount(0);await expect(control(page,'Enrichment price source')).toBeDisabled();await expect(page.locator('.enrichment-help')).toContainText('Adds all 8 indicators');
+ await expect(control(page,'Period')).toHaveCount(0);await expect(control(page,'Enrichment price source')).toBeDisabled();await expect(page.locator('.enrichment-help')).toContainText('Adds all 12 indicators');
  for(const name of Object.values(calendarRangeNames))await expect(page.locator('.enrichment-help')).toContainText(name);
  await page.getByRole('button',{name:'Enrich 2 files',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toEqual({dataSource:'hyperliquid',indicator:'',group:'Day / Week ranges',parameters:{},source:'auto',period:'h1'});

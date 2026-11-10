@@ -47,7 +47,7 @@ test('first refresh repairs an internal hole, revises overlap and enriches all a
   assert.equal(events.at(-1).type,'done');
 });
 
-test('all 52 indicator, time and range field headers can migrate their complete applied recipes and reproduce columns',async()=>{
+test('all 56 indicator, time and range field headers can migrate their complete applied recipes and reproduce columns',async()=>{
   for(const definition of catalog.indicators){
     const original=await calculator({indicator:definition.id,source:'auto'},header,'h1');
     const recipes=await recipesFor([...header,...original.columns],[],[],'h1');

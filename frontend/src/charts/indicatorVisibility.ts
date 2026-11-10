@@ -1,7 +1,7 @@
 import type {IndicatorComponent,IndicatorConfig,IndicatorType} from '../types';
 
 export const indicatorComponents:Record<IndicatorType,ReadonlyArray<{key:IndicatorComponent;label:string}>>={
- sma:[],ema:[],low:[],high:[],today_low:[],today_high:[],previous_day_low:[],previous_day_high:[],week_low:[],week_high:[],previous_week_low:[],previous_week_high:[],
+ sma:[],ema:[],low:[],high:[],today_low:[],today_high:[],previous_day_low:[],previous_day_high:[],week_low:[],week_high:[],previous_week_low:[],previous_week_high:[],two_days_ago_low:[],two_days_ago_high:[],three_days_ago_low:[],three_days_ago_high:[],
  ichimoku:[
   {key:'conversion',label:'Show conversion line'},
   {key:'base',label:'Show base line'},

@@ -280,7 +280,7 @@ func TestCSVInventoryBoundsPagesAndExcludesNonPublishedData(t *testing.T) {
 func TestIndicatorValidationUsesReviewedBoundsAndCopiesCallerParameters(t *testing.T) {
 	m := &Manager{}
 	catalog := m.Indicators()
-	if catalog.Version != "8.3.0" || len(catalog.Indicators) != 52 {
+	if catalog.Version != "8.3.0" || len(catalog.Indicators) != 56 {
 		t.Fatal("incorrect catalog")
 	}
 	for _, indicator := range catalog.Indicators {
@@ -342,7 +342,7 @@ func TestCalendarFieldCatalogValidationUsesTimestampOnlyAndCanonicalSource(t *te
 			t.Fatal("parameterless calendar field accepted period")
 		}
 	}
-	if technical != 42 || calendar != 2 || ranges != 8 {
+	if technical != 42 || calendar != 2 || ranges != 12 {
 		t.Fatalf("catalog must retain 42 technical indicators plus 2 time fields: %d/%d", technical, calendar)
 	}
 }

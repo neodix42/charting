@@ -831,6 +831,42 @@
       "parameters": [],
       "intradayOnly": true,
       "note": "Previous available completed week; blank until a preceding period is present. Weeks start Monday 00:00 UTC. Intraday candle periods only."
+    },
+    {
+      "id": "two_days_ago_low",
+      "name": "2 days ago low",
+      "category": "Day / Week ranges",
+      "input": "low",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Low of the single completed UTC day before the previous available day; not a rolling 48-hour range. Intraday candle periods only."
+    },
+    {
+      "id": "two_days_ago_high",
+      "name": "2 days ago high",
+      "category": "Day / Week ranges",
+      "input": "high",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "High of the single completed UTC day before the previous available day; not a rolling 48-hour range. Intraday candle periods only."
+    },
+    {
+      "id": "three_days_ago_low",
+      "name": "3 days ago low",
+      "category": "Day / Week ranges",
+      "input": "low",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Low of the single completed UTC day three available days ago; not a rolling 72-hour range. Intraday candle periods only."
+    },
+    {
+      "id": "three_days_ago_high",
+      "name": "3 days ago high",
+      "category": "Day / Week ranges",
+      "input": "high",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "High of the single completed UTC day three available days ago; not a rolling 72-hour range. Intraday candle periods only."
     }
   ]
 }

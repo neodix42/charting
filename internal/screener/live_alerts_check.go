@@ -708,32 +708,44 @@ func liveAlertProviderStopped(ctx context.Context, err error) bool {
 // Warm just the necessary preceding bars, then expose only the newest fully
 // closed result. Occurred/remained wrappers over crosses need one extra bar.
 func evaluateLiveAlertLatest(ctx context.Context, a *analysisState, s *analysisSeries, closed int64) (bool, error) {
-	compiled, err := compileAnalysisConditions(a, s)
+	matched, _, err := evaluateLiveAlertWindow(ctx, a, s, closed)
 	if err != nil {
 		return false, err
 	}
-	warm := int64(1)
-	for _, condition := range a.request.Conditions {
-		if condition.Operator == "occurredWithin" || condition.Operator == "remainedFor" {
-			warm = max(warm, int64(condition.Bars))
-		}
-	}
-	matched := false
-	for i := max(int64(0), closed-1-warm); i < closed; i++ {
-		if err = ctx.Err(); err != nil {
+	if matched && a.request.OnlyOneSignalPerDay && intradayEnrichmentPeriod(s.metadata.Timeframe) {
+		latest, err := s.row(closed - 1)
+		if err != nil {
 			return false, err
 		}
-		row, e := s.row(i)
-		if e != nil {
-			return false, e
-		}
-		matched = true
-		for _, condition := range compiled {
-			ok, e := condition.evaluate(i, analysisClosedAt(row.timestamp, s.metadata.Timeframe))
-			if e != nil {
-				return false, e
+		day := analysisSignalDay(latest.timestamp)
+		for _, other := range a.series {
+			if other == s || other.metadata.Symbol != s.metadata.Symbol || other.metadata.Timeframe != s.metadata.Timeframe || other.last < day {
+				continue
 			}
-			matched = matched && ok
+			// A separately downloaded file may contain an earlier signal today.
+			// Inspect only bars closed before this signal's open, with the same
+			// temporal warmup; never rescan another history's entire lifetime.
+			if _, err := compileAnalysisConditions(a, other); err != nil {
+				continue
+			}
+			count, err := other.closedCount(latest.timestamp)
+			if err != nil {
+				return false, err
+			}
+			_, first, err := evaluateLiveAlertWindow(ctx, a, other, count)
+			if err != nil {
+				return false, err
+			}
+			if first >= 0 {
+				row, err := other.row(first)
+				if err != nil {
+					return false, err
+				}
+				if row.timestamp >= day {
+					matched = false
+					break
+				}
+			}
 		}
 	}
 	for _, series := range a.series {
@@ -742,6 +754,70 @@ func evaluateLiveAlertLatest(ctx context.Context, a *analysisState, s *analysisS
 		}
 	}
 	return matched, nil
+}
+
+func evaluateLiveAlertWindow(ctx context.Context, a *analysisState, s *analysisSeries, closed int64) (bool, int64, error) {
+	if closed <= 0 {
+		return false, -1, nil
+	}
+	compiled, err := compileAnalysisConditions(a, s)
+	if err != nil {
+		return false, -1, err
+	}
+	warm := int64(1)
+	for _, condition := range a.request.Conditions {
+		if condition.Operator == "occurredWithin" || condition.Operator == "remainedFor" {
+			warm = max(warm, int64(condition.Bars))
+		}
+	}
+	start := max(int64(0), closed-1-warm)
+	limitDaily := a.request.OnlyOneSignalPerDay && intradayEnrichmentPeriod(s.metadata.Timeframe)
+	var day int64
+	if limitDaily {
+		latest, err := s.row(closed - 1)
+		if err != nil {
+			return false, -1, err
+		}
+		day = analysisSignalDay(latest.timestamp)
+		// Re-evaluate today's matches rather than storing a second durable claim
+		// key. This also preserves the rule across restarts and manual checks.
+		lo, hi := int64(0), closed
+		for lo < hi {
+			mid := lo + (hi-lo)/2
+			row, err := s.row(mid)
+			if err != nil {
+				return false, -1, err
+			}
+			if row.timestamp < day {
+				lo = mid + 1
+			} else {
+				hi = mid
+			}
+		}
+		start = max(int64(0), lo-warm)
+	}
+	matched, firstToday := false, int64(-1)
+	for i := start; i < closed; i++ {
+		if err = ctx.Err(); err != nil {
+			return false, -1, err
+		}
+		row, e := s.row(i)
+		if e != nil {
+			return false, -1, e
+		}
+		matched = true
+		for _, condition := range compiled {
+			ok, e := condition.evaluate(i, analysisClosedAt(row.timestamp, s.metadata.Timeframe))
+			if e != nil {
+				return false, -1, e
+			}
+			matched = matched && ok
+		}
+		if limitDaily && matched && firstToday < 0 && row.timestamp >= day {
+			firstToday = i
+		}
+	}
+	return matched && (!limitDaily || firstToday == closed-1), firstToday, nil
 }
 
 func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index int64, row analysisRow) (LiveAlert, error) {

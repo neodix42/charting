@@ -26,13 +26,13 @@ describe('indicator series ownership',()=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),ids=Object.keys(calendarRangeNames) as CalendarRangeType[],configs=ids.map(id=>config(id,id));
   const bars=Array.from({length:400},(_,i)=>({...candles[0],time:1704067200+i*3600,high:20+i%10,low:5-i%5}));
   layer.update(bars,configs,'1h');const lines=[...h.panes[0].series].slice(1);
-  expect(h.panes).toHaveLength(1);expect(lines).toHaveLength(8);expect(h.chart.addSeries).toHaveBeenCalledTimes(8);
+  expect(h.panes).toHaveLength(1);expect(lines).toHaveLength(ids.length);expect(h.chart.addSeries).toHaveBeenCalledTimes(ids.length);
   ids.forEach((id,index)=>expect(lines[index].data).toEqual(calendarRangeValues(bars,id,'1h')));
   const corrected=[...bars.slice(0,-1),{...bars.at(-1)!,low:-1,high:100}];layer.update(corrected,configs,'1h');
   ids.forEach((id,index)=>expect(lines[index].data).toEqual(calendarRangeValues(corrected,id,'1h')));
   layer.update(corrected,configs,'1d');expect(lines.every(line=>!line.data.length)).toBe(true);
-  layer.update(corrected,configs,'1h');expect(h.chart.addSeries).toHaveBeenCalledTimes(8);expect(h.removed).toHaveLength(0);
-  layer.dispose();expect(h.removed).toHaveLength(8);expect(h.panes[0].series.size).toBe(1);
+  layer.update(corrected,configs,'1h');expect(h.chart.addSeries).toHaveBeenCalledTimes(ids.length);expect(h.removed).toHaveLength(0);
+  layer.dispose();expect(h.removed).toHaveLength(ids.length);expect(h.panes[0].series.size).toBe(1);
  });
  it('keeps only the selected Ichimoku line and removes hidden projections from the timeline',()=>{
   const h=chartHarness(),layer=new IndicatorLayer(h.chart,h.main),original=config('cloud','ichimoku'),baseOnly={...original,visibility:{conversion:false,spanA:false,spanB:false,lagging:false,cloud:false}};

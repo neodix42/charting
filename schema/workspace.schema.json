@@ -971,7 +971,11 @@
                 "week_low",
                 "week_high",
                 "previous_week_low",
-                "previous_week_high"
+                "previous_week_high",
+                "two_days_ago_low",
+                "two_days_ago_high",
+                "three_days_ago_low",
+                "three_days_ago_high"
               ]
             },
             "parameters": {

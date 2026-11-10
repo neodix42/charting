@@ -8,7 +8,7 @@ export type AnalysisTradeDirection='long'|'short';
 export interface AnalysisTradeSimulation {direction?:AnalysisTradeDirection|'';stopLoss:string;stopLossBarsAgo?:number;takeProfit:string;takeProfitMultiple?:number;duration:number}
 export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:number;expired:number;insufficientData:number;invalidLevels:number;unavailable:number;profitablePercent:number;reason?:string}
 export type AnalysisPeriod='all'|'w1'|'d1'|'h1';
-export interface AnalysisRequest {dataSource?:ScreenerDataSource;conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
+export interface AnalysisRequest {dataSource?:ScreenerDataSource;conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number;onlyOneSignalPerDay?:boolean}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|'';profitabilityFilter?:number}
 export interface SavedConditionProfitability {profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
 export interface SavedConditionAnalysis {analyzedAt:number;failedFiles?:number;assets:SavedConditionProfitability[]}
@@ -157,7 +157,7 @@ export function profitabilityLabel(value:SavedConditionProfitability):string{ret
 /** Compare semantic rule values across Go JSON defaults and older saved drafts. */
 export function analysisRequestIdentity(value:AnalysisRequest,includeProfitability=true):string{
  const operand=(item?:AnalysisOperand)=>item?.kind==='number'?{kind:'number',value:item.value??0}:item?.kind==='field'?{kind:'field',field:item.field??'',timeframe:item.timeframe||'same',offset:item.offset??0,aggregate:item.aggregate||'value',window:item.aggregate==='highest'||item.aggregate==='lowest'?item.window??1:1}:{kind:''};
- return JSON.stringify({dataSource:value.dataSource||'dukascopy',period:value.period||'all',categories:value.categories?.slice().sort()??null,profitabilityFilter:includeProfitability?value.profitabilityFilter??0:undefined,
+ return JSON.stringify({dataSource:value.dataSource||'dukascopy',period:value.period||'all',categories:value.categories?.slice().sort()??null,profitabilityFilter:includeProfitability?value.profitabilityFilter??0:undefined,onlyOneSignalPerDay:value.onlyOneSignalPerDay??false,
   tradeSimulation:value.tradeSimulation?{direction:value.tradeSimulation.direction||'long',stopLoss:value.tradeSimulation.stopLoss,stopLossBarsAgo:value.tradeSimulation.stopLossBarsAgo??0,takeProfit:value.tradeSimulation.takeProfit,takeProfitMultiple:value.tradeSimulation.takeProfitMultiple??0,duration:value.tradeSimulation.duration}:null,
   conditions:value.conditions.map(condition=>({operator:condition.operator,comparison:condition.comparison||'above',left:operand(condition.left),right:operand(condition.right),upper:operand(condition.upper),distance:operand(condition.distance),multiplier:condition.multiplier??0,bars:condition.bars??0}))});
 }

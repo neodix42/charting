@@ -325,6 +325,8 @@ def day_week_smoke(runtime, node, directory):
         "previous_day_low": ["", "", "6", "3"], "previous_day_high": ["", "", "15", "13"],
         "week_low": ["8", "6", "3", "10"], "week_high": ["12", "15", "15", "18"],
         "previous_week_low": ["", "", "", "3"], "previous_week_high": ["", "", "", "15"],
+        "two_days_ago_low": ["", "", "", "6"], "two_days_ago_high": ["", "", "", "15"],
+        "three_days_ago_low": ["", "", "", ""], "three_days_ago_high": ["", "", "", ""],
     }
     current = source
     for indicator in expected:

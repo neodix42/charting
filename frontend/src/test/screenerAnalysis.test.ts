@@ -5,6 +5,11 @@ import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldL
 import type {AnalysisCatalog} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
+ it('treats the daily signal limit as part of the saved rule and backtest identity, with legacy drafts defaulting off',()=>{
+  const draft=initialAnalysisView();
+  expect(analysisRequestIdentity(draft)).toBe(analysisRequestIdentity({...draft,onlyOneSignalPerDay:false}));
+  expect(analysisRequestIdentity(draft,false)).not.toBe(analysisRequestIdentity({...draft,onlyOneSignalPerDay:true},false));
+ });
  it('defaults to Dukascopy and keeps source identity distinct while accepting legacy drafts',()=>{
   const {dataSource,...legacy}=initialAnalysisView();
   expect(dataSource).toBe('dukascopy');

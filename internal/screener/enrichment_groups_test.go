@@ -26,7 +26,7 @@ func TestEnrichmentGroupDefaultsValidationAndCompatibility(t *testing.T) {
 				t.Fatalf("noncanonical group member: %+v", member)
 			}
 		}
-		if group == "Day / Week ranges" && (len(members) != 8 || request.Source != "auto") {
+		if group == "Day / Week ranges" && (len(members) != len(calendarRangeIDs) || request.Source != "auto") {
 			t.Fatalf("range group: %+v", request)
 		}
 	}
@@ -60,11 +60,11 @@ func TestRangeGroupEnrichesOnceAndPersistsIndividualRecipesWithRecoverableBackup
 		}
 		data, _ := os.ReadFile(path)
 		rows, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
-		if err != nil || len(rows[0]) != 14 || rows[2][6] != "6" || rows[3][8] != "6" {
+		if err != nil || len(rows[0]) != 6+len(calendarRangeIDs) || rows[2][6] != "6" || rows[3][8] != "6" {
 			t.Fatalf("range CSV: %s %v", data, err)
 		}
 		metadata, err := readFileMetadata(m.directory, name)
-		if err != nil || len(metadata.Recipes) != 8 {
+		if err != nil || len(metadata.Recipes) != len(calendarRangeIDs) {
 			t.Fatalf("per-member recipes: %+v %v", metadata, err)
 		}
 		for _, recipe := range metadata.Recipes {
@@ -78,7 +78,7 @@ func TestRangeGroupEnrichesOnceAndPersistsIndividualRecipesWithRecoverableBackup
 		t.Fatal("group touched daily CSV")
 	}
 	recovered := legacyRecipes(context.Background(), m.directory)[name]
-	if len(recovered) != 8 {
+	if len(recovered) != len(calendarRangeIDs) {
 		t.Fatalf("backup recipes were not recovered: %+v", recovered)
 	}
 	files, _ := os.ReadDir(filepath.Join(m.directory, ".cryptodesk-enrichment-backups"))

@@ -165,7 +165,14 @@ func publicAlertPlans(conditions []SavedAnalysisCondition, periods map[string][]
 			}
 		}
 		for _, base := range periods[saved.ID] {
-			if err := add(base, "close", warm); err != nil {
+			baseWarm := warm
+			if saved.Request.OnlyOneSignalPerDay && intradayEnrichmentPeriod(base) {
+				seconds := exchange.TimeframeSeconds(publicAlertIntervals[base])
+				if seconds > 0 {
+					baseWarm += int((86400 + seconds - 1) / seconds)
+				}
+			}
+			if err := add(base, "close", baseWarm); err != nil {
 				return nil, err
 			}
 			for _, condition := range saved.Request.Conditions {
@@ -174,7 +181,7 @@ func publicAlertPlans(conditions []SavedAnalysisCondition, periods map[string][]
 					op = condition.Comparison
 				}
 				if (op == "highest" || op == "lowest") && condition.Right.Kind == "number" {
-					if err := add(base, "close", warm+condition.Bars); err != nil {
+					if err := add(base, "close", baseWarm+condition.Bars); err != nil {
 						return nil, err
 					}
 				}
@@ -186,14 +193,14 @@ func publicAlertPlans(conditions []SavedAnalysisCondition, periods map[string][]
 					if period == "" || period == "same" {
 						period = base
 					}
-					extra := warm
+					extra := baseWarm
 					if period != base && publicAlertIntervals[period] != "" {
 						baseDuration := exchange.TimeframeSeconds(publicAlertIntervals[base])
 						duration := exchange.TimeframeSeconds(publicAlertIntervals[period])
 						// Evaluation visits preceding BASE closes. An intraday manual
 						// check may also lag its latest base close by almost one base
 						// interval. Express that horizon in companion candle units.
-						extra = int((baseDuration*int64(warm+1) + duration - 1) / duration)
+						extra = int((baseDuration*int64(baseWarm+1) + duration - 1) / duration)
 					}
 					op := condition.Operator
 					if op == "occurredWithin" || op == "remainedFor" {
@@ -1120,8 +1127,8 @@ const base=['timestamp','open','high','low','close','volume'];
 const emit=x=>process.stdout.write(JSON.stringify(x)+'\n');
 async function required(recipe,fields,period){
  const api=await import(path.join(root,'node_modules/trading-signals/dist/index.js')),p=recipe.parameters,id=recipe.indicator;
- const {isCalendarRange}=await import(path.join(root,'calendar-ranges.mjs'));
- if(isCalendarRange(id)){const step={s1:1,m1:60,m5:300,m15:900,m30:1800,h1:3600,h4:14400}[period];return Math.ceil((id.includes('week')?7:1)*(id.startsWith('previous_')?2:1)*86400/step)+1;}
+ const {isCalendarRange,calendarRangeOffset}=await import(path.join(root,'calendar-ranges.mjs'));
+ if(isCalendarRange(id)){const step={s1:1,m1:60,m5:300,m15:900,m30:1800,h1:3600,h4:14400}[period];return Math.ceil((id.includes('week')?7:1)*(calendarRangeOffset(id)+1)*86400/step)+1;}
  if(['weekday','hour'].includes(id))return 1;
  if(['low','high','tenkan','kijun'].includes(id))return p.period;
  if(id==='ichimoku')return Math.max(...fields.map(f=>f.startsWith('tenkan_')?p.conversion:f.startsWith('kijun_')?p.base:f.startsWith('senkou_a_')?Math.max(p.conversion,p.base):f.startsWith('senkou_b_')?p.spanB:1));

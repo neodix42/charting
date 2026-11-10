@@ -13,3 +13,5 @@
 .analysis-period{display:flex;align-items:end;gap:16px;flex-wrap:wrap;border:0;margin:14px 20px;padding:0;min-width:0}.analysis-period label{display:flex;flex-direction:column;gap:6px;font-size:.84615385rem;color:var(--muted)}.analysis-period select{min-width:160px}.analysis-period>span{max-width:560px;font-size:.76923077rem;color:var(--muted);padding-bottom:5px}
 
 .analysis-saved-list button.analysis-condition-loaded{background:var(--accent-soft,var(--bg));border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}.analysis-save-actions{display:flex;gap:8px;flex-wrap:wrap}.analysis-save-actions>button{flex:1 1 auto;width:auto;font-size:.8rem;white-space:normal}.analysis-profitability-help{margin:0 20px 14px;color:var(--muted);font-size:.8rem;line-height:1.5}
+
+.analysis-period .analysis-daily-signal-toggle{flex-direction:row;align-items:center;gap:8px;min-height:34px;color:var(--text);cursor:pointer}.analysis-daily-signal-toggle input{width:16px;height:16px;min-height:0;margin:0;accent-color:var(--accent)}

@@ -17,6 +17,8 @@ const expected={
  previous_day_low:['','','6','6','5','7','7','4','6'],previous_day_high:['','','15','15','20','19','19','25','10'],
  week_low:['8','6','6','5','5','10','4','4','3'],week_high:['12','15','15','20','20','18','25','25','13'],
  previous_week_low:['','','','','','5','5','5','4'],previous_week_high:['','','','','','20','20','20','25'],
+ two_days_ago_low:['','','','','6','5','5','7','4'],two_days_ago_high:['','','','','15','20','20','19','25'],
+ three_days_ago_low:['','','','','','6','6','5','7'],three_days_ago_high:['','','','','','15','15','20','19'],
 };
 const request=indicator=>({indicator,parameters:{},source:'askprice',timeframe:'h1'});
 const csv=(data=rows)=>`${headers.join(',')}\n${data.map(row=>row.join(',')).join('\n')}\n`;
@@ -26,7 +28,24 @@ async function fixture(t,text=csv()){
  const input=path.join(directory,'input.csv'),output=path.join(directory,'output.csv');await fs.writeFile(input,text);return {input,output};
 }
 
-test('all eight ranges use UTC day/Monday week boundaries, carry the previous available period, and never leak future extrema',async()=>{
+test('two/three days ago select one day, exclude intervening extrema and remain fixed throughout today',async()=>{
+ const data=[['2024-01-01T00:00Z',8,12],['2024-01-01T23:00Z',6,15],['2024-01-02T00:00Z',2,30],['2024-01-03T00:00Z',10,11],['2024-01-03T12:00Z',1,40],['2024-01-04T00:00Z',7,9]].map(([time,low,high])=>[Date.parse(time),10,high,low,10,1].map(String));
+ const expected={two_days_ago_low:['','','','6','6','2'],two_days_ago_high:['','','','15','15','30'],three_days_ago_low:['','','','','','6'],three_days_ago_high:['','','','','','15']};
+ for(const [id,values] of Object.entries(expected)){
+  const calculate=await calculator(request(id),headers);
+  assert.deepEqual(data.map((row,i)=>calculate.next(row,i+2)[0]),values,id);
+ }
+});
+
+test('an incomplete initial day cannot supply a two/three-days-ago range',async()=>{
+ const data=Array.from({length:5},(_,i)=>[Date.parse(i===0?'2024-01-01T12:00Z':`2024-01-0${i+1}T00:00Z`),10,20+i,8-i,10,1].map(String));
+ for(const [id,values] of Object.entries({two_days_ago_low:['','','','7','6'],three_days_ago_high:['','','','','21']})){
+  const calculate=await calculator(request(id),headers);
+  assert.deepEqual(data.map((row,i)=>calculate.next(row,i+2)[0]),values,id);
+ }
+});
+
+test('all twelve ranges use UTC day/Monday week boundaries, carry the previous available period, and never leak future extrema',async()=>{
  const {calendarRangeNames}=await import('./calendar-ranges.mjs');
  assert.deepEqual(Object.keys(calendarRangeNames),Object.keys(expected));
  for(const [id,values] of Object.entries(expected)){
@@ -76,7 +95,7 @@ test('only supported intraday candle periods are accepted; prices/timestamps mus
  }
 });
 
-test('CSV publication appends/replaces exact columns and recipe recovery includes all eight fields',async t=>{
+test('CSV publication appends/replaces exact columns and recipe recovery includes all twelve fields',async t=>{
  let {input,output}=await fixture(t);
  const original=await fs.readFile(input);
  for(const id of Object.keys(expected)){

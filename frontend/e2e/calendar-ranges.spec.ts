@@ -9,7 +9,7 @@ const file=(id:string,timeframe:string,dataSource:'dukascopy'|'hyperliquid'='duk
 const control=(page:Page,name:string)=>page.getByLabel(name,{exact:true});
 async function screener(page:Page,tab:string){await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:tab,exact:true}).click();}
 
-test('Enrichment offers all eight parameterless UTC ranges only below D1 and All periods targets only intraday candles',async({page})=>{
+test('Enrichment offers all twelve parameterless UTC ranges only below D1 and All periods targets only intraday candles',async({page})=>{
  await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[file('eurusd','h1'),file('btcusd','m5'),file('eurusd','d1'),file('eurusd','w1'),file('eurusd','mn1'),file('eurusd','tick'),{...file('custom',''),name:'custom.csv'},file('btc','d1','hyperliquid')]);
  await screener(page,'Enrichment');const indicator=control(page,'Enrichment indicator'),period=control(page,'Enrichment period');
  await expect(indicator.locator('optgroup[label="Day / Week ranges"] option')).toHaveText(['All Day / Week ranges indicators',...names]);
@@ -42,25 +42,25 @@ test('Analysis compares Today and Previous day fields on hourly files, reports m
  expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toMatchObject({period:'h1',conditions:[{operator:'below',left:{field:'today_low',timeframe:'same'},right:{field:'previous_day_low',timeframe:'same'}}]});
 });
 
-test('all eight chart overlays configure without a lookback, persist, suspend on D1/W1 and keep the existing feed lease',async({page})=>{
+test('all twelve chart overlays configure without a lookback, persist, suspend on D1/W1 and keep the existing feed lease',async({page})=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await openTestApp(page);
  const chart=page.getByTestId('chart-cell');await expect(chart.getByLabel('OHLCV')).toContainText('C');const attachments=await page.evaluate(()=>(window as any).__testAttachCount());
  for(const [id,name]of Object.entries(calendarRangeNames)){
   await chart.getByLabel('Indicators',{exact:true}).selectOption(id);const dialog=page.getByRole('dialog',{name:`${name} parameters`,exact:true});
   await expect(dialog.getByLabel('Period',{exact:true})).toHaveCount(0);await expect(dialog).toContainText('UTC');await dialog.getByRole('button',{name:'OK',exact:true}).click();
  }
- await expect(chart.locator('.indicator-chip')).toHaveCount(8);await expect(page.getByRole('button',{name:'All changes saved'})).toBeVisible();
+ await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);await expect(page.getByRole('button',{name:'All changes saved'})).toBeVisible();
  const saved=await page.evaluate(()=>(window as any).__testWorkspace().tabs[0].charts[0].indicators);expect(saved.map((item:any)=>item.type)).toEqual(ids);expect(saved.every((item:any)=>Object.keys(item.parameters).length===0)).toBe(true);
  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
- await reloadTestApp(page);await expect(chart.locator('.indicator-chip')).toHaveCount(8);
+ await reloadTestApp(page);await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);
  await chart.getByRole('button',{name:"Edit Today's low",exact:true}).click();let dialog=page.getByRole('dialog',{name:"Today's low parameters",exact:true});await dialog.getByLabel('Indicator color',{exact:true}).fill('#123456');await dialog.getByRole('button',{name:'OK',exact:true}).click();
  for(const timeframe of ['1d','1w']){
   await chart.getByRole('button',{name:`Timeframe ${timeframe}`,exact:true}).click();
   for(const id of ids)await expect(chart.getByLabel('Indicators',{exact:true}).locator(`option[value="${id}"]`)).toBeDisabled();
-  await expect(chart.locator('.indicator-chip .indicator-warmup')).toHaveText(Array(8).fill(' · intraday only'));
+  await expect(chart.locator('.indicator-chip .indicator-warmup')).toHaveText(Array(ids.length).fill(' · intraday only'));
  }
  await chart.getByRole('button',{name:'Timeframe 1h',exact:true}).click();for(const id of ids)await expect(chart.getByLabel('Indicators',{exact:true}).locator(`option[value="${id}"]`)).toBeEnabled();
- await expect(chart.locator('.indicator-chip')).toHaveCount(8);await chart.getByRole('button',{name:"Remove Today's low",exact:true}).click();await expect(chart.locator('.indicator-chip')).toHaveCount(7);
+ await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);await chart.getByRole('button',{name:"Remove Today's low",exact:true}).click();await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length-1);
  expect(errors).toEqual([]);
 });
 

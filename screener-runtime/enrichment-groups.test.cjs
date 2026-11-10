@@ -11,7 +11,7 @@ async function fixture(t,text){
 }
 const header=['timestamp','open','high','low','close','volume'];
 
-test('range group calculates all eight columns in one aligned stream and replaces them without duplicates',async t=>{
+test('range group calculates all twelve columns in one aligned stream and replaces them without duplicates',async t=>{
  const original=`${header.join(',')},notes\n1704067200000,10,12,8,10,1,first\n1704150000000,10,15,6,10,1,last\n1704153600000,8,13,3,8,1,next\n1704672000000,14,18,10,14,1,week\n`;
  const paths=await fixture(t,original),events=[];
  await enrich({...paths,group:'Day / Week ranges',source:'askprice',parameters:{},timeframe:'h1'},{emit:event=>events.push(event)});

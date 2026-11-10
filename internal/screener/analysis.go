@@ -41,7 +41,8 @@ type AnalysisRequest struct {
 	// Empty preserves legacy conditions as Dukascopy; sources never mix in a scan.
 	DataSource string `json:"dataSource,omitempty"`
 	// Zero disables profitability filtering and preserves legacy saved rules.
-	ProfitabilityFilter int `json:"profitabilityFilter,omitempty"`
+	ProfitabilityFilter int  `json:"profitabilityFilter,omitempty"`
+	OnlyOneSignalPerDay bool `json:"onlyOneSignalPerDay,omitempty"`
 	// Empty preserves legacy requests that scan every downloaded timeframe.
 	Period string `json:"period,omitempty"`
 	// A nil selection preserves older saved conditions: apply to every asset.
@@ -721,6 +722,8 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 	a.markDuplicateResults()
 	a.phase = "scanning"
 	m.mu.Unlock()
+	var dailyGroup string
+	var dailyWinners map[int64]analysisDailyWinner
 	for i := range a.results {
 		if ctx.Err() != nil {
 			return
@@ -734,7 +737,17 @@ func (m *Manager) runAnalysis(ctx context.Context, a *analysisState) {
 		a.current = r.Name
 		a.results[i].Status = "running"
 		m.mu.Unlock()
-		err := m.scanAnalysisFile(ctx, a, i)
+		var err error
+		group := r.Symbol + "/" + r.Timeframe
+		if a.request.OnlyOneSignalPerDay && intradayEnrichmentPeriod(r.Timeframe) && group != dailyGroup {
+			dailyWinners, err = firstAnalysisSignals(ctx, a, r.Symbol, r.Timeframe)
+			if err == nil {
+				dailyGroup = group
+			}
+		}
+		if err == nil {
+			err = m.scanAnalysisFile(ctx, a, i, dailyWinners)
+		}
 		m.mu.Lock()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -786,7 +799,7 @@ func (a *analysisState) markDuplicateResults() {
 	}
 }
 
-func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index int) error {
+func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index int, dailyWinners map[int64]analysisDailyWinner) error {
 	r := a.results[index]
 	s := a.series[r.ID]
 	compiled, err := compileAnalysisConditions(a, s)
@@ -821,6 +834,9 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 	buffered := bufio.NewWriterSize(out, 64*1024)
 	var buf [16]byte
 	var matches, first, last int64
+	var lastSignalDay int64
+	hasSignalDay := false
+	limitDaily := a.request.OnlyOneSignalPerDay && intradayEnrichmentPeriod(s.metadata.Timeframe)
 	now := a.asOf
 	closedCount, err := s.closedCount(now)
 	if err != nil {
@@ -917,6 +933,18 @@ func (m *Manager) scanAnalysisFile(ctx context.Context, a *analysisState, index 
 			}
 		}
 		checked++
+		if match && limitDaily {
+			day := analysisSignalDay(row.timestamp)
+			if winner, exists := dailyWinners[day]; dailyWinners != nil && (!exists || winner.ResultID != r.ID || winner.Index != rowIndex) {
+				match = false
+			}
+			if hasSignalDay && day == lastSignalDay {
+				match = false
+			}
+			if match {
+				lastSignalDay, hasSignalDay = day, true
+			}
+		}
 		if match {
 			binary.LittleEndian.PutUint64(buf[:8], uint64(rowIndex))
 			binary.LittleEndian.PutUint64(buf[8:], uint64(row.timestamp))

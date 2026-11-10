@@ -1485,6 +1485,7 @@ export namespace screener {
 	    conditions: AnalysisCondition[];
 	    dataSource?: string;
 	    profitabilityFilter?: number;
+	    onlyOneSignalPerDay?: boolean;
 	    period?: string;
 	    categories: string[];
 	    tradeSimulation?: AnalysisTradeSimulation;
@@ -1498,6 +1499,7 @@ export namespace screener {
 	        this.conditions = this.convertValues(source["conditions"], AnalysisCondition);
 	        this.dataSource = source["dataSource"];
 	        this.profitabilityFilter = source["profitabilityFilter"];
+	        this.onlyOneSignalPerDay = source["onlyOneSignalPerDay"];
 	        this.period = source["period"];
 	        this.categories = source["categories"];
 	        this.tradeSimulation = this.convertValues(source["tradeSimulation"], AnalysisTradeSimulation);

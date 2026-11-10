@@ -1,5 +1,5 @@
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
-import {calendarRange,isCalendarRange,isIntradayPeriod,type CalendarRangeType} from '../../../../screener-runtime/calendar-ranges.mjs';
+import {calendarRange,calendarRangeOffset,isCalendarRange,isIntradayPeriod,type CalendarRangeType} from '../../../../screener-runtime/calendar-ranges.mjs';
 
 export interface IndicatorPoint {time:number;value:number}
 export interface CloudPoint {time:number;a:number;b:number}
@@ -11,7 +11,7 @@ const validPeriod=(period:number)=>Number.isInteger(period)&&period>=1&&period<=
 export function indicatorWarmupBars(config:IndicatorConfig,timeframe:Interval='1h'):number{
  if(isCalendarRange(config.type)){
   if(!isIntradayPeriod(timeframe))return 0;
-  const days=config.type.includes('week')?7:1,periods=config.type.startsWith('previous_')?2:1;
+  const days=config.type.includes('week')?7:1,periods=calendarRangeOffset(config.type)+1;
   return Math.ceil(days*periods*86400/intervalSeconds[timeframe])+1;
  }
  const p=config.parameters;

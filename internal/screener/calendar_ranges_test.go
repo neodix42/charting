@@ -15,7 +15,7 @@ import (
 	"cryptodesk/internal/domain"
 )
 
-var calendarRangeIDs = []string{"today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high"}
+var calendarRangeIDs = []string{"today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high", "two_days_ago_low", "two_days_ago_high", "three_days_ago_low", "three_days_ago_high"}
 
 func TestDayWeekRangeCatalogAndScope(t *testing.T) {
 	m := &Manager{}
@@ -88,7 +88,7 @@ func TestDayWeekEnrichmentFeedsIntradayAnalysisWithoutDailyLookahead(t *testing.
 		t.Fatalf("duplicate/lost columns: %v", records[0])
 	}
 	metadata, err := readFileMetadata(m.directory, name)
-	if err != nil || len(metadata.Recipes) != 8 {
+	if err != nil || len(metadata.Recipes) != len(calendarRangeIDs) {
 		t.Fatalf("recipes: %+v %v", metadata, err)
 	}
 	condition := analysisCondition("below", analysisField("today_low"), analysisField("previous_day_low"))

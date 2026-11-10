@@ -34,10 +34,19 @@ describe('calendar range chart calculations',()=>{
  it('retains parameterless labels and disables calculations on daily/weekly periods',()=>{
   for(const id of ids){expect(indicatorLabel(config(id))).toBe(calendarRangeNames[id]);for(const timeframe of ['1d','1w'] as const){expect(calendarRangeValues([bar('2024-01-01T00:00Z',8,12)],id,timeframe)).toEqual([]);expect(indicatorWarmupBars(config(id),timeframe)).toBe(0);}}
  });
+ it('selects one completed day for two/three days ago rather than combining a rolling window',()=>{
+  const bars=[bar('2024-01-01T00:00Z',8,12),bar('2024-01-01T23:00Z',6,15),bar('2024-01-02T00:00Z',2,30),bar('2024-01-03T00:00Z',10,11),bar('2024-01-03T12:00Z',1,40),bar('2024-01-04T00:00Z',7,9)];
+  expect(calendarRangeValues(bars,'two_days_ago_low','1h')).toEqual([{time:bars[3].time,value:6},{time:bars[4].time,value:6},{time:bars[5].time,value:2}]);
+  expect(calendarRangeValues(bars,'two_days_ago_high','1h')).toEqual([{time:bars[3].time,value:15},{time:bars[4].time,value:15},{time:bars[5].time,value:30}]);
+  expect(calendarRangeValues(bars,'three_days_ago_low','1h')).toEqual([{time:bars[5].time,value:6}]);
+  expect(calendarRangeValues(bars,'three_days_ago_high','1h')).toEqual([{time:bars[5].time,value:15}]);
+ });
  it('bounds ordinary chart history at 10,000 and loads enough minute bars for complete day/week boundaries',()=>{
   expect(indicatorHistoryLimit([],'1m')).toBe(10000);
   expect(indicatorWarmupBars(config('today_low'),'1m')).toBe(1441);
   expect(indicatorWarmupBars(config('previous_day_low'),'1m')).toBe(2881);
+  expect(indicatorWarmupBars(config('two_days_ago_low'),'1m')).toBe(4321);
+  expect(indicatorWarmupBars(config('three_days_ago_high'),'1m')).toBe(5761);
   expect(indicatorWarmupBars(config('week_high'),'1m')).toBe(10081);
   expect(indicatorHistoryLimit([config('previous_week_low')],'1m')).toBe(20161);
   expect(indicatorHistoryLimit([config('previous_week_low')],'1h')).toBe(10000);

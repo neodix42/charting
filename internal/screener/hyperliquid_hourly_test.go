@@ -45,7 +45,7 @@ func TestHyperliquidHourlyDownloadGroupEnrichmentAndReplayRetainsNativeIdentity(
 		t.Fatal(err)
 	}
 	enriched := waitEnrichment(t, m, []string{dataFileID(m.directory, filepath.Base(first))})
-	if enriched.Completed != 1 || enriched.Failed != 0 || len(enriched.Jobs[0].Columns) != 8 {
+	if enriched.Completed != 1 || enriched.Failed != 0 || len(enriched.Jobs[0].Columns) != len(calendarRangeIDs) {
 		t.Fatalf("H1 ranges: %+v", enriched)
 	}
 	adapter := m.hyperliquidAdapter.(*hyperliquidDownloadAdapter)

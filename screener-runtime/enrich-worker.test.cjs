@@ -24,9 +24,9 @@ async function fixture(t, csv) {
 }
 const request=(indicator,parameters={})=>({indicator,parameters,source:'auto',timeframe:'h1'});
 
-test('all 42 reviewed indicators, 2 UTC time fields and 8 intraday ranges produce finite, aligned values',async()=>{
+test('all 42 reviewed indicators, 2 UTC time fields and 12 intraday ranges produce finite, aligned values',async()=>{
   assert.equal(catalog.version,'8.3.0');
-  assert.equal(catalog.indicators.length,52);
+  assert.equal(catalog.indicators.length,56);
   assert.equal(catalog.indicators.filter(item=>item.input==='timestamp').length,2);
   const rows=candles(500);
   for (const item of catalog.indicators) {
