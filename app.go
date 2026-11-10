@@ -28,35 +28,37 @@ import (
 // App is the intentionally small privileged webview facade. Feed URLs, filesystem
 // paths and execution capabilities are never accepted from imported workspaces.
 type App struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
-	store           *storage.Store
-	market          *market.Service
-	candles         *candlestorage.Manager
-	screener        *screener.Manager
-	predictions     *predictions.Manager
-	hyperliquid     *hyperliquid.Store
-	tradingMu       sync.Mutex
-	tradingWG       sync.WaitGroup
-	tradingClosed   bool
-	jforex          *jforex.Manager
-	jforexMu        sync.Mutex
-	telegram        *telegram.Store
-	liveAlerts      *screener.LiveAlerts
-	liveAlertsError string
-	chartRenderer   *chartimage.Renderer
-	bootstrap       *appBootstrap
-	shutdownOnce    sync.Once
-	mu              sync.Mutex
-	revision        int64
-	closeToken      string
-	closeAllowed    bool
-	closeTimedOut   bool
-	closeTimer      *time.Timer
-	domReady        bool
-	frontendReady   bool
-	closeRequested  bool
-	window          domain.Window
+	ctx              context.Context
+	cancel           context.CancelFunc
+	store            *storage.Store
+	market           *market.Service
+	candles          *candlestorage.Manager
+	screener         *screener.Manager
+	predictions      *predictions.Manager
+	hyperliquid      *hyperliquid.Store
+	tradingMu        sync.Mutex
+	tradingWG        sync.WaitGroup
+	tradingClosed    bool
+	jforex           *jforex.Manager
+	jforexMu         sync.Mutex
+	telegram         *telegram.Store
+	liveAlerts       *screener.LiveAlerts
+	liveAlertsError  string
+	chartRenderer    *chartimage.Renderer
+	bootstrap        *appBootstrap
+	services         *serviceStartup
+	initialWorkspace *storage.Loaded
+	shutdownOnce     sync.Once
+	mu               sync.Mutex
+	revision         int64
+	closeToken       string
+	closeAllowed     bool
+	closeTimedOut    bool
+	closeTimer       *time.Timer
+	domReady         bool
+	frontendReady    bool
+	closeRequested   bool
+	window           domain.Window
 }
 
 func newApp(store *storage.Store, loaded storage.Loaded) *App {
@@ -71,6 +73,9 @@ func newApp(store *storage.Store, loaded storage.Loaded) *App {
 // Constructors may inspect files, recover journals or open local databases.
 // Production runs this only after the native window and loading UI exist.
 func (a *App) initializeServices(ctx context.Context) error {
+	if a.bootstrap != nil {
+		return a.initializeChartServices(ctx)
+	}
 	profile := a.store.Directory()
 	if err := ctx.Err(); err != nil {
 		return err
@@ -286,6 +291,12 @@ func (a *App) LoadWorkspace() (storage.Loaded, error) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if initial := a.initialWorkspace; initial != nil {
+		a.initialWorkspace = nil
+		if initial.Revision == a.revision {
+			return *initial, nil
+		}
+	}
 	loaded, err := a.store.Load()
 	a.revision = loaded.Revision
 	var recovery *storage.RecoveryError
@@ -316,6 +327,13 @@ func (a *App) ListInstruments(provider string) ([]domain.Instrument, error) {
 	return a.market.Instruments(a.ctx, provider)
 }
 func (a *App) AttachChart(chartID string, generation int64, key domain.FeedKey, fromSec, toSec int64) (market.Snapshot, error) {
+	// Wait outside the market mutex so retained Hyperliquid history restoration
+	// cannot hold up independent provider charts.
+	if key.Exchange == "hyperliquid" {
+		if err := a.awaitService("screener"); err != nil {
+			return market.Snapshot{}, err
+		}
+	}
 	if key.Exchange == "dukascopy" {
 		a.jforexMu.Lock()
 		defer a.jforexMu.Unlock()
@@ -327,13 +345,18 @@ func (a *App) GetFeedSnapshot(leaseID string, afterRevision int64) (market.Snaps
 	return a.market.Snapshot(leaseID)
 }
 func (a *App) GetHistory(requestID string, key domain.FeedKey, fromSec, toSec int64, maxBars int) (market.History, error) {
+	if key.Exchange == "hyperliquid" {
+		if err := a.awaitService("screener"); err != nil {
+			return market.History{}, err
+		}
+	}
 	return a.market.History(a.ctx, requestID, key, fromSec, toSec, maxBars)
 }
 func (a *App) GetDiagnostics() map[string]any {
 	a.mu.Lock()
 	revision := a.revision
 	a.mu.Unlock()
-	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "mode": "read-only market data", "version": applicationVersion}
+	return map[string]any{"market": a.market.Diagnostics(), "persistedRevision": revision, "startup": a.GetStartupStatus(), "mode": "read-only market data", "version": applicationVersion}
 }
 func (a *App) ExportWorkspace() (string, error) {
 	if err := a.awaitBootstrap(false); err != nil {

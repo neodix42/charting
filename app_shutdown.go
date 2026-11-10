@@ -36,6 +36,11 @@ func (a *App) closeServices() {
 	if a.bootstrap != nil {
 		a.bootstrap.stop()
 	}
+	// Background constructors may publish after cancellation. Drain them before
+	// taking ownership of their workers and releasing the profile lock.
+	if a.services != nil {
+		a.services.wg.Wait()
+	}
 	workers := []func(){a.closeTrading}
 	if a.liveAlerts != nil {
 		workers = append(workers, a.liveAlerts.Close)

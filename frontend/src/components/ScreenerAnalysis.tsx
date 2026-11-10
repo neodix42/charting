@@ -9,7 +9,7 @@ import {AnalysisSimulationCell,ScreenerTradeSimulation} from './ScreenerTradeSim
 import './ScreenerAnalysis.css';
 
 const pageSize=10;
-export interface ScreenerAnalysisHandle {flush():Promise<void>}
+export interface ScreenerAnalysisHandle {flush():Promise<void>;flushDraft():Promise<void>}
 export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAnalysisBackend;visible:boolean;onConditionRenamed?(rename:SavedConditionRename):void|Promise<void>}>(function ScreenerAnalysis({api,visible,onConditionRenamed},ref){
  const [catalog,setCatalog]=useState<AnalysisCatalog|null>(null),[view,setView]=useState<AnalysisRequest>(initialAnalysisView),[ready,setReady]=useState(false),[info,setInfo]=useState<AnalysisInfo|null>(null);
  const [loadError,setLoadError]=useState(''),[catalogError,setCatalogError]=useState(''),[saveError,setSaveError]=useState(''),[scanError,setScanError]=useState(''),[actionError,setActionError]=useState('');
@@ -22,20 +22,20 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
  const savedConditions=useRef<ScreenerSavedConditionsHandle>(null);
  selectionRef.current=selection;
  if(!writer.current)writer.current=new AnalysisViewWriter(async value=>{const saved=await api.SaveScreenerAnalysisView(value);if(mounted.current)setSaveError('');return saved;},error=>{if(mounted.current)setSaveError(errorText(error));});
- useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await savedConditions.current?.flush();}}),[]);
- useEffect(()=>{mounted.current=true;lifetime.current++;return ()=>{mounted.current=false;lifetime.current++;chartEpoch.current++;};},[]);
+ useImperativeHandle(ref,()=>({flushDraft:()=>writer.current!.flush(),flush:async()=>{await writer.current!.flush();await savedConditions.current?.flush();}}),[]);
+ useEffect(()=>{mounted.current=true;lifetime.current++;return ()=>{mounted.current=false;lifetime.current++;chartEpoch.current++;writer.current?.cancelScheduled();};},[]);
  useEffect(()=>{
   if(!visible||ready)return;
   let current=true;
-  void api.GetScreenerAnalysisView().then(value=>{if(current){draft.current=value;setView(value);setReady(true);setLoadError('');}}).catch(error=>{if(current)setLoadError(errorText(error));});
+  void api.GetScreenerAnalysisView().then(value=>{if(current){writer.current!.restore(value);draft.current=value;setView(value);setReady(true);setLoadError('');}}).catch(error=>{if(current)setLoadError(errorText(error));});
   return ()=>{current=false;};
  },[api,visible,ready,reload]);
  useEffect(()=>{
-  if(!visible)return;
+  if(!visible||!ready)return;
   let current=true;setCatalog(null);setCatalogError('');
   void api.GetScreenerAnalysisCatalogForSource(dataSource).then(value=>{if(current){if(value.dataSource&&value.dataSource!==dataSource)throw Error('Downloaded fields do not match the selected data source.');setCatalog(value);setCatalogError('');}}).catch(error=>{if(current)setCatalogError(errorText(error));});
   return ()=>{current=false;};
- },[api,visible,reload,dataSource]);
+ },[api,visible,ready,reload,dataSource]);
  useEffect(()=>{
   if(!visible)return;
   let current=true,timer:ReturnType<typeof setTimeout>|undefined;
@@ -120,7 +120,7 @@ export const ScreenerAnalysis=forwardRef<ScreenerAnalysisHandle,{api:ScreenerAna
    {!!info?.totalResults&&<nav className="analysis-pagination" aria-label="Analysis file pages"><button type="button" disabled={page===0} onClick={()=>setPage(value=>value-1)}>Previous files</button><span>Files {page*pageSize+1}–{Math.min((page+1)*pageSize,info.totalResults)} of {info.totalResults}</span><button type="button" disabled={(page+1)*pageSize>=info.totalResults} onClick={()=>setPage(value=>value+1)}>Next files</button></nav>}
   </section>
   </div>
-  <ScreenerSavedConditions ref={savedConditions} api={api} visible={visible} disabled={!ready||working||busy} canSave={!invalid} request={view} onRenamed={onConditionRenamed} onLoad={request=>{closeChart();change(request);setActionError('');}}/>
+  <ScreenerSavedConditions ref={savedConditions} api={api} visible={visible} disabled={!ready||working||busy} canSave={!invalid} request={view} flushDraft={()=>writer.current!.flush()} onRenamed={onConditionRenamed} onLoad={request=>{closeChart();change(request);setActionError('');}}/>
   {visible&&selection&&<ScreenerAnalysisChart api={api} selection={selection} onClose={closeChart} onNavigate={navigate}/>}
  </div>;
 });

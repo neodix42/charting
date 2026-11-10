@@ -5,17 +5,19 @@ export namespace candlestorage {
 	    directory: string;
 	    sizeBytes: number;
 	    error?: string;
-	
+	    pending?: boolean;
+
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
 	        this.directory = source["directory"];
 	        this.sizeBytes = source["sizeBytes"];
 	        this.error = source["error"];
+	        this.pending = source["pending"];
 	    }
 	}
 
@@ -3167,6 +3169,71 @@ export namespace trading {
 	        this.quantity = source["quantity"];
 	        this.leverage = source["leverage"];
 	        this.entryPrice = source["entryPrice"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace main {
+
+	export class StartupTask {
+	    id: string;
+	    message: string;
+	    state: string;
+	    elapsedMs: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new StartupTask(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.message = source["message"];
+	        this.state = source["state"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.error = source["error"];
+	    }
+	}
+	export class StartupStatus {
+	    workspaceReady: boolean;
+	    ready: boolean;
+	    phase: string;
+	    elapsedMs: number;
+	    tasks: StartupTask[];
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new StartupStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceReady = source["workspaceReady"];
+	        this.ready = source["ready"];
+	        this.phase = source["phase"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.tasks = this.convertValues(source["tasks"], StartupTask);
+	        this.error = source["error"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

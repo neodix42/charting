@@ -103,7 +103,7 @@ func TestLiveAlertsMidHourEnableAndRestartWaitUntilExactNextClose(t *testing.T) 
 	restored.now = l.now
 	restored.refresh = l.refresh
 	restored.Start(context.Background())
-	if info := restored.Info(); !info.Config.Enabled || info.NextRun != want || info.LastRun != 0 {
+	if info := waitLiveSchedule(t, restored, func(info LiveAlertsInfo) bool { return info.NextRun == want }); !info.Config.Enabled || info.LastRun != 0 {
 		t.Fatalf("restart must restore enabled selection and wait for its boundary: %+v", info)
 	}
 	clock.Store(want)

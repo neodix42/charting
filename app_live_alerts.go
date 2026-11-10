@@ -13,8 +13,11 @@ import (
 )
 
 func (a *App) GetScreenerLiveAlerts() screener.LiveAlertsInfo {
+	if err := a.awaitService("alerts"); err != nil {
+		return unavailableLiveAlertsInfo(err.Error(), "Live Alerts settings are unavailable")
+	}
 	if a.liveAlerts == nil {
-		return screener.LiveAlertsInfo{Config: screener.LiveAlertsConfig{ConditionIDs: []string{}}, ConditionScopes: []screener.LiveAlertConditionScope{}, Assets: []screener.LiveAlertAsset{}, Recent: []screener.LiveAlertOutcome{}, Checks: []screener.LiveAlertCheck{}, Error: a.liveAlertsError, Status: "Live Alerts settings are unavailable"}
+		return unavailableLiveAlertsInfo(a.liveAlertsError, "Live Alerts settings are unavailable")
 	}
 	info := a.liveAlerts.Info()
 	if a.liveAlertsError != "" {
@@ -23,8 +26,26 @@ func (a *App) GetScreenerLiveAlerts() screener.LiveAlertsInfo {
 	return info
 }
 
+func unavailableLiveAlertsInfo(reason, status string) screener.LiveAlertsInfo {
+	return screener.LiveAlertsInfo{Config: screener.LiveAlertsConfig{ConditionIDs: []string{}}, ConditionScopes: []screener.LiveAlertConditionScope{}, Assets: []screener.LiveAlertAsset{}, Recent: []screener.LiveAlertOutcome{}, Checks: []screener.LiveAlertCheck{}, Error: reason, Status: status}
+}
+
 // Progress polling never waits for saved-condition evidence or CSV inventory.
 func (a *App) GetScreenerLiveAlertsProgress() screener.LiveAlertsInfo {
+	a.mu.Lock()
+	services := a.services
+	a.mu.Unlock()
+	if services != nil {
+		services.mu.Lock()
+		ready := services.tasks["alerts"].finished
+		services.mu.Unlock()
+		if !ready {
+			return unavailableLiveAlertsInfo("", "Restoring Live Alerts…")
+		}
+	}
+	if err := a.awaitService("alerts"); err != nil {
+		return unavailableLiveAlertsInfo(err.Error(), "Live Alerts settings are unavailable")
+	}
 	if a.liveAlerts == nil {
 		return a.GetScreenerLiveAlerts()
 	}
@@ -36,6 +57,9 @@ func (a *App) GetScreenerLiveAlertsProgress() screener.LiveAlertsInfo {
 }
 
 func (a *App) ConfigureScreenerLiveAlerts(config screener.LiveAlertsConfig) (screener.LiveAlertsInfo, error) {
+	if err := a.awaitService("alerts"); err != nil {
+		return screener.LiveAlertsInfo{}, err
+	}
 	if a.liveAlerts == nil || a.liveAlertsError != "" {
 		return a.GetScreenerLiveAlerts(), errors.New("Live Alerts settings are unavailable; saved data was preserved")
 	}
@@ -49,6 +73,9 @@ func (a *App) ConfigureScreenerLiveAlerts(config screener.LiveAlertsConfig) (scr
 }
 
 func (a *App) CheckScreenerLiveAlerts() (screener.LiveAlertsInfo, error) {
+	if err := a.awaitService("alerts"); err != nil {
+		return screener.LiveAlertsInfo{}, err
+	}
 	if a.liveAlerts == nil || a.liveAlertsError != "" {
 		return a.GetScreenerLiveAlerts(), errors.New("Live Alerts settings are unavailable; saved data was preserved")
 	}
@@ -56,6 +83,9 @@ func (a *App) CheckScreenerLiveAlerts() (screener.LiveAlertsInfo, error) {
 }
 
 func (a *App) CheckScreenerLiveAlert(alertID string) (screener.LiveAlertsInfo, error) {
+	if err := a.awaitService("alerts"); err != nil {
+		return screener.LiveAlertsInfo{}, err
+	}
 	if a.liveAlerts == nil || a.liveAlertsError != "" {
 		return a.GetScreenerLiveAlerts(), errors.New("Live Alerts settings are unavailable; saved data was preserved")
 	}

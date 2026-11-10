@@ -1,8 +1,20 @@
-import {useEffect,useId,useState} from 'react';
+import {memo,useEffect,useId,useMemo,useState,type ReactNode} from 'react';
 import type {AnalysisCatalog,AnalysisCondition,AnalysisOperand,AnalysisOperator} from '../workspace/screenerAnalysis';
 import {analysisFieldGroups,analysisFieldLabel,analysisOperators,fieldOperand,numberOperand} from '../workspace/screenerAnalysis';
 import {analysisOperatorHelp} from '../workspace/screenerOperatorHelp';
 import './ScreenerAnalysisCondition.css';
+
+// The same catalog serves every operand. Reuse its grouped labels and immutable
+// option tree instead of rebuilding thousands of options for each draft edit.
+const emptyFields:string[]=[];
+const fieldMenus=new WeakMap<string[],{known:ReadonlySet<string>;options:ReactNode}>();
+function fieldMenu(fields:string[]){
+ let menu=fieldMenus.get(fields);if(menu)return menu;
+ const available=[...new Set(['price','close',...fields])];
+ menu={known:new Set(available),options:analysisFieldGroups(available).map(([group,items])=><optgroup key={group} label={group}>{items.map(field=><option key={field} value={field}>{analysisFieldLabel(field)}</option>)}</optgroup>)};
+ fieldMenus.set(fields,menu);return menu;
+}
+const FieldOptions=memo(function FieldOptions({fields}:{fields:string[]}){return fieldMenu(fields).options;});
 
 function OperatorSelect({label,name,value,options=analysisOperators,onChange}:{label:string;name:string;value:string;options?:typeof analysisOperators;onChange(value:AnalysisOperator):void}){
  const [showHelp,setShowHelp]=useState(false),helpID=useId();
@@ -26,16 +38,17 @@ function NumberInput({value,onChange,...props}:{value:number;onChange(value:numb
 }
 
 export function AnalysisOperandEditor({label,value,catalog,onChange}:{label:string;value:AnalysisOperand;catalog:AnalysisCatalog|null;onChange(value:AnalysisOperand):void}){
- const available=[...new Set(['price','close',...(catalog?.fields??[])])],groups=analysisFieldGroups(available),known=new Set(available);
+ const fields=catalog?.fields??emptyFields,{known}=fieldMenu(fields);
+ const timeframes=useMemo(()=>[...new Set([...(catalog?.timeframes??[]),...(value.timeframe&&value.timeframe!=='same'?[value.timeframe]:[])])],[catalog?.timeframes,value.timeframe]);
  return <div className="analysis-operand" role="group" aria-label={label}>
   <div className="analysis-operand-main"><select aria-label={`${label} type`} value={value.kind} onChange={event=>onChange(event.target.value==='number'?numberOperand():fieldOperand(known.has('close')?'close':catalog?.fields[0]||'close'))}><option value="field">Field</option><option value="number">Constant</option></select>
    {value.kind==='number'?<NumberInput aria-label={`${label} constant`} value={value.value??0} step="any" onChange={next=>onChange({...value,value:next})}/>:<select aria-label={`${label} field`} value={value.field??''} onChange={event=>onChange({...value,field:event.target.value})}>
     {!known.has(value.field??'')&&<option value={value.field??''}>{value.field||'Choose field'} (not in current files)</option>}
-    {groups.map(([group,fields])=><optgroup key={group} label={group}>{fields.map(field=><option key={field} value={field}>{analysisFieldLabel(field)}</option>)}</optgroup>)}
+    <FieldOptions fields={fields}/>
    </select>}
   </div>
   {value.kind==='field'&&<div className="analysis-operand-context">
-   <label>Timeframe<select aria-label={`${label} timeframe`} value={value.timeframe||'same'} onChange={event=>onChange({...value,timeframe:event.target.value})}><option value="same">Same as file</option>{[...new Set([...(catalog?.timeframes??[]),...(value.timeframe&&value.timeframe!=='same'?[value.timeframe]:[])])].map(timeframe=><option key={timeframe} value={timeframe}>{timeframe}</option>)}</select></label>
+   <label>Timeframe<select aria-label={`${label} timeframe`} value={value.timeframe||'same'} onChange={event=>onChange({...value,timeframe:event.target.value})}><option value="same">Same as file</option>{timeframes.map(timeframe=><option key={timeframe} value={timeframe}>{timeframe}</option>)}</select></label>
    <label>Bars ago<NumberInput aria-label={`${label} bars ago`} min={0} max={10000} step={1} value={value.offset??0} onChange={next=>onChange({...value,offset:next})}/></label>
    <label>Value<select aria-label={`${label} aggregation`} value={value.aggregate||'value'} onChange={event=>onChange({...value,aggregate:event.target.value as AnalysisOperand['aggregate'],window:Math.max(1,value.window??1)})}><option value="value">At bar</option><option value="highest">Highest</option><option value="lowest">Lowest</option></select></label>
    {value.aggregate&&value.aggregate!=='value'&&<label>Window<NumberInput aria-label={`${label} aggregation window`} min={1} max={10000} step={1} value={value.window??1} onChange={next=>onChange({...value,window:next})}/></label>}

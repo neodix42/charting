@@ -165,12 +165,46 @@ test('draft edits coalesce durably and restore after reload without being applie
  await control(page,'Condition 1 right constant').fill('10');await control(page,'Condition 1 left field').selectOption('ema_200');
  await control(page,'Condition 1 left timeframe').selectOption('h4');await control(page,'Condition 1 left bars ago').fill('2');
  await control(page,'Condition 1 left aggregation').selectOption('highest');await control(page,'Condition 1 left aggregation window').fill('20');
- expect(await page.evaluate(()=>(window as any).__testAnalysisSaves().length)).toBe(1);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisSaves().length)).toBe(1);
  await page.evaluate(()=>(window as any).__testReleaseAnalysisSaves());
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].left)).toMatchObject({field:'ema_200',timeframe:'h4',offset:2,aggregate:'highest',window:20});
  expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
  await page.reload();await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(control(page,'Condition 1 left field')).toHaveValue('ema_200');await expect(control(page,'Condition 1 left timeframe')).toHaveValue('h4');await expect(control(page,'Condition 1 left aggregation window')).toHaveValue('20');
+});
+
+test('saved condition summaries load once per visible visit across rule readiness, save and scan changes',async({page})=>{
+ await open(page);
+ await expect(page.getByRole('button',{name:'Save as new',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditionsReads())).toBe(1);
+ await saveCondition(page,'One summary');await control(page,'Condition 1 right constant').fill('12');
+ await page.getByRole('complementary',{name:'Saved conditions',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
+ await expect(page.getByText('Saved “One summary”.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Cancel analysis',exact:true})).toBeVisible();await complete(page,[result(0)]);
+ await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditionsReads())).toBe(1);
+ const summaries=await page.evaluate(()=>window.go!.main!.App!.GetScreenerSavedConditionSummaries());
+ expect(summaries).toHaveLength(1);expect(summaries[0].analysis).toBeUndefined();
+ await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testSavedAnalysisConditionsReads())).toBe(3);
+});
+
+test('leaving Analysis flushes a debounced draft and a failed flush keeps the rules visible for retry',async({page})=>{
+ await open(page);await page.evaluate(()=>(window as any).__testHoldAnalysisSaves());
+ await control(page,'Condition 1 right constant').fill('42');await page.getByRole('tab',{name:'Downloader',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisSaves().length)).toBe(1);
+ await expect(page.getByRole('tab',{name:'Analysis',exact:true})).toHaveAttribute('aria-selected','true');
+ await page.evaluate(()=>(window as any).__testReleaseAnalysisSaves());
+ await expect(page.getByRole('tab',{name:'Downloader',exact:true})).toHaveAttribute('aria-selected','true');
+ expect((await page.evaluate(()=>(window as any).__testAnalysisView())).conditions[0].right.value).toBe(42);
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.evaluate(()=>(window as any).__testAnalysisErrors({save:'disk full'}));
+ await control(page,'Condition 1 right constant').fill('43');await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Could not save before leaving Analysis');
+ await expect(page.getByRole('tab',{name:'Analysis',exact:true})).toHaveAttribute('aria-selected','true');await expect(control(page,'Condition 1 right constant')).toHaveValue('43');
+ await page.evaluate(()=>(window as any).__testAnalysisErrors({}));await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ await expect(page.getByRole('tab',{name:'Enrichment',exact:true})).toHaveAttribute('aria-selected','true');
+ expect((await page.evaluate(()=>(window as any).__testAnalysisView())).conditions[0].right.value).toBe(43);
 });
 
 test('matching assets show exact counts/errors and chart navigation traverses every occurrence with cleanup',async({page})=>{
@@ -311,8 +345,8 @@ test('normal close waits for an in-flight named condition save',async({page})=>{
 test('a delayed saved list cannot erase a newly saved condition',async({page})=>{
  await open(page);
  await page.evaluate(()=>{
-  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditions;
-  api.GetScreenerSavedConditions=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
+  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditionSummaries;
+  api.GetScreenerSavedConditionSummaries=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
  });
  await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSavedList)).toBe('function');
@@ -403,8 +437,8 @@ test('Rename duplicate, invalid-name and storage errors stay inline, preserve en
 test('a delayed saved list cannot undo a renamed condition or reorder the list',async({page})=>{
  await open(page);await saveCondition(page,'Original');await saveCondition(page,'Keep second');
  await page.evaluate(()=>{
-  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditions;
-  api.GetScreenerSavedConditions=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
+  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditionSummaries;
+  api.GetScreenerSavedConditionSummaries=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
  });
  await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSavedList)).toBe('function');
@@ -500,8 +534,8 @@ test('saved-condition Delete menu supports keyboard and dismissal, and a failed 
 test('a delayed saved list cannot resurrect a deleted condition',async({page})=>{
  await open(page);await saveCondition(page,'Delete me');await saveCondition(page,'Keep me');
  await page.evaluate(()=>{
-  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditions;
-  api.GetScreenerSavedConditions=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
+  const api=window.go!.main!.App!,original=api.GetScreenerSavedConditionSummaries;
+  api.GetScreenerSavedConditionSummaries=async()=>{const before=await original();return new Promise(resolve=>(window as any).__releaseSavedList=()=>resolve(before));};
  });
  await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSavedList)).toBe('function');
@@ -634,7 +668,7 @@ test('Simulate trade validates fields and duration, saves only valid duration ed
  for(const invalid of ['', '0','-1','1.5','10001']){
   await control(page,'Trade duration in bars').fill(invalid);await expect(apply).toBeDisabled();await expect(save).toBeDisabled();
   await expect(page.getByText('Trade duration must be a whole number from 1 to 10,000 bars.',{exact:true})).toBeVisible();
-  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation.duration)).toBe(20);
+  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation?.duration)).toBe(20);
  }
  await control(page,'Trade duration in bars').fill('5');await expect(apply).toBeEnabled();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toEqual({stopLoss:'low',takeProfit:'ema_200',duration:5});
@@ -708,6 +742,7 @@ test('SL Bars ago and risk targets validate, persist with named conditions and k
  const apply=page.getByRole('button',{name:'Apply conditions',exact:true}),save=page.getByRole('button',{name:'Save as new',exact:true}),offset=control(page,'Stop Loss bars ago'),profit=control(page,'Take profit field');
  await expect(offset).toHaveValue('0');await expect(profit.locator('optgroup[label="Stop Loss distance"] option')).toHaveText(['1xSL','2xSL','3xSL']);
  await control(page,'Stop Loss field').selectOption('low');await profit.selectOption('risk:1');await expect(apply).toBeEnabled();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toMatchObject({stopLoss:'low',takeProfitMultiple:1,duration:20});
  for(const invalid of ['', '-1','0.5','10001']){
   await offset.fill(invalid);await expect(apply).toBeDisabled();await expect(save).toBeDisabled();
   await expect(page.getByText('Stop Loss Bars ago must be a whole number from 0 to 10,000.',{exact:true})).toBeVisible();
@@ -851,7 +886,7 @@ test('Take profit field names cannot collide with SL multiple choices',async({pa
  await open(page,[{...file(0),fields:[...fields,'risk:1','field:risk:1']}]);await page.getByRole('button',{name:'Simulate trade',exact:true}).click();
  const profit=control(page,'Take profit field');await control(page,'Stop Loss field').selectOption('low');
  for(const field of ['risk:1','field:risk:1']){
-  await profit.selectOption(`field:${field}`);await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation.takeProfit)).toBe(field);
+  await profit.selectOption(`field:${field}`);await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation?.takeProfit)).toBe(field);
   expect((await page.evaluate(()=>(window as any).__testAnalysisView())).tradeSimulation.takeProfitMultiple).toBeUndefined();
  }
  await profit.selectOption('risk:1');await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().tradeSimulation)).toEqual({stopLoss:'low',takeProfit:'',takeProfitMultiple:1,duration:20});

@@ -4,6 +4,7 @@ package candlestorage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ type Info struct {
 	Directory string `json:"directory"`
 	SizeBytes int64  `json:"sizeBytes"`
 	Error     string `json:"error,omitempty"`
+	Pending   bool   `json:"pending,omitempty"`
 }
 type preferences struct {
 	Enabled   bool   `json:"enabled"`
@@ -32,20 +34,39 @@ type operation func()
 // Manager's bounded queue applies backpressure rather than losing accepted bars.
 // Its worker alone owns the database and drains all pending writes before Close.
 type Manager struct {
-	mu        sync.Mutex
-	closed    bool
-	active    atomic.Bool
-	jobs      chan operation
-	done      chan struct{}
-	store     *candlecache.Store
-	prefs     preferences
-	path      string
-	lastError string
-	onError   func(string)
+	mu            sync.Mutex
+	closed        bool
+	closing       atomic.Bool
+	active        atomic.Bool
+	restoring     atomic.Bool
+	jobs          chan operation
+	done          chan struct{}
+	store         *candlecache.Store
+	prefs         preferences
+	path          string
+	lastError     string
+	onError       func(string)
+	initialInfo   Info
+	ready         chan struct{}
+	cancelRestore context.CancelFunc
+	startupError  atomic.Value
 }
 
 func New(profile string, onError func(string)) *Manager {
-	m := &Manager{jobs: make(chan operation, 128), done: make(chan struct{}), path: filepath.Join(profile, "candle-storage.json"), prefs: preferences{Directory: filepath.Join(profile, "candles")}, onError: onError}
+	return newWithOpen(profile, onError, false, candlecache.OpenContext)
+}
+
+// NewDeferred restores a configured cache on its serial worker. The workspace
+// can render while the database is checked; pending cache reads are misses and
+// accepted writes queue behind validation instead of being discarded.
+func NewDeferred(profile string, onError func(string)) *Manager {
+	return newWithOpen(profile, onError, true, candlecache.OpenContext)
+}
+
+func newWithOpen(profile string, onError func(string), deferred bool, open func(context.Context, string) (*candlecache.Store, error)) *Manager {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := &Manager{jobs: make(chan operation, 128), done: make(chan struct{}), ready: make(chan struct{}), cancelRestore: cancel, path: filepath.Join(profile, "candle-storage.json"), prefs: preferences{Directory: filepath.Join(profile, "candles")}, onError: onError}
+	m.startupError.Store("")
 	data, err := os.ReadFile(m.path)
 	if err == nil {
 		decoder := json.NewDecoder(bytes.NewReader(data))
@@ -64,13 +85,38 @@ func New(profile string, onError func(string)) *Manager {
 	} else if errors.Is(err, os.ErrNotExist) {
 		err = nil
 	}
-	if err == nil && m.prefs.Enabled {
-		m.store, err = candlecache.Open(m.prefs.Directory)
+	if err == nil && m.prefs.Enabled && deferred {
+		m.restoring.Store(true)
+		m.initialInfo = Info{Enabled: true, Directory: m.prefs.Directory, Pending: true}
+		directory := m.prefs.Directory
+		m.jobs <- func() {
+			defer close(m.ready)
+			defer m.restoring.Store(false)
+			store, openErr := open(ctx, directory)
+			if ctx.Err() != nil {
+				if store != nil {
+					_ = store.Close()
+				}
+				return
+			}
+			m.store = store
+			m.active.Store(store != nil)
+			m.failure(openErr)
+			if openErr != nil {
+				m.startupError.Store(m.lastError)
+			}
+		}
+	} else {
+		if err == nil && m.prefs.Enabled {
+			m.store, err = open(ctx, m.prefs.Directory)
+		}
+		m.active.Store(m.store != nil)
+		close(m.ready)
 	}
 	if err != nil {
 		m.lastError = "Candle storage: " + err.Error()
+		m.startupError.Store(m.lastError)
 	}
-	m.active.Store(m.store != nil)
 	go func() {
 		defer close(m.done)
 		for job := range m.jobs {
@@ -78,6 +124,16 @@ func New(profile string, onError func(string)) *Manager {
 		}
 	}()
 	return m
+}
+
+// Ready closes after configured startup validation succeeds, fails or cancels.
+func (m *Manager) Ready() <-chan struct{} { return m.ready }
+
+// StartupState is a memory-only snapshot for frequent application progress
+// polling. It never waits behind cache work or measures the directory.
+func (m *Manager) StartupState() (pending bool, errorText string) {
+	errorText, _ = m.startupError.Load().(string)
+	return m.restoring.Load(), errorText
 }
 
 func (m *Manager) submit(job operation) error {
@@ -110,6 +166,12 @@ func (m *Manager) info() Info {
 	return info
 }
 func (m *Manager) Info() (Info, error) {
+	if m.restoring.Load() {
+		if m.closing.Load() {
+			return Info{}, candlecache.ErrClosed
+		}
+		return m.initialInfo, nil
+	}
 	result := make(chan Info, 1)
 	if err := m.submit(func() { result <- m.info() }); err != nil {
 		return Info{}, err
@@ -188,7 +250,7 @@ func savePreferences(path string, p preferences) error {
 }
 
 func (m *Manager) Put(key domain.FeedKey, bars []domain.Candle) {
-	if len(bars) == 0 || !m.active.Load() {
+	if len(bars) == 0 || m.closing.Load() || !m.active.Load() && !m.restoring.Load() {
 		return
 	}
 	copyBars := append([]domain.Candle(nil), bars...)
@@ -199,6 +261,12 @@ func (m *Manager) Put(key domain.FeedKey, bars []domain.Candle) {
 	})
 }
 func (m *Manager) Range(key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
+	if m.restoring.Load() {
+		if m.closing.Load() {
+			return nil, candlecache.ErrClosed
+		}
+		return nil, nil
+	}
 	type response struct {
 		bars []domain.Candle
 		err  error
@@ -219,6 +287,10 @@ func (m *Manager) Range(key domain.FeedKey, from, to int64, limit int) ([]domain
 	return r.bars, r.err
 }
 func (m *Manager) Close() error {
+	// Cancel before taking the queue mutex: a full accepted-write queue may be
+	// applying backpressure while the startup check owns the worker.
+	m.closing.Store(true)
+	m.cancelRestore()
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -229,6 +301,7 @@ func (m *Manager) Close() error {
 	m.active.Store(false)
 	result := make(chan error, 1)
 	m.jobs <- func() {
+		m.active.Store(false)
 		if m.store != nil {
 			result <- m.store.Close()
 		} else {

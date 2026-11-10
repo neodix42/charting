@@ -10,6 +10,7 @@ import './ScreenerDownloads.css';
 
 const downloadPageSize=10;
 type DownloadFilter='all'|'queued'|'running'|'completed'|'failed'|'cancelled';
+type ScreenerTab='analysis'|'downloader'|'enrichment'|'live-alerts';
 
 function Selection({label,checked,partial,disabled,onChange}:{label:string;checked:boolean;partial:boolean;disabled?:boolean;onChange(value:boolean):void}){
  const input=useRef<HTMLInputElement>(null);
@@ -19,7 +20,7 @@ function Selection({label,checked,partial,disabled,onChange}:{label:string;check
 
 export interface ScreenerHandle {flush():Promise<void>}
 export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(function Screener({api,visible},ref){
- const [tab,setTab]=useState<'analysis'|'downloader'|'enrichment'|'live-alerts'>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
+ const [tab,setTab]=useState<ScreenerTab>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
  const [view,setView]=useState<ScreenerView>(initialScreenerView),[viewReady,setViewReady]=useState(false),[viewError,setViewError]=useState(''),[viewReload,setViewReload]=useState(0),[query,setQuery]=useState('');
  const draft=useRef(view),writer=useRef<ScreenerViewWriter|null>(null);
  const analysis=useRef<ScreenerAnalysisHandle>(null);
@@ -32,6 +33,12 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const dataSource=view.dataSource??'dukascopy',isHyperliquid=dataSource==='hyperliquid',sourceName=isHyperliquid?'Hyperliquid':'Dukascopy';
  const selected=new Set(isHyperliquid?view.hyperliquidSymbols??[]:view.symbols),collapsed=new Set(isHyperliquid?[]:view.collapsedCategories),{timeframe,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
+ const sectionNavigation=useRef(0),[sectionError,setSectionError]=useState('');
+ const selectSection=async(next:ScreenerTab)=>{
+  const request=++sectionNavigation.current;if(next===tab)return;
+  try{if(tab==='analysis')await analysis.current?.flushDraft();if(request===sectionNavigation.current&&alive.current){setTab(next);setSectionError('');}}
+  catch(error){if(request===sectionNavigation.current&&alive.current)setSectionError(`Could not save before leaving Analysis: ${errorText(error)}`);}
+ };
  const [downloadFilter,setDownloadFilter]=useState<DownloadFilter>('all'),[downloadPage,setDownloadPage]=useState(0);
  const alive=useRef(false),lifetime=useRef(0),epoch=useRef(0),actionBusy=useRef(false);
  if(!writer.current)writer.current=new ScreenerViewWriter(value=>api.SaveScreenerView(value),error=>{if(alive.current)setViewError(errorText(error));});
@@ -76,7 +83,8 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  const search=query.trim().toLowerCase();
  const invalidDates=!from||!to||from>=to;
  return <section id="screener-panel" className="screener" role="tabpanel" aria-label="Screener" hidden={!visible}>
-  <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy and Hyperliquid</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>setTab('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>setTab('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>setTab('enrichment')}>Enrichment</button><button id="screener-live-alerts-tab" role="tab" aria-controls="screener-live-alerts" aria-selected={tab==='live-alerts'} onClick={()=>setTab('live-alerts')}>Live Alerts</button></div></div>
+  <div className="screener-heading"><div><h1>Screener</h1><p>Historical market data from Dukascopy and Hyperliquid</p></div><div role="tablist" aria-label="Screener sections" className="screener-subtabs"><button id="screener-analysis-tab" role="tab" aria-controls="screener-analysis" aria-selected={tab==='analysis'} onClick={()=>void selectSection('analysis')}>Analysis</button><button id="screener-downloader-tab" role="tab" aria-controls="screener-downloader" aria-selected={tab==='downloader'} onClick={()=>void selectSection('downloader')}>Downloader</button><button id="screener-enrichment-tab" role="tab" aria-controls="screener-enrichment" aria-selected={tab==='enrichment'} onClick={()=>void selectSection('enrichment')}>Enrichment</button><button id="screener-live-alerts-tab" role="tab" aria-controls="screener-live-alerts" aria-selected={tab==='live-alerts'} onClick={()=>void selectSection('live-alerts')}>Live Alerts</button></div></div>
+  {sectionError&&<div className="screener-error" role="alert">{sectionError}</div>}
   <div id="screener-analysis" role="tabpanel" aria-labelledby="screener-analysis-tab" hidden={tab!=='analysis'} className="screener-analysis"><ScreenerAnalysis ref={analysis} api={api} visible={visible&&tab==='analysis'} onConditionRenamed={conditionRenamed}/></div>
   <div id="screener-enrichment" role="tabpanel" aria-labelledby="screener-enrichment-tab" hidden={tab!=='enrichment'}><ScreenerEnrichment api={api} visible={visible&&tab==='enrichment'} timeframes={['tick','s1','m1','m5','m15','m30','h1','h4','d1','w1','mn1']}/></div>
   <div id="screener-live-alerts" role="tabpanel" aria-labelledby="screener-live-alerts-tab" hidden={tab!=='live-alerts'}><ScreenerLiveAlerts ref={liveAlerts} api={api} visible={visible&&tab==='live-alerts'} renamedCondition={renamedCondition}/></div>

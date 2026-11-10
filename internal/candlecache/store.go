@@ -4,6 +4,7 @@
 package candlecache
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -74,6 +75,15 @@ func NormalizeDirectory(directory string) (string, error) {
 // databases are rejected without reinitializing them or changing their contents.
 // Existing directories and unrelated files keep their permissions and contents.
 func Open(directory string) (*Store, error) {
+	return OpenContext(context.Background(), directory)
+}
+
+// OpenContext allows background startup integrity checks to stop during close.
+// Validation still completes before an existing cache is changed or served.
+func OpenContext(ctx context.Context, directory string) (*Store, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	directory, err := NormalizeDirectory(directory)
 	if err != nil {
 		return nil, err
@@ -117,7 +127,7 @@ func Open(directory string) (*Store, error) {
 	if !created {
 		// Validate before setting WAL mode, permissions or schema on an existing
 		// file. A foreign workspace.sqlite renamed here is never adopted.
-		if err = validateExisting(path); err != nil {
+		if err = validateExisting(ctx, path); err != nil {
 			return nil, fmt.Errorf("open candle database (original file preserved): %w", err)
 		}
 	}
@@ -138,7 +148,7 @@ func Open(directory string) (*Store, error) {
 		return nil, fmt.Errorf("open candle database: %w", cause)
 	}
 	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA synchronous=FULL", "PRAGMA foreign_keys=ON"} {
-		if _, err = db.Exec(pragma); err != nil {
+		if _, err = db.ExecContext(ctx, pragma); err != nil {
 			return fail(err)
 		}
 	}
@@ -190,7 +200,7 @@ func initialize(db *sql.DB) error {
 	return tx.Commit()
 }
 
-func validateExisting(path string) error {
+func validateExisting(ctx context.Context, path string) error {
 	db, err := sql.Open("sqlite", sqliteURI(path, "ro"))
 	if err != nil {
 		return err
@@ -198,26 +208,26 @@ func validateExisting(path string) error {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	var id, version int
-	if err = db.QueryRow("PRAGMA application_id").Scan(&id); err != nil {
+	if err = db.QueryRowContext(ctx, "PRAGMA application_id").Scan(&id); err != nil {
 		return err
 	}
 	if id != applicationID {
 		return errors.New("file is not a CryptoDesk candle cache")
 	}
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
 	if version != databaseVersion {
 		return fmt.Errorf("candle cache schema version %d is unsupported (expected %d)", version, databaseVersion)
 	}
 	var result string
-	if err = db.QueryRow("PRAGMA quick_check(1)").Scan(&result); err != nil {
+	if err = db.QueryRowContext(ctx, "PRAGMA quick_check(1)").Scan(&result); err != nil {
 		return err
 	}
 	if result != "ok" {
 		return fmt.Errorf("candle cache integrity check: %s", result)
 	}
-	if err = db.QueryRow("SELECT schema_checksum FROM candle_cache_metadata WHERE id=1").Scan(&result); err != nil {
+	if err = db.QueryRowContext(ctx, "SELECT schema_checksum FROM candle_cache_metadata WHERE id=1").Scan(&result); err != nil {
 		return err
 	}
 	if result != schemaChecksum() {
@@ -225,7 +235,7 @@ func validateExisting(path string) error {
 	}
 	// Check the actual persisted DDL as well as metadata. Changing a column while
 	// leaving the schema marker alone must not silently adopt an incompatible DB.
-	rows, err := db.Query("SELECT sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	rows, err := db.QueryContext(ctx, "SELECT sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
 	if err != nil {
 		return err
 	}

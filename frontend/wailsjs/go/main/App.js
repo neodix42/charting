@@ -230,12 +230,20 @@ export function GetScreenerRefresh(arg1) {
   return window['go']['main']['App']['GetScreenerRefresh'](arg1);
 }
 
+export function GetScreenerSavedConditionSummaries() {
+  return window['go']['main']['App']['GetScreenerSavedConditionSummaries']();
+}
+
 export function GetScreenerSavedConditions() {
   return window['go']['main']['App']['GetScreenerSavedConditions']();
 }
 
 export function GetScreenerView() {
   return window['go']['main']['App']['GetScreenerView']();
+}
+
+export function GetStartupStatus() {
+  return window['go']['main']['App']['GetStartupStatus']();
 }
 
 export function GetTelegramBotIdentity(arg1) {

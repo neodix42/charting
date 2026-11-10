@@ -31,8 +31,10 @@ export interface Snapshot {leaseId:string;revision:number;bars:Candle[];health:H
 export interface MarketEvent extends Snapshot {chartId:string;generation:number;feedKey:FeedKey;kind:'bars'|'health'|'resyncRequired'}
 export interface Instrument {nativeId:string;market:Market;baseAsset:string;quoteAsset:string;priceIncrement:string;sizeIncrement:string;availability:string;supportedIntervals:Interval[];providerMetadata?:Record<string,string>}
 export interface LoadResult {workspace:Workspace;revision:number;recovery?:string}
+export interface StartupTask {id:string;message:string;state:'loading'|'ready'|'error';elapsedMs:number;error?:string}
+export interface StartupStatus {workspaceReady:boolean;ready:boolean;phase:string;elapsedMs:number;tasks:StartupTask[];error?:string}
 export interface SaveResult {revision:number;acceptedEditSequence:number}
-export interface CandleStorageInfo {enabled:boolean;directory:string;sizeBytes:number;error?:string}
+export interface CandleStorageInfo {enabled:boolean;directory:string;sizeBytes:number;pending?:boolean;error?:string}
 export interface TelegramBotSettings {apiToken:string;recipient:string}
 export interface TelegramBotIdentity {id:number;username:string}
 export interface TelegramTestResult {sent:boolean;code?:string;botUsername?:string;messageId?:number;sentCount?:number;totalRecipients?:number}
@@ -74,6 +76,7 @@ export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:num
 export interface ScreenerRefreshInfo {directory:string;active:boolean;asOf?:number;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
 export interface Backend extends TradingBackend,ScreenerAnalysisBackend,ScreenerLiveAlertsBackend,PredictionsBackend {
+ GetStartupStatus():Promise<StartupStatus>;
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
  ListInstruments(exchange:Exchange):Promise<Instrument[]>;
  AttachChart(id:string,generation:number,key:FeedKey,fromSec:number,toSec:number):Promise<Snapshot>; DetachChart(leaseId:string):Promise<void>;

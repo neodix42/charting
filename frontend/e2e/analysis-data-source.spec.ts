@@ -14,6 +14,21 @@ async function analysis(page:Page){await page.getByRole('tab',{name:'Screener',e
 async function open(page:Page){await openTestApp(page);await page.evaluate(files=>{(window as any).__testSetEnrichmentFiles(files);const {dataSource,...legacy}=(window as any).__testAnalysisView();(window as any).__testSetAnalysisView({...legacy,profitabilityFilter:0,categories:['Forex']});},files);await analysis(page);}
 async function saveNew(page:Page,name:string){await page.getByRole('button',{name:'Save as new',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});await dialog.getByLabel('Condition name',{exact:true}).fill(name);await dialog.getByRole('button',{name:'Save condition',exact:true}).click();await expect(dialog).toHaveCount(0);}
 
+test('restoring Hyperliquid waits for the saved draft before requesting its field catalog',async({page})=>{
+ await openTestApp(page);await page.evaluate(files=>{
+  (window as any).__testSetEnrichmentFiles(files);(window as any).__testSetAnalysisView({...((window as any).__testAnalysisView()),dataSource:'hyperliquid',categories:null,profitabilityFilter:0});
+  const api=window.go!.main!.App!,read=api.GetScreenerAnalysisView,catalog=api.GetScreenerAnalysisCatalogForSource;
+  (window as any).__sourceCatalogRequests=[];
+  api.GetScreenerAnalysisView=()=>new Promise(resolve=>{(window as any).__releaseSourceDraft=async()=>resolve(await read());});
+  api.GetScreenerAnalysisCatalogForSource=selected=>{(window as any).__sourceCatalogRequests.push(selected);return catalog(selected);};
+ },files);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseSourceDraft)).toBe('function');
+ expect(await page.evaluate(()=>(window as any).__sourceCatalogRequests)).toEqual([]);
+ await page.evaluate(()=>(window as any).__releaseSourceDraft());await expect(source(page)).toHaveValue('hyperliquid');
+ await expect(page.getByLabel('Condition 1 left field',{exact:true}).locator('option[value="sma_50"]')).toHaveCount(1);
+ expect(await page.evaluate(()=>(window as any).__sourceCatalogRequests)).toEqual(['hyperliquid']);
+});
+
 test('Analysis defaults to Dukascopy, selects only downloaded source fields and saves/restores the source with a named condition',async({page})=>{
  await page.setViewportSize({width:1100,height:900});await open(page);
  await expect(source(page)).toHaveValue('dukascopy');await expect(source(page).locator('option')).toHaveText(['Dukascopy','Hyperliquid']);

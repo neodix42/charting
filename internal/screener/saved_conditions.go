@@ -2,10 +2,12 @@ package screener
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -33,6 +35,14 @@ type savedAnalysisConditions struct {
 	Conditions []SavedAnalysisCondition `json:"conditions"`
 }
 
+// Protected by Manager.mu. The digest includes the exact persisted bytes, so
+// external in-place edits are detected even if size and timestamps are retained.
+// Returned conditions never share mutable slices with this validated snapshot.
+type savedConditionsSnapshot struct {
+	digest     [sha256.Size]byte
+	conditions []SavedAnalysisCondition
+}
+
 func conditionName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 100 || strings.ContainsFunc(name, unicode.IsControl) {
@@ -45,19 +55,61 @@ func (m *Manager) readSavedConditions() ([]SavedAnalysisCondition, error) {
 	path := filepath.Join(m.profile, "screener-saved-conditions.json")
 	st, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
+		m.savedConditionsCache = nil
 		return []SavedAnalysisCondition{}, nil
 	}
 	if err != nil {
+		m.savedConditionsCache = nil
 		return nil, err
 	}
 	if !st.Mode().IsRegular() || st.Size() > savedConditionsBytes {
+		m.savedConditionsCache = nil
 		return nil, errors.New("saved conditions must be a regular file no larger than 128 MiB; original state preserved")
 	}
-	var saved savedAnalysisConditions
-	if err = readState(path, savedConditionsBytes, &saved); err != nil {
+	data, err := readSavedConditionsBytes(path, st)
+	if err != nil {
+		m.savedConditionsCache = nil
 		return nil, fmt.Errorf("read saved conditions (original state preserved): %w", err)
 	}
-	return validatedSavedConditions(saved)
+	digest := sha256.Sum256(data)
+	if cached := m.savedConditionsCache; cached != nil && cached.digest == digest {
+		return copySavedAnalysisConditions(cached.conditions), nil
+	}
+	// Never fall back to an old valid snapshot after an external corrupt edit.
+	m.savedConditionsCache = nil
+	var saved savedAnalysisConditions
+	if err = decodeState(data, &saved); err != nil {
+		return nil, fmt.Errorf("read saved conditions (original state preserved): %w", err)
+	}
+	conditions, err := validatedSavedConditions(saved)
+	if err != nil {
+		return nil, err
+	}
+	m.savedConditionsCache = &savedConditionsSnapshot{digest: digest, conditions: conditions}
+	return copySavedAnalysisConditions(conditions), nil
+}
+
+func readSavedConditionsBytes(path string, before os.FileInfo) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(before, opened) {
+		return nil, errors.New("saved conditions changed while opening; retry reading")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, savedConditionsBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > savedConditionsBytes {
+		return nil, errors.New("saved conditions exceed 128 MiB; original state preserved")
+	}
+	return data, nil
 }
 
 func validatedSavedConditions(saved savedAnalysisConditions) ([]SavedAnalysisCondition, error) {
@@ -118,18 +170,34 @@ func (m *Manager) SavedAnalysisConditions() ([]SavedAnalysisCondition, error) {
 	return conditions, nil
 }
 
+// Analysis only needs the named rule, not every recorded matching asset. Alert
+// callers retain the full evidence API; both paths preserve legacy recovery.
+func (m *Manager) SavedAnalysisConditionSummaries() ([]SavedAnalysisCondition, error) {
+	conditions, err := m.SavedAnalysisConditions()
+	if err != nil {
+		return nil, err
+	}
+	for i := range conditions {
+		conditions[i].Analysis = nil
+	}
+	return conditions, nil
+}
+
 func (m *Manager) writeSavedConditions(conditions []SavedAnalysisCondition) error {
 	saved := savedAnalysisConditions{Version: 1, Conditions: conditions}
 	encoded, err := json.Marshal(saved)
 	if err != nil {
 		return err
 	}
-	if len(encoded)+1 > savedConditionsBytes {
+	encoded = append(encoded, '\n')
+	if len(encoded) > savedConditionsBytes {
 		return errors.New("saved conditions exceed 128 MiB; existing conditions preserved")
 	}
-	if err = writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), saved); err != nil {
+	if err = writeStateBytes(filepath.Join(m.profile, "screener-saved-conditions.json"), encoded); err != nil {
+		m.savedConditionsCache = nil
 		return err
 	}
+	m.savedConditionsCache = &savedConditionsSnapshot{digest: sha256.Sum256(encoded), conditions: copySavedAnalysisConditions(conditions)}
 	m.notifySavedConditionsChangedLocked()
 	return nil
 }

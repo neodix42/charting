@@ -10,6 +10,7 @@ import {hyperliquid} from '../models';
 import {telegram} from '../models';
 import {trading} from '../models';
 import {storage} from '../models';
+import {main} from '../models';
 
 export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:number,arg5:number):Promise<market.Snapshot>;
 
@@ -125,9 +126,13 @@ export function GetScreenerLiveAlertsProgress():Promise<screener.LiveAlertsInfo>
 
 export function GetScreenerRefresh(arg1:Array<string>):Promise<screener.RefreshInfo>;
 
+export function GetScreenerSavedConditionSummaries():Promise<Array<screener.SavedAnalysisCondition>>;
+
 export function GetScreenerSavedConditions():Promise<Array<screener.SavedAnalysisCondition>>;
 
 export function GetScreenerView():Promise<screener.ViewState>;
+
+export function GetStartupStatus():Promise<main.StartupStatus>;
 
 export function GetTelegramBotIdentity(arg1:string):Promise<telegram.BotIdentity>;
 

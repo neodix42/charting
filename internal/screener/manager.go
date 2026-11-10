@@ -104,6 +104,7 @@ type Manager struct {
 	// Saved rule/evidence writes wake the single active Live Alerts scheduler.
 	savedConditionsChanged  chan struct{}
 	savedConditionsRevision uint64
+	savedConditionsCache    *savedConditionsSnapshot
 }
 
 func New(profile string) *Manager {

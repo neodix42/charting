@@ -143,7 +143,13 @@ func writeState(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	return writeStateBytes(path, append(data, '\n'))
+}
+
+// Persist already serialized state using the same durable atomic publication.
+// Callers that enforce an encoded size limit need not marshal it a second time.
+func writeStateBytes(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".screener-state-*")
@@ -151,7 +157,7 @@ func writeState(path string, value any) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if _, err = f.Write(append(data, '\n')); err == nil {
+	if _, err = f.Write(data); err == nil {
 		err = f.Sync()
 	}
 	closeErr := f.Close()

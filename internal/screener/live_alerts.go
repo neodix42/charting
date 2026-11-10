@@ -237,11 +237,15 @@ func NewLiveAlerts(manager *Manager, send func(context.Context, LiveAlert) error
 		l.blocked, l.errorText = true, "Restore confirmed Live Alerts deliveries: "+cleanMessage(err.Error())+"; original state preserved"
 		return l, errors.New(l.errorText)
 	}
-	l.manager.mu.Lock()
-	saved, savedErr := l.manager.readSavedConditions()
-	l.manager.mu.Unlock()
-	if savedErr == nil {
-		l.state.Config = migrateLiveAlertEntries(l.state.Config, saved, l.state.Watermarks, l.state.Checks)
+	// Current entries already carry their source and identity. Only legacy
+	// selection/source migration needs the saved-condition catalog here.
+	if l.state.Config.Alerts == nil || needsLiveAlertSourceDefaults(l.state.Config) {
+		l.manager.mu.Lock()
+		saved, savedErr := l.manager.readSavedConditions()
+		l.manager.mu.Unlock()
+		if savedErr == nil {
+			l.state.Config = migrateLiveAlertEntries(l.state.Config, saved, l.state.Watermarks, l.state.Checks)
+		}
 	}
 	return l, nil
 }
@@ -551,8 +555,26 @@ func (l *LiveAlerts) selectedConditionsWithProgress(ctx context.Context, config 
 	}
 	if !l.manager.mu.TryLock() {
 		reportPhase("Waiting for Screener work to load saved conditions")
-		l.manager.mu.Lock()
+		if !report {
+			l.manager.mu.Lock()
+		} else {
+			// Background restoration/check cancellation must not wait for an
+			// unrelated manager operation before the scheduler can shut down.
+			ticker := time.NewTicker(10 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-ticker.C:
+					if l.manager.mu.TryLock() {
+						goto locked
+					}
+				}
+			}
+		}
 	}
+locked:
 	defer l.manager.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -814,26 +836,14 @@ func (l *LiveAlerts) signal() {
 
 func (l *LiveAlerts) Start(parent context.Context) {
 	l.mu.Lock()
-	config, revision := copyLiveAlertsConfig(l.state.Config), l.configRevision
-	l.mu.Unlock()
-	resolved, err := l.resolveConfig(config)
-	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.started || l.closed || l.blocked {
+	if l.started || l.closed || l.blocked || parent.Err() != nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(parent)
 	l.cancel, l.started = cancel, true
 	if l.state.Config.Enabled {
-		if revision == l.configRevision && err == nil {
-			l.scheduleScope = append([]LiveAlertConditionPeriod{}, resolved.scope...)
-			l.scheduleCalendar = liveAlertsCalendarIdentity(resolved)
-			l.nextRun = nextLiveAlertsConfigCheck(l.now(), resolved)
-			l.nextBoundary = l.nextRun
-			l.status = "Waiting for next closed bar"
-		} else if err != nil {
-			l.errorText, l.status = cleanMessage(err.Error()), "Saved condition scope unavailable"
-		}
+		l.status = "Restoring saved condition schedule"
 	}
 	l.wg.Add(1)
 	go l.loop(ctx)
@@ -999,10 +1009,16 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		}
 		l.mu.Unlock()
 		var resolved LiveAlertsConfig
-		conditions, resolveErr := l.selectedConditionsForCheck(ctx, current)
 		resolved = current
-		if resolveErr == nil {
-			resolved = resolvedLiveAlertsConfig(current, conditions)
+		var resolveErr error
+		// A disabled scheduler has no scope to prepare. Enabling or a saved-rule
+		// notification wakes this loop; current settings are resolved then.
+		if current.Enabled {
+			var conditions []SavedAnalysisCondition
+			conditions, resolveErr = l.selectedConditionsForCheck(ctx, current)
+			if resolveErr == nil {
+				resolved = resolvedLiveAlertsConfig(current, conditions)
+			}
 		}
 		now := l.now()
 		l.mu.Lock()

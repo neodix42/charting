@@ -20,17 +20,54 @@ describe('Analysis draft persistence',()=>{
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
   const saved=vi.fn(async value=>{if(saved.mock.calls.length===1)await gate;return value;});
   const writer=new AnalysisViewWriter(saved,()=>{}),first={...initialAnalysisView(),period:'d1' as const,tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:3}};
-  writer.edit(first);first.conditions[0].right=numberOperand(99);first.tradeSimulation.duration=10;
+  writer.edit(first);const firstFlush=writer.flush();first.conditions[0].right=numberOperand(99);first.tradeSimulation.duration=10;
   const second=initialAnalysisView();second.conditions[0].left=fieldOperand('ema_200');writer.edit(second);
   const last={period:'h1' as const,conditions:[{...newAnalysisCondition('last'),operator:'withinDistance' as const,right:fieldOperand('ema_200'),distance:fieldOperand('atr_14'),multiplier:0.2}],tradeSimulation:{stopLoss:'low',takeProfit:'ema_200',duration:5}};
-  writer.edit(last);const flushed=writer.flush();expect(saved).toHaveBeenCalledTimes(1);release();await flushed;
+  writer.edit(last);const flushed=writer.flush();await Promise.resolve();expect(saved).toHaveBeenCalledTimes(1);release();await firstFlush;await flushed;
   expect(saved).toHaveBeenCalledTimes(2);expect(saved.mock.calls[0][0].conditions[0].right.value).toBe(0);expect(saved.mock.calls[0][0].period).toBe('d1');expect(saved.mock.calls[0][0].tradeSimulation.duration).toBe(3);expect(saved.mock.calls[1][0]).toEqual(last);
  });
  it('retains the latest draft after a failure so close or Retry can flush it',async()=>{
   const onError=vi.fn(),saved=vi.fn().mockRejectedValueOnce(Error('disk full')).mockImplementation(async value=>value);
   const writer=new AnalysisViewWriter(saved,onError),latest={conditions:[{...newAnalysisCondition('restored'),operator:'highest' as const,bars:20,right:fieldOperand('high')}]};
   writer.edit(latest);await expect(writer.flush()).rejects.toThrow('disk full');await writer.flush();
-  expect(onError).toHaveBeenCalled();expect(saved.mock.calls[1][0]).toEqual(latest);
+  expect(saved.mock.calls[1][0]).toEqual(latest);
+ });
+ it('debounces rapid edits, saves only the latest snapshot and avoids equivalent drafts',async()=>{
+  vi.useFakeTimers();
+  try{
+   const saved=vi.fn(async value=>value),writer=new AnalysisViewWriter(saved,()=>{}),initial=initialAnalysisView();writer.restore(initial);
+   writer.edit({...initial,dataSource:undefined});await vi.advanceTimersByTimeAsync(1000);expect(saved).not.toHaveBeenCalled();
+   writer.edit({...initial,period:'d1'});await vi.advanceTimersByTimeAsync(400);writer.edit({...initial,period:'w1'});await vi.advanceTimersByTimeAsync(499);expect(saved).not.toHaveBeenCalled();
+   await vi.advanceTimersByTimeAsync(1);expect(saved).toHaveBeenCalledTimes(1);expect(saved.mock.calls[0][0].period).toBe('w1');
+   writer.edit({...initial,period:'w1'});await writer.flush();expect(saved).toHaveBeenCalledTimes(1);
+  }finally{vi.useRealTimers();}
+ });
+ it('explicit flush bypasses the debounce and a reverted in-flight edit needs no duplicate write',async()=>{
+  let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),saved=vi.fn(async value=>{await gate;return value;});
+  const writer=new AnalysisViewWriter(saved,()=>{}),first={...initialAnalysisView(),period:'d1' as const};writer.edit(first);const flushed=writer.flush();await Promise.resolve();expect(saved).toHaveBeenCalledTimes(1);
+  writer.edit({...first,period:'w1'});writer.edit(first);release();await flushed;expect(saved).toHaveBeenCalledTimes(1);
+ });
+ it('scheduled failures notify once and keep the latest pending edit available for explicit retry',async()=>{
+  vi.useFakeTimers();
+  try{
+   const onError=vi.fn(),saved=vi.fn().mockRejectedValueOnce(Error('disk full')).mockImplementation(async value=>value),writer=new AnalysisViewWriter(saved,onError),latest={...initialAnalysisView(),period:'h1' as const};
+   writer.edit(latest);await vi.advanceTimersByTimeAsync(500);expect(onError).toHaveBeenCalledTimes(1);await writer.flush();expect(saved).toHaveBeenCalledTimes(2);expect(saved.mock.calls[1][0]).toEqual(latest);
+  }finally{vi.useRealTimers();}
+ });
+ it('concurrent flush callers wait for the latest write started by another waiter',async()=>{
+  const gates:Array<{resolve():void;reject(error:Error):void}>=[],saved=vi.fn(value=>new Promise<typeof value>((resolve,reject)=>gates.push({resolve:()=>resolve(value),reject})));
+  const writer=new AnalysisViewWriter(saved,()=>{}),initial=initialAnalysisView();writer.edit({...initial,period:'d1'});
+  const first=writer.flush();await Promise.resolve();const second=writer.flush();let secondDone=false;void second.then(()=>{secondDone=true;});
+  writer.edit({...initial,period:'w1'});gates[0].resolve();await vi.waitFor(()=>expect(saved).toHaveBeenCalledTimes(2));
+  expect(secondDone).toBe(false);gates[1].resolve();await Promise.all([first,second]);expect(secondDone).toBe(true);
+ });
+ it('all concurrent flush callers observe a later write failure and a retry retains that latest draft',async()=>{
+  const gates:Array<{resolve():void;reject(error:Error):void}>=[],saved=vi.fn(value=>new Promise<typeof value>((resolve,reject)=>gates.push({resolve:()=>resolve(value),reject})));
+  const writer=new AnalysisViewWriter(saved,()=>{}),initial=initialAnalysisView();writer.edit({...initial,period:'d1'});
+  const first=writer.flush();await Promise.resolve();const second=writer.flush();writer.edit({...initial,period:'h1'});
+  const settled=Promise.allSettled([first,second]);gates[0].resolve();await vi.waitFor(()=>expect(saved).toHaveBeenCalledTimes(2));gates[1].reject(Error('late disk failure'));
+  const results=await settled;expect(results.every(result=>result.status==='rejected'&&String(result.reason).includes('late disk failure'))).toBe(true);
+  const retry=writer.flush();await Promise.resolve();expect(saved).toHaveBeenCalledTimes(3);expect(saved.mock.calls[2][0].period).toBe('h1');gates[2].resolve();await retry;
  });
 });
 

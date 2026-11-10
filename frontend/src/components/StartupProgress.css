@@ -1,0 +1,2 @@
+.background-startup{pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border:1px solid var(--border);border-radius:7px;box-shadow:var(--shadow);background:var(--panel);font-size:.85rem;color:var(--muted)}
+.background-startup>span{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}.background-startup strong{color:var(--text);font-weight:600}.background-startup.error{color:var(--danger)}.background-startup button{background:none;border:0}

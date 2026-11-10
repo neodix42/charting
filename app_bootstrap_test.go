@@ -285,8 +285,13 @@ func TestBootstrapUsesActualSavedWorkspaceAndKeepsRecoveryAvailable(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			if a.market == nil || a.screener == nil || a.candles == nil || a.liveAlerts == nil {
-				t.Fatal("LoadWorkspace exposed an incomplete dependency graph")
+			if a.market == nil || a.candles == nil || a.jforex == nil {
+				t.Fatal("LoadWorkspace exposed incomplete chart services")
+			}
+			for _, service := range []string{"screener", "predictions", "alerts"} {
+				if err := a.awaitService(service); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if !invalid {
 				if actual.Recovery != "" || !reflect.DeepEqual(actual.Workspace, workspace) || a.window != workspace.Window {

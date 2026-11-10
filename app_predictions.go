@@ -8,37 +8,80 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-func (a *App) GetPredictions() predictions.Info { return a.predictions.Info() }
+func (a *App) GetPredictions() predictions.Info {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Info{Error: err.Error()}
+	}
+	return a.predictions.Info()
+}
 
 func (a *App) GetPredictionDatasets() ([]predictions.Dataset, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return nil, err
+	}
+
 	return a.predictions.Datasets()
 }
 
 func (a *App) ConfigurePredictions(settings predictions.Settings) (predictions.Info, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Info{}, err
+	}
+
 	return a.predictions.Configure(settings)
 }
 
 func (a *App) SavePredictionSelection(selection predictions.Selection) (predictions.Selection, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Selection{}, err
+	}
+
 	return a.predictions.SaveSelection(selection)
 }
 
-func (a *App) PreparePredictionModel() (predictions.Info, error) { return a.predictions.Prepare() }
+func (a *App) PreparePredictionModel() (predictions.Info, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Info{}, err
+	}
+	return a.predictions.Prepare()
+}
 
 func (a *App) StartPrediction(selection predictions.Selection) (predictions.Info, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Info{}, err
+	}
+
 	return a.predictions.Start(selection)
 }
 
-func (a *App) CancelPrediction() predictions.Info { return a.predictions.Cancel() }
+func (a *App) CancelPrediction() predictions.Info {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Info{Error: err.Error()}
+	}
+	return a.predictions.Cancel()
+}
 
 func (a *App) GetPredictionForecast(id string) (predictions.Forecast, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Forecast{}, err
+	}
+
 	return a.predictions.Forecast(id)
 }
 
 func (a *App) DeletePredictionForecast(id string) (predictions.Info, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return predictions.Info{}, err
+	}
+
 	return a.predictions.DeleteForecast(id)
 }
 
 func (a *App) ChoosePredictionModelDirectory() (string, error) {
+	if err := a.awaitService("predictions"); err != nil {
+		return "", err
+	}
+
 	initial := a.predictions.Info().Settings.ModelDirectory
 	if st, err := os.Stat(initial); err != nil || !st.IsDir() {
 		initial = a.store.Directory()
@@ -52,6 +95,10 @@ func (a *App) ChoosePredictionModelDirectory() (string, error) {
 // downloaded candle files enter Predictions; webview requests never supply a
 // path and inference never writes back to market data.
 func (a *App) predictionDatasets() ([]predictions.Dataset, error) {
+	if err := a.awaitService("screener"); err != nil {
+		return nil, err
+	}
+
 	catalog, err := a.screener.AnalysisCatalog()
 	if err != nil {
 		return nil, err

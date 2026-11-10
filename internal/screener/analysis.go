@@ -181,12 +181,7 @@ func validAnalysisTimeframe(tf string) bool {
 	if tf == "" || tf == "same" {
 		return true
 	}
-	for _, value := range loadCatalog().Timeframes {
-		if value == tf {
-			return true
-		}
-	}
-	return false
+	return catalogTimeframes[tf]
 }
 func conditionOperands(c AnalysisCondition) []*AnalysisOperand {
 	op := c.Operator

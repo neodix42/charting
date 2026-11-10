@@ -26,6 +26,7 @@ export interface ScreenerAnalysisBackend {
  GetScreenerAnalysisView():Promise<AnalysisRequest>;
  SaveScreenerAnalysisView(request:AnalysisRequest):Promise<AnalysisRequest>;
  GetScreenerSavedConditions():Promise<SavedAnalysisCondition[]>;
+ GetScreenerSavedConditionSummaries():Promise<SavedAnalysisCondition[]>;
  SaveScreenerAnalysisCondition(name:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
  UpdateScreenerAnalysisCondition(id:string,request:AnalysisRequest):Promise<SavedAnalysisCondition>;
  RenameScreenerAnalysisCondition(id:string,name:string):Promise<SavedAnalysisCondition>;
@@ -67,7 +68,7 @@ export function analysisFieldLabel(field:string){
  return `${component||families[family]||family.toUpperCase()}${parameters.length?` (${parameters.join(', ')})`:''}${suffix}`;
 }
 export function analysisFieldGroups(fields:string[]){
- const groups=new Map<string,string[]>();for(const field of fields){if(field.toLowerCase()==='timestamp')continue;const group=analysisFieldGroup(field);groups.set(group,[...(groups.get(group)??[]),field]);}return [...groups].sort(([a],[b])=>a==='Price / OHLC'?-1:b==='Price / OHLC'?1:a.localeCompare(b));
+ const groups=new Map<string,string[]>();for(const field of fields){if(field.toLowerCase()==='timestamp')continue;const group=analysisFieldGroup(field),items=groups.get(group);if(items)items.push(field);else groups.set(group,[field]);}return [...groups].sort(([a],[b])=>a==='Price / OHLC'?-1:b==='Price / OHLC'?1:a.localeCompare(b));
 }
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return priceFields.has(base.toLowerCase())||/^(?:low|high|sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
 export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
@@ -96,16 +97,28 @@ export function analysisInputError(view:AnalysisRequest){
  return'';
 }
 
-/** One durable writer. Edits made during a save replace only the pending draft. */
+/** Debounced durable writer. Explicit flushes drain the latest snapshot before navigation or scanning. */
 export class AnalysisViewWriter {
- private pending?:AnalysisRequest;private flight?:Promise<void>;
+ private pending?:AnalysisRequest;private flight?:Promise<void>;private timer?:ReturnType<typeof setTimeout>;private acknowledged?:string;
  constructor(private persist:(request:AnalysisRequest)=>Promise<AnalysisRequest>,private onError:(error:unknown)=>void){}
- edit(value:AnalysisRequest){this.pending=structuredClone(value);void this.flush().catch(this.onError);}
+ restore(value:AnalysisRequest){if(!this.pending&&!this.flight)this.acknowledged=analysisRequestIdentity(value);}
+ edit(value:AnalysisRequest){
+  this.pending=structuredClone(value);this.cancelScheduled();
+  if(!this.flight&&analysisRequestIdentity(this.pending)===this.acknowledged){this.pending=undefined;return;}
+  this.timer=setTimeout(()=>{this.timer=undefined;void this.flush().catch(this.onError);},500);
+ }
+ cancelScheduled(){if(this.timer!==undefined){clearTimeout(this.timer);this.timer=undefined;}}
  async flush():Promise<void>{
-  if(this.flight){await this.flight;if(this.pending)return this.flush();return;}
-  const next=this.pending;if(!next)return;this.pending=undefined;
-  this.flight=(async()=>{try{await this.persist(next);}catch(error){if(!this.pending)this.pending=next;throw error;}finally{this.flight=undefined;}})();
-  await this.flight;if(this.pending)return this.flush();
+  for(;;){
+   this.cancelScheduled();
+   // Another flush waiter can start the next write before this waiter resumes.
+   // Recheck both flight and pending until the writer is completely drained.
+   if(this.flight){await this.flight;continue;}
+   const next=this.pending;if(!next)return;this.pending=undefined;
+   const identity=analysisRequestIdentity(next);if(identity===this.acknowledged)continue;
+   const save=Promise.resolve().then(()=>this.persist(next)).then(()=>{this.acknowledged=identity;},error=>{if(!this.pending)this.pending=next;throw error;}).finally(()=>{if(this.flight===save)this.flight=undefined;});
+   this.flight=save;await save;
+  }
  }
 }
 

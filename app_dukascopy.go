@@ -74,9 +74,10 @@ func (a *App) CancelDucascopyConnectionTest() jforex.Info { return a.jforex.Canc
 // private chart and SDK caches, scoped to the configured server/account, so
 // demo/live sessions cannot reuse one another's chart snapshots.
 type chartCandleCache struct {
-	manager  *candlestorage.Manager
-	forex    *jforex.Manager
-	screener *screener.Manager
+	manager      *candlestorage.Manager
+	forex        *jforex.Manager
+	screener     *screener.Manager
+	loadScreener func() (*screener.Manager, error)
 }
 
 func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
@@ -87,9 +88,18 @@ func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit in
 		return []domain.Candle{}, nil
 	}
 	var retained []domain.Candle
-	if key.Exchange == "hyperliquid" && cache.screener != nil {
+	if key.Exchange == "hyperliquid" && (cache.screener != nil || cache.loadScreener != nil) {
 		var err error
-		retained, err = cache.screener.HyperliquidHistory(key, from, to, limit)
+		scanner := cache.screener
+		if cache.loadScreener != nil {
+			scanner, err = cache.loadScreener()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if scanner != nil {
+			retained, err = scanner.HyperliquidHistory(key, from, to, limit)
+		}
 		if err != nil {
 			return nil, err
 		}

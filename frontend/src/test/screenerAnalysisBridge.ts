@@ -60,6 +60,7 @@ export function screenerAnalysisBridge(directory:()=>string,instrumentCatalog:()
   async GetScreenerAnalysisView(){if(errors.view)throw Error(errors.view);return structuredClone(view);},
   async SaveScreenerAnalysisView(value){saves.push(structuredClone(value));if(saveGate)await saveGate;if(errors.save)throw Error(errors.save);view=structuredClone(value);sessionStorage.setItem(viewKey,JSON.stringify(view));return structuredClone(view);},
   async GetScreenerSavedConditions(){savedReads++;if(errors.savedList)throw Error(errors.savedList);return structuredClone(savedConditions);},
+  async GetScreenerSavedConditionSummaries(){savedReads++;if(errors.savedList)throw Error(errors.savedList);return savedConditions.map(({id,name,request})=>({id,name,request:structuredClone(request)}));},
   async SaveScreenerAnalysisCondition(name,value){
    if(errors.savedWrite)throw Error(errors.savedWrite);
    name=name.trim();if(!name)throw Error('Enter a condition name.');

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/storage"
@@ -26,6 +27,9 @@ type appBootstrap struct {
 	attempt    *bootstrapAttempt
 	cancel     context.CancelFunc
 	initialize func(context.Context, *App) error
+	phase      string
+	started    time.Time
+	duration   time.Duration
 }
 
 // Native startup binds this lightweight receiver before touching user databases
@@ -39,6 +43,7 @@ func newBootstrapApp(path string) *App {
 func newBootstrapAppWithInitializer(initialize func(context.Context, *App) error) *App {
 	return &App{window: domain.Window{Width: 1600, Height: 1000}, bootstrap: &appBootstrap{
 		attempt: &bootstrapAttempt{done: make(chan struct{})}, initialize: initialize,
+		phase: "Opening saved workspace…", started: time.Now(),
 	}}
 }
 
@@ -79,6 +84,7 @@ func (b *appBootstrap) startLocked(parent context.Context, a *App) {
 		}
 		b.mu.Lock()
 		attempt.err, attempt.finished = err, true
+		b.duration = time.Since(b.started)
 		close(attempt.done)
 		b.mu.Unlock()
 	}()
@@ -107,6 +113,7 @@ func (a *App) awaitBootstrap(retry bool) error {
 			b.cancel()
 		}
 		b.attempt = &bootstrapAttempt{done: make(chan struct{})}
+		b.started, b.duration, b.phase = time.Now(), 0, "Opening saved workspace…"
 	}
 	attempt := b.attempt
 	b.startLocked(ctx, a)
@@ -148,6 +155,7 @@ func (b *appBootstrap) stop() {
 }
 
 func (a *App) initializeWorkspace(ctx context.Context, path string) (err error) {
+	a.startupPhase("Opening workspace database…")
 	store, err := storage.Open(path)
 	if err != nil {
 		return err
@@ -172,6 +180,7 @@ func (a *App) initializeWorkspace(ctx context.Context, path string) (err error) 
 	if err = desktopSmokePrepare(ctx, store); err != nil {
 		return err
 	}
+	a.startupPhase("Reading saved layout…")
 	loaded, loadErr := store.Load()
 	var recovery *storage.RecoveryError
 	if loadErr != nil && !errors.As(loadErr, &recovery) {
@@ -191,6 +200,7 @@ func (a *App) initializeWorkspace(ctx context.Context, path string) (err error) 
 	a.mu.Lock()
 	if err = ctx.Err(); err == nil {
 		a.revision = loaded.Revision
+		a.initialWorkspace = &loaded
 		// The close path shares this mutex and cancels ctx before the native
 		// loop ends, fencing all saved-window queries during background startup.
 		a.applyWindowLocked(window)
@@ -199,8 +209,6 @@ func (a *App) initializeWorkspace(ctx context.Context, path string) (err error) 
 	if err != nil {
 		return err
 	}
-	if a.liveAlerts != nil && a.liveAlertsError == "" {
-		a.liveAlerts.Start(ctx)
-	}
+	a.startupPhase("Workspace ready")
 	return nil
 }
