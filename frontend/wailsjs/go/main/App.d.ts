@@ -74,6 +74,8 @@ export function GetBackups():Promise<Array<storage.Backup>>;
 
 export function GetCandleStorage():Promise<candlestorage.Info>;
 
+export function GetChartTrades(arg1:Array<domain.FeedKey>):Promise<trading.HistoryPage>;
+
 export function GetDiagnostics():Promise<Record<string, any>>;
 
 export function GetDucascopy():Promise<jforex.Info>;

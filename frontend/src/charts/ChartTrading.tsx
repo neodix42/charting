@@ -1,3 +1,4 @@
+import {TRADES_CHANGED} from '../workspace/chartTrades';
 import {useEffect,useRef,useState,type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import type {Backend,FeedKey,TradeEstimate,TradePreview,TradeResult,TradingStatus} from '../types';
@@ -60,7 +61,7 @@ export function ChartTrading({api,feedKey:currentKey,target}:{api:Backend;feedKe
  const submit=()=>{
   if(!preview||inFlight.current||transferOpenRef.current||ticketInvalidatedRef.current||submitted.current||Date.now()>=preview.expiresAt||(requiresLeverageCap&&(!validLeverageCap(preview.maxLeverage)||preview.leverage>Number(preview.maxLeverage)||preview.leverage<1)))return;
   submitted.current=true;inFlight.current=true;setPhase('submitting');setError('');const id=preview.id;
-  void api.SubmitTrade(id).then(next=>{if(alive.current)setResult(next);}).catch(()=>{if(alive.current)setResult({status:'uncertain',orderIds:[],message:'The submission result is unknown. Check your exchange account and open orders before taking further action. This ticket cannot be resent.'});}).finally(()=>{inFlight.current=false;if(alive.current)setPhase('done');});
+  void api.SubmitTrade(id).then(next=>{if(alive.current)setResult(next);}).catch(()=>{if(alive.current)setResult({status:'uncertain',orderIds:[],message:'The submission result is unknown. Check your exchange account and open orders before taking further action. This ticket cannot be resent.'});}).finally(()=>{window.dispatchEvent(new Event(TRADES_CHANGED));inFlight.current=false;if(alive.current)setPhase('done');});
  };
  const edit=()=>{setPreview(null);setError('');};
  const refreshQuote=()=>{if(inFlight.current||transferOpenRef.current||ticketInvalidatedRef.current||submitted.current)return;setPreview(null);setEstimate(null);setEstimateError('');setQuoteRefresh(value=>value+1);};

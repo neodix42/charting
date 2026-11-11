@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Hosted browser fixes and open-trade chart levels — 2026-11-11
+
+- [x] Both browser failures from Tests run42983193786 reproduce locally and pass with production fixes; geometry, profitability checks and original timeouts remain intact.
+- [x] Existing/new open platform trades display native entry/SL/TP lines with order IDs on matching Dukascopy/Hyperliquid-perpetual charts, including line charts and restart. Account/environment filtering, closure cleanup, active-grid deduplication and stale-response protection are covered.
+- [x] All 283 frontend unit tests, typecheck/lint, 14 focused browser checks and root Go race/vet checks pass. Linux build, packaged enrichment/download/pacing smoke and actual offline Telegram chart rendering pass.
+- [x] Complete 396-case browser suite, all native Go race/production/vet checks, archive inventory/provenance and final root/release checksums pass; final STATUS.md is included.
+- [ ] Hosted Tests have not been rerun for the local changes; see STATUS.md.
+- [ ] Native desktop, funded trading/close execution and Windows GUI remain unrun; verification uses isolated profiles and synthetic clients without messages or account operations.
+
 ## Platform trade history — 2026-11-11
 
 - [x] Trade history follows Predictions, lists only locally claimed Dukascopy/Hyperliquid submissions, and shows the requested prices, sizes, execution dates, account-currency SL/TP estimates, submission balance and supported position margin.

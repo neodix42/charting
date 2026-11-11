@@ -1,9 +1,11 @@
+import type {FeedKey} from '../types';
 export interface TradeRecord {
  id:string;provider:'dukascopy'|'hyperliquid';environment:string;account:string;instrument:string;market:string;orderId:string;submittedAt:number;openDate:number;closeDate:number;size:string;remainingSize:string;direction:string;entryPrice:string;stopLoss:string;takeProfit:string;slAmount:string;tpAmount:string;currency:string;balanceAtOpen:string;balanceCurrency:string;balanceTime:number;balanceBasis?:string;marginUsed:string;marginCurrency:string;marginBasis?:string;status:string;canClose:boolean;closeReason:string;checkedAt:number;error?:string;
 }
 export interface TradeHistoryPage {rows:TradeRecord[];total:number;offset:number;limit:number;errors:string[]}
 export interface TradeClosePreview {id:string;tradeId:string;provider:string;environment:string;account:string;instrument:string;orderId:string;quantity:string;expiresAt:number;warnings:string[]}
 export interface TradeHistoryBackend {
+ GetChartTrades(keys:FeedKey[]):Promise<TradeHistoryPage>;
  GetTradeHistory(offset:number,limit:number):Promise<TradeHistoryPage>;
  RefreshTradeHistory(ids:string[]):Promise<TradeRecord[]>;
  PreviewTradeClose(id:string):Promise<TradeClosePreview>;

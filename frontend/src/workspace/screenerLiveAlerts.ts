@@ -8,7 +8,7 @@ export interface LiveAlertAssetSelection {dataSource:LiveAlertDataSource;assets:
 export interface LiveAlertDefinition {assetSelections?:LiveAlertAssetSelection[];id:string;name:string;conditionId:string;period:LiveAlertPeriod;dataSource:LiveAlertDataSource;enabled:boolean}
 export interface LiveAlertsConfig {enabled:boolean;alerts?:LiveAlertDefinition[];conditionIds?:string[];conditionSources?:LiveAlertConditionSource[]}
 export interface LiveAlertAsset {symbol:string;name:string;category:string;periods:string[]}
-export interface LiveAlertOutcome {alertId?:string;alertName?:string;savedConditionId?:string;savedConditionName?:string;conditionId?:string;dataSource?:LiveAlertDataSource;market?:string;confirmedRecipients?:number;assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message:string;profitability?:SavedConditionProfitability|null}
+export interface LiveAlertOutcome {alertId?:string;alertName?:string;savedConditionId?:string;savedConditionName?:string;conditionId?:string;dataSource?:LiveAlertDataSource;market?:string;confirmedRecipients?:number;assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message?:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertConditionScope {alertId?:string;savedConditionId?:string;conditionId:string;period:string;dataSource?:LiveAlertDataSource;allAssets?:boolean;availableTargets?:LiveAlertTarget[];targets:LiveAlertTarget[];error:string}
 export type LiveAlertProgressState='queued'|'running'|'completed'|'failed'|'cancelled'|'skipped';
@@ -28,7 +28,7 @@ export function liveAlertCheckProgress(check:LiveAlertCheck):{state:string;phase
 
 /** Suppressed recipient failures affect presentation only, never persisted results. */
 export function visibleLiveAlertCheck(check:LiveAlertCheck):LiveAlertCheck {
- const error=liveAlertErrorText(check.error),ignored=!!check.error.trim()&&!error;
+ const error=liveAlertErrorText(check.error),ignored=!!check.error?.trim()&&!error;
  if(ignored&&(check.status==='completed'||check.status==='failed')){
   const active=check.progressState==='running'||check.progressState==='queued';
   return {...check,error:'',status:'completed',...(!active?{progressState:check.progressState?'completed' as const:undefined,phase:'Completed'}:{})};
@@ -37,7 +37,7 @@ export function visibleLiveAlertCheck(check:LiveAlertCheck):LiveAlertCheck {
 }
 
 export function liveAlertOutcomePresentation(outcome:LiveAlertOutcome):{label:string;message:string;className:string} {
- const message=liveAlertErrorText(outcome.message),ignored=!!outcome.message.trim()&&!message;
+ const message=liveAlertErrorText(outcome.message),ignored=!!outcome.message?.trim()&&!message;
  const labels={sent:'Sent',failed:'Failed',claimed:'Delivery pending',uncertain:'Delivery uncertain — it may have arrived; no automatic retry'};
  if(ignored){
   const count=outcome.confirmedRecipients;
@@ -125,9 +125,9 @@ const ignoredRecipientFailure=/(?:Telegram alert for (?:(?!Telegram alert for |T
 const ignoredLegacyRecipientFailure=/Telegram alert for (?:(?!Telegram alert for |Telegram alert delivery:|Telegram operation failed|[0-9]+ of [0-9]+ recipients confirmed)[^\r\n])*?: \d+ of \d+ recipients confirmed; no automatic resend \(recipientNotFound\)(?:\. This bar will not be resent automatically; check Telegram before any manual action\.)?/g;
 
 /** Hide ignored delivery messages, including old joined checks, only in the UI. */
-export function liveAlertErrorText(message:string):string {
+export function liveAlertErrorText(message:string|null|undefined):string {
  const pending='the newly closed bar is not yet available from the provider';
- message=message.replace(ignoredRecipientFailure,'').replace(ignoredLegacyRecipientFailure,'');
+ message=(message??'').replace(ignoredRecipientFailure,'').replace(ignoredLegacyRecipientFailure,'');
  let text=[...new Set(message.split(/\r?\n/).map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean))].join('\n');
  while(text.includes(`${pending} ${pending}`))text=text.replaceAll(`${pending} ${pending}`,pending);
  return text;

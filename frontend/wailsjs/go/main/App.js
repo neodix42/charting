@@ -126,6 +126,10 @@ export function GetCandleStorage() {
   return window['go']['main']['App']['GetCandleStorage']();
 }
 
+export function GetChartTrades(arg1) {
+  return window['go']['main']['App']['GetChartTrades'](arg1);
+}
+
 export function GetDiagnostics() {
   return window['go']['main']['App']['GetDiagnostics']();
 }

@@ -155,3 +155,12 @@ it('merges compact live work without erasing schedule/evidence, and late metadat
  expect(mergeLiveAlertsMetadata(paused,metadata).checks[0].nextCheck).toBe(0);
  expect(mergeLiveAlertsProgress(late,{...compact,config:{enabled:false}}).checks[0].nextCheck).toBe(0);
 });
+
+it('renders successful legacy outcomes with no message without suppressing other error types',()=>{
+ const outcome:LiveAlertOutcome={assetName:'Bitcoin',symbol:'btcusd',timeframe:'h1',time:1,conditionName:'Recorded 85',status:'sent'};
+ expect(liveAlertOutcomePresentation(outcome)).toEqual({label:'Sent',message:'',className:'sent'});
+ expect(liveAlertOutcomePresentation({...outcome,message:''})).toEqual({label:'Sent',message:'',className:'sent'});
+ expect(liveAlertErrorText(undefined)).toBe('');expect(liveAlertErrorText(null)).toBe('');
+ expect(liveAlertOutcomePresentation({...outcome,status:'failed',message:'Missing indicator sma_20'})).toEqual({label:'Failed',message:'Missing indicator sma_20',className:'failed'});
+ expect(outcome).not.toHaveProperty('message');
+});
