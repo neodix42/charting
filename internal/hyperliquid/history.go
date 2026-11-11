@@ -142,6 +142,7 @@ type historyFill struct {
 	Px            string `json:"px"`
 	Sz            string `json:"sz"`
 	StartPosition string `json:"startPosition"`
+	ClosedPnL     string `json:"closedPnl"`
 	OID           int64  `json:"oid"`
 	Time          int64  `json:"time"`
 	TID           uint64 `json:"tid"`
@@ -233,7 +234,7 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	if v.AccountAddress != p.AccountAddress || v.Network != p.Network {
 		return errors.New("Configure the account/network that opened this trade")
 	}
-	if r.CloseDate > 0 && r.Status == "closed" {
+	if r.CloseDate > 0 && r.Status == "closed" && r.ProfitLoss != "" && r.ProfitLossState == "closed" {
 		r.CheckedAt = s.now().UnixMilli()
 		return nil
 	}
@@ -293,10 +294,27 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	r.Size = quantity.String()
 	r.EntryPrice = cost.Div(quantity).String()
 	r.OpenDate = first
-	trading.ApplyRisk(r, p.ProfitPerPriceUnit)
+	m, marketErr := s.market(ctx, v, p.Request)
+	factor := p.ProfitPerPriceUnit
+	if marketErr == nil && profitFactor(m) != "" {
+		if p.AccountCurrency == "" || p.AccountCurrency == m.accountCurrency {
+			r.Currency = m.accountCurrency
+			factor = profitFactor(m)
+			r.ValuationTime = s.now().UnixMilli()
+			r.ValuationError = ""
+		} else {
+			factor = ""
+			r.ValuationError = "Settlement currency differs from the recorded trade"
+		}
+	}
+	r.ProfitLoss = ""
+	r.ProfitLossState = ""
+	r.ProfitLossError = "Position profit/loss is not yet verified"
+	trading.ApplyRisk(r, factor)
 	if p.Request.Market == "spot" {
 		r.Status = "filled"
 		r.CloseReason = "Spot orders are executions, not separately closeable positions"
+		r.ProfitLossError = "Spot executions have no separately attributable position profit/loss"
 		r.CheckedAt = s.now().UnixMilli()
 		return nil
 	}
@@ -304,6 +322,7 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	mixed := false
 	started := false
 	closedAt := int64(0)
+	realized, realizedKnown := decimal.Zero, true
 	for _, fill := range fills {
 		if fill.Coin != p.Request.Instrument || fill.Time < first {
 			continue
@@ -329,6 +348,14 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 		if fill.OID != oid && position.Sign() == delta.Sign() {
 			mixed = true
 		}
+		if !position.IsZero() && position.Sign() != delta.Sign() {
+			value, known := trading.Numeric(fill.ClosedPnL)
+			if !known {
+				realizedKnown = false
+			} else {
+				realized = realized.Add(value)
+			}
+		}
 		next := position.Add(delta)
 		if !position.IsZero() && (next.IsZero() || next.Sign() != position.Sign()) {
 			if !mixed {
@@ -339,6 +366,17 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 			r.RemainingSize = "0"
 			r.CheckedAt = s.now().UnixMilli()
 			r.CloseReason = "This trade's exposure is closed"
+			trading.ApplyRisk(r, factor)
+			if !mixed && realizedKnown && r.Currency != "" {
+				r.ProfitLoss = realized.String()
+				r.ProfitLossCurrency = r.Currency
+				r.ProfitLossTime = s.now().UnixMilli()
+				r.ProfitLossState = "closed"
+				r.ProfitLossBasis = "Realized Hyperliquid fill P/L; excludes fees and funding"
+				r.ProfitLossError = ""
+			} else {
+				r.ProfitLossError = "Complete individually attributable closing fills or settlement currency are unavailable"
+			}
 			if mixed {
 				r.CloseReason = "The net position closed; its individual close time is unavailable after mixed executions"
 			}
@@ -346,16 +384,15 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 		}
 		position = next
 	}
-	m, err := s.market(ctx, v, p.Request)
-	if err != nil {
-		return err
+	if marketErr != nil {
+		return marketErr
 	}
 	var state clearinghouseState
 	if err = s.post(ctx, v, "/info", map[string]string{"type": "clearinghouseState", "user": v.AccountAddress, "dex": m.dex}, &state); err != nil {
 		return err
 	}
 	live := decimal.Zero
-	margin := ""
+	margin, unrealized := "", ""
 	if state.AssetPositions == nil {
 		return errors.New("Current position list is unavailable")
 	}
@@ -369,6 +406,7 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 				return errors.New("Duplicate current position")
 			}
 			found = true
+			unrealized = asset.Position.UnrealizedPnL
 			var valid bool
 			live, valid = trading.Numeric(asset.Position.Size)
 			if !valid {
@@ -392,12 +430,28 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	}
 	if mixed {
 		r.MarginUsed = ""
+		r.RemainingSize = ""
+		r.SLAmount = ""
+		r.TPAmount = ""
+		r.ValuationError = "Other executions share this net position; the trade's remaining size cannot be attributed"
 		r.CloseReason = "Other executions share this net position; an individual platform trade cannot be closed safely"
+		r.ProfitLossError = "Other executions share this net position; individual trade P/L is unavailable"
 		return nil
 	}
 	r.MarginUsed = margin
 	r.MarginCurrency = m.accountCurrency
 	r.MarginBasis = "Last observed exchange margin for the verified position"
+	trading.ApplyRisk(r, factor)
+	if floating, valid := trading.Numeric(unrealized); valid && realizedKnown && r.Currency != "" && r.Currency == m.accountCurrency {
+		r.ProfitLoss = realized.Add(floating).String()
+		r.ProfitLossCurrency = r.Currency
+		r.ProfitLossTime = s.now().UnixMilli()
+		r.ProfitLossState = "open"
+		r.ProfitLossBasis = "Realized fill P/L plus current unrealized position P/L; excludes fees and funding"
+		r.ProfitLossError = ""
+	} else {
+		r.ProfitLossError = "The exchange has not supplied complete position/fill P/L or settlement currency"
+	}
 	for _, attempt := range j.Closes {
 		if attempt.Status == "filled" {
 			total := decimal.Zero
@@ -452,6 +506,10 @@ func (s *Store) RefreshTrade(ctx context.Context, id string) (trading.Trade, err
 		j.History.CanClose = false
 		j.History.Error = err.Error()
 		j.History.CloseReason = err.Error()
+		if j.History.Status != "closed" {
+			j.History.ProfitLoss = ""
+			j.History.ProfitLossError = err.Error()
+		}
 	} else {
 		j.History.Error = j.ProtectionWarning
 	}

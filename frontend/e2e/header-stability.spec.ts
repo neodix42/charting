@@ -22,9 +22,9 @@ async function adjacentTabPlus(page:Page,count:number){
  expect(geometry.gap).toBeGreaterThanOrEqual(0);expect(geometry.gap).toBeLessThanOrEqual(14);expect(geometry.documentWidth).toBe(geometry.windowWidth);return geometry;
 }
 
-for(const viewport of [{width:1600,height:1000},{width:1100,height:720}]){
- test(`save state changes keep header actions stationary at ${viewport.width}px`,async({page})=>{
-  await page.setViewportSize(viewport);await page.clock.install();await page.goto('/');await expect(page.locator('.save-indicator.saved')).toBeVisible();
+for(const viewport of [{width:1600,height:1000,wideFont:false},{width:1100,height:720,wideFont:false},{width:1100,height:720,wideFont:true}]){
+ test(`save state changes keep header actions stationary at ${viewport.width}px${viewport.wideFont?' with wider fonts':''}`,async({page})=>{
+  await page.setViewportSize({width:viewport.width,height:viewport.height});await page.clock.install();await page.goto('/');await expect(page.locator('.save-indicator.saved')).toBeVisible();
   await page.clock.pauseAt(await page.evaluate(()=>Date.now()+1000));await page.locator('.save-indicator').click();await expect(page.locator('.save-indicator.saved')).toBeVisible();await minimalControls(page);
   const baseline=await headerGeometry(page);
   const stationary=async()=>{const next=await headerGeometry(page);for(const key of Object.keys(baseline) as Array<keyof typeof baseline>){expect(next[key].left,`${key} left edge`).toBeCloseTo(baseline[key].left,3);expect(next[key].width,`${key} width`).toBeCloseTo(baseline[key].width,3);expect(next[key].top,`${key} top edge`).toBeCloseTo(baseline[key].top,3);}};
@@ -34,8 +34,8 @@ for(const viewport of [{width:1600,height:1000},{width:1100,height:720}]){
   await page.evaluate(()=>(window as any).__rejectHeaderSave());await expect(page.locator('.save-indicator.error')).toBeVisible();await expect(page.getByRole('button',{name:'Save failed · Retry',exact:true})).toBeVisible();await stationary();
   await page.locator('.save-indicator').click();await expect(page.locator('.save-indicator.saved')).toBeVisible();await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();await stationary();await page.screenshot({path:`test-results/header-save-stability-${viewport.width}.png`});
  });
- test(`add-tab plus stays adjacent through editing and reaches twenty tabs at ${viewport.width}px`,async({page})=>{
-  await page.setViewportSize(viewport);await page.goto('/');await minimalControls(page);await adjacentTabPlus(page,1);
+ test(`add-tab plus stays adjacent through editing and reaches twenty tabs at ${viewport.width}px${viewport.wideFont?' with wider fonts':''}`,async({page})=>{
+  await page.setViewportSize({width:viewport.width,height:viewport.height});await page.goto('/');if(viewport.wideFont)await page.addStyleTag({content:'.tab-row{font-size:18px;font-family:Arial,sans-serif}.tab-row>.fixture-label{font-size:13px}'});await minimalControls(page);await adjacentTabPlus(page,1);
   for(let i=1;i<3;i++){await page.getByRole('button',{name:'Add tab',exact:true}).click();await expect(page.locator('[role="tab"][data-tab-id]')).toHaveCount(i+1);}await adjacentTabPlus(page,3);
   const longName='A long research workspace '.repeat(3).slice(0,80);await page.locator('[role="tab"][data-tab-id]').last().dblclick();await page.getByRole('textbox',{name:'Tab name',exact:true}).fill(longName);await page.getByRole('button',{name:'Rename',exact:true}).click();const longTab=page.locator('[role="tab"][data-tab-id]').last();await expect(longTab).toContainText(longName);await expect(page.getByRole('tab',{name:longName,exact:false})).toHaveCount(1);await expect.poll(()=>longTab.evaluate(element=>{const text=element.querySelector('.tab-name')!;return{bounded:element.getBoundingClientRect().width<=260,ellipsis:getComputedStyle(text).textOverflow==='ellipsis',clipped:text.scrollWidth>text.clientWidth};})).toEqual({bounded:true,ellipsis:true,clipped:true});await adjacentTabPlus(page,3);
   await longTab.dragTo(page.locator('[role="tab"][data-tab-id]').first());await expect(page.locator('[role="tab"][data-tab-id]').first()).toContainText(longName);await adjacentTabPlus(page,3);await page.locator('[role="tab"][data-tab-id]').last().click({button:'middle'});await expect(page.getByRole('dialog')).toHaveCount(0);await adjacentTabPlus(page,2);

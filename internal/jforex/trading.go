@@ -102,7 +102,7 @@ func verifyTradingBridge(ctx context.Context, process *bridgeProcess) error {
 		return err
 	}
 	if version.Trading != "market-bracket-v1" {
-		return errors.New("The installed JForex bridge does not support trading. Install this build's matching jforex-runtime using scripts/install-user.sh, then restart CryptoDesk")
+		return errors.New("The selected JForex bridge does not support trading. Install this build's matching jforex-runtime using scripts/install-user.sh, then restart CryptoDesk")
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func (m *Manager) EstimateTrade(ctx context.Context, instrument, side string) (T
 		return TradeEstimate{}, err
 	}
 	if version.TradeEstimates != "account-currency-pnl-v1" {
-		return TradeEstimate{}, errors.New("The installed JForex bridge does not support account-currency trade estimates. Install this build's matching jforex-runtime, then restart CryptoDesk")
+		return TradeEstimate{}, errors.New("The selected JForex bridge does not support account-currency trade estimates. Install this build's matching jforex-runtime, then restart CryptoDesk")
 	}
 	m.mu.Lock()
 	config := m.config

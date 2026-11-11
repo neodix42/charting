@@ -77,7 +77,7 @@ func TestIncompatibleBridgeStopsBeforeCredentialsOrPINAndPreservesSettings(t *te
 				case "catalog":
 					_, err = m.Instruments(context.Background())
 				}
-				if err == nil || !strings.Contains(err.Error(), "installed JForex bridge") || !strings.Contains(err.Error(), "install-user.sh") || !strings.Contains(err.Error(), "Restart CryptoDesk") {
+				if err == nil || !strings.Contains(err.Error(), "selected JForex bridge") || !strings.Contains(err.Error(), "install-user.sh") || !strings.Contains(err.Error(), "Restart CryptoDesk") {
 					t.Fatalf("missing actionable compatibility failure: %v", err)
 				}
 				operations, readErr := os.ReadFile(trace)
@@ -831,6 +831,12 @@ func TestBridgeHelperProcess(t *testing.T) {
 			order := brokerOrder{Intent: intent, OrderID: "offline-order-1", Instrument: tradeRequest.Instrument, Side: tradeRequest.Side, Status: "open", OriginalQuantity: tradeRequest.Quantity, FilledQuantity: tradeRequest.Quantity, RemainingQuantity: tradeRequest.Quantity, EntryPrice: 1.1003, StopLoss: tradeRequest.StopLoss, TakeProfit: tradeRequest.TakeProfit, OpenDate: historyOpenAt}
 			if op == "tradeHistory" {
 				historyReads++
+				factor, pnl := .9, 12.5
+				order.AccountCurrency = "EUR"
+				order.ProfitPerPriceUnit = &factor
+				order.ValuationTime = time.Now().UnixMilli()
+				order.ProfitLoss = &pnl
+				order.ProfitLossTime = time.Now().UnixMilli()
 			}
 			if scenario == "trade-history-outside" {
 				order.Intent = strings.Repeat("f", 32)
@@ -850,6 +856,10 @@ func TestBridgeHelperProcess(t *testing.T) {
 				order.Status = "closed"
 				order.RemainingQuantity = 0
 				order.CloseDate = historyCloseAt
+				if op == "tradeHistory" {
+					pnl := -3.75
+					order.ProfitLoss = &pnl
+				}
 			}
 			respond(id, order)
 		case "connect":

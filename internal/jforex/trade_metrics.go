@@ -52,7 +52,7 @@ func (m *Manager) OrderMetrics(ctx context.Context, request TradeRequest) (Trade
 		return TradeMetrics{}, err
 	}
 	if version.TradeMetrics != "account-metrics-v1" {
-		return TradeMetrics{}, errors.New("The installed JForex bridge does not support account balance and trade metrics. Install this build's matching jforex-runtime, then restart CryptoDesk")
+		return TradeMetrics{}, errors.New("The selected JForex bridge does not support account balance and trade metrics. Install this build's matching jforex-runtime, then restart CryptoDesk")
 	}
 	m.mu.Lock()
 	config := m.config

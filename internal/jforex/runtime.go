@@ -24,36 +24,41 @@ type bridgeRuntime struct {
 type commandFactory func(context.Context) (*exec.Cmd, error)
 
 func discoverRuntime() bridgeRuntime {
-	name := "java"
-	systemJava := ""
-	if runtime.GOOS == "windows" {
+	executable, executableErr := os.Executable()
+	return discoverRuntimeAt(executable, executableErr, runtime.GOOS)
+}
+
+// Prefer the bridge shipped with the actual executable, never a working-directory
+// checkout. This keeps source builds and extracted releases self-contained.
+func discoverRuntimeAt(executable string, executableErr error, platform string) bridgeRuntime {
+	name, systemJava := "java", ""
+	if platform == "windows" {
 		name += ".exe"
-	} else if runtime.GOOS == "linux" {
+	} else if platform == "linux" {
 		systemJava = "/usr/bin/java"
 	}
 	result := bridgeRuntime{java: findJava(name, systemJava, os.Getenv("JAVA_HOME"))}
 	if explicit := strings.TrimSpace(os.Getenv("CRYPTODESK_JFOREX_RUNTIME")); explicit != "" {
 		result.directory, result.err = filepath.Abs(explicit)
-	} else if runtime.GOOS == "windows" {
-		// Windows archives retain their portable sibling runtime. Linux uses the
-		// user's installation even when launched from a checkout or Downloads.
-		var executable string
-		executable, result.err = os.Executable()
-		if result.err == nil {
-			if resolved, err := filepath.EvalSymlinks(executable); err == nil {
-				executable = resolved
-			}
-			result.directory = filepath.Join(filepath.Dir(executable), "jforex-runtime")
-		}
+	} else if executableErr != nil || executable == "" {
+		result.err = errors.New("Could not locate the CryptoDesk executable")
 	} else {
-		result.directory, result.err = installedRuntimeDirectory()
+		if resolved, err := filepath.EvalSymlinks(executable); err == nil {
+			executable = resolved
+		}
+		bundled := filepath.Join(filepath.Dir(executable), "jforex-runtime")
+		_, bundleErr := os.Lstat(bundled)
+		if platform == "windows" || !errors.Is(bundleErr, os.ErrNotExist) {
+			result.directory = bundled
+		} else {
+			result.directory, result.err = installedRuntimeDirectory()
+		}
 	}
 	if result.err != nil {
-		result.err = errors.New("Could not locate the installed JForex bridge folder in your user profile")
 		return result
 	}
 	if info, err := os.Stat(filepath.Join(result.directory, "cryptodesk-jforex.jar")); err != nil || !info.Mode().IsRegular() {
-		result.err = errors.New("The installed JForex bridge is missing; run ./install-user.sh from the extracted Linux release to install it in your user data folder, or restore the complete jforex-runtime folder beside CryptoDesk on Windows")
+		result.err = errors.New("The JForex bridge is missing; keep the complete jforex-runtime folder beside CryptoDesk, rebuild the full bundle with ./build.sh, or run ./install-user.sh from an extracted release")
 		return result
 	}
 	if _, err := readSDKManifest(filepath.Join(result.directory, "SDK-ARTIFACTS.json")); err != nil {

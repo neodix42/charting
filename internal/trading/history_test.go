@@ -43,3 +43,17 @@ func TestTradeJournalClaimsArePrivateAtomicAndOriginBounded(t *testing.T) {
 		t.Fatal("unsafe intent accepted")
 	}
 }
+
+func TestRiskUsesRemainingOpenSizeAndOriginalClosedSize(t *testing.T) {
+	row := Trade{EntryPrice: "100", StopLoss: "110", TakeProfit: "90", Size: "2", RemainingSize: "0.5", Direction: "short", Status: "open"}
+	ApplyRisk(&row, ".9")
+	if row.SLAmount != "-4.5" || row.TPAmount != "4.5" {
+		t.Fatal(row)
+	}
+	row.Status = "closed"
+	row.RemainingSize = "0"
+	ApplyRisk(&row, ".9")
+	if row.SLAmount != "-18" || row.TPAmount != "18" {
+		t.Fatal(row)
+	}
+}

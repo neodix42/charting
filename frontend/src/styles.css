@@ -82,3 +82,5 @@ select option:disabled,select optgroup:disabled{color:var(--muted)}
 @media(max-width:1200px){.tab-row>.tab{padding-inline:14px}}
 
 .chart-trade-levels{position:absolute;top:110px;right:85px;z-index:3;max-width:min(65%,430px);max-height:140px;overflow:auto;padding:5px 9px;background:color-mix(in srgb,var(--panel) 90%,transparent);border:1px solid var(--border);border-radius:4px;font-size:.72rem;line-height:1.5}.chart-trade-levels ul{list-style:none;margin:0;padding:0}.chart-trade-levels li{display:flex;justify-content:space-between;gap:14px}.chart-trade-levels .entry{color:var(--accent)}.chart-trade-levels .sl{color:var(--danger)}.chart-trade-levels .tp{color:var(--up)}.chart-trade-levels p{margin:0;max-width:300px;color:var(--muted);overflow-wrap:anywhere}
+
+.tab-list[data-compact=true]{flex:0 1 auto;min-width:0}.tab-list[data-compact=true]>.tab{flex:0 1 auto;min-width:90px}

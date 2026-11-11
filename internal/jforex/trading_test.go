@@ -154,7 +154,7 @@ func TestTradeValuationUnavailableKeepsEntryAndDoesNotInventRates(t *testing.T) 
 		})
 	}
 	m, _ := testManager(t, "trade")
-	if _, err := m.EstimateTrade(context.Background(), "EURUSD", "buy"); err == nil || !strings.Contains(err.Error(), "installed JForex bridge") {
+	if _, err := m.EstimateTrade(context.Background(), "EURUSD", "buy"); err == nil || !strings.Contains(err.Error(), "selected JForex bridge") {
 		t.Fatal("missing estimate capability accepted", err)
 	}
 	preview, err := m.PreviewTrade(context.Background(), sampleTrade())
@@ -195,7 +195,7 @@ func TestOrderMetricsKeepAccountMoneyIndependentOfQuoteAndConversion(t *testing.
 		})
 	}
 	legacy, _ := testManager(t, "trade-estimate")
-	if _, err := legacy.OrderMetrics(context.Background(), TradeRequest{Instrument: "EURUSD", Side: "buy"}); err == nil || !strings.Contains(err.Error(), "installed JForex bridge") {
+	if _, err := legacy.OrderMetrics(context.Background(), TradeRequest{Instrument: "EURUSD", Side: "buy"}); err == nil || !strings.Contains(err.Error(), "selected JForex bridge") {
 		t.Fatal("missing metrics capability not explained", err)
 	}
 }

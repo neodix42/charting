@@ -43,7 +43,7 @@ func discoveryJavaFixture(t *testing.T) {
 	t.Setenv("JAVA_HOME", home)
 }
 
-func TestRuntimeUsesInstalledHomeFolderFromAnyWorkingDirectory(t *testing.T) {
+func TestStandaloneRuntimeFallsBackToInstallationAndIgnoresWorkingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows retains the portable sibling runtime")
 	}
@@ -148,5 +148,61 @@ func TestJavaSelectionPrefersSystemThenPathThenJavaHome(t *testing.T) {
 	}
 	if got := findJava(name, system, javaHome); got != "" {
 		t.Fatal("missing Java reported available", got)
+	}
+}
+
+func TestLocalBuildUsesExecutableSiblingWithoutTouchingOlderInstallation(t *testing.T) {
+	discoveryJavaFixture(t)
+	data, bundle := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("CRYPTODESK_JFOREX_RUNTIME", "")
+	installed := filepath.Join(data, "cryptodesk-app", "jforex-runtime")
+	writeRuntimeFixture(t, installed)
+	installedJar := filepath.Join(installed, "cryptodesk-jforex.jar")
+	if err := os.WriteFile(installedJar, []byte("older installed bridge; preserved"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bundled := filepath.Join(bundle, "jforex-runtime")
+	writeRuntimeFixture(t, bundled)
+	executable := filepath.Join(bundle, "cryptodesk")
+	if err := os.WriteFile(executable, []byte("discovery fixture, never run"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	got := discoverRuntimeAt(executable, nil, "linux")
+	if got.err != nil || got.directory != bundled {
+		t.Fatal(got)
+	}
+	raw, err := os.ReadFile(installedJar)
+	if err != nil || string(raw) != "older installed bridge; preserved" {
+		t.Fatal("discovery mutated the user installation", err)
+	}
+	// A partial/corrupt bundled runtime must not silently run the installed JAR.
+	if err = os.Remove(filepath.Join(bundled, "cryptodesk-jforex.jar")); err != nil {
+		t.Fatal(err)
+	}
+	got = discoverRuntimeAt(executable, nil, "linux")
+	if got.err == nil || got.directory != bundled {
+		t.Fatal(got)
+	}
+}
+func TestRuntimeUsesRealExecutableLocationThroughLauncherSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix launcher symlink")
+	}
+	discoveryJavaFixture(t)
+	t.Setenv("CRYPTODESK_JFOREX_RUNTIME", "")
+	bundle := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(bundle, "jforex-runtime"))
+	executable := filepath.Join(bundle, "cryptodesk")
+	if err := os.WriteFile(executable, []byte("never executed"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "launcher")
+	if err := os.Symlink(executable, link); err != nil {
+		t.Fatal(err)
+	}
+	got := discoverRuntimeAt(link, nil, "linux")
+	if got.err != nil || got.directory != filepath.Join(bundle, "jforex-runtime") {
+		t.Fatal(got)
 	}
 }

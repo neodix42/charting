@@ -10,24 +10,32 @@ import (
 	"math"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 type brokerOrder struct {
-	Intent            string  `json:"intent"`
-	OrderID           string  `json:"orderID"`
-	Instrument        string  `json:"instrument"`
-	Side              string  `json:"side"`
-	Status            string  `json:"status"`
-	OriginalQuantity  float64 `json:"originalQuantity"`
-	FilledQuantity    float64 `json:"filledQuantity"`
-	RemainingQuantity float64 `json:"remainingQuantity"`
-	EntryPrice        float64 `json:"entryPrice"`
-	StopLoss          float64 `json:"stopLoss"`
-	TakeProfit        float64 `json:"takeProfit"`
-	OpenDate          int64   `json:"openDate"`
-	CloseDate         int64   `json:"closeDate"`
+	Intent             string   `json:"intent"`
+	OrderID            string   `json:"orderID"`
+	Instrument         string   `json:"instrument"`
+	Side               string   `json:"side"`
+	Status             string   `json:"status"`
+	OriginalQuantity   float64  `json:"originalQuantity"`
+	FilledQuantity     float64  `json:"filledQuantity"`
+	RemainingQuantity  float64  `json:"remainingQuantity"`
+	EntryPrice         float64  `json:"entryPrice"`
+	StopLoss           float64  `json:"stopLoss"`
+	TakeProfit         float64  `json:"takeProfit"`
+	OpenDate           int64    `json:"openDate"`
+	CloseDate          int64    `json:"closeDate"`
+	AccountCurrency    string   `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit *float64 `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64    `json:"valuationTime,omitempty"`
+	ValuationError     string   `json:"valuationError,omitempty"`
+	ProfitLoss         *float64 `json:"profitLoss,omitempty"`
+	ProfitLossTime     int64    `json:"profitLossTime,omitempty"`
+	ProfitLossError    string   `json:"profitLossError,omitempty"`
 }
 type brokerJournal struct {
 	ID          string                 `json:"id"`
@@ -137,6 +145,7 @@ func applyBrokerSnapshot(j *brokerJournal, order brokerOrder) error {
 		return errors.New("Unrecognized JForex position status")
 	}
 	r := &j.History
+	previousStatus := r.Status
 	r.OrderID = order.OrderID
 	r.OpenDate = order.OpenDate
 	r.CloseDate = order.CloseDate
@@ -148,11 +157,48 @@ func applyBrokerSnapshot(j *brokerJournal, order brokerOrder) error {
 	if order.FilledQuantity > 0 {
 		r.Size = numberText(order.FilledQuantity)
 	}
-	factor := numberText(j.Preview.ProfitPerPriceUnit)
-	if j.Preview.ValuationError != "" || r.Currency != j.Preview.AccountCurrency {
+	factor := r.ProfitPerPriceUnit
+	if factor == "" && j.Preview.ValuationError == "" && r.Currency == j.Preview.AccountCurrency {
+		factor = numberText(j.Preview.ProfitPerPriceUnit)
+	}
+	currencyKnown := len(order.AccountCurrency) >= 3 && order.AccountCurrency[0] >= 'A' && order.AccountCurrency[0] <= 'Z' && len(order.AccountCurrency) <= 8 && strings.Trim(order.AccountCurrency, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == ""
+	if currencyKnown && (order.ProfitPerPriceUnit != nil || order.ValuationTime != 0 || order.ValuationError != "") {
+		previousCurrency := r.Currency
+		currency, amount, at, problem := order.AccountCurrency, 0.0, order.ValuationTime, order.ValuationError
+		if order.ProfitPerPriceUnit != nil {
+			amount = *order.ProfitPerPriceUnit
+		}
+		normalizeValuation(&currency, &amount, &at, &problem)
+		if currency != "" {
+			r.Currency = currency
+		}
+		r.ValuationTime, r.ValuationError = at, problem
+		if amount > 0 && problem == "" {
+			factor = numberText(amount)
+		} else if currency != previousCurrency {
+			factor = ""
+		}
+	}
+	if currencyKnown && order.AccountCurrency != r.Currency {
+		r.Currency = order.AccountCurrency
 		factor = ""
 	}
 	trading.ApplyRisk(r, factor)
+	if order.ProfitLoss != nil && !math.IsNaN(*order.ProfitLoss) && !math.IsInf(*order.ProfitLoss, 0) && currencyKnown && r.Currency == order.AccountCurrency && order.ProfitLossTime >= time.Now().Add(-30*time.Second).UnixMilli() && order.ProfitLossTime <= time.Now().Add(5*time.Second).UnixMilli() && (order.Status == "open" || order.Status == "closed" || order.Status == "closing") {
+		r.ProfitLoss = numberText(*order.ProfitLoss)
+		r.ProfitLossCurrency = order.AccountCurrency
+		r.ProfitLossTime = order.ProfitLossTime
+		r.ProfitLossState = order.Status
+		r.ProfitLossBasis = "JForex SDK reported profit/loss in account currency"
+		r.ProfitLossError = ""
+	} else if r.Status != "closed" || previousStatus != "closed" || r.ProfitLoss == "" {
+		r.ProfitLoss = ""
+		r.ProfitLossState = ""
+		r.ProfitLossError = order.ProfitLossError
+		if r.ProfitLossError == "" {
+			r.ProfitLossError = "Refresh using the matching updated JForex bridge to retrieve position profit/loss"
+		}
+	}
 	return nil
 }
 func (m *Manager) readTradeJournal(id string) (*brokerJournal, error) {
@@ -221,7 +267,7 @@ func verifyHistoryBridge(ctx context.Context, p *bridgeProcess) error {
 	}
 	return nil
 }
-func (m *Manager) refreshBroker(ctx context.Context, j *brokerJournal) error {
+func (m *Manager) refreshBroker(ctx context.Context, j *brokerJournal, includeValuation bool) error {
 	r := &j.History
 	r.CanClose = false
 	m.mu.Lock()
@@ -240,6 +286,7 @@ func (m *Manager) refreshBroker(ctx context.Context, j *brokerJournal) error {
 	}
 	request := tradeRPC(j.Request, "tradeHistory")
 	request["intent"] = j.ID
+	request["includeValuation"] = includeValuation
 	if r.OrderID != "" {
 		request["orderID"] = r.OrderID
 	}
@@ -291,11 +338,15 @@ func (m *Manager) RefreshTrade(ctx context.Context, id string) (trading.Trade, e
 	if err != nil {
 		return trading.Trade{}, err
 	}
-	err = m.refreshBroker(ctx, j)
+	err = m.refreshBroker(ctx, j, true)
 	if err != nil {
 		j.History.CanClose = false
 		j.History.Error = err.Error()
 		j.History.CloseReason = err.Error()
+		if j.History.Status != "closed" {
+			j.History.ProfitLoss = ""
+			j.History.ProfitLossError = err.Error()
+		}
 	} else {
 		j.History.Error = ""
 	}
@@ -317,7 +368,7 @@ func (m *Manager) PreviewClose(ctx context.Context, id string) (trading.ClosePre
 	if err != nil {
 		return trading.ClosePreview{}, err
 	}
-	if err = m.refreshBroker(ctx, j); err != nil {
+	if err = m.refreshBroker(ctx, j, false); err != nil {
 		return trading.ClosePreview{}, err
 	}
 	if !j.History.CanClose {
@@ -365,7 +416,7 @@ func (m *Manager) ConfirmClose(ctx context.Context, token string) (trading.Trade
 	if err != nil {
 		return trading.Trade{}, err
 	}
-	if err = m.refreshBroker(ctx, j); err != nil {
+	if err = m.refreshBroker(ctx, j, false); err != nil {
 		return j.History, err
 	}
 	if !j.History.CanClose || j.History.RemainingSize != plan.Preview.Quantity {

@@ -32,6 +32,7 @@ type bridgeVersion struct {
 	TradeEstimates    string `json:"tradeEstimates"`
 	TradeMetrics      string `json:"tradeMetrics"`
 	TradeHistory      string `json:"tradeHistory"`
+	TradePnL          string `json:"tradePnL"`
 }
 
 func verifyBridge(ctx context.Context, process *bridgeProcess) error {
@@ -43,7 +44,7 @@ func verifyBridge(ctx context.Context, process *bridgeProcess) error {
 		return ctx.Err()
 	}
 	if err != nil || version.Protocol != 1 || version.SDKVersion != "3.6.51" || version.JavaVersion < 17 || version.InstrumentCatalog != bridgeInstrumentCatalog {
-		return &exchange.Error{Kind: "restricted", Message: "The installed JForex bridge is outdated or incompatible with this CryptoDesk build. On Linux, run ./scripts/install-user.sh after building locally, or ./install-user.sh from the new release. On Windows, replace jforex-runtime with the matching release folder. Restart CryptoDesk after updating."}
+		return &exchange.Error{Kind: "restricted", Message: "The selected JForex bridge is outdated or incompatible with this CryptoDesk build. Rebuild the complete app with ./build.sh and launch its executable, or re-extract the complete matching release including jforex-runtime. Use ./install-user.sh to update an installed app. Restart CryptoDesk after updating."}
 	}
 	return nil
 }
@@ -289,8 +290,8 @@ func (m *Manager) ensure(ctx context.Context, login bool, pin string, force bool
 		}
 		m.processes.Add(1)
 		go func() { <-p.exited; m.processes.Done() }()
-		// Check the installed bridge before exposing credentials or requesting a
-		// PIN image. A local build can otherwise keep using an older installed JAR
+		// Check the selected bridge before exposing credentials or requesting a
+		// PIN image. Never authenticate through an incompatible bridge
 		// that speaks protocol 1 but silently returns only fiat forex instruments.
 		if err = verifyBridge(ctx, p); err != nil {
 			p.stop()

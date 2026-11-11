@@ -184,7 +184,7 @@ public final class Bridge implements AutoCloseable {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1");
+                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1", "tradePnL", "account-pnl-v1");
                 case "instruments" -> instruments();
                 case "tradePreview" -> tradePreview(request);
                 case "tradeEstimate" -> tradeEstimate(request);
@@ -1022,7 +1022,20 @@ public final class Bridge implements AutoCloseable {
     }
     private Map<String, Object> tradeHistory(JsonObject request) throws Exception {
         IOrder order = ownedOrder(request, true);
-        return order == null ? Map.of("status", "not-found") : orderHistorySnapshot(order, text(request, "intent", 32));
+        if (order == null) return Map.of("status", "not-found");
+        Map<String,Object> result = orderHistorySnapshot(order, text(request, "intent", 32));
+        // History refresh can recover currency/risk for older local claims. Keep
+        // advisory FX work outside the order submission and close paths.
+        if (!request.has("includeValuation") || request.get("includeValuation").getAsBoolean()) result.putAll(tradeValuation(order.getInstrument(), nowMillis.getAsLong()));
+        try {
+            String currency = accountCurrency().getCurrencyCode();
+            double pnl = order.getProfitLossInAccountCurrency();
+            if (!Double.isFinite(pnl)) throw new Failure("restricted", "Invalid SDK position profit/loss");
+            if (order.getState() == IOrder.State.FILLED || order.getState() == IOrder.State.CLOSED) {
+                result.put("accountCurrency", currency); result.put("profitLoss", pnl); result.put("profitLossTime", nowMillis.getAsLong());
+            }
+        } catch (Exception error) { result.put("profitLossError", "JForex position profit/loss or account currency is unavailable"); }
+        return result;
     }
     private Map<String, Object> tradeClose(JsonObject request) throws Exception {
         IOrder order = ownedOrder(request, true);

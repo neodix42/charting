@@ -14,7 +14,7 @@ test('Trade history follows Predictions, stays lazy, labels actual currencies an
  expect(await page.locator('.tab-row > button[role=tab]').allTextContents()).toEqual(['Screener','Predictions','Trade history']);await enter(page);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);await expect(page.getByTestId('chart-cell')).toHaveCount(0);
  const headers=await panel(page).getByRole('columnheader').allTextContents();for(const name of ['Order ID','Open date','Close date','Size','Direction','SL price','TP price','SL amount (est.)','TP amount (est.)','Balance at open','Margin used'])expect(headers).toContain(name);
- const eur=panel(page).getByRole('row').filter({hasText:'EUR/USD'});await expect(eur).toContainText('-9.27 EUR');await expect(eur).toContainText('17.73 EUR');await expect(eur).toContainText('0.00 EUR');await expect(eur.getByRole('cell').nth(14)).toHaveText('—');
+ const eur=panel(page).getByRole('row').filter({hasText:'EUR/USD'});await expect(eur).toContainText('-9.27 EUR');await expect(eur).toContainText('17.73 EUR');await expect(eur).toContainText('0.00 EUR');await expect(eur.getByRole('cell').nth(15)).toHaveText('—');
  const btc=panel(page).getByRole('row').filter({hasText:'BTC'});await expect(btc).toContainText('-10.00 USDC');await expect(btc).toContainText('20.00 USDC');await expect(btc).toContainText('203.33 USDC');await expect(close(page)).toBeDisabled();
  await page.clock.install();const reads=await page.evaluate(()=>(window as any).__testTradeHistoryReads());await page.locator('[data-tab-id]').first().click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);await page.clock.fastForward(30000);expect(await page.evaluate(()=>(window as any).__testTradeHistoryReads())).toBe(reads);
 });
@@ -51,4 +51,23 @@ test('a rejected close confirmation remains explained after the automatic refres
  await page.evaluate(()=>{(window as any).__attempts=0;window.go!.main!.App!.ConfirmTradeClose=async()=>{(window as any).__attempts++;throw Error('Position changed; refresh and review again');};});
  await panel(page).getByRole('radio').check();await close(page).click();await review(page).getByRole('button',{name:'Confirm market close',exact:true}).click();await expect(review(page)).toHaveCount(0);
  await expect(panel(page)).toContainText('Close was not confirmed: Position changed; refresh and review again. No automatic resend was made.');await expect(panel(page).getByText('Refreshing exchange statuses… Saved records remain visible.',{exact:true})).toHaveCount(0);await expect(panel(page).getByRole('status')).toContainText('Position changed');expect(await page.evaluate(()=>(window as any).__attempts)).toBe(1);
+});
+
+
+test('refresh status reserves its space, preserves rows and removes the requested explanatory text',async({page})=>{
+ await openTestApp(page);await seed(page,[record({closeReason:'Verified platform order ID and label',profitLoss:'12.5',profitLossCurrency:'USDC',profitLossState:'open',profitLossTime:Date.now()})]);await enter(page);
+ await expect(panel(page)).not.toContainText('Verified platform order ID and label');await expect(panel(page)).not.toContainText("SL and TP amounts are estimates in each trade's labelled account currency");
+ const table=panel(page).locator('thead'),before=await table.boundingBox();expect(before).not.toBeNull();
+ await page.evaluate(()=>{const api=window.go!.main!.App!,refresh=api.RefreshTradeHistory;api.RefreshTradeHistory=ids=>new Promise(resolve=>(window as any).__finishHistoryRefresh=async()=>resolve(await refresh(ids)));});
+ await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(panel(page)).toContainText('Refreshing exchange statuses…');await expect(panel(page)).toContainText('12.50 USDC');const pending=await table.boundingBox();expect(pending!.y).toBeCloseTo(before!.y,3);
+ await page.evaluate(()=>(window as any).__finishHistoryRefresh());await expect(panel(page).getByText('Refreshing exchange statuses… Saved records remain visible.',{exact:true})).toHaveCount(0);const after=await table.boundingBox();expect(after!.y).toBeCloseTo(before!.y,3);
+});
+
+test('refreshed risk and P/L values use account currencies and retain the final result after reload',async({page})=>{
+ await openTestApp(page);const first=record({slAmount:'',tpAmount:'',profitLoss:'0',profitLossCurrency:'EUR',profitLossState:'open',profitLossTime:Date.now(),currency:'EUR'});
+ await seed(page,[first]);await page.evaluate(()=>{const api=window.go!.main!.App!,refresh=api.RefreshTradeHistory;api.RefreshTradeHistory=async ids=>(await refresh(ids)).map(row=>({...row,slAmount:'-9',tpAmount:'18',profitLoss:'12.5',profitLossCurrency:'EUR',profitLossState:'open',profitLossTime:Date.now()}));});await enter(page);
+ const row=panel(page).getByRole('row').filter({hasText:'BTC'});await expect(row).toContainText('-9.00 EUR');await expect(row).toContainText('18.00 EUR');await expect(row.locator('.trade-history-pnl')).toHaveText('12.50 EURCurrent');await expect(panel(page).getByRole('columnheader',{name:'Profit/Loss',exact:true})).toBeVisible();
+ await seed(page,[{...first,status:'closed',canClose:false,remainingSize:'0',closeDate:Date.now(),slAmount:'-9',tpAmount:'18',profitLoss:'-3.75',profitLossCurrency:'EUR',profitLossState:'closed',profitLossTime:Date.now()}]);
+ await page.evaluate(()=>{window.go!.main!.App!.RefreshTradeHistory=async ids=>(window as any).__testTradeHistory().filter((row:TradeRecord)=>ids.includes(row.id));});await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(row.locator('.trade-history-pnl')).toHaveText('-3.75 EURClosed');
+ await reloadTestApp(page);await enter(page);await expect(row.locator('.trade-history-pnl')).toHaveText('-3.75 EURClosed');
 });

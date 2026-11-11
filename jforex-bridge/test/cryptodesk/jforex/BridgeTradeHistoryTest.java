@@ -23,7 +23,7 @@ public final class BridgeTradeHistoryTest {
    case "getInstrument"->Instrument.EURUSD;case "isLong"->true;case "getOriginalAmount"->.001;
    case "getAmount"->state.get()==IOrder.State.FILLED?.001:0.0;case "getState"->state.get();
    case "getFillTime"->openedAt;case "getCloseTime"->closedAt.get();case "getOpenPrice"->1.1003;
-   case "getStopLossPrice"->1.09;case "getTakeProfitPrice"->1.12;case "getFillHistory"->List.of(fill);case "getCloseHistory"->List.of();
+   case "getProfitLossInAccountCurrency"->state.get()==IOrder.State.CLOSED?-3.75:12.5;case "getStopLossPrice"->1.09;case "getTakeProfitPrice"->1.12;case "getFillHistory"->List.of(fill);case "getCloseHistory"->List.of();
    case "close"->{check(strategyThread.get(),"native order.close must run on the SDK strategy thread");closes.incrementAndGet();closedAt.set(System.currentTimeMillis());state.set(IOrder.State.CLOSED);yield null;}
    default->null;
   });
@@ -34,7 +34,8 @@ public final class BridgeTradeHistoryTest {
    default->null;
   });
   IHistory history=fake(IHistory.class,(name,args)->switch(name){case "getHistoricalOrderById"->args[0].equals("owned-id")&&state.get()==IOrder.State.CLOSED?order:null;case "getOrdersHistory"->List.of(order);default->null;});
-  IContext context=fake(IContext.class,(name,args)->switch(name){case "getEngine"->engine;case "getHistory"->history;
+  IAccount account=fake(IAccount.class,(name,args)->name.equals("getAccountCurrency")?JFCurrency.getInstance("USD"):null);
+  IContext context=fake(IContext.class,(name,args)->switch(name){case "getEngine"->engine;case "getHistory"->history;case "getAccount"->account;
    case "executeTask"->{FutureTask<Object> task=new FutureTask<>((Callable<Object>)args[0]);strategyThread.set(true);try{task.run();}finally{strategyThread.set(false);}yield task;}
    default->null;
   });
@@ -42,7 +43,8 @@ public final class BridgeTradeHistoryTest {
   try(Bridge bridge=new Bridge(()->client,event->{},100)){
    JsonObject login=request("connect");login.addProperty("username","offline-history-user");login.addProperty("password","offline-history-password");login.addProperty("environment","demo");login.addProperty("cacheDirectory",Files.createTempDirectory("jforex-history-offline-").toString());good(bridge,login);
    JsonObject lookup=BridgeTradingTest.trade("tradeHistory",Instrument.EURUSD,"buy",1000,1.09,1.12);lookup.addProperty("orderID","owned-id");lookup.addProperty("from",openedAt-1000);
-   JsonObject found=good(bridge,lookup).getAsJsonObject("result");check(found.get("openDate").getAsLong()==openedAt&&found.get("filledQuantity").getAsDouble()==1000,"SDK fill time and base units retained");
+   JsonObject found=good(bridge,lookup).getAsJsonObject("result");check(found.get("openDate").getAsLong()==openedAt&&found.get("filledQuantity").getAsDouble()==1000,"SDK fill time and base units retained");check(found.get("accountCurrency").getAsString().equals("USD")&&found.get("profitPerPriceUnit").getAsDouble()==1&&found.get("profitLoss").getAsDouble()==12.5,"history recovers same-currency risk conversion and native open P/L without a saved preview");
+   JsonObject fast=lookup.deepCopy();fast.addProperty("includeValuation",false);JsonObject fastResult=good(bridge,fast).getAsJsonObject("result");check(!fastResult.has("profitPerPriceUnit")&&fastResult.get("profitLoss").getAsDouble()==12.5,"close ownership refresh skips advisory conversion and keeps native P/L");
    JsonObject legacy=lookup.deepCopy();legacy.remove("orderID");check(good(bridge,legacy).getAsJsonObject("result").get("orderID").getAsString().equals("owned-id"),"legacy local claims recover an open order by exact CD_ label");
    foreign.set(true);check(!bridge.handle(lookup).get("ok").getAsBoolean(),"an external order label cannot become a platform trade");foreign.set(false);
    JsonObject close=lookup.deepCopy();close.addProperty("op","tradeClose");close.addProperty("closeIntent","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");close.addProperty("remainingQuantity",500);
@@ -50,7 +52,7 @@ public final class BridgeTradeHistoryTest {
    close.addProperty("closeIntent","cccccccccccccccccccccccccccccccc");close.addProperty("remainingQuantity",1000);
    JsonObject result=good(bridge,close).getAsJsonObject("result");check(result.get("status").getAsString().equals("closed")&&result.get("closeDate").getAsLong()==closedAt.get()&&closes.get()==1,"exact native position closed and server close time returned");
    check(!bridge.handle(close).get("ok").getAsBoolean()&&closes.get()==1,"close confirmation is single-use");
-   found=good(bridge,lookup).getAsJsonObject("result");check(found.get("closeDate").getAsLong()==closedAt.get(),"closed position looked up through SDK history");check(good(bridge,legacy).getAsJsonObject("result").get("closeDate").getAsLong()==closedAt.get(),"legacy local claims recover a closed order by exact label through SDK history");check(opens.get()==0,"history/close created no new entry order");
+   found=good(bridge,lookup).getAsJsonObject("result");check(found.get("closeDate").getAsLong()==closedAt.get(),"closed position looked up through SDK history");check(found.get("profitLoss").getAsDouble()==-3.75,"closed SDK profit/loss is preserved as reported");check(good(bridge,legacy).getAsJsonObject("result").get("closeDate").getAsLong()==closedAt.get(),"legacy local claims recover a closed order by exact label through SDK history");check(opens.get()==0,"history/close created no new entry order");
   }
   System.out.println("JForex platform-only history, exact-position close and no-repeat checks passed");
  }

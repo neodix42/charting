@@ -5,6 +5,7 @@ import (
 	"cryptodesk/internal/trading"
 	"encoding/json"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -49,7 +50,7 @@ func newHistoryFixtureSide(t *testing.T, side string) *historyFixture {
 	}
 	f := &historyFixture{store: s, mock: m, id: p.ID, position: position, nextID: 200, entryAt: s.now().Add(-time.Second).UnixMilli(), cloids: map[string]int64{}}
 	f.fills = []historyFill{{Coin: p.Request.Instrument, OID: 101, Side: entrySide, Sz: "1", Px: "100", StartPosition: "0", Time: f.entryAt, TID: 1}, {Coin: "ETH", OID: 900, Side: "B", Sz: "2", Px: "200", StartPosition: "0", Time: f.entryAt, TID: 2}}
-	m.positions = json.RawMessage(fmt.Sprintf(`[{"position":{"coin":%q,"szi":%q,"marginUsed":"5"}}]`, p.Request.Instrument, position))
+	m.positions = json.RawMessage(fmt.Sprintf(`[{"position":{"coin":%q,"szi":%q,"marginUsed":"5","unrealizedPnl":"2.5"}}]`, p.Request.Instrument, position))
 	m.historyHandler = func(w http.ResponseWriter, input map[string]json.RawMessage) bool {
 		var kind string
 		_ = json.Unmarshal(input["type"], &kind)
@@ -128,14 +129,21 @@ func newHistoryFixtureSide(t *testing.T, side string) *historyFixture {
 		quantity, _ := trading.Numeric(filled)
 		f.nextID++
 		f.closeAt = s.now().UnixMilli()
-		f.fills = append(f.fills, historyFill{Coin: p.Request.Instrument, OID: f.nextID, Side: closeSide, Sz: filled, Px: "99", StartPosition: f.position, Time: f.closeAt, TID: uint64(f.nextID)})
+		closedPnl := quantity.Neg()
+		if closeSide == "B" {
+			closedPnl = quantity
+		}
+		f.fills = append(f.fills, historyFill{Coin: p.Request.Instrument, OID: f.nextID, Side: closeSide, ClosedPnL: closedPnl.String(), Sz: filled, Px: "99", StartPosition: f.position, Time: f.closeAt, TID: uint64(f.nextID)})
 		if closeSide == "A" {
 			f.position = old.Sub(quantity).String()
 		} else {
 			f.position = old.Add(quantity).String()
 		}
 		f.cloids[order["c"].(string)] = f.nextID
-		m.positions = json.RawMessage(fmt.Sprintf(`[{"position":{"coin":%q,"szi":%q,"marginUsed":"3"}}]`, p.Request.Instrument, f.position))
+		m.positions = json.RawMessage(fmt.Sprintf(`[{"position":{"coin":%q,"szi":%q,"marginUsed":"3","unrealizedPnl":%q}}]`, p.Request.Instrument, f.position, func() string {
+			left, _ := trading.Numeric(f.position)
+			return left.Abs().Mul(decimal.NewFromFloat(2.5)).String()
+		}()))
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "response": map[string]any{"type": "order", "data": map[string]any{"statuses": []any{map[string]any{"filled": map[string]any{"oid": f.nextID, "totalSz": filled, "avgPx": "99"}}}}}})
 		return true
 	}
@@ -275,5 +283,80 @@ func TestShortHistoryCloseBuysToReduceAndRecordsServerCloseTime(t *testing.T) {
 	row, err = f.store.RefreshTrade(ctx, f.id)
 	if err != nil || row.Status != "closed" || row.RemainingSize != "0" || row.CloseDate != f.closeAt || f.position != "0" {
 		t.Fatal(row, err)
+	}
+}
+
+func TestHistoryRecoversSettlementRiskAndTracksRealizedPlusFloatingProfit(t *testing.T) {
+	f := newHistoryFixture(t)
+	ctx := context.Background()
+	j, err := f.store.readOrderJournal(f.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.Preview.AccountCurrency = ""
+	j.Preview.ProfitPerPriceUnit = ""
+	j.History.Currency = ""
+	j.History.SLAmount = ""
+	j.History.TPAmount = ""
+	if err = trading.WriteJournal(f.store.journalPath(f.id), j, false); err != nil {
+		t.Fatal(err)
+	}
+	row, err := f.store.RefreshTrade(ctx, f.id)
+	if err != nil || row.Currency != "USDC" || row.SLAmount != "-10" || row.TPAmount != "10" || row.ProfitLoss != "2.5" || row.ProfitLossState != "open" {
+		t.Fatal(row, err)
+	}
+	f.partial = "0.4"
+	plan, err := f.store.PreviewClose(ctx, f.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.ConfirmClose(ctx, plan.ID); err != nil {
+		t.Fatal(err)
+	}
+	row, err = f.store.RefreshTrade(ctx, f.id)
+	if err != nil || row.RemainingSize != "0.6" || row.SLAmount != "-6" || row.TPAmount != "6" || row.ProfitLoss != "1.1" {
+		t.Fatal("remaining risk and realized/floating total", row, err)
+	}
+	plan, err = f.store.PreviewClose(ctx, f.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.ConfirmClose(ctx, plan.ID); err != nil {
+		t.Fatal(err)
+	}
+	row, err = f.store.RefreshTrade(ctx, f.id)
+	if err != nil || row.ProfitLoss != "-1" || row.ProfitLossCurrency != "USDC" || row.ProfitLossState != "closed" {
+		t.Fatal(row, err)
+	}
+	// Confirmed final values survive unavailable history and restart.
+	restored := NewStore(f.store.profile)
+	rows, issues := restored.TradeHistory()
+	if len(issues) != 0 || len(rows) != 1 || rows[0].ProfitLoss != "-1" {
+		t.Fatal(rows, issues)
+	}
+}
+func TestHistoryDoesNotInventProfitForMissingOrMixedExchangeData(t *testing.T) {
+	f := newHistoryFixture(t)
+	f.mock.mu.Lock()
+	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"1","marginUsed":"5","unrealizedPnl":"0"}}]`)
+	f.mock.mu.Unlock()
+	row, err := f.store.RefreshTrade(context.Background(), f.id)
+	if err != nil || row.ProfitLoss != "0" {
+		t.Fatal("real zero lost", row, err)
+	}
+	f.mock.mu.Lock()
+	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"1","marginUsed":"5"}}]`)
+	f.mock.mu.Unlock()
+	row, err = f.store.RefreshTrade(context.Background(), f.id)
+	if err != nil || row.ProfitLoss != "" || row.ProfitLossError == "" {
+		t.Fatal("missing field became zero", row, err)
+	}
+	f.mock.mu.Lock()
+	f.fills = append(f.fills, historyFill{Coin: "BTC", OID: 999, Side: "B", Sz: "1", Px: "100", StartPosition: "1", Time: f.entryAt + 1, TID: 999})
+	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"2","unrealizedPnl":"100"}}]`)
+	f.mock.mu.Unlock()
+	row, err = f.store.RefreshTrade(context.Background(), f.id)
+	if err != nil || row.ProfitLoss != "" || row.SLAmount != "" || row.CanClose {
+		t.Fatal("mixed account P/L attributed to one entry", row, err)
 	}
 }

@@ -110,3 +110,49 @@ func TestBrokerHistoryCannotCloseForeignOrChangedPositions(t *testing.T) {
 		})
 	}
 }
+
+func TestBrokerHistoryRecoversLegacyRiskAndReportedOpenAndClosedProfit(t *testing.T) {
+	m, _ := testManager(t, "trade-history")
+	ctx := context.Background()
+	preview, err := m.PreviewTrade(ctx, sampleTrade())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.SubmitTrade(ctx, preview.ID); err != nil {
+		t.Fatal(err)
+	}
+	j, err := m.readTradeJournal(preview.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Old claims have prices/size but no preview currency or conversion snapshot.
+	j.Preview.AccountCurrency = ""
+	j.Preview.ProfitPerPriceUnit = 0
+	j.Preview.ValuationError = "Missing original conversion"
+	j.History.Currency = ""
+	j.History.SLAmount = ""
+	j.History.TPAmount = ""
+	if err = trading.WriteJournal(m.tradeJournalPath(preview.ID), j, false); err != nil {
+		t.Fatal(err)
+	}
+	row, err := m.RefreshTrade(ctx, preview.ID)
+	if err != nil || row.Currency != "EUR" || row.SLAmount != "-9.27" || row.TPAmount != "17.73" || row.ProfitLoss != "12.5" || row.ProfitLossCurrency != "EUR" || row.ProfitLossState != "open" {
+		t.Fatal(row, err)
+	}
+	plan, err := m.PreviewClose(ctx, preview.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err = m.ConfirmClose(ctx, plan.ID)
+	if err != nil || row.Status != "closed" || row.ProfitLoss != "" {
+		t.Fatal("open P/L must not be presented as final", row, err)
+	}
+	row, err = m.RefreshTrade(ctx, preview.ID)
+	if err != nil || row.ProfitLoss != "-3.75" || row.ProfitLossState != "closed" || row.CloseDate == 0 {
+		t.Fatal(row, err)
+	}
+	rows, issues := m.TradeHistory()
+	if len(issues) != 0 || len(rows) != 1 || rows[0].ProfitLoss != "-3.75" {
+		t.Fatal(rows, issues)
+	}
+}

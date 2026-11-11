@@ -15,37 +15,46 @@ import (
 // Trade is a locally attributed submission, never an imported account-wide order.
 // Empty monetary values/times mean unavailable, not confirmed zero.
 type Trade struct {
-	ID              string `json:"id"`
-	Provider        string `json:"provider"`
-	Environment     string `json:"environment"`
-	Account         string `json:"account"`
-	Instrument      string `json:"instrument"`
-	Market          string `json:"market"`
-	OrderID         string `json:"orderId"`
-	SubmittedAt     int64  `json:"submittedAt"`
-	OpenDate        int64  `json:"openDate"`
-	CloseDate       int64  `json:"closeDate"`
-	Size            string `json:"size"`
-	RemainingSize   string `json:"remainingSize"`
-	Direction       string `json:"direction"`
-	EntryPrice      string `json:"entryPrice"`
-	StopLoss        string `json:"stopLoss"`
-	TakeProfit      string `json:"takeProfit"`
-	SLAmount        string `json:"slAmount"`
-	TPAmount        string `json:"tpAmount"`
-	Currency        string `json:"currency"`
-	BalanceAtOpen   string `json:"balanceAtOpen"`
-	BalanceCurrency string `json:"balanceCurrency"`
-	BalanceTime     int64  `json:"balanceTime"`
-	BalanceBasis    string `json:"balanceBasis,omitempty"`
-	MarginUsed      string `json:"marginUsed"`
-	MarginCurrency  string `json:"marginCurrency"`
-	MarginBasis     string `json:"marginBasis,omitempty"`
-	Status          string `json:"status"`
-	CanClose        bool   `json:"canClose"`
-	CloseReason     string `json:"closeReason"`
-	CheckedAt       int64  `json:"checkedAt"`
-	Error           string `json:"error,omitempty"`
+	ID                 string `json:"id"`
+	Provider           string `json:"provider"`
+	Environment        string `json:"environment"`
+	Account            string `json:"account"`
+	Instrument         string `json:"instrument"`
+	Market             string `json:"market"`
+	OrderID            string `json:"orderId"`
+	SubmittedAt        int64  `json:"submittedAt"`
+	OpenDate           int64  `json:"openDate"`
+	CloseDate          int64  `json:"closeDate"`
+	Size               string `json:"size"`
+	RemainingSize      string `json:"remainingSize"`
+	Direction          string `json:"direction"`
+	EntryPrice         string `json:"entryPrice"`
+	StopLoss           string `json:"stopLoss"`
+	TakeProfit         string `json:"takeProfit"`
+	SLAmount           string `json:"slAmount"`
+	TPAmount           string `json:"tpAmount"`
+	Currency           string `json:"currency"`
+	ProfitPerPriceUnit string `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime      int64  `json:"valuationTime,omitempty"`
+	ValuationError     string `json:"valuationError,omitempty"`
+	ProfitLoss         string `json:"profitLoss,omitempty"`
+	ProfitLossCurrency string `json:"profitLossCurrency,omitempty"`
+	ProfitLossTime     int64  `json:"profitLossTime,omitempty"`
+	ProfitLossState    string `json:"profitLossState,omitempty"`
+	ProfitLossBasis    string `json:"profitLossBasis,omitempty"`
+	ProfitLossError    string `json:"profitLossError,omitempty"`
+	BalanceAtOpen      string `json:"balanceAtOpen"`
+	BalanceCurrency    string `json:"balanceCurrency"`
+	BalanceTime        int64  `json:"balanceTime"`
+	BalanceBasis       string `json:"balanceBasis,omitempty"`
+	MarginUsed         string `json:"marginUsed"`
+	MarginCurrency     string `json:"marginCurrency"`
+	MarginBasis        string `json:"marginBasis,omitempty"`
+	Status             string `json:"status"`
+	CanClose           bool   `json:"canClose"`
+	CloseReason        string `json:"closeReason"`
+	CheckedAt          int64  `json:"checkedAt"`
+	Error              string `json:"error,omitempty"`
 }
 
 type HistoryPage struct {
@@ -95,8 +104,15 @@ func Risk(entry, target, size, factor, direction string) string {
 	return amount.String()
 }
 func ApplyRisk(row *Trade, factor string) {
-	row.SLAmount = Risk(row.EntryPrice, row.StopLoss, row.Size, factor, row.Direction)
-	row.TPAmount = Risk(row.EntryPrice, row.TakeProfit, row.Size, factor, row.Direction)
+	size := row.Size
+	if row.Status == "open" || row.Status == "closing" {
+		if q, ok := Numeric(row.RemainingSize); ok && !q.IsNegative() {
+			size = q.String()
+		}
+	}
+	row.ProfitPerPriceUnit = factor
+	row.SLAmount = Risk(row.EntryPrice, row.StopLoss, size, factor, row.Direction)
+	row.TPAmount = Risk(row.EntryPrice, row.TakeProfit, size, factor, row.Direction)
 }
 
 func ReadJournal(path string, out any) error {

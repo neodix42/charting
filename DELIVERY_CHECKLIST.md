@@ -2,6 +2,16 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Trade-history P/L and coherent JForex source builds — 2026-11-11
+
+- [x] Refresh notices reserve space; healthy verification text and the requested long caption are removed. Browser checks prove identical table-header Y before/during/after refresh.
+- [x] Legacy account-currency SL/TP risk recovers on refresh; remaining open size and confirmed zero/missing values are tested. Profit/Loss shows current/final values with native SDK/fill attribution and persisted closed results.
+- [x] Executable-relative bridge selection, explicit overrides, symlink launchers, standalone installed fallback and fail-closed damaged bundles have Go regressions. Source/root/build/bin/release/development outputs select their matching bridge without changing an installation or SDK pin.
+- [x] 284 frontend unit tests, 154 Python tests, typecheck/lint, provider/root race/vet and offline pinned SDK checks pass. Both related browser groups pass (38 trading/money/history cases and 40 header/JForex/chart/history cases), including runner-font layout stress.
+- [x] Full native Go race/production/vet checks, Linux build, all three executable-relative real-bundle probes and archive inventory/architecture/runtime provenance pass with unchanged SDK/API pins. Final documentation is included in the archive and root/release checksums are verified.
+- [ ] Post-push hosted checks are tracked by Actions for this revision; see STATUS.md. Native desktop/funded/Windows checks remain separate.
+- [ ] Native desktop, funded Demo/Testnet/Live execution and Windows GUI remain unrun; no real account operation or notification is used for verification.
+
 ## Hosted browser fixes and open-trade chart levels — 2026-11-11
 
 - [x] Both browser failures from Tests run42983193786 reproduce locally and pass with production fixes; geometry, profitability checks and original timeouts remain intact.

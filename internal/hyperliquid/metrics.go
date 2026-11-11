@@ -116,9 +116,10 @@ func tableFor(id *int, maximum int, raw []json.RawMessage) ([]marginTier, string
 
 type positionState struct {
 	Position struct {
-		Coin       string `json:"coin"`
-		Size       string `json:"szi"`
-		MarginUsed string `json:"marginUsed"`
+		Coin          string `json:"coin"`
+		Size          string `json:"szi"`
+		MarginUsed    string `json:"marginUsed"`
+		UnrealizedPnL string `json:"unrealizedPnl"`
 	} `json:"position"`
 }
 type clearinghouseState struct {
