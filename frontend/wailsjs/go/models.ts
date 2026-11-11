@@ -3247,7 +3247,9 @@ export namespace trading {
 	    entryPrice: string;
 	    exitPrice?: string;
 	    stopLoss: string;
+	    stopLossSource?: string;
 	    takeProfit: string;
+	    takeProfitSource?: string;
 	    slAmount: string;
 	    tpAmount: string;
 	    currency: string;
@@ -3302,7 +3304,9 @@ export namespace trading {
 	        this.entryPrice = source["entryPrice"];
 	        this.exitPrice = source["exitPrice"];
 	        this.stopLoss = source["stopLoss"];
+	        this.stopLossSource = source["stopLossSource"];
 	        this.takeProfit = source["takeProfit"];
+	        this.takeProfitSource = source["takeProfitSource"];
 	        this.slAmount = source["slAmount"];
 	        this.tpAmount = source["tpAmount"];
 	        this.currency = source["currency"];

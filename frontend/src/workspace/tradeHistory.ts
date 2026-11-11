@@ -1,5 +1,6 @@
 import type {FeedKey} from '../types';
 export interface TradeRecord {
+ stopLossSource?:string;takeProfitSource?:string;
  exitPrice?:string;pipSize?:string;profitLossPips?:string;profitLossPipsUnit?:string;profitLossPipsTime?:number;profitLossPipsState?:string;profitLossPipsBasis?:string;profitLossPipsError?:string;
  profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string;profitLoss?:string;profitLossCurrency?:string;profitLossTime?:number;profitLossState?:string;profitLossBasis?:string;profitLossError?:string;
  id:string;provider:'dukascopy'|'hyperliquid';environment:string;account:string;instrument:string;market:string;orderId:string;submittedAt:number;openDate:number;closeDate:number;size:string;remainingSize:string;direction:string;entryPrice:string;stopLoss:string;takeProfit:string;slAmount:string;tpAmount:string;currency:string;balanceAtOpen:string;balanceCurrency:string;balanceTime:number;balanceBasis?:string;marginUsed:string;marginCurrency:string;marginBasis?:string;status:string;canClose:boolean;closeReason:string;checkedAt:number;error?:string;

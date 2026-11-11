@@ -32,6 +32,8 @@ type Trade struct {
 	ExitPrice           string `json:"exitPrice,omitempty"`
 	StopLoss            string `json:"stopLoss"`
 	TakeProfit          string `json:"takeProfit"`
+	StopLossSource      string `json:"stopLossSource,omitempty"`
+	TakeProfitSource    string `json:"takeProfitSource,omitempty"`
 	SLAmount            string `json:"slAmount"`
 	TPAmount            string `json:"tpAmount"`
 	Currency            string `json:"currency"`

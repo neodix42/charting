@@ -857,6 +857,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 			}
 			if historyClosed {
 				order.Status = "closed"
+				if scenario == "trade-history-empty-protection" {
+					order.StopLoss, order.TakeProfit = 0, 0
+				}
 				order.RemainingQuantity = 0
 				order.CloseDate = historyCloseAt
 				order.ExitPrice = 1.096548

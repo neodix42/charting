@@ -90,7 +90,39 @@ func newBrokerHistory(j brokerJournal) trading.Trade {
 	if j.Request.Side == "sell" {
 		direction = "short"
 	}
-	return trading.Trade{ID: "dukascopy:" + j.ID, Provider: "dukascopy", Environment: j.Environment, Account: j.Account, Instrument: j.Request.Instrument, Market: "jforex", Direction: direction, SubmittedAt: j.CreatedAt, Size: numberText(j.Request.Quantity), StopLoss: optionalPrice(j.Request.StopLoss), TakeProfit: optionalPrice(j.Request.TakeProfit), Currency: j.Preview.AccountCurrency, Status: "unconfirmed", CloseReason: "Refresh to verify this platform position", MarginBasis: "JForex does not expose reliable per-position margin"}
+	r := trading.Trade{ID: "dukascopy:" + j.ID, Provider: "dukascopy", Environment: j.Environment, Account: j.Account, Instrument: j.Request.Instrument, Market: "jforex", Direction: direction, SubmittedAt: j.CreatedAt, Size: numberText(j.Request.Quantity), StopLoss: optionalPrice(j.Request.StopLoss), TakeProfit: optionalPrice(j.Request.TakeProfit), Currency: j.Preview.AccountCurrency, Status: "unconfirmed", CloseReason: "Refresh to verify this platform position", MarginBasis: "JForex does not expose reliable per-position margin"}
+	if r.StopLoss != "" {
+		r.StopLossSource = "submitted"
+	}
+	if r.TakeProfit != "" {
+		r.TakeProfitSource = "submitted"
+	}
+	return r
+}
+
+// Terminal SDK orders can report zero once protective orders have disappeared.
+// Keep recorded levels for history, while a zero on a live order means removed.
+func applyBrokerProtection(price, source *string, current float64, closed bool) {
+	if current > 0 {
+		*price, *source = optionalPrice(current), "exchange"
+	} else if !closed {
+		*price, *source = "", ""
+	} else if *price != "" && *source != "submitted" {
+		*source = "recorded"
+	}
+}
+
+func recoverClosedBrokerProtection(j *brokerJournal) {
+	r := &j.History
+	if r.Status != "closed" || r.CloseDate <= 0 {
+		return
+	}
+	if r.StopLoss == "" && j.Request.StopLoss > 0 {
+		r.StopLoss, r.StopLossSource = optionalPrice(j.Request.StopLoss), "submitted"
+	}
+	if r.TakeProfit == "" && j.Request.TakeProfit > 0 {
+		r.TakeProfit, r.TakeProfitSource = optionalPrice(j.Request.TakeProfit), "submitted"
+	}
 }
 func applyBrokerSubmission(j *brokerJournal) {
 	r := &j.History
@@ -163,8 +195,9 @@ func applyBrokerSnapshot(j *brokerJournal, order brokerOrder) error {
 	if order.Status == "closed" && order.CloseDate > 0 && order.ExitPrice > 0 && !math.IsInf(order.ExitPrice, 0) && !math.IsNaN(order.ExitPrice) {
 		r.ExitPrice = optionalPrice(order.ExitPrice)
 	}
-	r.StopLoss = optionalPrice(order.StopLoss)
-	r.TakeProfit = optionalPrice(order.TakeProfit)
+	applyBrokerProtection(&r.StopLoss, &r.StopLossSource, order.StopLoss, order.Status == "closed")
+	applyBrokerProtection(&r.TakeProfit, &r.TakeProfitSource, order.TakeProfit, order.Status == "closed")
+	recoverClosedBrokerProtection(j)
 	if order.FilledQuantity > 0 {
 		r.Size = numberText(order.FilledQuantity)
 	}
@@ -247,6 +280,16 @@ func (m *Manager) readTradeJournal(id string) (*brokerJournal, error) {
 	}
 	if j.History.ID != "dukascopy:"+id || j.History.Environment != j.Environment || j.History.Account != j.Account || j.History.Instrument != j.Request.Instrument || len(j.Closes) > 100 {
 		return nil, errors.New("Dukascopy journal identity mismatch; original preserved")
+	}
+	// Repair old rows in memory before login/network work, without rewriting the
+	// claim on a read. The next ordinary successful refresh persists the repair.
+	if j.History.Status == "closed" && j.History.CloseDate > 0 {
+		recoverClosedBrokerProtection(&j)
+		factor := j.History.ProfitPerPriceUnit
+		if factor == "" && j.History.Currency != "" && j.History.Currency == j.Preview.AccountCurrency && j.Preview.ValuationError == "" {
+			factor = numberText(j.Preview.ProfitPerPriceUnit)
+		}
+		trading.ApplyRisk(&j.History, factor)
 	}
 	return &j, nil
 }

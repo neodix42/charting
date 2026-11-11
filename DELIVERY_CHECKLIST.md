@@ -1,5 +1,14 @@
 # Release checklist — observed 2026-10-19
 
+## Closed-trade protection history recovery — 2026-11-11
+
+- [x] Reproduced loss of closed SL/TP and recovered prices/estimates from an isolated copy of the affected saved claim without account calls or original-profile changes.
+- [x] Provider/shared/root race and provider vet, 285 frontend unit tests, typecheck/lint and 15 history/chart browser cases pass. Submitted and last-recorded sources, absent FX/targets, active removals and closure/refresh/restart are covered with synthetic data.
+- [x] Native production-tagged root race/vet, Linux build, actual bundled SDK no-login probe and archive inventory/architecture/runtime-provenance checks pass; final documentation and verified checksums are included.
+- [ ] Hosted tests and both release builds for this revision are tracked by Actions; see STATUS.md.
+- [ ] Native desktop and funded order/close execution remain unrun.
+
+
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
 ## Stable order-metrics geometry — 2026-11-11

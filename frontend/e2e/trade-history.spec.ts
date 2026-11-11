@@ -87,3 +87,21 @@ test('Exit price follows Entry price and native pips/entry ticks follow monetary
  await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(open.getByRole('cell').nth(entry+1)).toHaveText('60,999');await expect(open.locator('.trade-history-pips')).toHaveText('-100 ticksClosed');
  await reloadTestApp(page);await enter(page);await expect(open.getByRole('cell').nth(entry+1)).toHaveText('60,999');await expect(open.locator('.trade-history-pips')).toHaveText('-100 ticksClosed');
 });
+
+test('closed protection prices and estimates retain their recorded or submission basis across refresh and reload',async({page})=>{
+ await openTestApp(page);
+ const closed=record({id:'dukascopy:'+'c'.repeat(32),provider:'dukascopy',instrument:'EUR/USD',orderId:'D-303',status:'closed',closeDate:Date.now(),canClose:false,remainingSize:'0',size:'1000',entryPrice:'1.1003',stopLoss:'1.09',takeProfit:'1.125',stopLossSource:'submitted',takeProfitSource:'recorded',slAmount:'-9.27',tpAmount:'22.23',currency:'EUR'});
+ await seed(page,[closed,record({id:'dukascopy:'+'d'.repeat(32),provider:'dukascopy',instrument:'GBP/USD',orderId:'D-404',stopLoss:'',takeProfit:'',slAmount:'',tpAmount:'',currency:'USD'})]);
+ await enter(page);
+ const row=panel(page).getByRole('row').filter({hasText:'EUR/USD'}),active=panel(page).getByRole('row').filter({hasText:'GBP/USD'});
+ const verify=async()=>{
+  await expect(row.getByRole('cell').nth(10)).toHaveText('1.09At submission');
+  await expect(row.getByRole('cell').nth(10)).toHaveAttribute('title',/final exchange level is unavailable/);
+  await expect(row.getByRole('cell').nth(11)).toHaveText('1.125Last recorded');
+  await expect(row.getByRole('cell').nth(12)).toHaveText('-9.27 EUR');
+  await expect(row.getByRole('cell').nth(13)).toHaveText('22.23 EUR');
+  for(const column of [10,11,12,13])await expect(active.getByRole('cell').nth(column)).toHaveText('—');
+ };
+ await verify();await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(panel(page).getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();await verify();
+ await reloadTestApp(page);await enter(page);await verify();
+});
