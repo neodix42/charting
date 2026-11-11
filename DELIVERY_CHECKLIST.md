@@ -2,6 +2,14 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Trade-history exit prices and pip/tick P/L — 2026-11-11
+
+- [x] Exit price and Profit/Loss, pips occupy the requested adjacent columns; open/incomplete closing histories stay unavailable.
+- [x] Native Dukascopy pips, fixed-entry Hyperliquid ticks, Long/Short partial exits, reversal caps, missing versus zero, legacy backfill and final persistence have provider/root race and pinned SDK regressions.
+- [x] 285 frontend unit tests, typecheck/lint, provider/root race/vet and all 35 selected browser cases pass. Linux build, actual no-login bundled SDK probe, archive inventory/architecture/runtime provenance and root/release checksums pass; final verification is included.
+- [ ] Post-push hosted verification is tracked by Actions for this revision; see STATUS.md.
+- [ ] Native desktop, funded account execution and Windows GUI remain unrun; all tests use explicit fixtures and isolated profiles.
+
 ## Trade-history P/L and coherent JForex source builds — 2026-11-11
 
 - [x] Refresh notices reserve space; healthy verification text and the requested long caption are removed. Browser checks prove identical table-header Y before/during/after refresh.
@@ -9,7 +17,7 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 - [x] Executable-relative bridge selection, explicit overrides, symlink launchers, standalone installed fallback and fail-closed damaged bundles have Go regressions. Source/root/build/bin/release/development outputs select their matching bridge without changing an installation or SDK pin.
 - [x] 284 frontend unit tests, 154 Python tests, typecheck/lint, provider/root race/vet and offline pinned SDK checks pass. Both related browser groups pass (38 trading/money/history cases and 40 header/JForex/chart/history cases), including runner-font layout stress.
 - [x] Full native Go race/production/vet checks, Linux build, all three executable-relative real-bundle probes and archive inventory/architecture/runtime provenance pass with unchanged SDK/API pins. Final documentation is included in the archive and root/release checksums are verified.
-- [ ] Post-push hosted checks are tracked by Actions for this revision; see STATUS.md. Native desktop/funded/Windows checks remain separate.
+- [x] Post-push Tests run43013005387 and both platform builds/publication pass for 269f7f8 (v0.1.66), including 400 hosted browser cases and packaged-runtime checks. Native desktop/funded/Windows GUI checks remain separate.
 - [ ] Native desktop, funded Demo/Testnet/Live execution and Windows GUI remain unrun; no real account operation or notification is used for verification.
 
 ## Hosted browser fixes and open-trade chart levels — 2026-11-11

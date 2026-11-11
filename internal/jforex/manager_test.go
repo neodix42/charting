@@ -831,12 +831,15 @@ func TestBridgeHelperProcess(t *testing.T) {
 			order := brokerOrder{Intent: intent, OrderID: "offline-order-1", Instrument: tradeRequest.Instrument, Side: tradeRequest.Side, Status: "open", OriginalQuantity: tradeRequest.Quantity, FilledQuantity: tradeRequest.Quantity, RemainingQuantity: tradeRequest.Quantity, EntryPrice: 1.1003, StopLoss: tradeRequest.StopLoss, TakeProfit: tradeRequest.TakeProfit, OpenDate: historyOpenAt}
 			if op == "tradeHistory" {
 				historyReads++
-				factor, pnl := .9, 12.5
+				factor, pnl, pips := .9, 12.5, 125.5
 				order.AccountCurrency = "EUR"
 				order.ProfitPerPriceUnit = &factor
 				order.ValuationTime = time.Now().UnixMilli()
 				order.ProfitLoss = &pnl
 				order.ProfitLossTime = time.Now().UnixMilli()
+				order.PipSize = .0001
+				order.ProfitLossPips = &pips
+				order.ProfitLossPipsTime = time.Now().UnixMilli()
 			}
 			if scenario == "trade-history-outside" {
 				order.Intent = strings.Repeat("f", 32)
@@ -856,9 +859,11 @@ func TestBridgeHelperProcess(t *testing.T) {
 				order.Status = "closed"
 				order.RemainingQuantity = 0
 				order.CloseDate = historyCloseAt
+				order.ExitPrice = 1.096548
 				if op == "tradeHistory" {
-					pnl := -3.75
+					pnl, pips := -3.75, -37.5
 					order.ProfitLoss = &pnl
+					order.ProfitLossPips = &pips
 				}
 			}
 			respond(id, order)

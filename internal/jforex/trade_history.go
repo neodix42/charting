@@ -16,26 +16,31 @@ import (
 )
 
 type brokerOrder struct {
-	Intent             string   `json:"intent"`
-	OrderID            string   `json:"orderID"`
-	Instrument         string   `json:"instrument"`
-	Side               string   `json:"side"`
-	Status             string   `json:"status"`
-	OriginalQuantity   float64  `json:"originalQuantity"`
-	FilledQuantity     float64  `json:"filledQuantity"`
-	RemainingQuantity  float64  `json:"remainingQuantity"`
-	EntryPrice         float64  `json:"entryPrice"`
-	StopLoss           float64  `json:"stopLoss"`
-	TakeProfit         float64  `json:"takeProfit"`
-	OpenDate           int64    `json:"openDate"`
-	CloseDate          int64    `json:"closeDate"`
-	AccountCurrency    string   `json:"accountCurrency,omitempty"`
-	ProfitPerPriceUnit *float64 `json:"profitPerPriceUnit,omitempty"`
-	ValuationTime      int64    `json:"valuationTime,omitempty"`
-	ValuationError     string   `json:"valuationError,omitempty"`
-	ProfitLoss         *float64 `json:"profitLoss,omitempty"`
-	ProfitLossTime     int64    `json:"profitLossTime,omitempty"`
-	ProfitLossError    string   `json:"profitLossError,omitempty"`
+	Intent              string   `json:"intent"`
+	OrderID             string   `json:"orderID"`
+	Instrument          string   `json:"instrument"`
+	Side                string   `json:"side"`
+	Status              string   `json:"status"`
+	OriginalQuantity    float64  `json:"originalQuantity"`
+	FilledQuantity      float64  `json:"filledQuantity"`
+	RemainingQuantity   float64  `json:"remainingQuantity"`
+	EntryPrice          float64  `json:"entryPrice"`
+	ExitPrice           float64  `json:"exitPrice,omitempty"`
+	StopLoss            float64  `json:"stopLoss"`
+	TakeProfit          float64  `json:"takeProfit"`
+	OpenDate            int64    `json:"openDate"`
+	CloseDate           int64    `json:"closeDate"`
+	AccountCurrency     string   `json:"accountCurrency,omitempty"`
+	ProfitPerPriceUnit  *float64 `json:"profitPerPriceUnit,omitempty"`
+	ValuationTime       int64    `json:"valuationTime,omitempty"`
+	ValuationError      string   `json:"valuationError,omitempty"`
+	ProfitLoss          *float64 `json:"profitLoss,omitempty"`
+	ProfitLossTime      int64    `json:"profitLossTime,omitempty"`
+	ProfitLossError     string   `json:"profitLossError,omitempty"`
+	PipSize             float64  `json:"pipSize,omitempty"`
+	ProfitLossPips      *float64 `json:"profitLossPips,omitempty"`
+	ProfitLossPipsTime  int64    `json:"profitLossPipsTime,omitempty"`
+	ProfitLossPipsError string   `json:"profitLossPipsError,omitempty"`
 }
 type brokerJournal struct {
 	ID          string                 `json:"id"`
@@ -152,6 +157,12 @@ func applyBrokerSnapshot(j *brokerJournal, order brokerOrder) error {
 	r.Status = order.Status
 	r.RemainingSize = numberText(order.RemainingQuantity)
 	r.EntryPrice = optionalPrice(order.EntryPrice)
+	if order.Status != "closed" || previousStatus != "closed" {
+		r.ExitPrice = ""
+	}
+	if order.Status == "closed" && order.CloseDate > 0 && order.ExitPrice > 0 && !math.IsInf(order.ExitPrice, 0) && !math.IsNaN(order.ExitPrice) {
+		r.ExitPrice = optionalPrice(order.ExitPrice)
+	}
 	r.StopLoss = optionalPrice(order.StopLoss)
 	r.TakeProfit = optionalPrice(order.TakeProfit)
 	if order.FilledQuantity > 0 {
@@ -197,6 +208,24 @@ func applyBrokerSnapshot(j *brokerJournal, order brokerOrder) error {
 		r.ProfitLossError = order.ProfitLossError
 		if r.ProfitLossError == "" {
 			r.ProfitLossError = "Refresh using the matching updated JForex bridge to retrieve position profit/loss"
+		}
+	}
+	if order.PipSize > 0 && !math.IsInf(order.PipSize, 0) && !math.IsNaN(order.PipSize) {
+		r.PipSize = numberText(order.PipSize)
+	}
+	if order.ProfitLossPips != nil && !math.IsNaN(*order.ProfitLossPips) && !math.IsInf(*order.ProfitLossPips, 0) && order.ProfitLossPipsTime >= time.Now().Add(-30*time.Second).UnixMilli() && order.ProfitLossPipsTime <= time.Now().Add(5*time.Second).UnixMilli() && (order.Status == "open" || order.Status == "closing" || order.Status == "closed" && order.CloseDate > 0) {
+		r.ProfitLossPips = numberText(*order.ProfitLossPips)
+		r.ProfitLossPipsUnit = "pips"
+		r.ProfitLossPipsTime = order.ProfitLossPipsTime
+		r.ProfitLossPipsState = order.Status
+		r.ProfitLossPipsBasis = "JForex SDK reported profit/loss in instrument pips (rounded by the broker to 0.1 pip)"
+		r.ProfitLossPipsError = ""
+	} else if r.Status != "closed" || previousStatus != "closed" || r.ProfitLossPips == "" {
+		r.ProfitLossPips = ""
+		r.ProfitLossPipsState = ""
+		r.ProfitLossPipsError = order.ProfitLossPipsError
+		if r.ProfitLossPipsError == "" {
+			r.ProfitLossPipsError = "Refresh using the matching updated JForex bridge to retrieve instrument pips"
 		}
 	}
 	return nil
@@ -346,6 +375,8 @@ func (m *Manager) RefreshTrade(ctx context.Context, id string) (trading.Trade, e
 		if j.History.Status != "closed" {
 			j.History.ProfitLoss = ""
 			j.History.ProfitLossError = err.Error()
+			j.History.ProfitLossPips = ""
+			j.History.ProfitLossPipsError = err.Error()
 		}
 	} else {
 		j.History.Error = ""

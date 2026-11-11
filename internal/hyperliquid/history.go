@@ -223,6 +223,26 @@ func (s *Store) historyOrder(ctx context.Context, v Settings, cloid string) (que
 	err := s.post(ctx, v, "/info", map[string]any{"type": "orderStatus", "user": v.AccountAddress, "oid": cloid}, &out)
 	return out, err
 }
+
+// Tick counts use the valid price increment at the filled entry, fixed for this
+// trade. A quantity-weighted price P/L keeps partial exits on the original size.
+func setHistoryTicks(r *trading.Trade, pricePnL decimal.Decimal, at int64) {
+	quantity, qOK := trading.Numeric(r.Size)
+	tick, tOK := trading.Numeric(r.PipSize)
+	if !qOK || !tOK || !quantity.IsPositive() || !tick.IsPositive() {
+		return
+	}
+	r.ProfitLossPips = pricePnL.Div(quantity.Mul(tick)).String()
+	r.ProfitLossPipsUnit = "ticks"
+	r.ProfitLossPipsTime = at
+	r.ProfitLossPipsState = r.Status
+	r.ProfitLossPipsBasis = "Quantity-weighted realized price movement plus current unrealized position P/L, before fees/funding; fixed entry tick = " + tick.String()
+	if r.Status == "closed" {
+		r.ProfitLossPipsBasis = "Signed price movement from filled entry to quantity-weighted confirmed exit, before fees/funding; fixed entry tick = " + tick.String()
+	}
+	r.ProfitLossPipsError = ""
+}
+
 func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) error {
 	s.mu.Lock()
 	v := s.settings
@@ -234,7 +254,7 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	if v.AccountAddress != p.AccountAddress || v.Network != p.Network {
 		return errors.New("Configure the account/network that opened this trade")
 	}
-	if r.CloseDate > 0 && r.Status == "closed" && r.ProfitLoss != "" && r.ProfitLossState == "closed" {
+	if r.CloseDate > 0 && r.Status == "closed" && r.ProfitLoss != "" && r.ProfitLossState == "closed" && r.ExitPrice != "" && r.ProfitLossPips != "" && r.ProfitLossPipsState == "closed" {
 		r.CheckedAt = s.now().UnixMilli()
 		return nil
 	}
@@ -292,9 +312,16 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 		return errors.New("Complete entry fill history is unavailable")
 	}
 	r.Size = quantity.String()
-	r.EntryPrice = cost.Div(quantity).String()
+	entry := cost.Div(quantity)
+	if r.EntryPrice != entry.String() {
+		r.PipSize = ""
+	}
+	r.EntryPrice = entry.String()
 	r.OpenDate = first
 	m, marketErr := s.market(ctx, v, p.Request)
+	if marketErr == nil && r.PipSize == "" && m.szDecimals >= 0 && m.szDecimals <= 6 {
+		r.PipSize = decimal.New(1, -priceDecimals(entry, m.szDecimals, p.Request.Market == "spot")).String()
+	}
 	factor := p.ProfitPerPriceUnit
 	if marketErr == nil && profitFactor(m) != "" {
 		if p.AccountCurrency == "" || p.AccountCurrency == m.accountCurrency {
@@ -310,11 +337,16 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	r.ProfitLoss = ""
 	r.ProfitLossState = ""
 	r.ProfitLossError = "Position profit/loss is not yet verified"
+	r.ExitPrice = ""
+	r.ProfitLossPips = ""
+	r.ProfitLossPipsState = ""
+	r.ProfitLossPipsError = "Entry price tick or complete position prices are unavailable"
 	trading.ApplyRisk(r, factor)
 	if p.Request.Market == "spot" {
 		r.Status = "filled"
 		r.CloseReason = "Spot orders are executions, not separately closeable positions"
 		r.ProfitLossError = "Spot executions have no separately attributable position profit/loss"
+		r.ProfitLossPipsError = r.ProfitLossError
 		r.CheckedAt = s.now().UnixMilli()
 		return nil
 	}
@@ -323,6 +355,7 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 	started := false
 	closedAt := int64(0)
 	realized, realizedKnown := decimal.Zero, true
+	exitSize, exitCost := decimal.Zero, decimal.Zero
 	for _, fill := range fills {
 		if fill.Coin != p.Request.Instrument || fill.Time < first {
 			continue
@@ -349,6 +382,11 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 			mixed = true
 		}
 		if !position.IsZero() && position.Sign() != delta.Sign() {
+			// A reversal fill can be larger than this trade's remaining size.
+			closedSize := decimal.Min(position.Abs(), delta.Abs())
+			px, _ := trading.Numeric(fill.Px)
+			exitSize = exitSize.Add(closedSize)
+			exitCost = exitCost.Add(closedSize.Mul(px))
 			value, known := trading.Numeric(fill.ClosedPnL)
 			if !known {
 				realizedKnown = false
@@ -367,6 +405,14 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 			r.CheckedAt = s.now().UnixMilli()
 			r.CloseReason = "This trade's exposure is closed"
 			trading.ApplyRisk(r, factor)
+			if !mixed && exitSize.Equal(quantity) {
+				r.ExitPrice = exitCost.Div(exitSize).String()
+				pricePnL := exitCost.Sub(entry.Mul(exitSize))
+				if p.Request.Side == "sell" {
+					pricePnL = pricePnL.Neg()
+				}
+				setHistoryTicks(r, pricePnL, s.now().UnixMilli())
+			}
 			if !mixed && realizedKnown && r.Currency != "" {
 				r.ProfitLoss = realized.String()
 				r.ProfitLossCurrency = r.Currency
@@ -436,12 +482,22 @@ func (s *Store) refreshOrder(ctx context.Context, id string, j *orderJournal) er
 		r.ValuationError = "Other executions share this net position; the trade's remaining size cannot be attributed"
 		r.CloseReason = "Other executions share this net position; an individual platform trade cannot be closed safely"
 		r.ProfitLossError = "Other executions share this net position; individual trade P/L is unavailable"
+		r.ProfitLossPipsError = r.ProfitLossError
 		return nil
 	}
 	r.MarginUsed = margin
 	r.MarginCurrency = m.accountCurrency
 	r.MarginBasis = "Last observed exchange margin for the verified position"
 	trading.ApplyRisk(r, factor)
+	if floating, valid := trading.Numeric(unrealized); valid && r.Currency != "" && r.Currency == m.accountCurrency {
+		if unitFactor, known := trading.Numeric(profitFactor(m)); known && unitFactor.IsPositive() {
+			pricePnL := exitCost.Sub(entry.Mul(exitSize))
+			if p.Request.Side == "sell" {
+				pricePnL = pricePnL.Neg()
+			}
+			setHistoryTicks(r, pricePnL.Add(floating.Div(unitFactor)), s.now().UnixMilli())
+		}
+	}
 	if floating, valid := trading.Numeric(unrealized); valid && realizedKnown && r.Currency != "" && r.Currency == m.accountCurrency {
 		r.ProfitLoss = realized.Add(floating).String()
 		r.ProfitLossCurrency = r.Currency
@@ -509,6 +565,8 @@ func (s *Store) RefreshTrade(ctx context.Context, id string) (trading.Trade, err
 		if j.History.Status != "closed" {
 			j.History.ProfitLoss = ""
 			j.History.ProfitLossError = err.Error()
+			j.History.ProfitLossPips = ""
+			j.History.ProfitLossPipsError = err.Error()
 		}
 	} else {
 		j.History.Error = j.ProtectionWarning

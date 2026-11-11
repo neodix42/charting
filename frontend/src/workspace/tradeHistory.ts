@@ -1,5 +1,6 @@
 import type {FeedKey} from '../types';
 export interface TradeRecord {
+ exitPrice?:string;pipSize?:string;profitLossPips?:string;profitLossPipsUnit?:string;profitLossPipsTime?:number;profitLossPipsState?:string;profitLossPipsBasis?:string;profitLossPipsError?:string;
  profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string;profitLoss?:string;profitLossCurrency?:string;profitLossTime?:number;profitLossState?:string;profitLossBasis?:string;profitLossError?:string;
  id:string;provider:'dukascopy'|'hyperliquid';environment:string;account:string;instrument:string;market:string;orderId:string;submittedAt:number;openDate:number;closeDate:number;size:string;remainingSize:string;direction:string;entryPrice:string;stopLoss:string;takeProfit:string;slAmount:string;tpAmount:string;currency:string;balanceAtOpen:string;balanceCurrency:string;balanceTime:number;balanceBasis?:string;marginUsed:string;marginCurrency:string;marginBasis?:string;status:string;canClose:boolean;closeReason:string;checkedAt:number;error?:string;
 }
@@ -22,4 +23,12 @@ export function tradeProfitLoss(row:TradeRecord,now=Date.now()){
  const fresh=closed||!!row.profitLossTime&&now-row.profitLossTime<=45000&&row.profitLossTime<=now+5000;
  const available=raw!==undefined&&raw!==''&&Number.isFinite(Number(raw))&&state&&fresh&&(closed||!row.error)&&!!row.profitLossCurrency?.trim()&&(closed||Number(row.remainingSize)>0);
  return {text:available?tradeMoney(raw,row.profitLossCurrency!):'—',label:available?(closed?'Closed':'Current'):'',tone:available?(Number(raw)>0?'profit':Number(raw)<0?'loss':''):'',title:available?row.profitLossBasis||'Exchange-reported position profit/loss':row.profitLossError||(!fresh?'Waiting for fresh exchange profit/loss':'Profit/loss is not yet confirmed')};
+}
+
+export function tradePipsProfitLoss(row:TradeRecord,now=Date.now()){
+ const closed=row.status==='closed'&&row.closeDate>0,raw=row.profitLossPips,unit=row.profitLossPipsUnit;
+ const state=closed?row.profitLossPipsState==='closed':['open','closing'].includes(row.profitLossPipsState??'');
+ const fresh=closed||!!row.profitLossPipsTime&&now-row.profitLossPipsTime<=45000&&row.profitLossPipsTime<=now+5000;
+ const available=raw!==undefined&&raw!==''&&Number.isFinite(Number(raw))&&state&&fresh&&(closed||!row.error)&&(unit==='pips'||unit==='ticks')&&(closed||Number(row.remainingSize)>0);
+ return {text:available?`${tradeNumber(raw)} ${unit}`:'—',label:available?(closed?'Closed':'Current'):'',tone:available?(Number(raw)>0?'profit':Number(raw)<0?'loss':''):'',title:available?row.profitLossPipsBasis||`Price profit/loss in ${unit}${row.pipSize?` (unit size ${row.pipSize})`:''}`:row.profitLossPipsError||(!fresh?'Waiting for fresh exchange pip/tick profit/loss':'Pip/tick profit/loss is not yet confirmed')};
 }

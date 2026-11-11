@@ -14,7 +14,7 @@ test('Trade history follows Predictions, stays lazy, labels actual currencies an
  expect(await page.locator('.tab-row > button[role=tab]').allTextContents()).toEqual(['Screener','Predictions','Trade history']);await enter(page);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);await expect(page.getByTestId('chart-cell')).toHaveCount(0);
  const headers=await panel(page).getByRole('columnheader').allTextContents();for(const name of ['Order ID','Open date','Close date','Size','Direction','SL price','TP price','SL amount (est.)','TP amount (est.)','Balance at open','Margin used'])expect(headers).toContain(name);
- const eur=panel(page).getByRole('row').filter({hasText:'EUR/USD'});await expect(eur).toContainText('-9.27 EUR');await expect(eur).toContainText('17.73 EUR');await expect(eur).toContainText('0.00 EUR');await expect(eur.getByRole('cell').nth(15)).toHaveText('—');
+ const eur=panel(page).getByRole('row').filter({hasText:'EUR/USD'});await expect(eur).toContainText('-9.27 EUR');await expect(eur).toContainText('17.73 EUR');await expect(eur).toContainText('0.00 EUR');await expect(eur.getByRole('cell').nth(17)).toHaveText('—');
  const btc=panel(page).getByRole('row').filter({hasText:'BTC'});await expect(btc).toContainText('-10.00 USDC');await expect(btc).toContainText('20.00 USDC');await expect(btc).toContainText('203.33 USDC');await expect(close(page)).toBeDisabled();
  await page.clock.install();const reads=await page.evaluate(()=>(window as any).__testTradeHistoryReads());await page.locator('[data-tab-id]').first().click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);await page.clock.fastForward(30000);expect(await page.evaluate(()=>(window as any).__testTradeHistoryReads())).toBe(reads);
 });
@@ -70,4 +70,20 @@ test('refreshed risk and P/L values use account currencies and retain the final 
  await seed(page,[{...first,status:'closed',canClose:false,remainingSize:'0',closeDate:Date.now(),slAmount:'-9',tpAmount:'18',profitLoss:'-3.75',profitLossCurrency:'EUR',profitLossState:'closed',profitLossTime:Date.now()}]);
  await page.evaluate(()=>{window.go!.main!.App!.RefreshTradeHistory=async ids=>(window as any).__testTradeHistory().filter((row:TradeRecord)=>ids.includes(row.id));});await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(row.locator('.trade-history-pnl')).toHaveText('-3.75 EURClosed');
  await reloadTestApp(page);await enter(page);await expect(row.locator('.trade-history-pnl')).toHaveText('-3.75 EURClosed');
+});
+
+
+test('Exit price follows Entry price and native pips/entry ticks follow monetary P/L through close and reload',async({page})=>{
+ await openTestApp(page);const now=Date.now();
+ const btc=record({profitLossPips:'250',profitLossPipsUnit:'ticks',profitLossPipsState:'open',profitLossPipsTime:now,pipSize:'0.01',exitPrice:'99999'});
+ const eur=record({id:'dukascopy:'+'b'.repeat(32),provider:'dukascopy',instrument:'EUR/USD',orderId:'D-202',profitLossPips:'-37.5',profitLossPipsUnit:'pips',profitLossPipsState:'closed',profitLossPipsTime:now,exitPrice:'1.096548',entryPrice:'1.1003',status:'closed',closeDate:now,remainingSize:'0',canClose:false});
+ await seed(page,[btc,eur]);await enter(page);
+ const names=await panel(page).getByRole('columnheader').allTextContents(),entry=names.indexOf('Entry price');
+ expect(names[entry+1]).toBe('Exit price');expect(names[names.indexOf('Profit/Loss')+1]).toBe('Profit/Loss, pips');
+ const open=panel(page).getByRole('row').filter({hasText:'BTC'}),closed=panel(page).getByRole('row').filter({hasText:'EUR/USD'});
+ await expect(open.getByRole('cell').nth(entry+1)).toHaveText('—');await expect(open.locator('.trade-history-pips')).toHaveText('250 ticksCurrent');
+ await expect(closed.getByRole('cell').nth(entry+1)).toHaveText('1.096548');await expect(closed.locator('.trade-history-pips')).toHaveText('-37.5 pipsClosed');
+ await seed(page,[{...btc,status:'closed',closeDate:now,remainingSize:'0',canClose:false,exitPrice:'60999',profitLossPips:'-100',profitLossPipsState:'closed'},eur]);
+ await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(open.getByRole('cell').nth(entry+1)).toHaveText('60,999');await expect(open.locator('.trade-history-pips')).toHaveText('-100 ticksClosed');
+ await reloadTestApp(page);await enter(page);await expect(open.getByRole('cell').nth(entry+1)).toHaveText('60,999');await expect(open.locator('.trade-history-pips')).toHaveText('-100 ticksClosed');
 });

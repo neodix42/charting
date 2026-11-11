@@ -3245,6 +3245,7 @@ export namespace trading {
 	    remainingSize: string;
 	    direction: string;
 	    entryPrice: string;
+	    exitPrice?: string;
 	    stopLoss: string;
 	    takeProfit: string;
 	    slAmount: string;
@@ -3259,6 +3260,13 @@ export namespace trading {
 	    profitLossState?: string;
 	    profitLossBasis?: string;
 	    profitLossError?: string;
+	    pipSize?: string;
+	    profitLossPips?: string;
+	    profitLossPipsUnit?: string;
+	    profitLossPipsTime?: number;
+	    profitLossPipsState?: string;
+	    profitLossPipsBasis?: string;
+	    profitLossPipsError?: string;
 	    balanceAtOpen: string;
 	    balanceCurrency: string;
 	    balanceTime: number;
@@ -3292,6 +3300,7 @@ export namespace trading {
 	        this.remainingSize = source["remainingSize"];
 	        this.direction = source["direction"];
 	        this.entryPrice = source["entryPrice"];
+	        this.exitPrice = source["exitPrice"];
 	        this.stopLoss = source["stopLoss"];
 	        this.takeProfit = source["takeProfit"];
 	        this.slAmount = source["slAmount"];
@@ -3306,6 +3315,13 @@ export namespace trading {
 	        this.profitLossState = source["profitLossState"];
 	        this.profitLossBasis = source["profitLossBasis"];
 	        this.profitLossError = source["profitLossError"];
+	        this.pipSize = source["pipSize"];
+	        this.profitLossPips = source["profitLossPips"];
+	        this.profitLossPipsUnit = source["profitLossPipsUnit"];
+	        this.profitLossPipsTime = source["profitLossPipsTime"];
+	        this.profitLossPipsState = source["profitLossPipsState"];
+	        this.profitLossPipsBasis = source["profitLossPipsBasis"];
+	        this.profitLossPipsError = source["profitLossPipsError"];
 	        this.balanceAtOpen = source["balanceAtOpen"];
 	        this.balanceCurrency = source["balanceCurrency"];
 	        this.balanceTime = source["balanceTime"];

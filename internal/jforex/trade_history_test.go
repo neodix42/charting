@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBrokerPlatformHistoryCapturesExecutionBalanceAndClosesVerifiedOrder(t *testing.T) {
@@ -136,7 +137,7 @@ func TestBrokerHistoryRecoversLegacyRiskAndReportedOpenAndClosedProfit(t *testin
 		t.Fatal(err)
 	}
 	row, err := m.RefreshTrade(ctx, preview.ID)
-	if err != nil || row.Currency != "EUR" || row.SLAmount != "-9.27" || row.TPAmount != "17.73" || row.ProfitLoss != "12.5" || row.ProfitLossCurrency != "EUR" || row.ProfitLossState != "open" {
+	if err != nil || row.Currency != "EUR" || row.SLAmount != "-9.27" || row.TPAmount != "17.73" || row.ProfitLoss != "12.5" || row.ProfitLossCurrency != "EUR" || row.ProfitLossState != "open" || row.ProfitLossPips != "125.5" || row.ProfitLossPipsUnit != "pips" || row.ExitPrice != "" {
 		t.Fatal(row, err)
 	}
 	plan, err := m.PreviewClose(ctx, preview.ID)
@@ -144,15 +145,48 @@ func TestBrokerHistoryRecoversLegacyRiskAndReportedOpenAndClosedProfit(t *testin
 		t.Fatal(err)
 	}
 	row, err = m.ConfirmClose(ctx, plan.ID)
-	if err != nil || row.Status != "closed" || row.ProfitLoss != "" {
+	if err != nil || row.Status != "closed" || row.ProfitLoss != "" || row.ProfitLossPips != "" {
 		t.Fatal("open P/L must not be presented as final", row, err)
 	}
 	row, err = m.RefreshTrade(ctx, preview.ID)
-	if err != nil || row.ProfitLoss != "-3.75" || row.ProfitLossState != "closed" || row.CloseDate == 0 {
+	if err != nil || row.ProfitLoss != "-3.75" || row.ProfitLossState != "closed" || row.CloseDate == 0 || row.ExitPrice != "1.096548" || row.ProfitLossPips != "-37.5" || row.ProfitLossPipsState != "closed" {
 		t.Fatal(row, err)
 	}
 	rows, issues := m.TradeHistory()
-	if len(issues) != 0 || len(rows) != 1 || rows[0].ProfitLoss != "-3.75" {
+	if len(issues) != 0 || len(rows) != 1 || rows[0].ProfitLoss != "-3.75" || rows[0].ExitPrice != "1.096548" || rows[0].ProfitLossPips != "-37.5" {
 		t.Fatal(rows, issues)
+	}
+}
+
+func TestBrokerPipsAreIndependentOfCurrencyAndNeverReuseOpenResultAsFinal(t *testing.T) {
+	now := time.Now().UnixMilli()
+	j := brokerJournal{ID: strings.Repeat("a", 32), Request: sampleTrade()}
+	zero := 0.0
+	order := brokerOrder{Intent: j.ID, OrderID: "owned", Instrument: j.Request.Instrument, Side: j.Request.Side, Status: "open", OriginalQuantity: j.Request.Quantity, FilledQuantity: j.Request.Quantity, RemainingQuantity: j.Request.Quantity, EntryPrice: 1.1003, OpenDate: now - 1000, PipSize: .0001, ProfitLossPips: &zero, ProfitLossPipsTime: now}
+	if err := applyBrokerSnapshot(&j, order); err != nil || j.History.ProfitLossPips != "0" || j.History.ProfitLossPipsUnit != "pips" || j.History.Currency != "" {
+		t.Fatal(j.History, err)
+	}
+	order.ProfitLossPipsTime = now - 60000
+	if err := applyBrokerSnapshot(&j, order); err != nil || j.History.ProfitLossPips != "" {
+		t.Fatal("stale native pips displayed", j.History, err)
+	}
+	order.ProfitLossPipsTime = now
+	if err := applyBrokerSnapshot(&j, order); err != nil {
+		t.Fatal(err)
+	}
+	order.Status, order.CloseDate, order.RemainingQuantity = "closed", now, 0
+	order.ExitPrice = 1.096548
+	order.ProfitLossPips = nil
+	if err := applyBrokerSnapshot(&j, order); err != nil || j.History.ExitPrice != "1.096548" || j.History.ProfitLossPips != "" {
+		t.Fatal("open pip result reused as final", j.History, err)
+	}
+	final := -37.5
+	order.ProfitLossPips = &final
+	if err := applyBrokerSnapshot(&j, order); err != nil || j.History.ProfitLossPips != "-37.5" || j.History.ProfitLossPipsState != "closed" {
+		t.Fatal(j.History, err)
+	}
+	order.ProfitLossPips, order.ExitPrice = nil, 0
+	if err := applyBrokerSnapshot(&j, order); err != nil || j.History.ExitPrice != "1.096548" || j.History.ProfitLossPips != "-37.5" {
+		t.Fatal("confirmed final values lost", j.History, err)
 	}
 }

@@ -1018,6 +1018,18 @@ public final class Bridge implements AutoCloseable {
         result.put("remainingQuantity", state == IOrder.State.FILLED ? order.getAmount() * 1_000_000.0 : 0);
         result.put("entryPrice", order.getOpenPrice()); result.put("stopLoss", order.getStopLossPrice()); result.put("takeProfit", order.getTakeProfitPrice());
         result.put("openDate", order.getFillTime()); result.put("closeDate", state == IOrder.State.CLOSED ? order.getCloseTime() : 0);
+        // getClosePrice() is only the latest partial exit. Publish the whole
+        // trade's exit only when the SDK closing fills cover its filled size.
+        if (state == IOrder.State.CLOSED && filled > 0) try {
+            List<ICloseOrder> exits = order.getCloseHistory();
+            double amount = 0, cost = 0;
+            if (exits != null) for (ICloseOrder exit : exits) {
+                double q = exit.getAmount() * 1_000_000.0, px = exit.getPrice();
+                if (!Double.isFinite(q) || !Double.isFinite(px) || q <= 0 || px <= 0) throw new IllegalArgumentException("Invalid closing fill");
+                amount += q; cost += q * px;
+            }
+            if (amount > 0 && Math.abs(amount - filled) <= Math.max(1e-7, filled * 1e-8) && Double.isFinite(cost / amount)) result.put("exitPrice", cost / amount);
+        } catch (Exception ignored) { /* Optional historical prices must not block status/close confirmation. */ }
         return result;
     }
     private Map<String, Object> tradeHistory(JsonObject request) throws Exception {
@@ -1035,6 +1047,13 @@ public final class Bridge implements AutoCloseable {
                 result.put("accountCurrency", currency); result.put("profitLoss", pnl); result.put("profitLossTime", nowMillis.getAsLong());
             }
         } catch (Exception error) { result.put("profitLossError", "JForex position profit/loss or account currency is unavailable"); }
+        try {
+            if (order.getState() == IOrder.State.FILLED || order.getState() == IOrder.State.CLOSED) {
+                double pipSize = order.getInstrument().getPipValue(), pips = order.getProfitLossInPips();
+                if (!Double.isFinite(pipSize) || pipSize <= 0 || !Double.isFinite(pips)) throw new IllegalArgumentException("Invalid SDK pip value");
+                result.put("pipSize", pipSize); result.put("profitLossPips", pips); result.put("profitLossPipsTime", nowMillis.getAsLong());
+            }
+        } catch (Exception error) { result.put("profitLossPipsError", "JForex instrument pip profit/loss is unavailable"); }
         return result;
     }
     private Map<String, Object> tradeClose(JsonObject request) throws Exception {

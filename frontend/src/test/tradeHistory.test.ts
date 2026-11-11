@@ -1,6 +1,6 @@
 import type {TradeRecord} from '../workspace/tradeHistory';
 import {describe,it,expect} from 'vitest';
-import {tradeDate,tradeMoney,tradeNumber,tradeProfitLoss} from '../workspace/tradeHistory';
+import {tradeDate,tradeMoney,tradeNumber,tradeProfitLoss,tradePipsProfitLoss} from '../workspace/tradeHistory';
 
 describe('trade history values',()=>{
  it('keeps a real zero balance distinct from an unavailable snapshot and labels account currencies',()=>{
@@ -24,4 +24,21 @@ it('shows current exchange P/L and preserves confirmed final zero/loss values af
  expect(tradeProfitLoss(closed,now+365*86400000)).toMatchObject({text:'-3.75 EUR',label:'Closed',tone:'loss'});
  expect(tradeProfitLoss({...closed,profitLoss:'0'},now+365*86400000).text).toBe('0.00 EUR');
  expect(tradeProfitLoss({...base,profitLossCurrency:''},now).text).toBe('—');
+});
+
+
+it('labels native pips and Hyperliquid ticks, preserves zero and expires only open values',()=>{
+ const now=Date.now(),base={status:'open',closeDate:0,remainingSize:'1',profitLossPips:'125.5',profitLossPipsUnit:'pips',profitLossPipsState:'open',profitLossPipsTime:now} as TradeRecord;
+ expect(tradePipsProfitLoss(base,now)).toMatchObject({text:'125.5 pips',label:'Current',tone:'profit'});
+ expect(tradePipsProfitLoss({...base,profitLossPips:'0'},now).text).toBe('0 pips');
+ expect(tradePipsProfitLoss({...base,profitLossPips:'-100',profitLossPipsUnit:'ticks'},now)).toMatchObject({text:'-100 ticks',tone:'loss'});
+ expect(tradePipsProfitLoss({...base,profitLossPipsUnit:undefined},now).text).toBe('—');
+ expect(tradePipsProfitLoss({...base,profitLossPips:undefined},now).text).toBe('—');
+ expect(tradePipsProfitLoss({...base,profitLossPipsTime:now-46000},now).text).toBe('—');
+ expect(tradePipsProfitLoss({...base,profitLossPipsTime:now+6000},now).text).toBe('—');
+ expect(tradePipsProfitLoss({...base,error:'Exchange unavailable'},now).text).toBe('—');
+ expect(tradePipsProfitLoss({...base,status:'closed',closeDate:now,remainingSize:'0'},now).text).toBe('—');
+ const closed={...base,status:'closed',closeDate:now,remainingSize:'0',profitLossPips:'-37.5',profitLossPipsState:'closed'};
+ expect(tradePipsProfitLoss(closed,now+365*86400000)).toMatchObject({text:'-37.5 pips',label:'Closed',tone:'loss'});
+ expect(tradePipsProfitLoss({...closed,profitLossPips:'0'},now+365*86400000).text).toBe('0 pips');
 });

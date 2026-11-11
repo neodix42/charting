@@ -21,6 +21,7 @@ type historyFixture struct {
 	position         string
 	nextID           int64
 	partial          string
+	exitPrice        string
 	uncertain        bool
 	entryAt, closeAt int64
 	cloids           map[string]int64
@@ -129,11 +130,16 @@ func newHistoryFixtureSide(t *testing.T, side string) *historyFixture {
 		quantity, _ := trading.Numeric(filled)
 		f.nextID++
 		f.closeAt = s.now().UnixMilli()
-		closedPnl := quantity.Neg()
-		if closeSide == "B" {
-			closedPnl = quantity
+		exit := "99"
+		if f.exitPrice != "" {
+			exit = f.exitPrice
 		}
-		f.fills = append(f.fills, historyFill{Coin: p.Request.Instrument, OID: f.nextID, Side: closeSide, ClosedPnL: closedPnl.String(), Sz: filled, Px: "99", StartPosition: f.position, Time: f.closeAt, TID: uint64(f.nextID)})
+		exitPx, _ := trading.Numeric(exit)
+		closedPnl := quantity.Mul(exitPx.Sub(decimal.NewFromInt(100)))
+		if closeSide == "B" {
+			closedPnl = closedPnl.Neg()
+		}
+		f.fills = append(f.fills, historyFill{Coin: p.Request.Instrument, OID: f.nextID, Side: closeSide, ClosedPnL: closedPnl.String(), Sz: filled, Px: exit, StartPosition: f.position, Time: f.closeAt, TID: uint64(f.nextID)})
 		if closeSide == "A" {
 			f.position = old.Sub(quantity).String()
 		} else {
@@ -144,7 +150,7 @@ func newHistoryFixtureSide(t *testing.T, side string) *historyFixture {
 			left, _ := trading.Numeric(f.position)
 			return left.Abs().Mul(decimal.NewFromFloat(2.5)).String()
 		}()))
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "response": map[string]any{"type": "order", "data": map[string]any{"statuses": []any{map[string]any{"filled": map[string]any{"oid": f.nextID, "totalSz": filled, "avgPx": "99"}}}}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "response": map[string]any{"type": "order", "data": map[string]any{"statuses": []any{map[string]any{"filled": map[string]any{"oid": f.nextID, "totalSz": filled, "avgPx": exit}}}}}})
 		return true
 	}
 	return f
@@ -302,7 +308,7 @@ func TestHistoryRecoversSettlementRiskAndTracksRealizedPlusFloatingProfit(t *tes
 		t.Fatal(err)
 	}
 	row, err := f.store.RefreshTrade(ctx, f.id)
-	if err != nil || row.Currency != "USDC" || row.SLAmount != "-10" || row.TPAmount != "10" || row.ProfitLoss != "2.5" || row.ProfitLossState != "open" {
+	if err != nil || row.Currency != "USDC" || row.SLAmount != "-10" || row.TPAmount != "10" || row.ProfitLoss != "2.5" || row.ProfitLossState != "open" || row.ExitPrice != "" || row.ProfitLossPips != "250" || row.ProfitLossPipsUnit != "ticks" || row.PipSize != "0.01" {
 		t.Fatal(row, err)
 	}
 	f.partial = "0.4"
@@ -314,7 +320,7 @@ func TestHistoryRecoversSettlementRiskAndTracksRealizedPlusFloatingProfit(t *tes
 		t.Fatal(err)
 	}
 	row, err = f.store.RefreshTrade(ctx, f.id)
-	if err != nil || row.RemainingSize != "0.6" || row.SLAmount != "-6" || row.TPAmount != "6" || row.ProfitLoss != "1.1" {
+	if err != nil || row.RemainingSize != "0.6" || row.SLAmount != "-6" || row.TPAmount != "6" || row.ProfitLoss != "1.1" || row.ProfitLossPips != "110" || row.ExitPrice != "" {
 		t.Fatal("remaining risk and realized/floating total", row, err)
 	}
 	plan, err = f.store.PreviewClose(ctx, f.id)
@@ -325,13 +331,13 @@ func TestHistoryRecoversSettlementRiskAndTracksRealizedPlusFloatingProfit(t *tes
 		t.Fatal(err)
 	}
 	row, err = f.store.RefreshTrade(ctx, f.id)
-	if err != nil || row.ProfitLoss != "-1" || row.ProfitLossCurrency != "USDC" || row.ProfitLossState != "closed" {
+	if err != nil || row.ProfitLoss != "-1" || row.ProfitLossCurrency != "USDC" || row.ProfitLossState != "closed" || row.ExitPrice != "99" || row.ProfitLossPips != "-100" || row.ProfitLossPipsState != "closed" {
 		t.Fatal(row, err)
 	}
 	// Confirmed final values survive unavailable history and restart.
 	restored := NewStore(f.store.profile)
 	rows, issues := restored.TradeHistory()
-	if len(issues) != 0 || len(rows) != 1 || rows[0].ProfitLoss != "-1" {
+	if len(issues) != 0 || len(rows) != 1 || rows[0].ProfitLoss != "-1" || rows[0].ExitPrice != "99" || rows[0].ProfitLossPips != "-100" {
 		t.Fatal(rows, issues)
 	}
 }
@@ -341,22 +347,99 @@ func TestHistoryDoesNotInventProfitForMissingOrMixedExchangeData(t *testing.T) {
 	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"1","marginUsed":"5","unrealizedPnl":"0"}}]`)
 	f.mock.mu.Unlock()
 	row, err := f.store.RefreshTrade(context.Background(), f.id)
-	if err != nil || row.ProfitLoss != "0" {
+	if err != nil || row.ProfitLoss != "0" || row.ProfitLossPips != "0" {
 		t.Fatal("real zero lost", row, err)
 	}
 	f.mock.mu.Lock()
 	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"1","marginUsed":"5"}}]`)
 	f.mock.mu.Unlock()
 	row, err = f.store.RefreshTrade(context.Background(), f.id)
-	if err != nil || row.ProfitLoss != "" || row.ProfitLossError == "" {
+	if err != nil || row.ProfitLoss != "" || row.ProfitLossError == "" || row.ProfitLossPips != "" {
 		t.Fatal("missing field became zero", row, err)
 	}
 	f.mock.mu.Lock()
+	f.mock.collateralToken = intPointer(9999)
+	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"1","unrealizedPnl":"100"}}]`)
+	f.mock.mu.Unlock()
+	row, err = f.store.RefreshTrade(context.Background(), f.id)
+	if err != nil || row.ProfitLossPips != "" {
+		t.Fatal("unknown current settlement currency reused an old price conversion", row, err)
+	}
+	f.mock.mu.Lock()
+	f.mock.collateralToken = intPointer(0)
 	f.fills = append(f.fills, historyFill{Coin: "BTC", OID: 999, Side: "B", Sz: "1", Px: "100", StartPosition: "1", Time: f.entryAt + 1, TID: 999})
 	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"2","unrealizedPnl":"100"}}]`)
 	f.mock.mu.Unlock()
 	row, err = f.store.RefreshTrade(context.Background(), f.id)
-	if err != nil || row.ProfitLoss != "" || row.SLAmount != "" || row.CanClose {
+	if err != nil || row.ProfitLoss != "" || row.SLAmount != "" || row.CanClose || row.ProfitLossPips != "" || row.ExitPrice != "" {
 		t.Fatal("mixed account P/L attributed to one entry", row, err)
+	}
+}
+
+func TestHistoryWeightsExitFillsAndBackfillsLegacyClosedTicks(t *testing.T) {
+	for _, side := range []string{"buy", "sell"} {
+		t.Run(side, func(t *testing.T) {
+			f := newHistoryFixtureSide(t, side)
+			ctx := context.Background()
+			f.partial = "0.4"
+			plan, err := f.store.PreviewClose(ctx, f.id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = f.store.ConfirmClose(ctx, plan.ID); err != nil {
+				t.Fatal(err)
+			}
+			f.exitPrice = "101"
+			plan, err = f.store.PreviewClose(ctx, f.id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = f.store.ConfirmClose(ctx, plan.ID); err != nil {
+				t.Fatal(err)
+			}
+			row, err := f.store.RefreshTrade(ctx, f.id)
+			want := "20"
+			if side == "sell" {
+				want = "-20"
+			}
+			if err != nil || row.ExitPrice != "100.2" || row.ProfitLossPips != want || row.ProfitLossPipsState != "closed" {
+				t.Fatal(row, err)
+			}
+			j, err := f.store.readOrderJournal(f.id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Existing final monetary results must not prevent new-field backfill.
+			j.History.ExitPrice, j.History.PipSize, j.History.ProfitLossPips, j.History.ProfitLossPipsState = "", "", "", ""
+			if err = trading.WriteJournal(f.store.journalPath(f.id), j, false); err != nil {
+				t.Fatal(err)
+			}
+			row, err = f.store.RefreshTrade(ctx, f.id)
+			if err != nil || row.ExitPrice != "100.2" || row.ProfitLossPips != want {
+				t.Fatal("legacy closed values not recovered", row, err)
+			}
+		})
+	}
+}
+
+func TestHistoryTicksUseEntryPrecisionAndCapReversalClosingSize(t *testing.T) {
+	f := newHistoryFixture(t)
+	ctx := context.Background()
+	f.mock.mu.Lock()
+	f.fills[0].Px = "99.99"
+	f.mock.positions = json.RawMessage(`[{"position":{"coin":"BTC","szi":"1","unrealizedPnl":"0.02"}}]`)
+	f.mock.mu.Unlock()
+	row, err := f.store.RefreshTrade(ctx, f.id)
+	if err != nil || row.PipSize != "0.001" || row.ProfitLossPips != "20" || row.ExitPrice != "" {
+		t.Fatal(row, err)
+	}
+	f.mock.mu.Lock()
+	// The live price has crossed 100; retain the entry tick rather than the
+	// coarser increment at the new price. A reversal closes only the original 1.
+	f.fills = append(f.fills, historyFill{Coin: "BTC", Side: "A", Px: "101", Sz: "2", StartPosition: "1", ClosedPnL: "1.01", OID: 999, Time: f.entryAt + 1, TID: 999})
+	f.mock.mu.Unlock()
+	row, err = f.store.RefreshTrade(ctx, f.id)
+	if err != nil || row.PipSize != "0.001" || row.ExitPrice != "101" || row.ProfitLossPips != "1010" || row.ProfitLossPipsState != "closed" {
+		t.Fatal(row, err)
 	}
 }
