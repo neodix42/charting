@@ -2,6 +2,13 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Stable order-metrics geometry — 2026-11-11
+
+- [x] Hosted 400/401 failure is traced to an async metrics-card expansion moving Review order; two controlled late-value/error cases fail before the fix and pass after it.
+- [x] Stable responsive card size, keyboard-accessible diagnostic scrolling and existing preview/confirmation rules pass all 49 related browser cases, typecheck/lint and 285 unit tests.
+- [x] Linux production build, archive inventory/architecture/runtime provenance and root/release checksums pass with final verification included.
+- [ ] Post-push hosted checks are tracked by Actions for this revision. Native desktop/funded/Windows GUI remain unrun.
+
 ## Hosted Ubuntu dependency setup — 2026-11-11
 
 - [x] Cancelled test-run logs identify the Azure Ubuntu mirror DNS failure and warning-only stale-index reuse before any test; the Windows build succeeds.

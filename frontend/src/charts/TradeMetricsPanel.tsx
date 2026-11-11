@@ -17,7 +17,7 @@ export function TradeMetricsPanel({value,loading,error,now,reviewed,entryPrice}:
  const liquidation=!sharedReason&&!value?.liquidationError&&value?.liquidationKind==='estimate'?price(value.liquidationPrice):null;
  const notApplicable=value?.liquidationKind==='not-applicable';
  const unavailable=loading&&!value?'Loading…':'Unavailable';
- return <section className="trade-account-metrics" aria-label={reviewed?'Reviewed account metrics':'Account metrics'}>
+ return <section className="trade-account-metrics" tabIndex={0} aria-label={reviewed?'Reviewed account metrics':'Account metrics'}>
   <div className="trade-metrics-heading"><strong>{reviewed?'Account snapshot for this review':'Account and margin'}</strong>{loading&&<small role="status">Updating account data…</small>}{value?.metricsTime&&Number.isFinite(value.metricsTime)?<small>As of {new Date(value.metricsTime).toLocaleTimeString('en-GB',{hour12:false})}</small>:null}</div>
   {(margin!==null||liquidation!==null)&&price(entryPrice)&&<small className="trade-metrics-entry" aria-label="Metrics projection entry">Projection entry: {entryPrice}</small>}
   <dl>

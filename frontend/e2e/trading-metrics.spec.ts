@@ -45,3 +45,20 @@ test('spot sell balance retains small owned-token amounts and its own currency',
 test('a compact desktop can scroll from account diagnostics to the explicit confirmation',async({page})=>{
  await page.setViewportSize({width:1100,height:800});await setup(page);await page.evaluate(()=>{(window as any).__testSetTradeValuation({profitPerPriceUnit:'',valuationError:'SDK conversion unavailable. Update the installed JForex bridge, restart the app and refresh the quote.'});(window as any).__testSetTradeMetrics({availableBalance:'2500',accountBalance:'3000',equity:'2750',usedMargin:'250',availableBalanceBasis:'Available funds use current equity minus used margin. Account balance is the previous end-of-day snapshot.'});});await openOrder(page);await settle(page);await ticket(page).getByLabel('Order quantity').fill('1000');await ticket(page).getByLabel('Order stop loss').fill('1.09');await ticket(page).getByLabel('Order take profit').fill('1.12');await settle(page);await page.screenshot({path:'../.tools/verification/trading-metrics-compact-ticket.png'});await ticket(page).getByRole('button',{name:'Review order',exact:true}).click();const confirm=ticket(page).getByRole('button',{name:'Confirm Buy at market',exact:true});await confirm.scrollIntoViewIfNeeded();await expect(confirm).toBeEnabled();const box=await confirm.boundingBox();expect(box).not.toBeNull();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(1100);expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual(800);expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
 });
+
+for(const outcome of ['values','error'] as const){
+ test(`late account metrics ${outcome} keep the pressed Review order target stationary`,async({page})=>{
+  await setup(page,'hyperliquid');
+  await page.evaluate(outcome=>{const api=window.go!.main!.App!,read=api.GetTradeMetrics;api.GetTradeMetrics=request=>request.quantity!=='.001'?read(request):new Promise((resolve,reject)=>{(window as any).__finishPressedMetrics=async()=>{if(outcome==='error')reject(Error('Account service is temporarily unavailable. '.repeat(20)));else resolve(await read(request));};});},outcome);
+  await openOrder(page);await expect(ticket(page).getByLabel('Main perps available',{exact:true})).toHaveText(/1,000\.00 USDC/);
+  await ticket(page).getByLabel('Order quantity',{exact:true}).fill('.001');await ticket(page).getByLabel('Order stop loss',{exact:true}).fill('59000');await ticket(page).getByLabel('Order take profit',{exact:true}).fill('65000');await settle(page);
+  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__finishPressedMetrics)).toBe('function');
+  const review=ticket(page).getByRole('button',{name:'Review order',exact:true}),metrics=ticket(page).getByRole('region',{name:'Account metrics',exact:true});
+  await expect(review).toBeEnabled();await review.scrollIntoViewIfNeeded();const before=await review.boundingBox(),cardBefore=await metrics.boundingBox();expect(before).not.toBeNull();expect(cardBefore).not.toBeNull();
+  await page.mouse.move(before!.x+before!.width/2,before!.y+before!.height/2);await page.mouse.down();await page.evaluate(()=>(window as any).__finishPressedMetrics());
+  if(outcome==='values')await expect(metric(page,'Margin required')).toHaveText('61.00 USDC');else await expect(metrics).toContainText('Account service is temporarily unavailable.');
+  const after=await review.boundingBox(),cardAfter=await metrics.boundingBox();await page.mouse.up();
+  expect(cardAfter!.height).toBeCloseTo(cardBefore!.height,3);expect(after!.y).toBeCloseTo(before!.y,3);
+  await expect(ticket(page).getByLabel('Order review',{exact:true})).toBeVisible();expect((await page.evaluate(()=>(window as any).__testTradeRequests())).length).toBe(1);expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
+ });
+}
