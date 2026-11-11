@@ -1,4 +1,12 @@
-# Implementation status — updated 2026-11-10
+# Implementation status — updated 2026-11-11
+
+## Fair Dukascopy request pacing and readable progress — 2026-11-11
+
+Read-only observation of the user's active 15-worker H1 batch established that IBEESEUR was downloading, with no active 403/429 cooldown or recorded failed jobs. Its committed checkpoint advanced from 25/59 monthly source files (4,799 bars), through 44/59 (8,401 bars), to a successfully published CSV with 11,129 hourly bars. The generic pacing message masked real file progress and remained after a permit was granted; mutex/timer competition also gave no fairness guarantee among queued workers.
+
+The Go-owned limiter now admits requests in arrival order, promptly removes cancelled head/middle tickets and wakes waiting peers after grants, cancellations and provider cooldown changes. The existing two-second shared start interval, persisted cooldown deadlines, supported provider transport and network timeout remain. Downloader and Refresh/Live Alerts preserve the real worker stage/completed-file count while adding requests ahead, estimated time to the next turn and the shared start interval. Waiting text clears at permit completion. A Downloader note explains shared throughput and normal queue waits; HTTP 403/429 states retain their explicit reasons/deadlines. Existing data formats, partial checkpoints, publication and automatic resume behavior remain unchanged.
+
+Verification: all Screener Go race tests, root bindings-tag race facade tests and Screener vet pass. New tests verify FIFO ordering, cancelled head/middle removal, waiting-status clearing and the actual H1 worker/owner-pipe transport with gated offline network responses. Existing tests still verify aggregate pacing, response cooldown persistence, blocked retries, worker overlap, cancellation, refresh and data publication. Frontend typecheck/lint and all 273 unit tests pass. All 33 selected browser cases pass for Downloader progress/errors/filtering/persistence, parallel workers and Refresh. The Linux executable/archive were rebuilt with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh` and both root artifact checksums pass; the archive includes this final record. Evidence is ignored `.tools/verification/dukascopy-pacing-*.log` and the read-only before/after/final/CSV JSON observations. No additional provider probe was initiated; the user's existing batch continued on its installed version and was not restarted or modified by the agent. Native GUI interaction, Windows GUI and hosted CI are UNRUN. The installed app/runtime and user settings/checkpoints/credentials were not replaced; install and launch the new build to use the queue changes.
 
 ## First daily intraday signal and two/three-days-ago ranges — 2026-11-10
 

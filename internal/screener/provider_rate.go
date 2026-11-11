@@ -26,11 +26,13 @@ type providerRateState struct {
 }
 
 type providerLimiter struct {
-	mu       sync.Mutex
-	state    providerRateState
-	path     string
-	interval time.Duration
-	wake     chan struct{}
+	mu         sync.Mutex
+	state      providerRateState
+	path       string
+	interval   time.Duration
+	wake       chan struct{}
+	queue      []uint64
+	nextTicket uint64
 }
 
 func newProviderLimiter(path string) (*providerLimiter, error) {
@@ -47,11 +49,38 @@ func newProviderLimiter(path string) (*providerLimiter, error) {
 func untilUTC(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04:05 UTC") }
 
 func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	l.mu.Lock()
+	l.nextTicket++
+	ticket := l.nextTicket
+	l.queue = append(l.queue, ticket)
+	l.mu.Unlock()
+	reportedWait := false
+	defer func() {
+		l.mu.Lock()
+		for i, queued := range l.queue {
+			if queued == ticket {
+				l.queue = append(l.queue[:i], l.queue[i+1:]...)
+				break
+			}
+		}
+		l.notifyLocked()
+		l.mu.Unlock()
+		if reportedWait && waiting != nil {
+			waiting("")
+		}
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		l.mu.Lock()
+		if err := ctx.Err(); err != nil {
+			l.mu.Unlock()
+			return err
+		}
 		now := time.Now().UnixMilli()
 		if l.state.DeniedTill > now {
 			until := l.state.DeniedTill
@@ -63,22 +92,32 @@ func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) erro
 			l.mu.Unlock()
 			return fmt.Errorf("Dukascopy rate-limited until %s (Retry-After); no request sent. Retry after that time", untilUTC(until))
 		}
-		if until <= now {
+		ahead := 0
+		for l.queue[ahead] != ticket {
+			ahead++
+		}
+		if ahead == 0 && until <= now {
 			l.state.NextAt = now + l.interval.Milliseconds()
 			err := writeState(l.path, l.state)
 			l.mu.Unlock()
 			return err
 		}
 		wake := l.wake
-		message := "Waiting for shared Dukascopy request pacing"
+		seconds := max(int64(1), (max(until, now)+int64(ahead)*l.interval.Milliseconds()-now+999)/1000)
+		message := fmt.Sprintf("Waiting for shared Dukascopy request pacing: %d requests ahead; next turn in about %ds (one request start every %s)", ahead, seconds, l.interval)
 		if l.state.LimitedTill > now {
-			message = "Dukascopy rate limit; all workers wait until " + untilUTC(l.state.LimitedTill)
+			message = fmt.Sprintf("Dukascopy HTTP 429 rate limit; all workers wait until %s; %d requests ahead", untilUTC(l.state.LimitedTill), ahead)
 		}
 		l.mu.Unlock()
 		if waiting != nil {
+			reportedWait = true
 			waiting(message)
 		}
-		timer := time.NewTimer(time.Duration(min(until-now, int64(1000))) * time.Millisecond)
+		waitMS := int64(1000)
+		if until > now {
+			waitMS = min(until-now, waitMS)
+		}
+		timer := time.NewTimer(time.Duration(waitMS) * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -88,6 +127,23 @@ func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) erro
 		case <-timer.C:
 		}
 	}
+}
+
+func (l *providerLimiter) notifyLocked() {
+	close(l.wake)
+	l.wake = make(chan struct{})
+}
+
+// Keep completed-file/row progress visible while the next request is queued.
+// An empty wait restores the actual worker stage as soon as a permit is given.
+func providerProgressMessage(progress, waiting string) string {
+	if progress == "" {
+		return waiting
+	}
+	if waiting == "" {
+		return progress
+	}
+	return progress + " · " + waiting
 }
 
 func providerRetryAfter(value string, now time.Time) int64 {
@@ -128,8 +184,7 @@ func (l *providerLimiter) observe(status int, retryAfter string) (int64, error) 
 		return max(l.state.DeniedTill, l.state.LimitedTill), nil
 	}
 	err := writeState(l.path, l.state)
-	close(l.wake)
-	l.wake = make(chan struct{})
+	l.notifyLocked()
 	return max(l.state.DeniedTill, l.state.LimitedTill), err
 }
 

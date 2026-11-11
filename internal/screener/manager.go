@@ -63,7 +63,7 @@ type Info struct {
 	Active            bool     `json:"active"`
 }
 
-// Manager downloads one symbol at a time, preserving selection order. Each
+// Manager uses bounded parallel workers and preserves selection order. Each
 // child has a process group/tree, bounded logs and a private temporary directory.
 // The supported WAF session cache is shared by the batch and retained in the local profile.
 // Preferences belong to the local profile, never imported workspaces.
@@ -660,11 +660,13 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	var done bool
 	var result workerEvent
 	var finalMessage, workerError string
+	progressMessage, waitMessage := "Starting Dukascopy downloader", ""
 	replies := newProviderReplies(ctx, owner, func(message string) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
+		waitMessage = message
 		if m.jobs[index].Status == "running" {
-			m.jobs[index].Message = message
+			m.jobs[index].Message = providerProgressMessage(progressMessage, waitMessage)
 		}
 	})
 	defer replies.close()
@@ -688,7 +690,8 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 			m.mu.Lock()
 			if m.jobs[index].Status == "running" {
 				m.jobs[index].Progress = math.Max(m.jobs[index].Progress, math.Min(event.Progress, 99))
-				m.jobs[index].Message = cleanMessage(event.Message)
+				progressMessage = cleanMessage(event.Message)
+				m.jobs[index].Message = providerProgressMessage(progressMessage, waitMessage)
 			}
 			m.mu.Unlock()
 		case "done":

@@ -372,8 +372,11 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 	var result refreshEvent
 	var done bool
 	var workerError string
+	progressMessage, waitMessage := "Starting Dukascopy refresh", ""
 	replies := newProviderReplies(ctx, owner, func(message string) {
 		m.mu.Lock()
+		waitMessage = message
+		message = providerProgressMessage(progressMessage, waitMessage)
 		progress := m.refreshJobs[index].Progress
 		if m.refreshJobs[index].Status == "running" {
 			m.refreshJobs[index].Message = message
@@ -405,7 +408,8 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 				m.refreshJobs[index].Progress = math.Max(m.refreshJobs[index].Progress, math.Min(99, math.Max(0, event.Progress)))
 			}
 			m.refreshJobs[index].Rows, m.refreshJobs[index].AddedRows, m.refreshJobs[index].UpdatedRows = event.Rows, event.AddedRows, event.UpdatedRows
-			m.refreshJobs[index].Message = cleanMessage(event.Message)
+			progressMessage = cleanMessage(event.Message)
+			m.refreshJobs[index].Message = providerProgressMessage(progressMessage, waitMessage)
 			progress, message := m.refreshJobs[index].Progress, m.refreshJobs[index].Message
 			m.mu.Unlock()
 			if report != nil {
