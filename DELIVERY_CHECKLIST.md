@@ -1,5 +1,11 @@
 # Release checklist — observed 2026-10-19
 
+## Offline JForex test-clock repair — 2026-11-12
+
+- [x] Reproduced the hosted current-flat-candle assertion with mismatched fixture/bridge clocks and made the fixture deterministic using the existing injected clock.
+- [x] Complete offline SDK protocol/responsiveness/history/rollover/valuation/trading/bootstrap suites pass under UTC and Asia/Dubai; assertions and production code are unchanged.
+- [ ] Hosted checks for the repair are tracked by Actions; see STATUS.md.
+
 ## Trade images and alert timeframe priority — 2026-11-12
 
 - [x] Screens supports multiple original paste/drop/file images per trade, persistent +/icons, a gallery viewer, fit/actual size and retryable failures.

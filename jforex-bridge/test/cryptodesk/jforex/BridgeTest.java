@@ -62,7 +62,7 @@ public final class BridgeTest {
         check(offshoreYuan != null && offshoreYuan.getSecondaryJFCurrency().getJavaCurrency() == null,
             "regression covers SDK fiat absent from Java ISO currencies");
         offered.put(offshoreYuan, "forex");
-        long now = System.currentTimeMillis() / 60000 * 60000;
+        long now = java.time.Instant.parse("2026-11-09T12:34:00Z").toEpochMilli();
         AtomicReference<IBar> active = new AtomicReference<>(bar(now, 1.10, 1.15, 1.09, 1.14));
         IHistory history = fake(IHistory.class, (method, values) -> switch (method) {
             case "getBarStart" -> ((Long) values[1]) / 60000 * 60000;
@@ -99,7 +99,9 @@ public final class BridgeTest {
             case "disconnect" -> { connected.set(false); yield null; }
             default -> null;
         });
-        try (Bridge bridge = new Bridge(() -> { factories.incrementAndGet(); return client; }, events::add)) {
+        // Fixture candles and the bridge must share one clock. A wall-clock
+        // minute rollover cannot turn the fake current bar into a past bar.
+        try (Bridge bridge = new Bridge(() -> { factories.incrementAndGet(); return client; }, events::add, 45_000, () -> now + 5_000)) {
             JsonObject version = good(bridge, request("version")).getAsJsonObject("result");
             check(version.get("instrumentCatalog").getAsString().equals("all-available-v1"), "bridge advertises the full account catalog before authentication");
             check(factories.get() == 0 && !connected.get(), "version handshake must not initialize or authenticate the SDK");
