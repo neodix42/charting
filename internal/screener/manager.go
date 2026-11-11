@@ -61,6 +61,7 @@ type Info struct {
 	Concurrency       int      `json:"concurrency"`
 	MaxConcurrency    int      `json:"maxConcurrency"`
 	Active            bool     `json:"active"`
+	DownloadsPaused   bool     `json:"downloadsPaused,omitempty"`
 }
 
 // Manager uses bounded parallel workers and preserves selection order. Each
@@ -79,6 +80,7 @@ type Manager struct {
 	runtimeError, lastError string
 	jobs                    []Job
 	active, closed          bool
+	downloadsPaused         bool
 	cancel                  context.CancelFunc
 	batchDone               chan struct{}
 	concurrency             int
@@ -167,7 +169,7 @@ func (m *Manager) infoLocked() Info {
 	if err != nil {
 		fileError = err.Error()
 	}
-	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, m.settingsError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active}
+	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, m.settingsError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active || m.downloadsPaused, DownloadsPaused: m.downloadsPaused}
 }
 func (m *Manager) Info() Info { m.mu.Lock(); defer m.mu.Unlock(); return m.infoLocked() }
 
@@ -409,6 +411,7 @@ func (m *Manager) Start(request Request) (Info, error) {
 }
 
 func (m *Manager) cancelLocked() {
+	m.downloadsPaused = false
 	if m.cancel != nil {
 		m.cancel()
 	}

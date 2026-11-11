@@ -46,7 +46,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 	}
 	m := l.manager
 
-	run, err := l.beginCheckHistory(config, !scheduled)
+	run, err := l.beginScopedCheckHistory(ctx, config, !scheduled)
 	if err != nil {
 		return err
 	}

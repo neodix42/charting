@@ -93,6 +93,13 @@ class WorkflowPolicyTests(unittest.TestCase):
         smoke = step(TESTS, "Verify packaged indicators, downloads and provider pacing offline")
         self.assertIn('scripts/smoke-enrichment-runtime.py "$RUNNER_TEMP/screener-runtime"', smoke)
         self.assertIn('--report "$RUNNER_TEMP/test-checks/enrichment-runtime.json"', smoke)
+        # Diagnostics uploads previously preceded required runtime checks; a
+        # remote artifact-finalization failure then skipped those checks.
+        first_upload = TESTS.index("name: Preserve browser test diagnostics on success or failure")
+        for name in ("Assemble the pinned production Screener runtime",
+                     "Verify packaged indicators, downloads and provider pacing offline",
+                     "Verify the Telegram signal chart with the packaged browser offline"):
+            self.assertLess(TESTS.index("name: " + name), first_upload)
         for name, path in (("Preserve browser test diagnostics on success or failure", "frontend/test-results/"),
                            ("Preserve packaged runtime diagnostics on success or failure", "${{ runner.temp }}/test-checks/")):
             diagnostics = step(TESTS, name)

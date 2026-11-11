@@ -51,6 +51,7 @@ type liveAlertCheckRun struct {
 	processedPairs map[string]map[string]bool
 	failures       map[string]error
 	finished       bool
+	borrowed       bool
 }
 
 func copyLiveCheckStates(values map[string]liveAlertCheckState) map[string]liveAlertCheckState {
@@ -263,6 +264,18 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 		return nil
 	}
 	r.finished = true
+	if r.borrowed {
+		for id := range r.scannedSymbols {
+			complete := len(r.expectedPairs[id]) > 0
+			for pair := range r.expectedPairs[id] {
+				complete = complete && r.processedPairs[id][pair]
+			}
+			if !complete {
+				r.failures[id] = joinLiveAlertErrors(r.failures[id], cycleErr)
+			}
+		}
+		return nil
+	}
 	changed := false
 	for id, symbols := range r.scannedSymbols {
 		state, exists := l.state.Checks[id]

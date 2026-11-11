@@ -213,3 +213,9 @@ export function TestTelegramBot():Promise<telegram.TestResult>;
 export function UpdateScreenerAnalysisCondition(arg1:string,arg2:screener.AnalysisRequest):Promise<screener.SavedAnalysisCondition>;
 
 export function SetTradeEntryCondition(arg1:string,arg2:string):Promise<string>;
+
+export function AddTradeScreen(arg1:string,arg2:string,arg3:string):Promise<trading.TradeScreen>;
+
+export function GetTradeScreen(arg1:string,arg2:string):Promise<string>;
+
+export function QueryTradeScreens(arg1:trading.TradeScreenQuery):Promise<trading.TradeScreenPage>;

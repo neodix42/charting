@@ -147,7 +147,7 @@ const liveAlertPublicationWindow = 5 * time.Minute
 
 var errLiveAlertsPendingBar = errors.New("the newly closed bar is not yet available from the provider")
 
-var errLiveAlertsBusy = errors.New("downloads, refresh, enrichment or Analysis are active; Live Alerts will check after they finish")
+var errLiveAlertsBusy = errors.New("refresh, enrichment, Analysis or another Live Alerts check is active; Live Alerts will check after it finishes")
 
 // LiveAlerts owns only local configuration, scheduling and delivery claims.
 // The caller starts it with the application context and closes it before the

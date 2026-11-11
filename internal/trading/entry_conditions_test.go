@@ -95,7 +95,7 @@ func TestEntryConditionsSerializeConcurrentEditsWithoutDroppingOtherRows(t *test
 }
 
 func TestEntryConditionsPreserveMalformedOrFutureFiles(t *testing.T) {
-	for _, original := range []string{`not json`, `{"version":2,"trades":{}}`, `{"version":1,"trades":{},"future":"keep me"}`, `{"version":1,"trades":{"external":{"entryCondition":"keep me"}}}`} {
+	for _, original := range []string{`not json`, `{"version":3,"trades":{}}`, `{"version":1,"trades":{},"future":"keep me"}`, `{"version":1,"trades":{"external":{"entryCondition":"keep me"}}}`} {
 		t.Run(original, func(t *testing.T) {
 			profile := t.TempDir()
 			path := filepath.Join(profile, "trades.json")

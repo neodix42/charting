@@ -64,7 +64,7 @@ export interface ScreenerCatalog {version:string;groups:Array<{name:string;instr
 export interface ScreenerDownloadRequest {dataSource?:ScreenerDataSource;symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
 export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategories:string[];hyperliquidSymbols?:string[];hyperliquidSelectionInitialized?:boolean}
 export interface ScreenerJob {dataSource?:ScreenerDataSource;nativeId?:string;market?:string;id:string;symbol:string;timeframe:string;from:string;to:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;message:string;outputPath?:string}
-export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;jobs:ScreenerJob[];downloadedSymbols?:string[]}
+export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtimeError?:string;error?:string;concurrency:number;maxConcurrency:number;active:boolean;downloadsPaused?:boolean;jobs:ScreenerJob[];downloadedSymbols?:string[]}
 export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
 export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'low'|'high'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string;intradayOnly?:boolean}
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}

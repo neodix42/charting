@@ -12,7 +12,8 @@ import (
 )
 
 type tradeAnnotation struct {
-	EntryCondition string `json:"entryCondition"`
+	EntryCondition string        `json:"entryCondition"`
+	Screens        []TradeScreen `json:"screens,omitempty"`
 }
 
 type tradeAnnotations struct {
@@ -44,7 +45,7 @@ func ValidateEntryCondition(value string) error {
 }
 
 func (s *EntryConditions) read() (tradeAnnotations, error) {
-	data := tradeAnnotations{Version: 1, Trades: map[string]tradeAnnotation{}}
+	data := tradeAnnotations{Version: 2, Trades: map[string]tradeAnnotation{}}
 	var raw json.RawMessage
 	if err := ReadJournal(s.path, &raw); errors.Is(err, os.ErrNotExist) {
 		return data, nil
@@ -53,29 +54,44 @@ func (s *EntryConditions) read() (tradeAnnotations, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if !utf8.Valid(raw) || decoder.Decode(&data) != nil || data.Version != 1 || data.Trades == nil || len(data.Trades) > 20000 {
+	if !utf8.Valid(raw) || decoder.Decode(&data) != nil || (data.Version != 1 && data.Version != 2) || data.Trades == nil || len(data.Trades) > 20000 {
 		return data, errors.New("Invalid or unsupported trades.json; original file preserved")
 	}
 	for id, note := range data.Trades {
 		if !validAnnotatedTrade(id) || ValidateEntryCondition(note.EntryCondition) != nil {
 			return data, errors.New("Invalid entry condition in trades.json; original file preserved")
 		}
+		seen := map[string]bool{}
+		for _, screen := range note.Screens {
+			if !validTradeScreen(screen, id) || seen[screen.ID] {
+				return data, errors.New("Invalid screen metadata in trades.json; original file preserved")
+			}
+			seen[screen.ID] = true
+		}
 	}
 	return data, nil
 }
 
 func (s *EntryConditions) Snapshot() (map[string]string, error) {
+	data, err := s.MetadataSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(data))
+	for id, note := range data {
+		result[id] = note.EntryCondition
+	}
+	return result, nil
+}
+
+func (s *EntryConditions) MetadataSnapshot() (map[string]tradeAnnotation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, err := s.read()
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]string, len(data.Trades))
-	for id, note := range data.Trades {
-		result[id] = note.EntryCondition
-	}
-	return result, nil
+	return data.Trades, nil
 }
 
 func (s *EntryConditions) Set(id, value string) (string, error) {
@@ -91,11 +107,14 @@ func (s *EntryConditions) Set(id, value string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if value == "" {
+	note := data.Trades[id]
+	note.EntryCondition = value
+	if value == "" && len(note.Screens) == 0 {
 		delete(data.Trades, id)
 	} else {
-		data.Trades[id] = tradeAnnotation{EntryCondition: value}
+		data.Trades[id] = note
 	}
+	data.Version = 2
 	if len(data.Trades) > 20000 {
 		return "", errors.New("Trade annotations exceed 20,000 records; original file preserved")
 	}

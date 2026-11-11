@@ -1,5 +1,17 @@
 # Release checklist — observed 2026-10-19
 
+## Trade images and alert timeframe priority — 2026-11-12
+
+- [x] Screens supports multiple original paste/drop/file images per trade, persistent +/icons, a gallery viewer, fit/actual size and retryable failures.
+- [x] Version-2 trades.json and private trade-screens originals retain trade/order/account/instrument metadata, checksums and note compatibility; bounded queries avoid binary scans and account access.
+- [x] Higher alert timeframes drain before lower ones per source; independent sources overlap within existing limits, preserving due scopes and multi-period counters/claims.
+- [x] Alert ownership pauses/drains Downloader safely and resumes unfinished queued jobs; checkpoint preservation, completed files, explicit Cancel and shutdown are covered.
+- [x] Provider/shared/root/full Screener race checks, native root race/vet, 285 frontend unit tests, typecheck/lint and 21 focused browser cases pass.
+- [x] Linux build, archive inventory/architecture/runtime provenance and actual bundled SDK no-login probe pass; final documentation and checksums are included.
+- [x] Diagnostic uploads follow required runtime checks, retaining upload-failure visibility; workflow regression coverage prevents an upload outage skipping those checks.
+- [ ] Hosted CI/release for this revision are tracked in STATUS.md.
+- [ ] Native desktop clipboard/drag-drop and funded exchange operations remain unrun.
+
 ## Trade entry condition annotations — 2026-11-12
 
 - [x] Entry condition supports Enter/blur saving, 100-character single-line text, clearing, Escape cancellation, retryable errors and stale-refresh protection.

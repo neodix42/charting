@@ -329,6 +329,16 @@ func (m *Manager) TradeHistory() ([]trading.Trade, []string) {
 	}
 	return rows, problems
 }
+
+// The journal is atomically published; local attachments do not wait on the
+// exchange refresh lock or initiate an account connection.
+func (m *Manager) LocalTrade(id string) (trading.Trade, error) {
+	j, err := m.readTradeJournal(id)
+	if err != nil {
+		return trading.Trade{}, err
+	}
+	return j.History, nil
+}
 func verifyHistoryBridge(ctx context.Context, p *bridgeProcess) error {
 	var version bridgeVersion
 	if err := p.call(ctx, map[string]any{"op": "version"}, &version); err != nil {

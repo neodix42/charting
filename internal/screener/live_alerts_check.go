@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -84,7 +83,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	if len(selected) == 0 {
 		return nil
 	}
-	l.reportCheckPreparation(ctx, ids, "Waiting for Screener work before checking alerts")
+	l.reportCheckPreparation(ctx, ids, "Pausing downloads and reserving alert workers")
 	// Reserve Manager once for the complete batch. Public checks own private
 	// snapshots; Dukascopy still has one owner of its shared refresh job list.
 	checkContext, release, err := l.reserveCheckManager(ctx, asOf)
@@ -95,112 +94,75 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 	l.reportCheckPreparation(ctx, ids, "Waiting for an alert worker")
 	cycleCtx, cancel := context.WithCancel(checkContext)
 	defer cancel()
-	failures := make([]error, len(selected))
-	var workers sync.WaitGroup
-	completed := make(chan bool, len(selected))
-	active, localActive := 0, false
-	pending := make([]int, len(selected))
-	for i := range pending {
-		pending[i] = i
+	work := liveAlertPriorityWork(selected, config, asOf, scheduled)
+	groups := make([]liveAlertHistoryGroup, len(selected))
+	remaining := make([]int, len(selected))
+	started := make([]bool, len(selected))
+	conditionErrors := make([]error, len(selected))
+	for _, task := range work {
+		remaining[task.condition]++
 	}
-	for len(pending) > 0 || active > 0 {
-		launched := false
-		if cycleCtx.Err() == nil && active < liveAlertCheckConcurrency {
-			for queueIndex, index := range pending {
-				saved := selected[index]
-				source := liveAlertSource(config, saved.ID)
-				if source == "dukascopy" && localActive {
-					l.mu.Lock()
-					l.prepareCheckProgressLocked([]string{saved.ID}, "Waiting for the active Dukascopy refresh")
-					l.mu.Unlock()
-					continue
+	failures := runPriorityAlertWork(cycleCtx, work, func(taskCtx context.Context, task liveAlertWork) error {
+		saved := selected[task.condition]
+		subset := copyLiveAlertsConfig(config)
+		subset.ConditionIDs = []string{saved.ID}
+		if task.period != "" {
+			subset.scope = []LiveAlertConditionPeriod{{ConditionID: saved.ID, Period: task.period}}
+		} else if config.scope != nil {
+			subset.scope = []LiveAlertConditionPeriod{}
+			for _, scope := range config.scope {
+				if scope.ConditionID == saved.ID {
+					subset.scope = append(subset.scope, scope)
 				}
-				pending = append(pending[:queueIndex], pending[queueIndex+1:]...)
-				local := source == "dukascopy"
-				if local {
-					localActive = true
-				}
-				active++
-				launched = true
-				l.mu.Lock()
-				l.startCheckProgressLocked(saved.ID)
-				l.mu.Unlock()
-				workers.Add(1)
-				go func() {
-					defer workers.Done()
-					subset := copyLiveAlertsConfig(config)
-					subset.ConditionIDs = []string{saved.ID}
-					if config.scope != nil {
-						subset.scope = []LiveAlertConditionPeriod{}
-						for _, scope := range config.scope {
-							if scope.ConditionID == saved.ID {
-								subset.scope = append(subset.scope, scope)
-							}
-						}
-					}
-					checkCtx := context.WithValue(cycleCtx, liveAlertProgressKey{}, saved.ID)
-					var checkErr error
-					if local {
-						checkErr = l.checkDukascopyCycle(checkCtx, subset, asOf, scheduled)
-					} else {
-						checkErr = l.checkPublicCycle(checkCtx, subset, source, asOf, scheduled)
-					}
-					failures[index] = checkErr
-					if fatalLiveAlertPersistence(checkErr) || errors.Is(checkErr, errLiveAlertsBusy) {
-						cancel()
-					}
-					l.mu.Lock()
-					l.finishCheckProgressLocked(saved.ID, checkErr, asOf)
-					l.mu.Unlock()
-					completed <- local
-				}()
-				break
 			}
 		}
-		if launched {
-			continue
+		taskCtx = context.WithValue(taskCtx, liveAlertProgressKey{}, saved.ID)
+		taskCtx = context.WithValue(taskCtx, liveAlertHistoryGroupKey{}, &groups[task.condition])
+		if task.source == "dukascopy" {
+			return l.checkDukascopyCycle(taskCtx, subset, asOf, scheduled)
 		}
-		if active == 0 {
-			break
+		return l.checkPublicCycle(taskCtx, subset, task.source, asOf, scheduled)
+	}, func(task liveAlertWork) {
+		if !started[task.condition] {
+			started[task.condition] = true
+			l.mu.Lock()
+			l.startCheckProgressLocked(selected[task.condition].ID)
+			l.mu.Unlock()
 		}
-		if <-completed {
-			localActive = false
+	}, func(task liveAlertWork, err error) {
+		index := task.condition
+		conditionErrors[index] = joinLiveAlertErrors(conditionErrors[index], err)
+		remaining[index]--
+		if remaining[index] == 0 {
+			if groups[index].run != nil {
+				if problem := groups[index].run.finish(conditionErrors[index]); problem != nil {
+					conditionErrors[index] = joinLiveAlertErrors(conditionErrors[index], problem)
+					cancel()
+				}
+			}
+			l.mu.Lock()
+			l.finishCheckProgressLocked(selected[index].ID, conditionErrors[index], asOf)
+			l.mu.Unlock()
 		}
-		active--
+	}, func(task liveAlertWork, phase string) {
+		l.mu.Lock()
+		l.prepareCheckProgressLocked([]string{selected[task.condition].ID}, phase)
+		l.mu.Unlock()
+	})
+	for index := range groups {
+		if groups[index].run != nil && remaining[index] > 0 {
+			failures = append(failures, groups[index].run.finish(joinLiveAlertErrors(conditionErrors[index], context.Canceled)))
+		}
+		failures = append(failures, conditionErrors[index])
 	}
-	workers.Wait()
-	if cycleCtx.Err() != nil {
-		failures = append(failures, cycleCtx.Err())
-	}
+
 	return errors.Join(failures...)
 }
 
 const liveAlertCheckConcurrency = 4
 
 func (l *LiveAlerts) reserveCheckManager(ctx context.Context, asOf int64) (context.Context, func(), error) {
-	m := l.manager
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return ctx, nil, errors.New("screener is closed")
-	}
-	if m.active || m.pendingLocked() || m.enrichmentActive || m.refreshActive || m.analysisActiveLocked() || m.liveActive {
-		return ctx, nil, errLiveAlertsBusy
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	m.liveActive, m.liveCancel = true, cancel
-	m.refreshActive, m.refreshCancel, m.refreshDone, m.refreshAsOf = true, cancel, done, asOf
-	m.wg.Add(1)
-	return ctx, func() {
-		cancel()
-		m.mu.Lock()
-		m.liveActive, m.liveCancel = false, nil
-		m.refreshActive, m.refreshCancel = false, nil
-		close(done)
-		m.mu.Unlock()
-		m.wg.Done()
-	}, nil
+	return l.manager.reserveAlertPriority(ctx, asOf)
 }
 
 func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsConfig, asOf int64, scheduled bool) (cycleErr error) {
@@ -270,7 +232,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 	directory := m.directory
 	m.mu.Unlock()
 
-	run, err := l.beginCheckHistory(config, !scheduled)
+	run, err := l.beginScopedCheckHistory(ctx, config, !scheduled)
 	if err != nil {
 		return err
 	}

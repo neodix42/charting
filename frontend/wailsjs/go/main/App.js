@@ -405,3 +405,15 @@ export function UpdateScreenerAnalysisCondition(arg1, arg2) {
 export function SetTradeEntryCondition(arg1, arg2) {
   return window['go']['main']['App']['SetTradeEntryCondition'](arg1, arg2);
 }
+
+export function AddTradeScreen(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddTradeScreen'](arg1, arg2, arg3);
+}
+
+export function GetTradeScreen(arg1, arg2) {
+  return window['go']['main']['App']['GetTradeScreen'](arg1, arg2);
+}
+
+export function QueryTradeScreens(arg1) {
+  return window['go']['main']['App']['QueryTradeScreens'](arg1);
+}

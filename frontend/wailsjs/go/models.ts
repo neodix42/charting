@@ -1902,6 +1902,7 @@ export namespace screener {
 	    concurrency: number;
 	    maxConcurrency: number;
 	    active: boolean;
+	    downloadsPaused?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
@@ -1918,6 +1919,7 @@ export namespace screener {
 	        this.concurrency = source["concurrency"];
 	        this.maxConcurrency = source["maxConcurrency"];
 	        this.active = source["active"];
+	        this.downloadsPaused = source["downloadsPaused"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1938,6 +1940,7 @@ export namespace screener {
 		    return a;
 		}
 	}
+
 
 	export class RefreshJob {
 	    id: string;
@@ -3239,6 +3242,7 @@ export namespace trading {
 	    market: string;
 	    orderId: string;
 	    entryCondition?: string;
+	    screens?: TradeScreen[];
 	    submittedAt: number;
 	    openDate: number;
 	    closeDate: number;
@@ -3248,8 +3252,8 @@ export namespace trading {
 	    entryPrice: string;
 	    exitPrice?: string;
 	    stopLoss: string;
-	    stopLossSource?: string;
 	    takeProfit: string;
+	    stopLossSource?: string;
 	    takeProfitSource?: string;
 	    slAmount: string;
 	    tpAmount: string;
@@ -3297,6 +3301,7 @@ export namespace trading {
 	        this.market = source["market"];
 	        this.orderId = source["orderId"];
 	        this.entryCondition = source["entryCondition"];
+	        this.screens = this.convertValues(source["screens"], TradeScreen);
 	        this.submittedAt = source["submittedAt"];
 	        this.openDate = source["openDate"];
 	        this.closeDate = source["closeDate"];
@@ -3306,8 +3311,8 @@ export namespace trading {
 	        this.entryPrice = source["entryPrice"];
 	        this.exitPrice = source["exitPrice"];
 	        this.stopLoss = source["stopLoss"];
-	        this.stopLossSource = source["stopLossSource"];
 	        this.takeProfit = source["takeProfit"];
+	        this.stopLossSource = source["stopLossSource"];
 	        this.takeProfitSource = source["takeProfitSource"];
 	        this.slAmount = source["slAmount"];
 	        this.tpAmount = source["tpAmount"];
@@ -3341,8 +3346,25 @@ export namespace trading {
 	        this.checkedAt = source["checkedAt"];
 	        this.error = source["error"];
 	    }
-	}
 
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class HistoryPage {
 	    rows: Trade[];
 	    total: number;
@@ -3381,6 +3403,117 @@ export namespace trading {
 		    return a;
 		}
 	}
+	export class TradeScreen {
+	    id: string;
+	    tradeId: string;
+	    provider: string;
+	    environment: string;
+	    account: string;
+	    orderId: string;
+	    instrument: string;
+	    market: string;
+	    direction: string;
+	    tradeOpenDate: number;
+	    createdAt: number;
+	    fileName: string;
+	    mimeType: string;
+	    bytes: number;
+	    width: number;
+	    height: number;
+	    sha256: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreen(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.tradeId = source["tradeId"];
+	        this.provider = source["provider"];
+	        this.environment = source["environment"];
+	        this.account = source["account"];
+	        this.orderId = source["orderId"];
+	        this.instrument = source["instrument"];
+	        this.market = source["market"];
+	        this.direction = source["direction"];
+	        this.tradeOpenDate = source["tradeOpenDate"];
+	        this.createdAt = source["createdAt"];
+	        this.fileName = source["fileName"];
+	        this.mimeType = source["mimeType"];
+	        this.bytes = source["bytes"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.sha256 = source["sha256"];
+	    }
+	}
+	export class TradeScreenPage {
+	    screens: TradeScreen[];
+	    total: number;
+	    offset: number;
+	    limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreenPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.screens = this.convertValues(source["screens"], TradeScreen);
+	        this.total = source["total"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TradeScreenQuery {
+	    tradeId: string;
+	    provider: string;
+	    instrument: string;
+	    orderId: string;
+	    environment: string;
+	    entryCondition: string;
+	    from: number;
+	    to: number;
+	    offset: number;
+	    limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreenQuery(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tradeId = source["tradeId"];
+	        this.provider = source["provider"];
+	        this.instrument = source["instrument"];
+	        this.orderId = source["orderId"];
+	        this.environment = source["environment"];
+	        this.entryCondition = source["entryCondition"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	    }
+	}
+
 }
 
 export namespace main {

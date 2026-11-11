@@ -1,5 +1,9 @@
 import type {FeedKey} from '../types';
+export interface TradeScreen {id:string;tradeId:string;provider:string;environment:string;account:string;orderId:string;instrument:string;market:string;direction:string;tradeOpenDate:number;createdAt:number;fileName:string;mimeType:string;bytes:number;width:number;height:number;sha256:string}
+export interface TradeScreenQuery {tradeId?:string;provider?:string;instrument?:string;orderId?:string;environment?:string;entryCondition?:string;from?:number;to?:number;offset?:number;limit?:number}
+export interface TradeScreenPage {screens:TradeScreen[];total:number;offset:number;limit:number}
 export interface TradeRecord {
+ screens?:TradeScreen[];
  entryCondition?:string;
  stopLossSource?:string;takeProfitSource?:string;
  exitPrice?:string;pipSize?:string;profitLossPips?:string;profitLossPipsUnit?:string;profitLossPipsTime?:number;profitLossPipsState?:string;profitLossPipsBasis?:string;profitLossPipsError?:string;
@@ -9,6 +13,9 @@ export interface TradeRecord {
 export interface TradeHistoryPage {rows:TradeRecord[];total:number;offset:number;limit:number;errors:string[]}
 export interface TradeClosePreview {id:string;tradeId:string;provider:string;environment:string;account:string;instrument:string;orderId:string;quantity:string;expiresAt:number;warnings:string[]}
 export interface TradeHistoryBackend {
+ AddTradeScreen(tradeId:string,fileName:string,dataURL:string):Promise<TradeScreen>;
+ GetTradeScreen(tradeId:string,screenId:string):Promise<string>;
+ QueryTradeScreens(query:TradeScreenQuery):Promise<TradeScreenPage>;
  SetTradeEntryCondition(id:string,value:string):Promise<string>;
  GetChartTrades(keys:FeedKey[]):Promise<TradeHistoryPage>;
  GetTradeHistory(offset:number,limit:number):Promise<TradeHistoryPage>;

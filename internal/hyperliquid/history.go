@@ -136,6 +136,14 @@ func (s *Store) TradeHistory() ([]trading.Trade, []string) {
 	return rows, problems
 }
 
+func (s *Store) LocalTrade(id string) (trading.Trade, error) {
+	j, err := s.readOrderJournal(id)
+	if err != nil {
+		return trading.Trade{}, err
+	}
+	return j.History, nil
+}
+
 type historyFill struct {
 	Coin          string `json:"coin"`
 	Side          string `json:"side"`

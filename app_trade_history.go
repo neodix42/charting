@@ -29,12 +29,13 @@ func (a *App) annotateTradeHistory(rows []trading.Trade) error {
 	if store == nil {
 		return nil
 	}
-	notes, err := store.Snapshot()
+	notes, err := store.MetadataSnapshot()
 	if err != nil {
 		return err
 	}
 	for i := range rows {
-		rows[i].EntryCondition = notes[rows[i].ID]
+		rows[i].EntryCondition = notes[rows[i].ID].EntryCondition
+		rows[i].Screens = notes[rows[i].ID].Screens
 	}
 	return nil
 }
@@ -83,7 +84,7 @@ func (a *App) GetTradeHistory(offset, limit int) (trading.HistoryPage, error) {
 	start := min(offset, len(rows))
 	out.Rows = append(out.Rows, rows[start:min(start+limit, len(rows))]...)
 	if err := a.annotateTradeHistory(out.Rows); err != nil {
-		out.Errors = append(out.Errors, "Entry conditions: "+err.Error())
+		out.Errors = append(out.Errors, "Trade annotations: "+err.Error())
 	}
 	return out, nil
 }
@@ -132,7 +133,7 @@ func (a *App) RefreshTradeHistory(ids []string) ([]trading.Trade, error) {
 		rows = append(rows, row)
 	}
 	if err := a.annotateTradeHistory(rows); err != nil {
-		return nil, errors.New("Entry conditions: " + err.Error())
+		return nil, errors.New("Trade annotations: " + err.Error())
 	}
 	return rows, nil
 }

@@ -14,6 +14,7 @@ import (
 	"cryptodesk/internal/hyperliquid"
 	"cryptodesk/internal/jforex"
 	"cryptodesk/internal/storage"
+	"cryptodesk/internal/trading"
 )
 
 func TestTradeHistoryFacadeMergesOnlyLocalClaimsAndPagesWithoutExchangeAccess(t *testing.T) {
@@ -60,6 +61,29 @@ func TestTradeHistoryFacadeMergesOnlyLocalClaimsAndPagesWithoutExchangeAccess(t 
 	if _, err = a.SetTradeEntryCondition("dukascopy:"+newer, "Retest"); err != nil {
 		t.Fatal(err)
 	}
+	const originalImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGU8AAAAASUVORK5CYII="
+	var firstScreen trading.TradeScreen
+	for _, tradeID := range []string{"hyperliquid:" + newest, "hyperliquid:" + newest, "dukascopy:" + newer} {
+		screen, err := a.AddTradeScreen(tradeID, "screen.png", originalImage)
+		if err != nil || screen.TradeID != tradeID || screen.Width != 1 || screen.Height != 1 {
+			t.Fatal("offline attachment failed", screen, err)
+		}
+		if firstScreen.ID == "" {
+			firstScreen = screen
+		}
+	}
+	if _, err := a.AddTradeScreen("hyperliquid:"+strings.Repeat("f", 32), "untracked.png", originalImage); err == nil {
+		t.Fatal("an image created an untracked platform trade")
+	}
+	if image, err := a.GetTradeScreen(firstScreen.TradeID, firstScreen.ID); err != nil || image != originalImage {
+		t.Fatal("original image was changed by the facade", err)
+	}
+	if _, err := a.GetTradeScreen("dukascopy:"+newer, firstScreen.ID); err == nil {
+		t.Fatal("the facade exposed an image from another trade")
+	}
+	if screens, err := a.QueryTradeScreens(trading.TradeScreenQuery{Provider: "hyperliquid", EntryCondition: "Breakout"}); err != nil || screens.Total != 2 {
+		t.Fatal("trade images cannot be queried by local metadata", screens, err)
+	}
 	page, err := a.GetTradeHistory(0, 2)
 	if err != nil || page.Total != 3 || len(page.Rows) != 2 || len(page.Errors) != 0 {
 		t.Fatal(page, err)
@@ -69,6 +93,9 @@ func TestTradeHistoryFacadeMergesOnlyLocalClaimsAndPagesWithoutExchangeAccess(t 
 	}
 	if page.Rows[0].EntryCondition != "Breakout" || page.Rows[1].EntryCondition != "Retest" {
 		t.Fatal("local conditions were not merged into provider rows", page.Rows)
+	}
+	if len(page.Rows[0].Screens) != 2 || len(page.Rows[1].Screens) != 1 {
+		t.Fatal("local image metadata did not merge with both providers", page.Rows)
 	}
 	if after, _ := os.ReadFile(claimPath); !bytes.Equal(claimBefore, after) {
 		t.Fatal("editing an entry condition changed the provider claim")
@@ -120,6 +147,9 @@ func TestTradeHistoryFacadeRejectsUntrackedAndMalformedCloseActions(t *testing.T
 		t.Fatal("unbounded refresh accepted")
 	}
 	a.closeTrading()
+	if _, err := a.QueryTradeScreens(trading.TradeScreenQuery{}); err == nil {
+		t.Fatal("image work started after shutdown")
+	}
 	if _, err := a.GetTradeHistory(0, 25); err == nil {
 		t.Fatal("history started after shutdown")
 	}
