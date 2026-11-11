@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"cryptodesk/internal/trading"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -441,6 +443,13 @@ func (s *Store) Submit(ctx context.Context, id string) (OrderResult, error) {
 	if err = s.checkInventory(ctx, v, r, m); err != nil {
 		return OrderResult{}, err
 	}
+	// Snapshot the account immediately before the signed entry. Unknown metrics
+	// remain empty; historical account balances are never reconstructed later.
+	metrics := s.orderMetrics(ctx, v, r, m, quote, s.now().UnixMilli())
+	journal := orderJournal{Preview: p.Preview, History: newHistoryTrade(p.Preview, metrics, s.now().UnixMilli())}
+	if s.now().UnixMilli() >= p.ExpiresAt {
+		return OrderResult{}, errors.New("Order preview expired; preview again")
+	}
 	// Consume before any signed action. Restart and uncertain responses cannot
 	// replay a confirmation token. The journal deliberately excludes credentials.
 	claim := filepath.Join(s.profile, "hyperliquid-orders", id+".json")
@@ -451,7 +460,7 @@ func (s *Store) Submit(ctx context.Context, id string) (OrderResult, error) {
 	if err != nil {
 		return OrderResult{}, errors.New("Order confirmation is already claimed or cannot be saved")
 	}
-	raw, _ := json.Marshal(p.Preview)
+	raw, _ := json.Marshal(journal)
 	_, writeErr := f.Write(raw)
 	err = errors.Join(writeErr, f.Sync(), f.Close())
 	if err != nil {
@@ -459,10 +468,11 @@ func (s *Store) Submit(ctx context.Context, id string) (OrderResult, error) {
 	}
 	result := OrderResult{Status: "uncertain", Message: "Submission may have reached Hyperliquid. Check the exchange account before placing another order.", ClientOrderID: "0x" + id, OrderIDs: []int64{}}
 	finish := func() {
-		if err := atomicJSON(claim, struct {
-			Preview Preview     `json:"preview"`
-			Result  OrderResult `json:"result"`
-		}{p.Preview, result}); err != nil {
+		unlock := s.lockHistory(id)
+		defer unlock()
+		journal.Result = result
+		applySubmission(&journal)
+		if err := trading.WriteJournal(claim, journal, false); err != nil {
 			result.Message += " The local result journal could not be saved; do not resubmit this confirmation."
 		}
 	}

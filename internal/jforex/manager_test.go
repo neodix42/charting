@@ -673,6 +673,10 @@ func TestBridgeHelperProcess(t *testing.T) {
 		return
 	}
 	scenario := os.Getenv("CRYPTODESK_JFOREX_TEST_SCENARIO")
+	historyClosed := false
+	historyReads := 0
+	historyOpenAt := time.Now().Add(-time.Second).UnixMilli()
+	historyCloseAt := int64(0)
 	encoder := json.NewEncoder(os.Stdout)
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 4096), 64*1024)
@@ -738,6 +742,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 			version := bridgeVersion{Protocol: 1, SDKVersion: "3.6.51", JavaVersion: 17, InstrumentCatalog: bridgeInstrumentCatalog}
 			if strings.HasPrefix(scenario, "trade") {
 				version.Trading = "market-bracket-v1"
+				if strings.HasPrefix(scenario, "trade-history") {
+					version.TradeHistory = "platform-orders-v1"
+				}
 				if strings.HasPrefix(scenario, "trade-estimate") {
 					version.TradeEstimates = "account-currency-pnl-v1"
 					if strings.HasPrefix(scenario, "trade-estimate-metrics") {
@@ -800,12 +807,51 @@ func TestBridgeHelperProcess(t *testing.T) {
 			preview.MinQuantity = 1000
 			preview.QuantityStep = 1000
 			preview.PriceStep = 0.00001
+			if strings.HasPrefix(scenario, "trade-history") {
+				preview.AccountCurrency = "EUR"
+				preview.ProfitPerPriceUnit = .9
+				preview.ValuationTime = time.Now().UnixMilli()
+			}
 			respond(id, preview)
 		case "tradeSubmit":
 			if scenario == "trade-hang" {
 				select {}
 			}
-			respond(id, TradeResult{Status: "filled", OrderID: "offline-order-1", FilledQuantity: 1000, EntryPrice: 1.1003, ProtectionConfirmed: true})
+			result := TradeResult{Status: "filled", OrderID: "offline-order-1", FilledQuantity: 1000, EntryPrice: 1.1003, ProtectionConfirmed: true}
+			if strings.HasPrefix(scenario, "trade-history") {
+				balance := 900.0
+				result.ExecutionMetrics = &TradeMetrics{AccountCurrency: "EUR", Balance: &balance, AccountTime: time.Now().UnixMilli(), AccountNote: "Opening SDK balance snapshot"}
+			}
+			respond(id, result)
+		case "tradeHistory", "tradeClose":
+			var tradeRequest TradeRequest
+			_ = json.Unmarshal(scanner.Bytes(), &tradeRequest)
+			var intent string
+			_ = json.Unmarshal(request["intent"], &intent)
+			order := brokerOrder{Intent: intent, OrderID: "offline-order-1", Instrument: tradeRequest.Instrument, Side: tradeRequest.Side, Status: "open", OriginalQuantity: tradeRequest.Quantity, FilledQuantity: tradeRequest.Quantity, RemainingQuantity: tradeRequest.Quantity, EntryPrice: 1.1003, StopLoss: tradeRequest.StopLoss, TakeProfit: tradeRequest.TakeProfit, OpenDate: historyOpenAt}
+			if op == "tradeHistory" {
+				historyReads++
+			}
+			if scenario == "trade-history-outside" {
+				order.Intent = strings.Repeat("f", 32)
+			}
+			if scenario == "trade-history-changed" && historyReads >= 2 {
+				order.RemainingQuantity = 500
+			}
+			if op == "tradeClose" {
+				if scenario == "trade-history-uncertain" {
+					_ = encoder.Encode(map[string]any{"id": id, "ok": false, "error": map[string]any{"kind": "offline", "message": "Synthetic uncertain close"}})
+					continue
+				}
+				historyClosed = true
+				historyCloseAt = time.Now().UnixMilli()
+			}
+			if historyClosed {
+				order.Status = "closed"
+				order.RemainingQuantity = 0
+				order.CloseDate = historyCloseAt
+			}
+			respond(id, order)
 		case "connect":
 			connections++
 			if scenario == "hang-retest" && connections > 1 {

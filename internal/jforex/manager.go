@@ -31,6 +31,7 @@ type bridgeVersion struct {
 	Trading           string `json:"trading"`
 	TradeEstimates    string `json:"tradeEstimates"`
 	TradeMetrics      string `json:"tradeMetrics"`
+	TradeHistory      string `json:"tradeHistory"`
 }
 
 func verifyBridge(ctx context.Context, process *bridgeProcess) error {
@@ -84,6 +85,8 @@ type Manager struct {
 	testCancel         context.CancelFunc
 	testGeneration     uint64
 	tradePreviews      map[string]*tradeConfirmation
+	historyLocks       sync.Map
+	closePreviews      map[string]closeConfirmation
 }
 
 // New reads only machine-local configuration and discovers files. Login is

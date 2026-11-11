@@ -56,6 +56,8 @@ export function ConfigureTelegramBotSettings(arg1:string,arg2:string):Promise<te
 
 export function ConfirmClose(arg1:string,arg2:boolean):Promise<void>;
 
+export function ConfirmTradeClose(arg1:string):Promise<trading.Trade>;
+
 export function DeletePredictionForecast(arg1:string):Promise<predictions.Info>;
 
 export function DeleteScreenerAnalysisCondition(arg1:string):Promise<void>;
@@ -138,6 +140,8 @@ export function GetTelegramBotIdentity(arg1:string):Promise<telegram.BotIdentity
 
 export function GetTelegramBotSettings():Promise<telegram.Settings>;
 
+export function GetTradeHistory(arg1:number,arg2:number):Promise<trading.HistoryPage>;
+
 export function GetTradeMetrics(arg1:trading.Request):Promise<trading.Metrics>;
 
 export function GetTradingStatus(arg1:domain.FeedKey):Promise<trading.Status>;
@@ -158,9 +162,13 @@ export function PreviewHyperliquidTransfer(arg1:hyperliquid.TransferRequest):Pro
 
 export function PreviewTrade(arg1:trading.Request):Promise<trading.Preview>;
 
+export function PreviewTradeClose(arg1:string):Promise<trading.ClosePreview>;
+
 export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 
 export function RefreshDucascopyInstruments(arg1:boolean):Promise<Array<domain.Instrument>>;
+
+export function RefreshTradeHistory(arg1:Array<string>):Promise<Array<trading.Trade>>;
 
 export function RenameScreenerAnalysisCondition(arg1:string,arg2:string):Promise<screener.SavedAnalysisCondition>;
 

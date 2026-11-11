@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"cryptodesk/internal/trading"
 )
 
 // Quantity is the instrument's base units, not FX lots or SDK millions.
@@ -60,12 +62,14 @@ type TradePreview struct {
 	Message            string        `json:"message"`
 }
 type TradeResult struct {
-	Status              string  `json:"status"`
-	OrderID             string  `json:"orderID"`
-	FilledQuantity      float64 `json:"filledQuantity"`
-	EntryPrice          float64 `json:"entryPrice"`
-	ProtectionConfirmed bool    `json:"protectionConfirmed"`
-	Message             string  `json:"message"`
+	ExecutionMetrics    *TradeMetrics `json:"executionMetrics,omitempty"`
+	History             *brokerOrder  `json:"history,omitempty"`
+	Status              string        `json:"status"`
+	OrderID             string        `json:"orderID"`
+	FilledQuantity      float64       `json:"filledQuantity"`
+	EntryPrice          float64       `json:"entryPrice"`
+	ProtectionConfirmed bool          `json:"protectionConfirmed"`
+	Message             string        `json:"message"`
 }
 type tradeConfirmation struct {
 	preview TradePreview
@@ -238,12 +242,22 @@ func (m *Manager) SubmitTrade(ctx context.Context, id string) (TradeResult, erro
 	if err != nil {
 		return TradeResult{}, errors.New("Could not reserve a unique trade intent; no order was submitted")
 	}
-	encoded, _ := json.Marshal(map[string]any{"id": id, "request": request, "environment": confirmation.preview.Environment, "createdAt": time.Now().UnixMilli(), "status": "claimed"})
+	journal := brokerJournal{ID: id, Request: request, Environment: confirmation.preview.Environment, Account: accountKey(confirmation.config), CreatedAt: time.Now().UnixMilli(), Status: "claimed", Preview: confirmation.preview}
+	journal.History = newBrokerHistory(journal)
+	encoded, _ := json.Marshal(journal)
 	_, writeErr := claim.Write(encoded)
 	err = errors.Join(writeErr, claim.Sync(), claim.Close())
 	if err != nil {
 		return TradeResult{}, errors.New("Could not persist the trade intent; no order was submitted")
 	}
+	sent := false
+	defer func() {
+		if !sent {
+			journal.Status = "not-sent"
+			journal.History.Status = "rejected"
+			_ = trading.WriteJournal(filepath.Join(directory, id+".json"), journal, false)
+		}
+	}()
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	process, release, err := m.begin(ctx, true, "")
@@ -263,11 +277,20 @@ func (m *Manager) SubmitTrade(ctx context.Context, id string) (TradeResult, erro
 	rpc := tradeRPC(request, "tradeSubmit")
 	rpc["intent"] = id
 	var result TradeResult
+	sent = true
 	if err = process.call(ctx, rpc, &result); err != nil {
 		result = TradeResult{Status: "unknown", Message: "JForex did not confirm the submission outcome. Inspect account orders labelled CD_" + id + " before another trade. No automatic retry was made."}
 	} else if result.Status != "filled" && result.Status != "partial" && result.Status != "submitted" && result.Status != "rejected" && result.Status != "unknown" {
 		result = TradeResult{Status: "unknown", Message: "JForex returned an unrecognized submission outcome; inspect the account. No automatic retry was made."}
 	}
+	unlock := m.lockTradeHistory(id)
+	journal.Result = result
+	journal.Status = result.Status
+	applyBrokerSubmission(&journal)
+	if saveErr := trading.WriteJournal(filepath.Join(directory, id+".json"), journal, false); saveErr != nil {
+		result.Message += " Trade result could not be saved; inspect the account before another action."
+	}
+	unlock()
 	m.mu.Lock()
 	confirmation.result = &result
 	m.mu.Unlock()

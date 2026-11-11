@@ -12,7 +12,7 @@ async function openSettings(page:Page){await page.getByRole('button',{name:'Open
 
 test('Predictions is fixed after Screener, pauses chart leases and prepares only after opening',async({page})=>{
  await openTestApp(page);await expect(page.getByTestId('chart-cell')).toHaveCount(1);expect((await calls(page)).get).toBe(0);expect((await calls(page)).prepare).toBe(0);
- const fixed=await page.locator('.tab-row > button[role=tab]').allTextContents();expect(fixed).toEqual(['Screener','Predictions']);
+ const fixed=await page.locator('.tab-row > button[role=tab]').allTextContents();expect(fixed).toEqual(['Screener','Predictions','Trade history']);
  await enter(page,false);await expect(panel(page).getByRole('progressbar',{name:'Prediction progress'})).toHaveAttribute('value','25');await expect(panel(page)).toContainText('100 MiB / 400 MiB');expect((await calls(page)).prepare).toBe(1);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);await expect(page.getByTestId('chart-cell')).toHaveCount(0);await expect(page.getByRole('button',{name:'Add tab',exact:true})).toBeDisabled();await expect(panel(page).getByRole('button',{name:'Start prediction',exact:true})).toBeDisabled();
  await panel(page).getByRole('button',{name:'Cancel prediction',exact:true}).click();await expect(panel(page)).toContainText('Prediction cancelled');

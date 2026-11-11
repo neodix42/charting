@@ -35,6 +35,8 @@ type Info struct {
 }
 type Store struct {
 	mu               sync.Mutex
+	historyLocks     sync.Map
+	closePreviews    map[string]closePlan
 	gate             chan struct{}
 	profile          string
 	settings         Settings

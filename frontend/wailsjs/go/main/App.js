@@ -90,6 +90,10 @@ export function ConfirmClose(arg1, arg2) {
   return window['go']['main']['App']['ConfirmClose'](arg1, arg2);
 }
 
+export function ConfirmTradeClose(arg1) {
+  return window['go']['main']['App']['ConfirmTradeClose'](arg1);
+}
+
 export function DeletePredictionForecast(arg1) {
   return window['go']['main']['App']['DeletePredictionForecast'](arg1);
 }
@@ -254,6 +258,10 @@ export function GetTelegramBotSettings() {
   return window['go']['main']['App']['GetTelegramBotSettings']();
 }
 
+export function GetTradeHistory(arg1, arg2) {
+  return window['go']['main']['App']['GetTradeHistory'](arg1, arg2);
+}
+
 export function GetTradeMetrics(arg1) {
   return window['go']['main']['App']['GetTradeMetrics'](arg1);
 }
@@ -294,12 +302,20 @@ export function PreviewTrade(arg1) {
   return window['go']['main']['App']['PreviewTrade'](arg1);
 }
 
+export function PreviewTradeClose(arg1) {
+  return window['go']['main']['App']['PreviewTradeClose'](arg1);
+}
+
 export function RecoverWorkspace(arg1) {
   return window['go']['main']['App']['RecoverWorkspace'](arg1);
 }
 
 export function RefreshDucascopyInstruments(arg1) {
   return window['go']['main']['App']['RefreshDucascopyInstruments'](arg1);
+}
+
+export function RefreshTradeHistory(arg1) {
+  return window['go']['main']['App']['RefreshTradeHistory'](arg1);
 }
 
 export function RenameScreenerAnalysisCondition(arg1, arg2) {

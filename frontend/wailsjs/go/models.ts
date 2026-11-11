@@ -3198,6 +3198,149 @@ export namespace trading {
 		}
 	}
 
+
+	export class ClosePreview {
+	    id: string;
+	    tradeId: string;
+	    provider: string;
+	    environment: string;
+	    account: string;
+	    instrument: string;
+	    orderId: string;
+	    quantity: string;
+	    expiresAt: number;
+	    warnings: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ClosePreview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.tradeId = source["tradeId"];
+	        this.provider = source["provider"];
+	        this.environment = source["environment"];
+	        this.account = source["account"];
+	        this.instrument = source["instrument"];
+	        this.orderId = source["orderId"];
+	        this.quantity = source["quantity"];
+	        this.expiresAt = source["expiresAt"];
+	        this.warnings = source["warnings"];
+	    }
+	}
+
+	export class Trade {
+	    id: string;
+	    provider: string;
+	    environment: string;
+	    account: string;
+	    instrument: string;
+	    market: string;
+	    orderId: string;
+	    submittedAt: number;
+	    openDate: number;
+	    closeDate: number;
+	    size: string;
+	    remainingSize: string;
+	    direction: string;
+	    entryPrice: string;
+	    stopLoss: string;
+	    takeProfit: string;
+	    slAmount: string;
+	    tpAmount: string;
+	    currency: string;
+	    balanceAtOpen: string;
+	    balanceCurrency: string;
+	    balanceTime: number;
+	    balanceBasis?: string;
+	    marginUsed: string;
+	    marginCurrency: string;
+	    marginBasis?: string;
+	    status: string;
+	    canClose: boolean;
+	    closeReason: string;
+	    checkedAt: number;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Trade(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.provider = source["provider"];
+	        this.environment = source["environment"];
+	        this.account = source["account"];
+	        this.instrument = source["instrument"];
+	        this.market = source["market"];
+	        this.orderId = source["orderId"];
+	        this.submittedAt = source["submittedAt"];
+	        this.openDate = source["openDate"];
+	        this.closeDate = source["closeDate"];
+	        this.size = source["size"];
+	        this.remainingSize = source["remainingSize"];
+	        this.direction = source["direction"];
+	        this.entryPrice = source["entryPrice"];
+	        this.stopLoss = source["stopLoss"];
+	        this.takeProfit = source["takeProfit"];
+	        this.slAmount = source["slAmount"];
+	        this.tpAmount = source["tpAmount"];
+	        this.currency = source["currency"];
+	        this.balanceAtOpen = source["balanceAtOpen"];
+	        this.balanceCurrency = source["balanceCurrency"];
+	        this.balanceTime = source["balanceTime"];
+	        this.balanceBasis = source["balanceBasis"];
+	        this.marginUsed = source["marginUsed"];
+	        this.marginCurrency = source["marginCurrency"];
+	        this.marginBasis = source["marginBasis"];
+	        this.status = source["status"];
+	        this.canClose = source["canClose"];
+	        this.closeReason = source["closeReason"];
+	        this.checkedAt = source["checkedAt"];
+	        this.error = source["error"];
+	    }
+	}
+
+	export class HistoryPage {
+	    rows: Trade[];
+	    total: number;
+	    offset: number;
+	    limit: number;
+	    errors: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new HistoryPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rows = this.convertValues(source["rows"], Trade);
+	        this.total = source["total"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	        this.errors = source["errors"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 }
 
 export namespace main {

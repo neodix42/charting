@@ -18,6 +18,7 @@ const testPrivate = "01234567890123456789012345678901234567890123456789012345678
 const testAccount = "0x1111111111111111111111111111111111111111"
 
 type tradingMock struct {
+	historyHandler              func(http.ResponseWriter, map[string]json.RawMessage) bool
 	mu                          sync.Mutex
 	actions                     []map[string]any
 	infos                       []string
@@ -56,6 +57,9 @@ func mockStore(t *testing.T) (*Store, *tradingMock) {
 		mock.mu.Lock()
 		defer mock.mu.Unlock()
 		mock.requests = append(mock.requests, input)
+		if mock.historyHandler != nil && mock.historyHandler(w, input) {
+			return
+		}
 		if r.URL.Path == "/exchange" {
 			var action map[string]any
 			_ = json.Unmarshal(input["action"], &action)

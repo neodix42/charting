@@ -2,6 +2,15 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Platform trade history — 2026-11-11
+
+- [x] Trade history follows Predictions, lists only locally claimed Dukascopy/Hyperliquid submissions, and shows the requested prices, sizes, execution dates, account-currency SL/TP estimates, submission balance and supported position margin.
+- [x] Existing provider journals survive restart; native ID/client label and account/environment verification exclude outside trades. Legacy unknown balances/conversions remain unavailable; actual zero and explicit currency labels are retained.
+- [x] Confirmed Close uses the exact JForex position or a verified sole Hyperliquid exposure with reduce-only IOC; partial/uncertain results, one-use durable claims, protective-order ownership and exchange-confirmed close times have offline production tests.
+- [x] Provider/market/shared-trading/root Go race suites, vet, pinned JForex offline SDK tests, 279 frontend unit tests, typecheck/lint and 49 distinct related browser cases pass.
+- [x] Linux executable/archive rebuilt; archive inventory/JForex provenance and root/release checksums pass, with final STATUS.md included.
+- [ ] Native desktop interaction, funded Demo/Testnet/Live order/close execution, Windows GUI and hosted CI remain unrun. No real account was used for verification. Install the matching JForex bridge and restart before the manual check.
+
 ## Explicit chart trading — 2026-11-09
 
 - [x] Hyperliquid private API-agent setup/help/read-only test and source-scoped chart Buy/Sell review/confirm tickets.

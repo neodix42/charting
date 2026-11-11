@@ -184,12 +184,14 @@ public final class Bridge implements AutoCloseable {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1");
+                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1");
                 case "instruments" -> instruments();
                 case "tradePreview" -> tradePreview(request);
                 case "tradeEstimate" -> tradeEstimate(request);
                 case "tradeMetrics" -> tradeMetrics(request);
                 case "tradeSubmit" -> tradeSubmit(request);
+                case "tradeHistory" -> tradeHistory(request);
+                case "tradeClose" -> tradeClose(request);
                 case "history" -> history(request);
                 case "subscribe" -> subscribe(request);
                 case "unsubscribe" -> unsubscribe(text(request, "subscriptionId", 128));
@@ -941,9 +943,11 @@ public final class Bridge implements AutoCloseable {
         String side = (String) preview.get("side");
         double quantity = (Double) preview.get("quantity"), sl = (Double) preview.get("stopLoss"), tp = (Double) preview.get("takeProfit");
         IContext active = context;
+        AtomicReference<Map<String, Object>> openingMetrics = new AtomicReference<>();
         Future<IOrder> submission = active.executeTask(() -> {
             if (closing || context != active || client == null || !client.isConnected()) throw new Failure("offline", "JForex disconnected before order submission");
             tradePreview(request, false); // revalidate fresh price/levels on the SDK strategy thread
+            openingMetrics.set(accountMetrics());
             return active.getEngine().submitOrder("CD_" + intent, instrument, side.equals("buy") ? IEngine.OrderCommand.BUY : IEngine.OrderCommand.SELL,
                 quantity / 1_000_000.0, 0, 5, sl, tp);
         });
@@ -969,8 +973,81 @@ public final class Bridge implements AutoCloseable {
         result.put("orderID", order.getId() == null ? "" : order.getId());
         result.put("filledQuantity", state == IOrder.State.FILLED ? order.getAmount() * 1_000_000.0 : 0);
         result.put("entryPrice", order.getOpenPrice()); result.put("protectionConfirmed", protection && state == IOrder.State.FILLED);
+        result.put("executionMetrics", openingMetrics.get());
+        try { result.put("history", orderHistorySnapshot(order, intent)); }
+        catch (Exception error) { result.put("historyError", "Filled order metadata could not be read; refresh Trade history"); }
         result.put("message", fullyFilled && protection ? "JForex reports the market order filled with the requested protective levels." :
             "JForex order state: " + state + ". Inspect the account; fill and protective levels are not fully confirmed. No automatic retry was made.");
+        return result;
+    }
+
+    private final Object orderHistoryLock = new Object();
+    private final Set<String> closeClaims = ConcurrentHashMap.newKeySet();
+    private IOrder ownedOrder(JsonObject request, boolean history) throws Exception {
+        requireConnected();
+        String intent = text(request, "intent", 32), orderID = request.has("orderID") ? text(request, "orderID", 128) : "";
+        if (!intent.matches("[a-f0-9]{32}")) throw new Failure("restricted", "Invalid platform trade identity");
+        IOrder order = orderID.isEmpty() ? context.getEngine().getOrder("CD_" + intent) : context.getEngine().getOrderById(orderID);
+        if (order == null && history) synchronized (orderHistoryLock) {
+            if (!orderID.isEmpty()) order = context.getHistory().getHistoricalOrderById(orderID);
+            else {
+                long from = request.has("from") ? request.get("from").getAsLong() : 0;
+                if (from <= 0 || from > nowMillis.getAsLong()) throw new Failure("restricted", "A valid local trade creation time is required");
+                for (IOrder candidate : context.getHistory().getOrdersHistory(tradeInstrument(request), Math.max(0, from - 86_400_000L), nowMillis.getAsLong()))
+                    if (("CD_" + intent).equals(candidate.getLabel())) { if (order != null) throw new Failure("restricted", "Duplicate platform order label"); order = candidate; }
+            }
+        }
+        if (order == null) return null;
+        String side = text(request, "side", 8);
+        double expected = tradeNumber(request, "quantity", false);
+        if (!("CD_" + intent).equals(order.getLabel()) || order.getInstrument() != tradeInstrument(request)
+                || order.isLong() != side.equals("buy") || !orderID.isEmpty() && !orderID.equals(order.getId())
+                || !Double.isFinite(order.getOriginalAmount()) || Math.abs(order.getOriginalAmount() * 1_000_000.0 - expected) > Math.max(1e-7, expected * 1e-8))
+            throw new Failure("restricted", "The exchange order does not match this platform's local submission");
+        return order;
+    }
+    private Map<String, Object> orderHistorySnapshot(IOrder order, String intent) throws Exception {
+        Map<String, Object> result = new HashMap<>();
+        IOrder.State state = order.getState();
+        result.put("intent", intent); result.put("orderID", order.getId()); result.put("instrument", order.getInstrument().name()); result.put("side", order.isLong() ? "buy" : "sell");
+        result.put("status", state == IOrder.State.CLOSED ? "closed" : state == IOrder.State.FILLED ? "open" : state == IOrder.State.CANCELED ? "cancelled" : "submitted");
+        double filled = 0;
+        if (order.getFillHistory() != null) for (IFillOrder fill : order.getFillHistory()) filled += fill.getAmount() * 1_000_000.0;
+        if (filled <= 0 && state == IOrder.State.FILLED && (order.getCloseHistory() == null || order.getCloseHistory().isEmpty())) filled = order.getAmount() * 1_000_000.0;
+        result.put("filledQuantity", filled); result.put("originalQuantity", order.getOriginalAmount() * 1_000_000.0);
+        result.put("remainingQuantity", state == IOrder.State.FILLED ? order.getAmount() * 1_000_000.0 : 0);
+        result.put("entryPrice", order.getOpenPrice()); result.put("stopLoss", order.getStopLossPrice()); result.put("takeProfit", order.getTakeProfitPrice());
+        result.put("openDate", order.getFillTime()); result.put("closeDate", state == IOrder.State.CLOSED ? order.getCloseTime() : 0);
+        return result;
+    }
+    private Map<String, Object> tradeHistory(JsonObject request) throws Exception {
+        IOrder order = ownedOrder(request, true);
+        return order == null ? Map.of("status", "not-found") : orderHistorySnapshot(order, text(request, "intent", 32));
+    }
+    private Map<String, Object> tradeClose(JsonObject request) throws Exception {
+        IOrder order = ownedOrder(request, true);
+        if (order == null) throw new Failure("restricted", "The platform position could not be found");
+        String intent = text(request, "intent", 32), closeIntent = text(request, "closeIntent", 32);
+        if (!closeIntent.matches("[a-f0-9]{32}") || !closeClaims.add(closeIntent)) throw new Failure("restricted", "Invalid or already used close confirmation");
+        if (order.getState() == IOrder.State.CLOSED) return orderHistorySnapshot(order, intent);
+        double remaining = tradeNumber(request, "remainingQuantity", false);
+        String orderID = order.getId();
+        IContext active = context;
+        Future<?> closingOrder = active.executeTask(() -> {
+            if (closing || context != active || client == null || !client.isConnected()) throw new Failure("offline", "JForex disconnected before closing");
+            IOrder current = active.getEngine().getOrderById(orderID);
+            if (current == null || !("CD_" + intent).equals(current.getLabel()) || current.getInstrument() != order.getInstrument() || current.isLong() != order.isLong()
+                    || current.getState() != IOrder.State.FILLED || Math.abs(current.getAmount() * 1_000_000.0 - remaining) > Math.max(1e-7, remaining * 1e-8))
+                throw new Failure("restricted", "The platform position changed; refresh and review its close again");
+            current.close();
+            return null;
+        });
+        try { closingOrder.get(10, TimeUnit.SECONDS); }
+        catch (Exception error) { closingOrder.cancel(false); throw new Failure("restricted", "Close outcome is uncertain; inspect this exact position before another action"); }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.min(10_000, historyTimeoutMillis));
+        while (System.nanoTime() < deadline && !closing && order.getState() == IOrder.State.FILLED) Thread.sleep(20);
+        Map<String, Object> result = orderHistorySnapshot(order, intent);
+        if (order.getState() != IOrder.State.CLOSED) result.put("status", "closing");
         return result;
     }
 

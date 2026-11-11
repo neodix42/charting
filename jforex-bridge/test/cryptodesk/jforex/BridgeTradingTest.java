@@ -66,6 +66,7 @@ public final class BridgeTradingTest {
             check(good(bridge,trade("tradePreview",fx,"sell",1000,1.12,1.09)).getAsJsonObject("result").get("entryPrice").getAsDouble()==1.1,"Sell uses bid");
         }
         BridgeValuationTest.run();
+        BridgeTradeHistoryTest.run();
         System.out.println("JForex trading validation, SDK thread, amount conversion and no-repeat tests passed");
     }
 }
