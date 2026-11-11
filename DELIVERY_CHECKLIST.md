@@ -2,6 +2,13 @@
 
 Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpacked at root. Checked items refer to implemented code and observed automated/live evidence, with manual limits stated separately.
 
+## Hosted Ubuntu dependency setup — 2026-11-11
+
+- [x] Cancelled test-run logs identify the Azure Ubuntu mirror DNS failure and warning-only stale-index reuse before any test; the Windows build succeeds.
+- [x] Both workflows share a runner-only official HTTPS source setup, preserve signing/other repositories, fail index updates visibly and bound dependency setup.
+- [x] All 158 Python tests, workflow contract checks and YAML parsing pass without privileged local commands or host configuration changes.
+- [ ] Replacement hosted Tests/Linux release checks remain tracked by Actions for this revision; see STATUS.md.
+
 ## Trade-history exit prices and pip/tick P/L — 2026-11-11
 
 - [x] Exit price and Profit/Loss, pips occupy the requested adjacent columns; open/incomplete closing histories stay unavailable.
