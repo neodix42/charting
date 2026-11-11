@@ -5,8 +5,8 @@ Evidence: docs/verification/REPORT.md; usage: APP_README.md. The bundle was unpa
 ## Hosted Ubuntu dependency setup — 2026-11-11
 
 - [x] Cancelled test-run logs identify the Azure Ubuntu mirror DNS failure and warning-only stale-index reuse before any test; the Windows build succeeds.
-- [x] Both workflows share a runner-only official HTTPS source setup, preserve signing/other repositories, fail index updates visibly and bound dependency setup.
-- [x] All 158 Python tests, workflow contract checks and YAML parsing pass without privileged local commands or host configuration changes.
+- [x] Both workflows share a runner-only HTTPS archive selector with required-suite probes and fixed Ubuntu/kernel.org/Princeton choices; preserve signing/other repositories, fail index updates visibly and bound dependency setup.
+- [x] All 160 Python tests, workflow contract checks and YAML parsing pass. Read-only fallback probes and Ubuntu-signed metadata verification pass without privileged local commands or host configuration changes; the complete 401-case local browser suite also passes.
 - [ ] Replacement hosted Tests/Linux release checks remain tracked by Actions for this revision; see STATUS.md.
 
 ## Trade-history exit prices and pip/tick P/L — 2026-11-11

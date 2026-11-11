@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import ci_ubuntu_apt as apt
 
@@ -40,7 +41,35 @@ class CIUbuntuAPTTests(unittest.TestCase):
             source = root / "sources.list"
             source.write_text("deb [arch=amd64 signed-by=/keys/ubuntu.gpg] http://azure.archive.ubuntu.com/ubuntu noble main\ndeb http://security.ubuntu.com/ubuntu/ noble-security main\n")
             apt.configure(root)
-            self.assertEqual(source.read_text(), "deb [arch=amd64 signed-by=/keys/ubuntu.gpg] https://archive.ubuntu.com/ubuntu noble main\ndeb https://security.ubuntu.com/ubuntu/ noble-security main\n")
+            self.assertEqual(source.read_text(), "deb [arch=amd64 signed-by=/keys/ubuntu.gpg] https://archive.ubuntu.com/ubuntu noble main\ndeb https://archive.ubuntu.com/ubuntu noble-security main\n")
+            apt.configure(root, apt.ARCHIVES[1])
+            self.assertNotIn("archive.ubuntu.com", source.read_text())
+            self.assertIn("https://mirrors.edge.kernel.org/ubuntu noble-security", source.read_text())
+            self.assertIn("signed-by=/keys/ubuntu.gpg", source.read_text())
+
+    def test_reachable_archive_selection_checks_each_suite_and_handles_dns_failure(self):
+        for fallback in (False, True):
+            calls = []
+            def opener(request, timeout):
+                calls.append(request.full_url)
+                self.assertEqual(request.get_method(), "HEAD")
+                self.assertEqual(timeout, 8)
+                if fallback and request.full_url.startswith(apt.ARCHIVE + "/"):
+                    raise OSError("Temporary DNS failure")
+                return contextlib.nullcontext(SimpleNamespace(status=200))
+            with self.subTest(fallback=fallback), contextlib.redirect_stdout(io.StringIO()):
+                chosen = apt.select_archive(opener)
+                self.assertEqual(chosen, apt.ARCHIVES[1] if fallback else apt.ARCHIVE)
+                for suite in apt.SUITES:
+                    self.assertIn(f"{chosen}/dists/{suite}/InRelease", calls)
+
+    def test_no_reachable_archive_fails_and_unlisted_sources_are_refused(self):
+        def unavailable(request, timeout):
+            raise OSError("Temporary DNS failure")
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, "No Ubuntu HTTPS archive"):
+            apt.select_archive(unavailable)
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(ValueError):
+            apt.configure(Path(directory), "https://example.com/unsigned")
 
     def test_normal_local_invocation_refuses_before_configuration(self):
         for environment in ({}, {"GITHUB_ACTIONS": "true", "RUNNER_OS": "Windows"}):

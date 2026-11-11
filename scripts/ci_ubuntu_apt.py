@@ -4,8 +4,11 @@
 import os
 from pathlib import Path
 import re
+from urllib.request import Request, urlopen
 
 ARCHIVE = "https://archive.ubuntu.com/ubuntu"
+ARCHIVES = (ARCHIVE, "https://mirrors.edge.kernel.org/ubuntu", "https://mirror.math.princeton.edu/pub/ubuntu")
+SUITES = ("noble", "noble-updates", "noble-backports", "noble-security")
 NETWORK_CONFIG = '''APT::Update::Error-Mode "any";
 Acquire::Retries "1";
 Acquire::http::Timeout "15";
@@ -13,7 +16,27 @@ Acquire::https::Timeout "15";
 '''
 
 
-def configure(apt_directory: Path) -> None:
+def select_archive(opener=urlopen) -> str:
+    errors = []
+    for archive in ARCHIVES:
+        try:
+            for suite in SUITES:
+                with opener(Request(f"{archive}/dists/{suite}/InRelease", method="HEAD"), timeout=8) as response:
+                    if response.status != 200:
+                        raise OSError(f"HTTP status {response.status}")
+            return archive
+        except OSError as error:
+            errors.append(f"{archive}: {error}")
+            print(f"CI Ubuntu mirror unavailable: {archive} ({type(error).__name__})")
+    raise RuntimeError("No Ubuntu HTTPS archive is reachable: " + "; ".join(errors))
+
+
+def configure(apt_directory: Path, archive: str = ARCHIVE) -> None:
+    if archive not in ARCHIVES:
+        raise ValueError("Only the fixed Ubuntu HTTPS archive list is supported")
+    patterns = [r"mirror\+file:/etc/apt/apt-mirrors\.txt/?(?=\s|$)", r"https?://(?:azure\.archive|archive|security)\.ubuntu\.com/ubuntu/?(?=\s|$)"]
+    patterns.extend(re.escape(base) + r"/?(?=\s|$)" for base in ARCHIVES)
+    source_uri = re.compile("|".join(patterns))
     paths = [apt_directory / "sources.list"]
     for pattern in ("*.list", "*.sources"):
         paths.extend(sorted((apt_directory / "sources.list.d").glob(pattern)))
@@ -22,10 +45,8 @@ def configure(apt_directory: Path) -> None:
         if not path.is_file():
             continue
         original = path.read_text()
-        updated = re.sub(r"mirror\+file:/etc/apt/apt-mirrors\.txt/?(?=\s|$)", ARCHIVE, original)
-        updated = re.sub(r"https?://azure\.archive\.ubuntu\.com/ubuntu/?(?=\s|$)", ARCHIVE, updated)
-        updated = re.sub(r"http://(archive|security)\.ubuntu\.com/ubuntu(?=/|\s|$)", r"https://\1.ubuntu.com/ubuntu", updated)
-        ubuntu_found |= bool(re.search(r"https://(?:archive|security)\.ubuntu\.com/ubuntu(?=/|\s|$)", updated))
+        updated, count = source_uri.subn(archive, original)
+        ubuntu_found |= count > 0
         if updated != original:
             path.write_text(updated)
     if not ubuntu_found:
@@ -39,8 +60,9 @@ def configure(apt_directory: Path) -> None:
 def main() -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_OS") != "Linux":
         raise SystemExit("This helper is only for GitHub Actions Linux runners; no local configuration was changed")
-    configure(Path("/etc/apt"))
-    print("CI Ubuntu sources use official HTTPS archives; APT update errors fail and network waits are bounded")
+    archive = select_archive()
+    configure(Path("/etc/apt"), archive)
+    print(f"CI Ubuntu sources use {archive}; package signatures remain required, index errors fail and network waits are bounded")
 
 
 if __name__ == "__main__":
