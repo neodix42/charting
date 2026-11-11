@@ -218,7 +218,7 @@ func TestAllDukascopyAssetClassesUseSharedCatalogHistoryAndStream(t *testing.T) 
 }
 
 func TestDukascopyCatalogRejectsMalformedAndOtherProviderMarkets(t *testing.T) {
-	for _, scenario := range []string{"catalog-wrong-market", "catalog-unknown-market", "catalog-duplicate", "catalog-missing-asset", "catalog-unsafe-id"} {
+	for _, scenario := range []string{"catalog-wrong-market", "catalog-unknown-market", "catalog-duplicate", "catalog-missing-asset", "catalog-unsafe-id", "catalog-empty"} {
 		t.Run(scenario, func(t *testing.T) {
 			m, _ := testManager(t, scenario)
 			if _, err := m.Instruments(context.Background()); err == nil || !strings.Contains(err.Error(), "invalid instrument") {
@@ -476,7 +476,7 @@ func TestInitialConfigurationCanUnblockAnUnconfiguredFeedCheck(t *testing.T) {
 	// configuration is safe: there is no process, login or source to replace.
 	m.gate <- struct{}{}
 	done := make(chan error, 1)
-	go func() { _, err := m.Instruments(context.Background()); done <- err }()
+	go func() { _, err := m.History(context.Background(), forexKey(), 1792368000, 1792378800, 3); done <- err }()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		m.mu.Lock()
@@ -824,11 +824,23 @@ func TestBridgeHelperProcess(t *testing.T) {
 			challenge = true
 			respond(id, LoginChallenge{ImageDataURL: pngImage})
 		case "instruments":
+			if scenario == "catalog-gated" {
+				folder := os.Getenv("CRYPTODESK_JFOREX_CATALOG_GATE")
+				_ = os.WriteFile(filepath.Join(folder, "started"), []byte("started"), 0600)
+				for {
+					if _, err := os.Stat(filepath.Join(folder, "release")); err == nil {
+						break
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+			}
 			items := []domain.Instrument{{NativeID: "USDJPY", Market: "forex", BaseAsset: "USD", QuoteAsset: "JPY", SupportedIntervals: domain.Intervals}, {NativeID: "EURUSD", Market: "forex", BaseAsset: "EUR", QuoteAsset: "USD", SupportedIntervals: domain.Intervals}}
 			if scenario == "all-assets" {
 				items = append(items, dukascopyAssetFixtures()...)
 			} else if strings.HasPrefix(scenario, "catalog-") {
 				switch scenario {
+				case "catalog-empty":
+					items = nil
 				case "catalog-wrong-market":
 					items[0].Market = "spot"
 				case "catalog-unknown-market":

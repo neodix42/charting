@@ -79,6 +79,7 @@ export interface Backend extends TradingBackend,ScreenerAnalysisBackend,Screener
  GetStartupStatus():Promise<StartupStatus>;
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
  ListInstruments(exchange:Exchange):Promise<Instrument[]>;
+ RefreshDucascopyInstruments(force:boolean):Promise<Instrument[]>;
  AttachChart(id:string,generation:number,key:FeedKey,fromSec:number,toSec:number):Promise<Snapshot>; DetachChart(leaseId:string):Promise<void>;
  GetFeedSnapshot(leaseId:string,revision:number):Promise<Snapshot>;
  GetHistory(requestId:string,key:FeedKey,fromSec:number,toSec:number,maxBars:number):Promise<HistoryResult>;

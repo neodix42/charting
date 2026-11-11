@@ -15,6 +15,16 @@ import (
 
 func (a *App) GetDucascopy() jforex.Info { return a.jforex.Info() }
 
+func (a *App) RefreshDucascopyInstruments(force bool) ([]domain.Instrument, error) {
+	ctx, cancel := a.ducascopyContext()
+	defer cancel()
+	items, err := a.jforex.RefreshInstruments(ctx, force)
+	if err == nil && a.market != nil {
+		a.market.InvalidateInstruments("dukascopy")
+	}
+	return items, err
+}
+
 func (a *App) ConfigureDucascopy(settings jforex.Settings) (jforex.Info, error) {
 	a.jforexMu.Lock()
 	defer a.jforexMu.Unlock()

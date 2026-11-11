@@ -65,6 +65,12 @@ type Manager struct {
 	authenticated      bool
 	online             bool
 	instrumentCount    int
+	catalogLoaded      bool
+	catalog            *savedInstrumentCatalog
+	catalogError       error
+	catalogFlight      *instrumentCatalogFlight
+	catalogCheckedAt   time.Time
+	catalogCheckError  error
 	lastError          string
 	closed             bool
 	operations         int
@@ -156,6 +162,8 @@ func (m *Manager) Configure(request Settings) (Info, error) {
 		m.process = nil
 	}
 	m.config = config
+	m.catalogLoaded, m.catalog, m.catalogError = false, nil, nil
+	m.catalogCheckedAt, m.catalogCheckError = time.Time{}, nil
 	m.closeChartCacheLocked()
 	m.chartCacheError = ""
 	m.authenticated = false
@@ -456,6 +464,24 @@ func (m *Manager) CancelConnectionTest() Info {
 }
 
 func (m *Manager) Instruments(ctx context.Context) ([]domain.Instrument, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	err := m.loadInstrumentCatalogLocked()
+	if err == nil && m.catalog != nil {
+		items := cloneInstruments(m.catalog.Items)
+		m.mu.Unlock()
+		return items, nil
+	}
+	m.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return m.RefreshInstruments(ctx, false)
+}
+
+func (m *Manager) fetchInstruments(ctx context.Context) ([]domain.Instrument, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	p, release, err := m.begin(ctx, true, "")
@@ -470,16 +496,8 @@ func (m *Manager) Instruments(ctx context.Context) ([]domain.Instrument, error) 
 		m.recordError(err)
 		return nil, err
 	}
-	if len(instruments) > 10000 {
-		return nil, errors.New("The JForex instrument catalog exceeds its limit")
-	}
-	seen := map[string]bool{}
-	for _, instrument := range instruments {
-		key := domain.FeedKey{Exchange: "dukascopy", Market: instrument.Market, Instrument: instrument.NativeID, Timeframe: "1m"}
-		if key.Validate() != nil || seen[instrument.NativeID] || instrument.BaseAsset == "" || instrument.QuoteAsset == "" {
-			return nil, errors.New("The JForex bridge returned an invalid instrument")
-		}
-		seen[instrument.NativeID] = true
+	if err := validateInstrumentCatalog(instruments); err != nil {
+		return nil, err
 	}
 	sort.Slice(instruments, func(i, j int) bool { return instruments[i].NativeID < instruments[j].NativeID })
 	m.mu.Lock()
@@ -759,4 +777,22 @@ func (m *Manager) Close() {
 	m.mu.Lock()
 	m.closeChartCacheLocked()
 	m.mu.Unlock()
+}
+
+func validateInstrumentCatalog(instruments []domain.Instrument) error {
+	if len(instruments) == 0 {
+		return errors.New("The JForex bridge returned an invalid instrument catalog (empty)")
+	}
+	if len(instruments) > 10000 {
+		return errors.New("The JForex instrument catalog exceeds its limit")
+	}
+	seen := map[string]bool{}
+	for _, instrument := range instruments {
+		key := domain.FeedKey{Exchange: "dukascopy", Market: instrument.Market, Instrument: instrument.NativeID, Timeframe: "1m"}
+		if key.Validate() != nil || seen[instrument.NativeID] || instrument.BaseAsset == "" || instrument.QuoteAsset == "" {
+			return errors.New("The JForex bridge returned an invalid instrument")
+		}
+		seen[instrument.NativeID] = true
+	}
+	return nil
 }

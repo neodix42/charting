@@ -160,6 +160,8 @@ export function PreviewTrade(arg1:trading.Request):Promise<trading.Preview>;
 
 export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 
+export function RefreshDucascopyInstruments(arg1:boolean):Promise<Array<domain.Instrument>>;
+
 export function RenameScreenerAnalysisCondition(arg1:string,arg2:string):Promise<screener.SavedAnalysisCondition>;
 
 export function ResetWorkspace():Promise<storage.Loaded>;

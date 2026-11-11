@@ -21,8 +21,9 @@ export function ducascopyBridge(){
  const info=():DucascopyInfo=>({username:saved.username,environment:saved.environment,passwordConfigured:!!saved.password,runtimeAvailable:true,runtimeDirectory:'/explicit-test/jforex',javaPath:'/explicit-test/java/bin/java',connected,instrumentCount:connected?catalog.length:0});
  const connect=()=>{if(!saved.username||!saved.password)throw Error('Save JForex credentials in Settings → Dukascopy.');connected=true;};
  const instruments=():Instrument[]=>{connect();return structuredClone(catalog);};
- const api:Pick<Backend,'GetDucascopy'|'ConfigureDucascopy'|'TestDucascopyConnection'|'GetDucascopyLoginChallenge'|'TestDucascopyConnectionWithPIN'|'CancelDucascopyConnectionTest'>={
+ const api:Pick<Backend,'GetDucascopy'|'ConfigureDucascopy'|'TestDucascopyConnection'|'GetDucascopyLoginChallenge'|'TestDucascopyConnectionWithPIN'|'CancelDucascopyConnectionTest'|'RefreshDucascopyInstruments'>={
   async GetDucascopy(){return info();},
+  async RefreshDucascopyInstruments(){return instruments();},
   async ConfigureDucascopy(request){
    const username=request.username.trim(),sameIdentity=username===saved.username&&request.environment===saved.environment;
    const password=request.clearPassword?'':request.password||(sameIdentity?saved.password:'');

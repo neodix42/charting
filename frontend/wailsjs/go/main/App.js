@@ -298,6 +298,10 @@ export function RecoverWorkspace(arg1) {
   return window['go']['main']['App']['RecoverWorkspace'](arg1);
 }
 
+export function RefreshDucascopyInstruments(arg1) {
+  return window['go']['main']['App']['RefreshDucascopyInstruments'](arg1);
+}
+
 export function RenameScreenerAnalysisCondition(arg1, arg2) {
   return window['go']['main']['App']['RenameScreenerAnalysisCondition'](arg1, arg2);
 }
