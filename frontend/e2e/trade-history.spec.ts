@@ -105,3 +105,40 @@ test('closed protection prices and estimates retain their recorded or submission
  await verify();await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(panel(page).getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();await verify();
  await reloadTestApp(page);await enter(page);await verify();
 });
+
+test('entry conditions save on Enter and blur for either source, enforce 100 characters and clear across reload',async({page})=>{
+ await openTestApp(page);
+ await seed(page,[record({status:'closed',closeDate:Date.now(),remainingSize:'0',canClose:false}),record({id:'dukascopy:'+'b'.repeat(32),provider:'dukascopy',instrument:'EUR/USD',orderId:'D-202',status:'closed',closeDate:Date.now(),remainingSize:'0',canClose:false})]);await enter(page);
+ await page.evaluate(()=>{const api=window.go!.main!.App!,save=api.SetTradeEntryCondition;(window as any).__entryWrites=[];api.SetTradeEntryCondition=async(id,value)=>{(window as any).__entryWrites.push({id,value});return save(id,value);};});
+ const btc=panel(page).getByRole('row').filter({hasText:'BTC'}),eur=panel(page).getByRole('row').filter({hasText:'EUR/USD'});
+ await expect(panel(page).getByRole('columnheader',{name:'Entry condition',exact:true})).toBeVisible();
+ await btc.getByRole('button',{name:/edit entry condition/i}).click();let input=btc.getByRole('textbox',{name:'Entry condition for hyperliquid 101'});await expect(input).toBeFocused();
+ await input.fill('Breakout <confirmation> ✓');await input.press('Enter');await expect(btc.getByRole('button',{name:/edit entry condition/i})).toHaveText('Breakout <confirmation> ✓');expect(await page.evaluate(()=>(window as any).__entryWrites.length)).toBe(1);
+ await eur.getByRole('button',{name:/edit entry condition/i}).click();const dukaInput=eur.getByRole('textbox',{name:'Entry condition for dukascopy D-202'});await dukaInput.fill('Retest of yesterday’s high');await dukaInput.press('Tab');await expect(eur.getByRole('button',{name:/edit entry condition/i})).toHaveText('Retest of yesterday’s high');
+ await btc.getByRole('button',{name:/edit entry condition/i}).click();input=btc.getByRole('textbox');await input.fill('');await input.pressSequentially('x'.repeat(105));await expect(input).toHaveValue('x'.repeat(100));await expect(input).toHaveAttribute('maxlength','100');await input.press('Enter');
+ await reloadTestApp(page);await enter(page);await expect(btc.getByRole('button',{name:/edit entry condition/i})).toHaveText('x'.repeat(100));await expect(eur.getByRole('button',{name:/edit entry condition/i})).toHaveText('Retest of yesterday’s high');
+ await btc.getByRole('button',{name:/edit entry condition/i}).click();input=btc.getByRole('textbox');await input.fill('');await input.press('Enter');await expect(btc.getByRole('button',{name:/edit entry condition/i})).toHaveText('Add entry condition');
+ await reloadTestApp(page);await enter(page);await expect(btc.getByRole('button',{name:/edit entry condition/i})).toHaveText('Add entry condition');await expect(eur.getByRole('button',{name:/edit entry condition/i})).toHaveText('Retest of yesterday’s high');
+});
+
+test('entry condition saves once while pending, retains failed text for retry and cancels unchanged edits',async({page})=>{
+ await openTestApp(page);await seed(page,[record({entryCondition:'Original',status:'closed',closeDate:Date.now(),remainingSize:'0',canClose:false})]);await enter(page);
+ const row=panel(page).getByRole('row').filter({hasText:'BTC'}),edit=row.getByRole('button',{name:/edit entry condition/i});
+ await page.evaluate(()=>{const api=window.go!.main!.App!,save=api.SetTradeEntryCondition;(window as any).__entryAttempts=0;api.SetTradeEntryCondition=(id,value)=>{(window as any).__entryAttempts++;return new Promise((resolve,reject)=>(window as any).__finishEntrySave=async(fail:boolean)=>fail?reject(Error('Local file is read-only')):resolve(await save(id,value)));};});
+ await edit.click();const input=row.getByRole('textbox');await input.fill('A preserved draft');await input.press('Enter');await expect(input).toBeDisabled();expect(await page.evaluate(()=>(window as any).__entryAttempts)).toBe(1);
+ await page.evaluate(()=>(window as any).__finishEntrySave(true));await expect(row.getByRole('alert')).toContainText('Not saved: Local file is read-only');await expect(input).toHaveValue('A preserved draft');await expect(input).toBeFocused();
+ await input.press('Enter');expect(await page.evaluate(()=>(window as any).__entryAttempts)).toBe(2);await page.evaluate(()=>(window as any).__finishEntrySave(false));await expect(edit).toHaveText('A preserved draft');
+ await edit.click();await row.getByRole('textbox').press('Enter');expect(await page.evaluate(()=>(window as any).__entryAttempts)).toBe(2);
+ await edit.click();await row.getByRole('textbox').fill('Cancel this edit');await row.getByRole('textbox').press('Escape');await expect(edit).toHaveText('A preserved draft');expect(await page.evaluate(()=>(window as any).__entryAttempts)).toBe(2);
+});
+
+test('an older exchange refresh cannot replace an edited draft or a just-saved entry condition',async({page})=>{
+ await openTestApp(page);await seed(page,[record({entryCondition:'Before edit',status:'closed',closeDate:Date.now(),remainingSize:'0',canClose:false})]);await enter(page);
+ await page.evaluate(()=>{const api=window.go!.main!.App!,refresh=api.RefreshTradeHistory;api.RefreshTradeHistory=async ids=>{const stale=await refresh(ids);return new Promise(resolve=>(window as any).__releaseEntryRefresh=()=>resolve(stale));};});
+ await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseEntryRefresh)).toBe('function');
+ const row=panel(page).getByRole('row').filter({hasText:'BTC'}),edit=row.getByRole('button',{name:/edit entry condition/i});await edit.click();const input=row.getByRole('textbox');await input.fill('After edit');
+ await page.evaluate(()=>(window as any).__releaseEntryRefresh());await expect(input).toHaveValue('After edit');await input.press('Enter');await expect(edit).toHaveText('After edit');
+ await page.evaluate(()=>delete(window as any).__releaseEntryRefresh);await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseEntryRefresh)).toBe('function');await edit.click();await row.getByRole('textbox').fill('Saved during refresh');await row.getByRole('textbox').press('Enter');await expect(edit).toHaveText('Saved during refresh');
+ await page.evaluate(()=>(window as any).__releaseEntryRefresh());await expect(edit).toHaveText('Saved during refresh');
+ await reloadTestApp(page);await enter(page);await expect(edit).toHaveText('Saved during refresh');
+});

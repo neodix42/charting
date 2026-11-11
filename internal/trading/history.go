@@ -22,6 +22,7 @@ type Trade struct {
 	Instrument          string `json:"instrument"`
 	Market              string `json:"market"`
 	OrderID             string `json:"orderId"`
+	EntryCondition      string `json:"entryCondition,omitempty"`
 	SubmittedAt         int64  `json:"submittedAt"`
 	OpenDate            int64  `json:"openDate"`
 	CloseDate           int64  `json:"closeDate"`

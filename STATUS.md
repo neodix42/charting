@@ -1,4 +1,14 @@
-# Implementation status — updated 2026-11-11
+# Implementation status — updated 2026-11-12
+
+## Editable trade entry conditions — 2026-11-12
+
+Trade history has an Entry condition column at the right, with a single-line editor limited to 100 characters. Enter or blur saves; an empty string clears the condition and Escape cancels. Concurrent Enter/blur events produce one write, unchanged edits do not write, failed saves retain the draft for retry, and old exchange responses cannot overwrite editing or just-saved values.
+
+Conditions live in a versioned profile-local trades.json, keyed by the provider-qualified local trade ID. The store is created lazily without startup I/O, reads one bounded file per history snapshot, validates IDs/text/schema, serializes updates and uses the existing private atomic journal writer. Missing files remain absent until an edit. Invalid/future files are reported and preserved. Annotations merge into local pages and refreshed rows without provider account access or changes to order claims; notes alone never import/create trades. Shutdown drains pending writes through the existing work lifecycle.
+
+Verification so far: note-store and bindings-root race checks, all 285 frontend unit tests, typecheck/lint and all 18 focused history/chart browser cases pass. Cases cover provider separation, Unicode/text preservation, concurrent edits, limits, clearing/reopen, malformed-file preservation, Enter/blur, duplicate suppression, failed-save retry, stale refreshes and reload. Bindings-root and production-tagged native root race/vet, `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`, the actual bundled SDK no-login probe and Linux archive inventory/architecture/runtime-provenance validation pass. Final documentation is included and root/release checksums are verified. Hosted checks for this revision are tracked by Actions. No real account operation or original profile edit is used for verification; native desktop and funded execution remain unrun. Logs: ignored `.tools/verification/entry-condition-*.log`.
+
+The preceding SL/TP recovery revision d3e2499 completed Tests run43076634699 successfully (404 browser cases, 285 frontend unit tests, 160 Python tests, native/provider/SDK and packaged-runtime checks). Release run43076634809 passed both platform builds and published v0.1.69 from that revision, superseding the pending hosted checks recorded below.
 
 ## Recover closed-trade SL/TP prices and estimates — 2026-11-11
 

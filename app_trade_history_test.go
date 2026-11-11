@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/hyperliquid"
 	"cryptodesk/internal/jforex"
+	"cryptodesk/internal/storage"
 )
 
 func TestTradeHistoryFacadeMergesOnlyLocalClaimsAndPagesWithoutExchangeAccess(t *testing.T) {
@@ -43,14 +45,33 @@ func TestTradeHistoryFacadeMergesOnlyLocalClaimsAndPagesWithoutExchangeAccess(t 
 	write("dukascopy-trade-claims", newer, map[string]any{"id": newer, "createdAt": 2000, "environment": "demo", "status": "claimed", "request": jforex.TradeRequest{Instrument: "EUR/USD", Side: "sell", Quantity: 1000}})
 	// Arbitrary downloaded/external history must never become platform-owned trades.
 	write("hyperliquid-orders", "external-order", map[string]any{"orderId": 999, "status": "filled"})
-	a := &App{hyperliquid: hyperliquid.NewStore(profile), jforex: jforex.New(profile)}
+	local, err := storage.Open(filepath.Join(profile, "workspace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer local.Close()
+	a := &App{store: local, hyperliquid: hyperliquid.NewStore(profile), jforex: jforex.New(profile)}
 	defer a.jforex.Close()
+	claimPath := filepath.Join(profile, "hyperliquid-orders", newest+".json")
+	claimBefore, _ := os.ReadFile(claimPath)
+	if _, err = a.SetTradeEntryCondition("hyperliquid:"+newest, "Breakout"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.SetTradeEntryCondition("dukascopy:"+newer, "Retest"); err != nil {
+		t.Fatal(err)
+	}
 	page, err := a.GetTradeHistory(0, 2)
 	if err != nil || page.Total != 3 || len(page.Rows) != 2 || len(page.Errors) != 0 {
 		t.Fatal(page, err)
 	}
 	if page.Rows[0].ID != "hyperliquid:"+newest || page.Rows[1].ID != "dukascopy:"+newer {
 		t.Fatal("history is not sorted across providers", page.Rows)
+	}
+	if page.Rows[0].EntryCondition != "Breakout" || page.Rows[1].EntryCondition != "Retest" {
+		t.Fatal("local conditions were not merged into provider rows", page.Rows)
+	}
+	if after, _ := os.ReadFile(claimPath); !bytes.Equal(claimBefore, after) {
+		t.Fatal("editing an entry condition changed the provider claim")
 	}
 	if page.Rows[0].CanClose || page.Rows[0].BalanceAtOpen != "" {
 		t.Fatal("legacy balance or closeability invented", page.Rows[0])

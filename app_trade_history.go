@@ -14,6 +14,45 @@ func splitTradeID(value string) (string, string, error) {
 	}
 	return provider, id, nil
 }
+
+func (a *App) entryConditionStore() *trading.EntryConditions {
+	a.tradingMu.Lock()
+	defer a.tradingMu.Unlock()
+	if a.entryConditions == nil && a.store != nil {
+		a.entryConditions = trading.NewEntryConditions(a.store.Directory())
+	}
+	return a.entryConditions
+}
+
+func (a *App) annotateTradeHistory(rows []trading.Trade) error {
+	store := a.entryConditionStore()
+	if store == nil {
+		return nil
+	}
+	notes, err := store.Snapshot()
+	if err != nil {
+		return err
+	}
+	for i := range rows {
+		rows[i].EntryCondition = notes[rows[i].ID]
+	}
+	return nil
+}
+
+func (a *App) SetTradeEntryCondition(id, value string) (string, error) {
+	if err := a.beginTradeWork(); err != nil {
+		return "", err
+	}
+	defer a.tradingWG.Done()
+	if _, _, err := splitTradeID(id); err != nil {
+		return "", err
+	}
+	store := a.entryConditionStore()
+	if store == nil {
+		return "", errors.New("The local trade settings directory is unavailable")
+	}
+	return store.Set(id, value)
+}
 func (a *App) GetTradeHistory(offset, limit int) (trading.HistoryPage, error) {
 	if err := a.beginTradeWork(); err != nil {
 		return trading.HistoryPage{}, err
@@ -43,6 +82,9 @@ func (a *App) GetTradeHistory(offset, limit int) (trading.HistoryPage, error) {
 	out.Total = len(rows)
 	start := min(offset, len(rows))
 	out.Rows = append(out.Rows, rows[start:min(start+limit, len(rows))]...)
+	if err := a.annotateTradeHistory(out.Rows); err != nil {
+		out.Errors = append(out.Errors, "Entry conditions: "+err.Error())
+	}
 	return out, nil
 }
 func (a *App) RefreshTradeHistory(ids []string) ([]trading.Trade, error) {
@@ -88,6 +130,9 @@ func (a *App) RefreshTradeHistory(ids []string) ([]trading.Trade, error) {
 			row.CloseReason = err.Error()
 		}
 		rows = append(rows, row)
+	}
+	if err := a.annotateTradeHistory(rows); err != nil {
+		return nil, errors.New("Entry conditions: " + err.Error())
 	}
 	return rows, nil
 }

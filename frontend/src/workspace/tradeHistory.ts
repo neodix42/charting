@@ -1,5 +1,6 @@
 import type {FeedKey} from '../types';
 export interface TradeRecord {
+ entryCondition?:string;
  stopLossSource?:string;takeProfitSource?:string;
  exitPrice?:string;pipSize?:string;profitLossPips?:string;profitLossPipsUnit?:string;profitLossPipsTime?:number;profitLossPipsState?:string;profitLossPipsBasis?:string;profitLossPipsError?:string;
  profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string;profitLoss?:string;profitLossCurrency?:string;profitLossTime?:number;profitLossState?:string;profitLossBasis?:string;profitLossError?:string;
@@ -8,6 +9,7 @@ export interface TradeRecord {
 export interface TradeHistoryPage {rows:TradeRecord[];total:number;offset:number;limit:number;errors:string[]}
 export interface TradeClosePreview {id:string;tradeId:string;provider:string;environment:string;account:string;instrument:string;orderId:string;quantity:string;expiresAt:number;warnings:string[]}
 export interface TradeHistoryBackend {
+ SetTradeEntryCondition(id:string,value:string):Promise<string>;
  GetChartTrades(keys:FeedKey[]):Promise<TradeHistoryPage>;
  GetTradeHistory(offset:number,limit:number):Promise<TradeHistoryPage>;
  RefreshTradeHistory(ids:string[]):Promise<TradeRecord[]>;

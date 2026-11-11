@@ -401,3 +401,7 @@ export function TestTelegramBot() {
 export function UpdateScreenerAnalysisCondition(arg1, arg2) {
   return window['go']['main']['App']['UpdateScreenerAnalysisCondition'](arg1, arg2);
 }
+
+export function SetTradeEntryCondition(arg1, arg2) {
+  return window['go']['main']['App']['SetTradeEntryCondition'](arg1, arg2);
+}

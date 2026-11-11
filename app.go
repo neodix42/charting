@@ -22,6 +22,7 @@ import (
 	"cryptodesk/internal/screener"
 	"cryptodesk/internal/storage"
 	"cryptodesk/internal/telegram"
+	"cryptodesk/internal/trading"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -39,6 +40,7 @@ type App struct {
 	tradingMu        sync.Mutex
 	tradingWG        sync.WaitGroup
 	tradingClosed    bool
+	entryConditions  *trading.EntryConditions
 	jforex           *jforex.Manager
 	jforexMu         sync.Mutex
 	telegram         *telegram.Store

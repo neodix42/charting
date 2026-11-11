@@ -211,3 +211,5 @@ export function TestHyperliquidConnection():Promise<hyperliquid.Info>;
 export function TestTelegramBot():Promise<telegram.TestResult>;
 
 export function UpdateScreenerAnalysisCondition(arg1:string,arg2:screener.AnalysisRequest):Promise<screener.SavedAnalysisCondition>;
+
+export function SetTradeEntryCondition(arg1:string,arg2:string):Promise<string>;

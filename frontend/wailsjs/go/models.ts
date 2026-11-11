@@ -3238,6 +3238,7 @@ export namespace trading {
 	    instrument: string;
 	    market: string;
 	    orderId: string;
+	    entryCondition?: string;
 	    submittedAt: number;
 	    openDate: number;
 	    closeDate: number;
@@ -3295,6 +3296,7 @@ export namespace trading {
 	        this.instrument = source["instrument"];
 	        this.market = source["market"];
 	        this.orderId = source["orderId"];
+	        this.entryCondition = source["entryCondition"];
 	        this.submittedAt = source["submittedAt"];
 	        this.openDate = source["openDate"];
 	        this.closeDate = source["closeDate"];

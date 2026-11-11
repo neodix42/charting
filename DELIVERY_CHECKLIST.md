@@ -1,5 +1,15 @@
 # Release checklist — observed 2026-10-19
 
+## Trade entry condition annotations — 2026-11-12
+
+- [x] Entry condition supports Enter/blur saving, 100-character single-line text, clearing, Escape cancellation, retryable errors and stale-refresh protection.
+- [x] Versioned profile-local trades.json persists conditions by full trade identity with private atomic serialized writes; malformed/future files and provider claims are preserved.
+- [x] Note-store/root race checks, 285 frontend unit tests, typecheck/lint and 18 history/chart browser cases pass, including restart and no account operations.
+- [x] Bindings-root and native production race/vet, Linux build, actual bundled SDK no-login probe and archive inventory/architecture/runtime provenance pass; final documentation and checksums are included.
+- [ ] Hosted tests and both release builds are tracked by Actions for this revision; see STATUS.md.
+- [ ] Native desktop and funded order/close execution remain unrun.
+
+
 ## Closed-trade protection history recovery — 2026-11-11
 
 - [x] Reproduced loss of closed SL/TP and recovered prices/estimates from an isolated copy of the affected saved claim without account calls or original-profile changes.
