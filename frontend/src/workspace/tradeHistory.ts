@@ -13,6 +13,8 @@ export interface TradeRecord {
 export interface TradeHistoryPage {rows:TradeRecord[];total:number;offset:number;limit:number;errors:string[]}
 export interface TradeClosePreview {id:string;tradeId:string;provider:string;environment:string;account:string;instrument:string;orderId:string;quantity:string;expiresAt:number;warnings:string[]}
 export interface TradeHistoryBackend {
+ PasteTradeScreen?(tradeId:string):Promise<TradeScreen>;
+ AddTradeScreenFile?(tradeId:string,path:string):Promise<TradeScreen>;
  AddTradeScreen(tradeId:string,fileName:string,dataURL:string):Promise<TradeScreen>;
  GetTradeScreen(tradeId:string,screenId:string):Promise<string>;
  QueryTradeScreens(query:TradeScreenQuery):Promise<TradeScreenPage>;

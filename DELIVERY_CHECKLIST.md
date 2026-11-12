@@ -1,5 +1,13 @@
 # Release checklist — observed 2026-10-19
 
+## Native trade-screen images — 2026-11-12
+
+- [x] Native file-drop option and scoped Wails callbacks route image files to the trade store; original bytes and dimensions are retained.
+- [x] Image clipboard items and explicit Paste image use a native Linux fallback when WebKit omits files.
+- [x] Original-size viewer supports horizontal/vertical scrolling, manual resizing, fit and image navigation.
+- [x] Complete local race/vet, 285 frontend/160 Python tests, seven Screens browser cases, isolated native GTK clipboard transfer, Linux build and archive/runtime/SDK validation pass. Hosted CI/release are tracked by Actions for the push.
+- [ ] Manual Wayland/Windows desktop paste/drop remains unrun; isolated GTK clipboard and browser tests are recorded in STATUS.md.
+
 ## Durable provider pacing repair — 2026-11-12
 
 - [x] Reproduced slow-persistence expiry of the next request deadline and retained a full interval after commit plus a conservative interval on reload.
