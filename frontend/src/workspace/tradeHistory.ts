@@ -1,4 +1,5 @@
 import type {FeedKey} from '../types';
+import type {TradeScreenGalleryPage,TradeScreenGalleryQuery} from './tradeScreenGallery';
 export interface TradeScreen {id:string;tradeId:string;provider:string;environment:string;account:string;orderId:string;instrument:string;market:string;direction:string;tradeOpenDate:number;createdAt:number;fileName:string;mimeType:string;bytes:number;width:number;height:number;sha256:string}
 export interface TradeScreenQuery {tradeId?:string;provider?:string;instrument?:string;orderId?:string;environment?:string;entryCondition?:string;from?:number;to?:number;offset?:number;limit?:number}
 export interface TradeScreenPage {screens:TradeScreen[];total:number;offset:number;limit:number}
@@ -13,6 +14,8 @@ export interface TradeRecord {
 export interface TradeHistoryPage {rows:TradeRecord[];total:number;offset:number;limit:number;errors:string[]}
 export interface TradeClosePreview {id:string;tradeId:string;provider:string;environment:string;account:string;instrument:string;orderId:string;quantity:string;expiresAt:number;warnings:string[]}
 export interface TradeHistoryBackend {
+ GetTradeScreenGallery?(query:TradeScreenGalleryQuery):Promise<TradeScreenGalleryPage>;
+ RemoveTradeScreen?(tradeId:string,screenId:string):Promise<{removed:boolean;warning?:string}>;
  PasteTradeScreen?(tradeId:string):Promise<TradeScreen>;
  AddTradeScreenFile?(tradeId:string,path:string):Promise<TradeScreen>;
  AddTradeScreen(tradeId:string,fileName:string,dataURL:string):Promise<TradeScreen>;

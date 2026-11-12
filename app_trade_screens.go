@@ -146,3 +146,46 @@ func (a *App) QueryTradeScreens(query trading.TradeScreenQuery) (trading.TradeSc
 	}
 	return store.QueryScreens(query)
 }
+
+func (a *App) RemoveTradeScreen(tradeID, screenID string) (trading.TradeScreenRemoval, error) {
+	if err := a.beginTradeWork(); err != nil {
+		return trading.TradeScreenRemoval{}, err
+	}
+	defer a.tradingWG.Done()
+	if _, _, err := splitTradeID(tradeID); err != nil {
+		return trading.TradeScreenRemoval{}, err
+	}
+	store := a.entryConditionStore()
+	if store == nil {
+		return trading.TradeScreenRemoval{}, errors.New("The local trade settings directory is unavailable")
+	}
+	return store.RemoveScreen(tradeID, screenID)
+}
+
+// Filtering reads all local platform journals, not the visible history page,
+// and never refreshes accounts or makes exchange requests.
+func (a *App) GetTradeScreenGallery(query trading.TradeScreenGalleryQuery) (trading.TradeScreenGalleryPage, error) {
+	if err := a.beginTradeWork(); err != nil {
+		return trading.TradeScreenGalleryPage{}, err
+	}
+	defer a.tradingWG.Done()
+	store := a.entryConditionStore()
+	if store == nil {
+		return trading.TradeScreenGalleryPage{}, errors.New("The local trade settings directory is unavailable")
+	}
+	rows := []trading.Trade{}
+	issues := []string{}
+	if a.hyperliquid != nil {
+		trades, errors := a.hyperliquid.TradeHistory()
+		rows = append(rows, trades...)
+		issues = append(issues, errors...)
+	}
+	if a.jforex != nil {
+		trades, errors := a.jforex.TradeHistory()
+		rows = append(rows, trades...)
+		issues = append(issues, errors...)
+	}
+	page, err := store.ScreenGallery(rows, query)
+	page.Errors = append(page.Errors, issues...)
+	return page, err
+}

@@ -282,6 +282,10 @@ export function GetTradeScreen(arg1, arg2) {
   return window['go']['main']['App']['GetTradeScreen'](arg1, arg2);
 }
 
+export function GetTradeScreenGallery(arg1) {
+  return window['go']['main']['App']['GetTradeScreenGallery'](arg1);
+}
+
 export function GetTradingStatus(arg1) {
   return window['go']['main']['App']['GetTradingStatus'](arg1);
 }
@@ -340,6 +344,10 @@ export function RefreshDucascopyInstruments(arg1) {
 
 export function RefreshTradeHistory(arg1) {
   return window['go']['main']['App']['RefreshTradeHistory'](arg1);
+}
+
+export function RemoveTradeScreen(arg1, arg2) {
+  return window['go']['main']['App']['RemoveTradeScreen'](arg1, arg2);
 }
 
 export function RenameScreenerAnalysisCondition(arg1, arg2) {

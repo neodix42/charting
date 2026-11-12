@@ -3514,6 +3514,126 @@ export namespace trading {
 	    }
 	}
 
+
+	export class TradeScreenGalleryItem {
+	    screen: TradeScreen;
+	    entryCondition: string;
+	    outcome: string;
+	    profitLoss: string;
+	    currency: string;
+	    closeDate: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreenGalleryItem(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.screen = this.convertValues(source["screen"], TradeScreen);
+	        this.entryCondition = source["entryCondition"];
+	        this.outcome = source["outcome"];
+	        this.profitLoss = source["profitLoss"];
+	        this.currency = source["currency"];
+	        this.closeDate = source["closeDate"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class TradeScreenGalleryPage {
+	    items: TradeScreenGalleryItem[];
+	    conditions: string[];
+	    total: number;
+	    offset: number;
+	    limit: number;
+	    errors: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreenGalleryPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], TradeScreenGalleryItem);
+	        this.conditions = source["conditions"];
+	        this.total = source["total"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	        this.errors = source["errors"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class TradeScreenGalleryQuery {
+	    conditions?: string[];
+	    directions?: string[];
+	    outcomes?: string[];
+	    providers?: string[];
+	    offset: number;
+	    limit: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreenGalleryQuery(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conditions = source["conditions"];
+	        this.directions = source["directions"];
+	        this.outcomes = source["outcomes"];
+	        this.providers = source["providers"];
+	        this.offset = source["offset"];
+	        this.limit = source["limit"];
+	    }
+	}
+
+	export class TradeScreenRemoval {
+	    removed: boolean;
+	    warning?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeScreenRemoval(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.removed = source["removed"];
+	        this.warning = source["warning"];
+	    }
+	}
 }
 
 export namespace main {

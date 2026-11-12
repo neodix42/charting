@@ -1,0 +1,11 @@
+.trade-screen-viewer.trade-image-viewer{max-width:94vw;max-height:90vh;min-width:min(460px,94vw);min-height:min(360px,90vh);resize:both;overflow:hidden;display:flex;flex-direction:column;gap:10px;white-space:normal}
+.trade-image-viewer>header,.trade-image-viewer>p,.trade-image-viewer>.trade-screen-controls{flex:none}
+.trade-image-viewer>header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.trade-image-viewer h2{margin:0;overflow-wrap:anywhere}
+.trade-image-viewer .trade-screen-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.trade-image-viewer .trade-screen-attribution,.trade-image-viewer .trade-screen-details{color:var(--muted);font-size:.85rem}
+.trade-image-viewer .trade-screen-image{flex:1;min-height:0;min-width:0;overflow:hidden;background:var(--elevated);margin-top:0;display:block}
+.trade-image-viewer .trade-screen-image img{display:block;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain}
+.trade-image-viewer .trade-screen-image.actual-size{overflow:auto}
+.trade-image-viewer .trade-screen-image.actual-size img{width:auto;height:auto;max-width:none;max-height:none;object-fit:unset;margin:0}
+.trade-image-viewer .inline-error{flex:none;max-height:100px;overflow:auto}

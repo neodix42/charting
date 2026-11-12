@@ -1,5 +1,13 @@
 # Release checklist — observed 2026-10-19
 
+## Trade image gallery and viewer — 2026-11-12
+
+- [x] History/Filtering subscreens; full-history conditions, direction/result/provider filters combine across groups, and Clear all leaves no images.
+- [x] Shared responsive viewer supports outside dismissal, original pixels and scoped removal with metadata safety and cleanup warnings.
+- [x] Gallery is local-only, paginated and lazy; inactive History stops exchange-status polling.
+- [x] Complete local race/vet, 285 frontend/160 Python tests and 32 relevant browser cases pass; final production packaging and hosted CI/release are tracked for this revision.
+- [ ] Native Wayland/Windows desktop verification remains unrun; deterministic/browser evidence is recorded in STATUS.md.
+
 ## Dukascopy repeated-check counts — 2026-11-12
 
 - [x] Count valid inspected closed candles even when saved checkpoints skip repeated evaluation; never inflate missing/failed/pending histories.

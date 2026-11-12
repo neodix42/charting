@@ -152,6 +152,8 @@ export function GetTradeMetrics(arg1:trading.Request):Promise<trading.Metrics>;
 
 export function GetTradeScreen(arg1:string,arg2:string):Promise<string>;
 
+export function GetTradeScreenGallery(arg1:trading.TradeScreenGalleryQuery):Promise<trading.TradeScreenGalleryPage>;
+
 export function GetTradingStatus(arg1:domain.FeedKey):Promise<trading.Status>;
 
 export function ImportWorkspace():Promise<storage.Loaded>;
@@ -181,6 +183,8 @@ export function RecoverWorkspace(arg1:number):Promise<storage.Loaded>;
 export function RefreshDucascopyInstruments(arg1:boolean):Promise<Array<domain.Instrument>>;
 
 export function RefreshTradeHistory(arg1:Array<string>):Promise<Array<trading.Trade>>;
+
+export function RemoveTradeScreen(arg1:string,arg2:string):Promise<trading.TradeScreenRemoval>;
 
 export function RenameScreenerAnalysisCondition(arg1:string,arg2:string):Promise<screener.SavedAnalysisCondition>;
 
