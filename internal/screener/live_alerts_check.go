@@ -118,10 +118,16 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		}
 		taskCtx = context.WithValue(taskCtx, liveAlertProgressKey{}, saved.ID)
 		taskCtx = context.WithValue(taskCtx, liveAlertHistoryGroupKey{}, &groups[task.condition])
+		var err error
 		if task.source == "dukascopy" {
-			return l.checkDukascopyCycle(taskCtx, subset, asOf, scheduled)
+			err = l.checkDukascopyCycle(taskCtx, subset, asOf, scheduled)
+		} else {
+			err = l.checkPublicCycle(taskCtx, subset, task.source, asOf, scheduled)
 		}
-		return l.checkPublicCycle(taskCtx, subset, task.source, asOf, scheduled)
+		if err != nil {
+			return &liveAlertWorkIssue{condition: saved.ID, period: task.period, error: err}
+		}
+		return nil
 	}, func(task liveAlertWork) {
 		if !started[task.condition] {
 			started[task.condition] = true
@@ -358,8 +364,9 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		}
 		if closed == 0 {
 			if scheduled {
-				failures = append(failures, fmt.Errorf("%s %s: %w", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar))
-				failPair(s.metadata.Symbol, s.metadata.Timeframe, errLiveAlertsPendingBar)
+				issue := fmt.Errorf("%s %s: %w; no closed candle before %s UTC", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar, time.UnixMilli(asOf).UTC().Format("2006-01-02 15:04"))
+				failures = append(failures, issue)
+				failPair(s.metadata.Symbol, s.metadata.Timeframe, issue)
 			}
 			continue
 		}
@@ -371,8 +378,9 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			interval, _, _ := liveAlertCalendarPeriod(SavedAnalysisCondition{}, s.metadata.Timeframe)
 			expected := liveAlertPeriodStart(time.UnixMilli(asOf), s.metadata.Timeframe).Add(-interval).UnixMilli()
 			if latest.timestamp != expected {
-				failures = append(failures, fmt.Errorf("%s %s: %w; waiting for the bar closing at %s", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar, time.UnixMilli(expected).Add(interval).UTC().Format(time.RFC3339)))
-				failPair(s.metadata.Symbol, s.metadata.Timeframe, errLiveAlertsPendingBar)
+				issue := fmt.Errorf("%s %s: %w; expected candle %s UTC, latest available %s UTC", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, errLiveAlertsPendingBar, time.UnixMilli(expected).UTC().Format("2006-01-02 15:04"), time.UnixMilli(latest.timestamp).UTC().Format("2006-01-02 15:04"))
+				failures = append(failures, issue)
+				failPair(s.metadata.Symbol, s.metadata.Timeframe, issue)
 				continue
 			}
 		}

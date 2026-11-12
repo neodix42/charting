@@ -1062,6 +1062,11 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 							config.ConditionIDs = append(config.ConditionIDs, rule.ConditionID)
 						}
 					}
+					// Retry subsets contain only failed named definitions. Bring
+					// newly due peers back from the current resolved definition list.
+					scope := config.scope
+					config = subsetLiveAlertsConfig(resolved, config.ConditionIDs)
+					config.scope = scope
 					asOf = now.UnixMilli()
 				}
 			} else if !manual {
@@ -1112,8 +1117,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				if completedLiveAlertScan(err) {
 					l.progress, l.status = 100, "Check completed with errors; waiting for next closed bar"
 				}
-				if errors.Is(err, errLiveAlertsBusy) || (errors.Is(err, errLiveAlertsPendingBar) && l.now().Sub(time.UnixMilli(asOf)) < liveAlertPublicationWindow) {
-					retry := copyLiveAlertsConfig(config)
+				if retry, eligible := retryLiveAlertConfig(config, err, asOf, l.now(), manual); eligible {
 					l.retryConfig, l.retryAsOf, l.retryManual = &retry, asOf, manual
 					l.retryTargeted = targeted
 					retryAt := l.now().Add(liveAlertRetryDelay).UnixMilli()
@@ -1123,6 +1127,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 						l.nextRun = min(l.nextRun, retryAt)
 					}
 					l.status = "Waiting to retry closed-bar check"
+					l.markReadRetryProgressLocked(retry, err)
 				}
 			} else {
 				l.progress, l.status = 100, "Waiting for next closed bar"

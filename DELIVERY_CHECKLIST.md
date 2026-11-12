@@ -1,5 +1,15 @@
 # Release checklist — observed 2026-10-19
 
+## Midnight alert recovery — 2026-11-12
+
+- [x] DNS/temporary public read failures and late D1/W1 candles retain bounded automatic recovery, with visible retry progress/Next check and provider backoff respected.
+- [x] Retry only failed scopes; preserve new named hourly schedules during daily recovery, skip completed public asset downloads and retain delivery claims/no-resend behavior.
+- [x] Complete market catalogs persist and restore lazily, with explicit stale fallback/retry and corrupt-original preservation; source DNS cooldowns do not suppress isolated market timeouts or other providers.
+- [x] Midnight long-first-attempt/publication, duplicate prevention, catalog restart/corruption, cooldown and scope regressions plus broad race/vet and frontend checks pass.
+- [x] Linux build, archive inventory/architecture/runtime provenance and actual bundled SDK no-login checks pass, with final documentation and checksums included.
+- [ ] Hosted CI/release for this revision are tracked in STATUS.md.
+- [ ] Actual overnight native-desktop recovery and live Telegram delivery remain unrun; ongoing external DNS failure cannot be repaired by candle retries.
+
 ## Offline JForex test-clock repair — 2026-11-12
 
 - [x] Reproduced the hosted current-flat-candle assertion with mismatched fixture/bridge clocks and made the fixture deterministic using the existing injected clock.

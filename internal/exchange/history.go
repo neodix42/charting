@@ -306,6 +306,9 @@ func (a *publicAdapter) Instruments(ctx context.Context) ([]domain.Instrument, e
 				result[i].ProviderMetadata = map[string]string{}
 			}
 			result[i].ProviderMetadata["catalogWarning"] = catalogErr.Error()
+			if RetryableReadError(catalogErr) {
+				result[i].ProviderMetadata["catalogRetryable"] = "true"
+			}
 		}
 		// A retry must re-query missing categories rather than caching an
 		// incomplete list as though discovery succeeded in full.

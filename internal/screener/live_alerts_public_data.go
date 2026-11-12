@@ -36,6 +36,7 @@ type publicAlertBatch struct {
 	Assets    []publicAlertAsset
 	Files     map[string]string
 	Failures  map[string]error
+	Processed map[string]bool
 	snapshot  string
 }
 
@@ -55,11 +56,13 @@ type publicAlertCatalog struct {
 // Owned by LiveAlerts, so discovery and HTTP request pacing survive individual
 // checks. Construction, settings and Info never contact public exchanges.
 type publicAlertData struct {
-	mu       sync.Mutex
-	adapters map[string]exchange.Adapter
-	catalogs map[string]publicAlertCatalog
-	slots    chan struct{}
-	locks    map[string]*publicAlertDataLock
+	mu           sync.Mutex
+	adapters     map[string]exchange.Adapter
+	catalogs     map[string]publicAlertCatalog
+	readProblems map[string]publicAlertReadProblem
+	now          func() time.Time
+	slots        chan struct{}
+	locks        map[string]*publicAlertDataLock
 }
 
 type publicAlertDataLock struct {
@@ -77,6 +80,11 @@ func (l *LiveAlerts) publicAlertDataState() *publicAlertData {
 	if l.publicData == nil {
 		l.publicData = &publicAlertData{}
 	}
+	l.publicData.mu.Lock()
+	if l.publicData.now == nil {
+		l.publicData.now = func() time.Time { return l.now() }
+	}
+	l.publicData.mu.Unlock()
 	return l.publicData
 }
 
@@ -270,13 +278,35 @@ func (l *LiveAlerts) publicAlertCatalog(ctx context.Context, source string) (exc
 	}
 	cached := data.catalogs[source]
 	data.mu.Unlock()
+	var cacheErr error
+	if len(cached.items) == 0 {
+		cached, cacheErr = l.readPublicAlertCatalog(source)
+		if len(cached.items) > 0 {
+			data.mu.Lock()
+			data.catalogs[source] = cached
+			data.mu.Unlock()
+		}
+	}
 	if len(cached.items) > 0 && time.Since(cached.at) < 30*time.Minute {
 		l.publicAlertStep(ctx, "Reusing market catalog", source)
 		return a, cached.items, nil
 	}
+	if problem := data.readProblem(source); problem != nil {
+		return a, reusablePublicAlertCatalog(cached), problem
+	}
 	l.publicAlertStep(ctx, "Discovering public markets (provider pacing and network)", source)
 	items, err := a.Instruments(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return a, nil, ctx.Err()
+		}
+		err = data.recordReadProblem(source, err)
+		if exchange.RetryableReadError(err) {
+			if previous := reusablePublicAlertCatalog(cached); len(previous) > 0 {
+				l.publicAlertStep(ctx, "Using last verified market list; discovery will retry", source)
+				return a, previous, err
+			}
+		}
 		return a, nil, err
 	}
 	partial := false
@@ -287,8 +317,11 @@ func (l *LiveAlerts) publicAlertCatalog(ctx context.Context, source string) (exc
 		data.mu.Lock()
 		data.catalogs[source] = publicAlertCatalog{items: items, at: time.Now()}
 		data.mu.Unlock()
+		if cacheErr == nil {
+			cacheErr = l.savePublicAlertCatalog(source, publicAlertCatalog{items: items, at: time.Now()})
+		}
 	}
-	return a, items, nil
+	return a, items, cacheErr
 }
 
 func publicAlertSymbol(market, native string) string {
@@ -297,7 +330,7 @@ func publicAlertSymbol(market, native string) string {
 }
 
 func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, conditions []SavedAnalysisCondition, periods map[string][]string, asOf int64) (publicAlertBatch, error) {
-	batch := publicAlertBatch{Files: map[string]string{}, Failures: map[string]error{}}
+	batch := publicAlertBatch{Files: map[string]string{}, Failures: map[string]error{}, Processed: map[string]bool{}}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	data := l.publicAlertDataState()
@@ -322,6 +355,14 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	}
 	root := filepath.Join(profile, "screener-public-history", source)
 	cacheDirectory := filepath.Join(root, "data")
+	a, items, err := l.publicAlertCatalog(ctx, source)
+	if err != nil && len(items) == 0 {
+		return batch, err
+	}
+	if err != nil {
+		batch.Failures["catalog"] = err
+	}
+	a = publicAlertReadAdapter{Adapter: a, data: data, source: source}
 	l.publicAlertStep(ctx, "Waiting for public data worker", source)
 	releaseInitial, err := data.acquireSlot(ctx)
 	if err != nil {
@@ -343,10 +384,6 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		}
 	}()
 	plans = preparedPlans
-	a, items, err := l.publicAlertCatalog(ctx, source)
-	if err != nil {
-		return batch, err
-	}
 	l.publicAlertStep(ctx, "Preparing market history tasks", source)
 	for _, dir := range []string{root, filepath.Join(root, "raw"), cacheDirectory} {
 		if err = os.MkdirAll(dir, 0700); err != nil {
@@ -380,7 +417,11 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 			return batch, errors.New("public asset discovery exceeds the supported 20,000-market bound")
 		}
 		if warning := item.ProviderMetadata["catalogWarning"]; warning != "" {
-			batch.Failures["catalog"] = errors.New(warning)
+			issue := error(errors.New(warning))
+			if item.ProviderMetadata["catalogRetryable"] == "true" {
+				issue = &liveAlertReadIssue{issue}
+			}
+			batch.Failures["catalog"] = joinLiveAlertErrors(batch.Failures["catalog"], issue)
 		}
 	}
 	if selected != nil {
@@ -414,12 +455,16 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		return batch, err
 	}
 	batch.Directory, batch.snapshot = snapshot, snapshot
+	completedAssets := l.completedPublicAlertAssets(batch.Assets, conditions, periods, source, asOf, batch.Processed)
 	type task struct {
 		asset  publicAlertAsset
 		period string
 	}
 	tasks := make([]task, 0, len(batch.Assets)*len(orderedPeriods))
 	for _, asset := range batch.Assets {
+		if completedAssets[asset.Symbol] {
+			continue
+		}
 		for _, period := range orderedPeriods {
 			if asset.Unavailable != "" {
 				batch.Failures[asset.Symbol+"/"+period] = fmt.Errorf("%s %s %s: %s", asset.NativeID, asset.Market, period, asset.Unavailable)

@@ -120,6 +120,10 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 			for _, period := range periods[saved.ID] {
 				pair := asset.Symbol + "/" + period
 				run.expectPair(saved.ID, asset.Symbol, period)
+				if batch.Processed[livePublicClaimKey(saved.ID, source, asset.Symbol, period)] {
+					run.processedPair(saved.ID, asset.Symbol, period)
+					continue
+				}
 				failure := batch.Failures[pair]
 				if failure == nil {
 					failure = indexFailures[pair]
