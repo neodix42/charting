@@ -33,17 +33,39 @@ type providerLimiter struct {
 	wake       chan struct{}
 	queue      []uint64
 	nextTicket uint64
+	now        func() time.Time
+	persist    func(providerRateState) error
 }
 
 func newProviderLimiter(path string) (*providerLimiter, error) {
 	l := &providerLimiter{path: path, interval: providerRequestInterval, wake: make(chan struct{}), state: providerRateState{Version: 1}}
-	if err := readState(path, 4096, &l.state); err != nil && !errors.Is(err, os.ErrNotExist) {
+	err := readState(path, 4096, &l.state)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("read provider cooldown: %w", err)
 	}
 	if l.state.Version != 1 || l.state.NextAt < 0 || l.state.LimitedTill < 0 || l.state.DeniedTill < 0 || l.state.RateCount < 0 || l.state.RateCount > 10 {
 		return nil, errors.New("invalid saved Dukascopy rate-limit state")
 	}
+	if err == nil {
+		// The saved reservation can predate a slow final fsync. Conservatively
+		// retain a full request interval when reconstructing the limiter.
+		l.state.NextAt = max(l.state.NextAt, l.timeNow().Add(l.interval).UnixMilli())
+	}
 	return l, nil
+}
+
+func (l *providerLimiter) timeNow() time.Time {
+	if l.now != nil {
+		return l.now()
+	}
+	return time.Now()
+}
+
+func (l *providerLimiter) saveLocked() error {
+	if l.persist != nil {
+		return l.persist(l.state)
+	}
+	return writeState(l.path, l.state)
 }
 
 func untilUTC(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04:05 UTC") }
@@ -81,7 +103,7 @@ func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) erro
 			l.mu.Unlock()
 			return err
 		}
-		now := time.Now().UnixMilli()
+		now := l.timeNow().UnixMilli()
 		if l.state.DeniedTill > now {
 			until := l.state.DeniedTill
 			l.mu.Unlock()
@@ -98,7 +120,14 @@ func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) erro
 		}
 		if ahead == 0 && until <= now {
 			l.state.NextAt = now + l.interval.Milliseconds()
-			err := writeState(l.path, l.state)
+			err := l.saveLocked()
+			if err == nil {
+				// Do not let time spent durably saving a permit consume the next
+				// request's spacing, or slow storage can release queued workers in
+				// a catch-up burst as soon as their old reservations expire.
+				l.state.NextAt = max(l.state.NextAt, l.timeNow().Add(l.interval).UnixMilli())
+				err = ctx.Err()
+			}
 			l.mu.Unlock()
 			return err
 		}
@@ -167,7 +196,7 @@ func providerRetryAfter(value string, now time.Time) int64 {
 func (l *providerLimiter) observe(status int, retryAfter string) (int64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	now := time.Now()
+	now := l.timeNow()
 	until := providerRetryAfter(retryAfter, now)
 	switch status {
 	case 403:
@@ -183,7 +212,7 @@ func (l *providerLimiter) observe(status int, retryAfter string) (int64, error) 
 	default:
 		return max(l.state.DeniedTill, l.state.LimitedTill), nil
 	}
-	err := writeState(l.path, l.state)
+	err := l.saveLocked()
 	l.notifyLocked()
 	return max(l.state.DeniedTill, l.state.LimitedTill), err
 }

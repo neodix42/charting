@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-11-12
 
+## Shared-provider pacing under slow persistence — 2026-11-12
+
+Hosted Tests run43151990095 for 74590f8 failed only TestProviderLimiterSpacesTwentyWorkersAndPersistsCooldowns in the Screener package: its caller-observed first/last return times spanned 279 ms against a 280 ms threshold. The test sampled after durable writes and goroutine scheduling, so delayed callbacks could cluster despite serialized reservations. The limiter also based its next deadline on the time before fsync, allowing a slow state commit to exhaust the next request's interval.
+
+The limiter now retains a full spacing interval after each successful durable commit and conservatively restores one interval when reloading saved state. Provider intervals, FIFO ownership, cancellation and Retry-After/access-denial cooldowns remain intact. The existing test observes serialized reservations through the persistence boundary and now checks every adjacent interval plus the full 285 ms requirement for twenty 15 ms test permits. A controlled clock and real temporary persistence reproduce the expired-deadline failure without sleeps; the regression fails when the post-commit update is removed and passes with the fix. Restart spacing is covered too. No assertion or provider interval was relaxed. Focused pacing/FIFO/cancellation/worker cases, the complete Screener race suite, bindings/native-production root race/vet and Linux build pass. Archive inventory/architecture/runtime provenance, actual bundled SDK no-login validation and final documentation/checksums are included; hosted checks for the repair are tracked by Actions. Logs: ignored .tools/verification/midnight-ci-provider-*.log.
+
+Both desktop builds and release run43151990159 succeeded and published v0.1.73 from 74590f8, which contains the midnight recovery changes below. The failed test workflow did not reach browser/runtime validation; the next push reruns the complete required checks.
+
 ## Midnight daily-alert DNS and publication recovery — 2026-11-12
 
 Read-only inspection confirms a Hyperliquid D1 discovery failure and a Dukascopy D1 missing-candle result around 00:05 UTC. The system resolver still returns name-not-found for api.hyperliquid.xyz while a control hostname resolves; this identifies an ongoing DNS lookup failure before HTTP, without establishing whether its cause is the local router, upstream DNS or the exchange domain. No resolver/system settings or real alert deliveries were changed. The existing scheduler retried only busy/publication errors, excluding DNS/network failures, and used a five-minute publication window which could expire during the first scan.

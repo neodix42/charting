@@ -22,8 +22,13 @@ func TestProviderLimiterSpacesTwentyWorkersAndPersistsCooldowns(t *testing.T) {
 		t.Fatal(err)
 	}
 	l.interval = 15 * time.Millisecond
-	var mu sync.Mutex
 	var starts []int64
+	// Observe serialized reservations. Measuring goroutine return times also
+	// measures fsync and scheduling delays, which can cluster healthy workers.
+	l.persist = func(state providerRateState) error {
+		starts = append(starts, state.NextAt-l.interval.Milliseconds())
+		return writeState(filename, state)
+	}
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Go(func() {
@@ -31,15 +36,17 @@ func TestProviderLimiterSpacesTwentyWorkersAndPersistsCooldowns(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			mu.Lock()
-			starts = append(starts, time.Now().UnixMilli())
-			mu.Unlock()
 		})
 	}
 	wg.Wait()
 	sort.Slice(starts, func(i, j int) bool { return starts[i] < starts[j] })
-	if len(starts) != 20 || starts[19]-starts[0] < 280 {
+	if len(starts) != 20 || starts[19]-starts[0] < 19*l.interval.Milliseconds() {
 		t.Fatal("workers bypassed aggregate pacing", starts)
+	}
+	for i := 1; i < len(starts); i++ {
+		if starts[i]-starts[i-1] < l.interval.Milliseconds() {
+			t.Fatal("consecutive permits bypassed request spacing", starts)
+		}
 	}
 	until, err := l.observe(429, "601")
 	if err != nil || until < time.Now().Add(600*time.Second).UnixMilli() {

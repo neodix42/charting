@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Durable provider pacing repair — 2026-11-12
+
+- [x] Reproduced slow-persistence expiry of the next request deadline and retained a full interval after commit plus a conservative interval on reload.
+- [x] Existing twenty-worker test now measures serialized reservations and asserts every adjacent interval and the full aggregate bound; FIFO/cancellation/cooldown/worker protocol cases pass.
+- [x] Full Screener race, bindings/native-production root race/vet, Linux build, archive inventory/architecture/runtime provenance and actual bundled SDK no-login checks pass; final documentation and checksums are included.
+- [ ] Hosted checks for this repair are tracked in STATUS.md.
+
 ## Midnight alert recovery — 2026-11-12
 
 - [x] DNS/temporary public read failures and late D1/W1 candles retain bounded automatic recovery, with visible retry progress/Next check and provider backoff respected.
