@@ -234,3 +234,35 @@ test('young listings finish without red errors and show a bounded history-wait c
  await expect(progress(page,names[0])).not.toContainText('waiting for more history');
  await expect(row(page,names[0]).getByRole('cell').nth(1)).toHaveText('22');
 });
+
+
+test('Sent alerts resets for each real check while lifetime totals remain separate from legacy records',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(({currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:true,progressState:'completed',phase:'Completed',progress:100,sentAlerts:0,sentAlertsKnown:false,lifetimeSentAlerts:index===0?37:old.sentAlerts}));
+  (window as any).__testSetLiveAlertsInfo({checks,sent:52,running:false,error:'',status:'Waiting for next closed bar'});
+  const api=window.go!.main!.App!,original=api.CheckScreenerLiveAlerts.bind(api);
+  api.CheckScreenerLiveAlerts=async()=>{
+   await original();const info=(window as any).__testLiveAlertsInfo();
+   const enabled=new Set(info.config.alerts.filter((entry:any)=>entry.enabled).map((entry:any)=>entry.id));
+   const checks=info.checks.map((old:any)=>enabled.has(old.alertId??old.conditionId)?{...old,lastChecked:currentClose+1000,status:'running',manual:true,progressState:'running',phase:'Checking latest closed bars',progress:50,sentAlerts:0,sentAlertsKnown:true}:old);
+   (window as any).__testSetLiveAlertsInfo({checks,running:true,error:'',status:'Checking latest closed bars'});
+   return api.GetScreenerLiveAlerts();
+  };
+ },{currentClose});
+ const count=row(page,names[0]).getByRole('cell').last();
+ await expect(count).toHaveText('—');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 37/);
+ await expect(page.getByText('Lifetime total: 52',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Check now',exact:true}).click();
+ await expect(count).toHaveText('0');await expect(count).toHaveAttribute('title',/at least one recipient/);
+ await expect(page.getByText('Lifetime total: 52',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo();const checks=info.checks.map((old:any)=>({...old,status:'completed',progressState:'completed',progress:100,phase:'Completed',...(old.name==='Top Bybit'?{sentAlerts:1,lifetimeSentAlerts:38}:{})}));
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,sent:53,status:'Waiting for next closed bar'});
+ });
+ await expect(count).toHaveText('1');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 38/);
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Check now',exact:true}).click();
+ await expect(count).toHaveText('0');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 38/);
+ await expect(page.getByText('Lifetime total: 53',{exact:true})).toBeVisible();
+});

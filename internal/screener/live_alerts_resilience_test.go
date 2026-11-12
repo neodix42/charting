@@ -302,7 +302,7 @@ func TestLiveAlertsV6DefaultsAllWithoutRewriteAndV7SelectionSurvivesRestart(t *t
 		t.Fatal(err)
 	}
 	defer again.Close()
-	if again.state.Version != 7 || !reflect.DeepEqual(again.Info().Config.Alerts, info.Config.Alerts) || !reflect.DeepEqual(again.state.Watermarks, state.Watermarks) || again.Info().Checks[0].SentAlerts != 3 {
+	if again.state.Version != 7 || !reflect.DeepEqual(again.Info().Config.Alerts, info.Config.Alerts) || !reflect.DeepEqual(again.state.Watermarks, state.Watermarks) || again.Info().Checks[0].SentAlerts != 0 || again.Info().Checks[0].SentAlertsKnown || again.Info().Checks[0].LifetimeSentAlerts != 3 {
 		t.Fatal("selection restart lost claims/config/history", again.Info())
 	}
 }

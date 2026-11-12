@@ -322,7 +322,7 @@ func TestMidnightDailyCandlePublicationRecoversAfterFiveMinutesAndSkipsCompleted
 	clock.Store(info.NextRun)
 	l.signal()
 	info = waitLiveSchedule(t, l, func(info LiveAlertsInfo) bool { return !info.Running && info.Sent == 2 && info.LastRun == clock.Load() })
-	if sends.Load() != 2 || len(btc.historyKeys) != before || info.Error != "" || info.Checks[0].SentAlerts != 2 {
+	if sends.Load() != 2 || len(btc.historyKeys) != before || info.Error != "" || info.Checks[0].SentAlerts != 1 || !info.Checks[0].SentAlertsKnown || info.Checks[0].LifetimeSentAlerts != 2 {
 		t.Fatal("recovery repeated successful history or delivery", info, sends.Load(), len(btc.historyKeys), before)
 	}
 }

@@ -114,7 +114,7 @@ func TestNamedLiveAlertsDuplicateRuleHasIndependentDeliveriesAndNoResends(t *tes
 		t.Fatal("renaming/re-enabling resent a claimed candle")
 	}
 	info := l.Info()
-	if info.Sent != 2 || len(info.Checks) != 2 || info.Checks[0].SentAlerts != 1 || info.Checks[1].SentAlerts != 1 {
+	if info.Sent != 2 || len(info.Checks) != 2 || info.Checks[0].SentAlerts != 0 || info.Checks[1].SentAlerts != 0 || !info.Checks[0].SentAlertsKnown || !info.Checks[1].SentAlertsKnown || info.Checks[0].LifetimeSentAlerts != 1 || info.Checks[1].LifetimeSentAlerts != 1 {
 		t.Fatalf("independent check counters collapsed: %+v", info.Checks)
 	}
 	if len(info.Recent) != 2 || info.Recent[0].SavedConditionID != saved.ID {

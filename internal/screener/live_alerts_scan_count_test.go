@@ -67,28 +67,28 @@ func TestDukascopyRepeatedManualDailyCheckCountsInspectedAssetsWithoutResending(
 	if _, err := l.Configure(config); err != nil {
 		t.Fatal(err)
 	}
-	assertCheck := func(l *LiveAlerts) {
+	assertCheck := func(l *LiveAlerts, wantSent int64) {
 		t.Helper()
 		if err := l.check(context.Background(), config, asOf.UnixMilli()); err != nil {
 			t.Fatal(err)
 		}
 		info := l.Info()
-		if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || !info.Checks[0].Manual || info.Checks[0].AssetsScanned != 5 || info.Checks[0].AssetsSkipped != 0 || info.Checks[0].Error != "" || sends != 5 || info.Sent != 5 || len(info.Recent) != 5 {
+		if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || !info.Checks[0].Manual || info.Checks[0].AssetsScanned != 5 || info.Checks[0].AssetsSkipped != 0 || info.Checks[0].Error != "" || info.Checks[0].SentAlerts != wantSent || !info.Checks[0].SentAlertsKnown || info.Checks[0].LifetimeSentAlerts != 5 || sends != 5 || info.Sent != 5 || len(info.Recent) != 5 {
 			t.Fatalf("inspected daily assets were miscounted or already-processed signals resent: %+v; sends=%d", info.Checks, sends)
 		}
 	}
-	assertCheck(l)
+	assertCheck(l, 5)
 	watermarks := map[string]int64{}
 	for key, value := range l.state.Watermarks {
 		watermarks[key] = value
 	}
 	recent := append([]LiveAlertOutcome{}, l.state.Recent...)
-	assertCheck(l)
+	assertCheck(l, 0)
 	if !reflect.DeepEqual(watermarks, l.state.Watermarks) || !reflect.DeepEqual(recent, l.state.Recent) {
 		t.Fatal("repeated manual inspection changed processed-bar or delivery history")
 	}
 	restored := newAlerts()
-	assertCheck(restored)
+	assertCheck(restored, 0)
 	if !reflect.DeepEqual(watermarks, restored.state.Watermarks) || !reflect.DeepEqual(recent, restored.state.Recent) || refreshes != 3 {
 		t.Fatal("restart changed durable claims or skipped actual file refresh")
 	}

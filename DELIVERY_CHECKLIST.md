@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Confirmed signals per check — 2026-11-12
+
+- [x] Current-attempt delivery counters reset at actual start; lifetime totals and durable no-resend markers are retained separately.
+- [x] Legacy unknown per-check counts are labelled unavailable, and partial recipient batches are explained.
+- [x] Complete native/bindings/production race/vet, 287 frontend tests, nine progress browser cases and 15 malformed/unconfirmed Telegram-delivery regressions pass; packaging and hosted checks are tracked for the revision.
+- [ ] Real Telegram recipient delivery remains unrun; malformed acknowledgments and unconfirmed failures use isolated transports.
+
 ## Public alert warm-up waits — 2026-11-12
 
 - [x] Genuine short histories have a separate waiting count; mature assets continue without changing indicator requirements or claiming unready bars.

@@ -78,8 +78,10 @@ func (l *LiveAlerts) stopInfoLocked() LiveAlertsInfo {
 			}
 		}
 		row := LiveAlertCheck{ConditionID: id, Name: name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, AssetsWarmingUp: state.AssetsWarmingUp, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		applyLiveAlertSentCounts(&row, state)
 		if row.Status == "" {
 			row.Status = "never"
+			row.SentAlertsKnown = true
 		}
 		if info.Config.Alerts != nil {
 			entry, exists := liveAlertEntry(info.Config, id)

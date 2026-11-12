@@ -28,7 +28,7 @@ func TestLiveAlertProgressSnapshotRemainsAvailableDuringManagerWork(t *testing.T
 			t.Fatal("lost check rows", info)
 		}
 		row := info.Checks[0]
-		if row.Phase != "Enriching indicators" || row.Progress != 38 || row.CurrentAsset != "EURUSD h1" || row.AssetsScanned != 7 || row.LastChecked != 1704070800000 || row.SentAlerts != 2 || row.Status != "completed" {
+		if row.Phase != "Enriching indicators" || row.Progress != 38 || row.CurrentAsset != "EURUSD h1" || row.AssetsScanned != 7 || row.LastChecked != 1704070800000 || row.SentAlerts != 0 || row.SentAlertsKnown || row.LifetimeSentAlerts != 2 || row.Status != "completed" {
 			t.Fatalf("progress snapshot changed attempt history or omitted worker stage: %+v", row)
 		}
 		info.Config.ConditionIDs[0] = "caller mutation"

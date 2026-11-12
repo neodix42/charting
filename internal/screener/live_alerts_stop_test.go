@@ -56,7 +56,7 @@ func TestLiveAlertsStopCancelsAndReturnsWithoutWaitingForManager(t *testing.T) {
 	}
 	select {
 	case result := <-done:
-		if result.err != nil || result.info.Config.Enabled || !result.info.Running || result.info.NextRun != 0 || result.info.Sent != 17 || len(result.info.Checks) != 1 || result.info.Checks[0].SentAlerts != 3 {
+		if result.err != nil || result.info.Config.Enabled || !result.info.Running || result.info.NextRun != 0 || result.info.Sent != 17 || len(result.info.Checks) != 1 || result.info.Checks[0].SentAlerts != 0 || result.info.Checks[0].SentAlertsKnown || result.info.Checks[0].LifetimeSentAlerts != 3 {
 			t.Fatalf("stop lost durable state or truthful worker status: %+v %v", result.info, result.err)
 		}
 		var saved liveAlertsState
@@ -106,7 +106,7 @@ func TestLiveAlertsStopPreservesNamedDraftWithoutResolvingItsSavedCondition(t *t
 		t.Fatal("named stop resolved saved-condition evidence before returning")
 	}
 	m.mu.Unlock()
-	if result.err != nil || !reflect.DeepEqual(result.info.Config.Alerts, config.Alerts) || result.info.Config.Enabled || len(result.info.Checks) != 1 || result.info.Checks[0].Name != entry.Name || result.info.Checks[0].AlertID != entry.ID || result.info.Checks[0].SentAlerts != 2 {
+	if result.err != nil || !reflect.DeepEqual(result.info.Config.Alerts, config.Alerts) || result.info.Config.Enabled || len(result.info.Checks) != 1 || result.info.Checks[0].Name != entry.Name || result.info.Checks[0].AlertID != entry.ID || result.info.Checks[0].SentAlerts != 0 || result.info.Checks[0].SentAlertsKnown || result.info.Checks[0].LifetimeSentAlerts != 2 {
 		t.Fatalf("named stop lost draft or check presentation: %+v %v", result.info, result.err)
 	}
 	var saved liveAlertsState

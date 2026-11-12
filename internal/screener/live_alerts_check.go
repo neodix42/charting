@@ -882,6 +882,7 @@ func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionI
 
 func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 	l.mu.Lock()
+	checkID := l.deliveryCheckIDLocked(ctx, alert.ConditionID)
 	l.updateCheckProgressContextLocked(ctx, "Sending alert", -1, alert.Symbol+" "+alert.Timeframe)
 	l.mu.Unlock()
 	var err error
@@ -896,7 +897,7 @@ func (l *LiveAlerts) deliver(ctx context.Context, alert LiveAlert) error {
 	defer l.mu.Unlock()
 	if err == nil || confirmedAlertDelivery(err) {
 		l.state.Sent++
-		l.recordConfirmedAlertLocked(alert.ConditionID)
+		l.recordConfirmedAlertLocked(alert.ConditionID, checkID)
 	}
 	for i := range l.state.Recent {
 		outcome := &l.state.Recent[i]

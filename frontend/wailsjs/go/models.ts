@@ -2411,6 +2411,8 @@ export namespace screener {
 	    lastChecked: number;
 	    nextCheck: number;
 	    sentAlerts: number;
+	    sentAlertsKnown: boolean;
+	    lifetimeSentAlerts: number;
 	    status: string;
 	    manual: boolean;
 	    error: string;
@@ -2437,6 +2439,8 @@ export namespace screener {
 	        this.lastChecked = source["lastChecked"];
 	        this.nextCheck = source["nextCheck"];
 	        this.sentAlerts = source["sentAlerts"];
+	        this.sentAlertsKnown = source["sentAlertsKnown"];
+	        this.lifetimeSentAlerts = source["lifetimeSentAlerts"];
 	        this.status = source["status"];
 	        this.manual = source["manual"];
 	        this.error = source["error"];

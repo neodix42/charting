@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertCheck,LiveAlertOutcome,LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertSentCount,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -177,4 +177,17 @@ it('presents immature assets as a history wait and clears an omitted zero count 
  expect(mergeLiveAlertsProgress(previous,current).checks[0].assetsWarmingUp).toBe(0);
  expect(mergeLiveAlertsMetadata(current,previous).checks[0].assetsWarmingUp).toBe(0);
  expect(row.assetsWarmingUp).toBe(2);
+});
+
+
+it('renders per-check confirmed signals independently of legacy lifetime totals',()=>{
+ const legacy:LiveAlertCheck={conditionId:'old',name:'Legacy',assetsScanned:1,lastChecked:10,nextCheck:100,sentAlerts:0,sentAlertsKnown:false,lifetimeSentAlerts:37,status:'completed',manual:true,error:''};
+ expect(liveAlertSentCount(legacy)).toMatchObject({text:'—'});expect(liveAlertSentCount(legacy).title).toContain('Lifetime confirmed signals: 37');
+ const running={...legacy,sentAlertsKnown:true,status:'running' as const};
+ expect(liveAlertSentCount(running).text).toBe('0');
+ expect(liveAlertSentCount({...running,sentAlerts:1,lifetimeSentAlerts:38}).text).toBe('1');
+ expect(liveAlertSentCount({...running,sentAlerts:1}).title).toContain('at least one recipient');
+ const metadata={...result({enabled:true}),checks:[{...running,sentAlerts:1,lifetimeSentAlerts:38}]};
+ const compact={...result({enabled:true}),checks:[{...running,sentAlerts:0,lifetimeSentAlerts:undefined}]};
+ expect(mergeLiveAlertsProgress(metadata,compact).checks[0]).toMatchObject({sentAlerts:0,lifetimeSentAlerts:0});
 });
