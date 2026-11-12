@@ -44,6 +44,23 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 	for _, saved := range conditions {
 		config.ConditionIDs = append(config.ConditionIDs, saved.ID)
 	}
+	// Keep the base/companion dependency set per rule and base period. A
+	// companion that is still warming up must not become a generic missing-file
+	// error, but a genuine provider/CSV failure in any dependency wins.
+	dependencies := map[string]map[string][]string{}
+	for _, saved := range conditions {
+		dependencies[saved.ID] = map[string][]string{}
+		for _, period := range periods[saved.ID] {
+			plans, err := publicAlertPlans([]SavedAnalysisCondition{saved}, map[string][]string{saved.ID: {period}})
+			if err != nil {
+				return err
+			}
+			for required := range plans {
+				dependencies[saved.ID][period] = append(dependencies[saved.ID][period], required)
+			}
+			sort.Strings(dependencies[saved.ID][period])
+		}
+	}
 	m := l.manager
 
 	run, err := l.beginScopedCheckHistory(ctx, config, !scheduled)
@@ -124,15 +141,16 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 					run.processedPair(saved.ID, asset.Symbol, period)
 					continue
 				}
-				failure := batch.Failures[pair]
-				if failure == nil {
-					failure = indexFailures[pair]
-				}
+				failure := publicAlertRequiredHistoryFailure(asset.Symbol, dependencies[saved.ID][period], batch.Failures, indexFailures)
 				s := series[pair]
 				if failure == nil && s == nil {
 					failure = fmt.Errorf("required %s %s history is unavailable", asset.NativeID, period)
 				}
 				if failure != nil {
+					if publicAlertHistoryPending(failure) {
+						run.warmingUp(saved.ID, asset.Symbol, period)
+						continue
+					}
 					e := fmt.Errorf("%s %s %s, %s: %w", source, asset.NativeID, period, saved.Name, failure)
 					run.skipped(saved.ID, asset.Symbol, e)
 					failures = append(failures, e)
@@ -209,6 +227,10 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 					}
 				}
 				if failure != nil {
+					if publicAlertHistoryPending(failure) {
+						run.warmingUp(saved.ID, asset.Symbol, period)
+						continue
+					}
 					e := fmt.Errorf("%s %s %s, %s: %w", source, asset.NativeID, period, saved.Name, failure)
 					run.skipped(saved.ID, asset.Symbol, e)
 					failures = append(failures, e)

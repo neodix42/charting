@@ -79,15 +79,24 @@ func TestLiveAlertsIndividualHistoryTimeoutAndShortWarmupContinueAcrossAlerts(t 
 			}
 			cutoff := time.Date(2026, 11, 6, 12, 0, 5, 0, time.UTC).UnixMilli()
 			err := l.check(context.Background(), config, cutoff)
-			if err == nil || sent != 2 {
-				t.Fatalf("asset error stopped healthy peers: sent=%d err=%v", sent, err)
+			if sent != 2 {
+				t.Fatalf("unavailable asset stopped healthy peers: sent=%d err=%v", sent, err)
 			}
 			if mode == "timeout" && !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("timeout cause lost", err)
 			}
+			if mode == "warmup" && err != nil {
+				t.Fatal("genuine short listing became an error", err)
+			}
 			for _, row := range l.Info().Checks {
-				if row.Status != "completed" || row.Progress != 100 || row.Phase != "Completed with errors" || row.AssetsSkipped != 1 || row.SentAlerts != 1 || row.Error == "" {
+				if row.Status != "completed" || row.Progress != 100 || row.SentAlerts != 1 {
 					t.Fatalf("finished scan left incomplete progress: %+v", row)
+				}
+				if mode == "timeout" && (row.Phase != "Completed with errors" || row.AssetsSkipped != 1 || row.AssetsWarmingUp != 0 || row.Error == "") {
+					t.Fatal("real timeout hidden", row)
+				}
+				if mode == "warmup" && (row.Phase != "Completed; waiting for more history" || row.AssetsSkipped != 0 || row.AssetsWarmingUp != 1 || row.Error != "") {
+					t.Fatal("immature listing not reported as history wait", row)
 				}
 			}
 			if mode == "warmup" {

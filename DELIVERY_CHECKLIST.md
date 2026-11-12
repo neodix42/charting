@@ -1,5 +1,11 @@
 # Release checklist — observed 2026-10-19
 
+## Public alert warm-up waits — 2026-11-12
+
+- [x] Genuine short histories have a separate waiting count; mature assets continue without changing indicator requirements or claiming unready bars.
+- [x] Complete local race/vet, 286 frontend/160 Python tests and eight alert-progress browser cases pass, including bounded/restart/expiry and invalid-evidence backfill checks; final packaging and hosted checks are tracked for the revision.
+- [ ] Actual native/live-provider checks remain unrun; hosted CI/release are tracked after the push.
+
 ## Trade image gallery and viewer — 2026-11-12
 
 - [x] History/Filtering subscreens; full-history conditions, direction/result/provider filters combine across groups, and Clear all leaves no images.

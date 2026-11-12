@@ -215,3 +215,22 @@ test('a progress sample taken during Stop cannot restore the old enabled check a
  await expect(page.getByRole('button',{name:'Start alerts',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toHaveCount(0);
 });
+
+
+test('young listings finish without red errors and show a bounded history-wait count until ready',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(({currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:false,progress:100,progressState:'completed',phase:index===0?'Completed; waiting for more history':'Completed',assetsWarmingUp:index===0?12:0,assetsSkipped:0,error:''}));
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,error:'',status:'Waiting for next closed bar'});
+ },{currentClose});
+ await expect(progress(page,names[0])).toContainText('12 assets waiting for more history');
+ await expect(progress(page,names[0])).toContainText('100%');
+ await expect(row(page,names[0]).getByRole('button',{name:/Completed with errors/})).toHaveCount(0);
+ await expect(row(page,names[0])).toContainText('Scheduled · Completed');
+ await page.evaluate(({currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any)=>({...old,lastChecked:currentClose+3600000,status:'completed',manual:false,progress:100,progressState:'completed',phase:'Completed',assetsScanned:22,assetsSkipped:0,error:''}));
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,error:'',status:'Waiting for next closed bar'});
+ },{currentClose});
+ await expect(progress(page,names[0])).not.toContainText('waiting for more history');
+ await expect(row(page,names[0]).getByRole('cell').nth(1)).toHaveText('22');
+});

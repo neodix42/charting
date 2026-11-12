@@ -584,14 +584,15 @@ func publicAlertSnapshot(source, target string) error {
 }
 
 type publicAlertRawState struct {
-	Source          string `json:"source"`
-	Market          string `json:"market"`
-	NativeID        string `json:"nativeId"`
-	Period          string `json:"period"`
-	Checksum        string `json:"checksum"`
-	CheckedThrough  int64  `json:"checkedThrough"`
-	BackfillThrough int64  `json:"backfillThrough,omitempty"`
-	BackfillBars    int    `json:"backfillBars,omitempty"`
+	Source          string                       `json:"source"`
+	Market          string                       `json:"market"`
+	NativeID        string                       `json:"nativeId"`
+	Period          string                       `json:"period"`
+	Checksum        string                       `json:"checksum"`
+	CheckedThrough  int64                        `json:"checkedThrough"`
+	BackfillThrough int64                        `json:"backfillThrough,omitempty"`
+	BackfillBars    int                          `json:"backfillBars,omitempty"`
+	OlderBackfill   *publicAlertBackfillEvidence `json:"olderBackfill,omitempty"`
 }
 
 func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, worker *publicAlertWorker, root, directory, source string, asset publicAlertAsset, period string, plan publicAlertPlan, asOf int64, reporters ...func(string)) (string, error) {
@@ -693,12 +694,25 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	for ts := range bars {
 		first = min(first, ts)
 	}
+	fetchedAuthoritative := true
+	authoritativeHistory := func() bool {
+		if !fetchedAuthoritative {
+			return false
+		}
+		for ts, c := range bars {
+			if ts < end && c.Quality != "authoritative" {
+				return false
+			}
+		}
+		return true
+	}
+	olderChecked := state.OlderBackfill.reusable(first, from, end, d, plan.Bars, authoritativeHistory())
 	type span struct{ from, to int64 }
 	ranges := []span{}
 	if len(bars) == 0 {
 		ranges = append(ranges, span{from, end})
 	} else {
-		if first > from && (state.BackfillThrough < end || state.BackfillBars < plan.Bars) {
+		if first > from && !olderChecked {
 			ranges = append(ranges, span{from, min(first, end)})
 		}
 		repairFrom := max(from, state.CheckedThrough-d)
@@ -712,7 +726,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			ranges = append(ranges, span{repairFrom, end})
 		}
 	}
-	fetch := func(from, to int64) error {
+	fetch := func(from, to int64) (bool, error) {
 		var rows []domain.Candle
 		var e error
 		if source == "hyperliquid" && period == "w1" {
@@ -721,23 +735,26 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			rows, e = adapter.History(ctx, key, from, to, 1000)
 		}
 		if e != nil {
-			return e
+			return false, e
 		}
 		for _, c := range rows {
 			if err := c.Validate(); err != nil || exchange.BucketStart(c.Time, d) != c.Time {
-				return errors.New("public provider returned invalid candle data")
+				return false, errors.New("public provider returned invalid candle data")
+			}
+			if c.Time < from || c.Time >= to || !c.Closed || c.Quality != "authoritative" {
+				fetchedAuthoritative = false
 			}
 			if c.Time >= from && c.Time < to && c.Closed && c.Time+d <= end {
 				bars[c.Time] = c
 			}
 		}
-		return nil
+		return len(rows) == 0, nil
 	}
 	for _, r := range ranges {
 		for cursor := r.from; cursor < r.to; {
 			pageEnd := min(r.to, cursor+1000*d)
 			report("Downloading history (provider pacing and network)")
-			if e := fetch(cursor, pageEnd); e != nil {
+			if _, e := fetch(cursor, pageEnd); e != nil {
 				return "", e
 			}
 			cursor = pageEnd
@@ -755,7 +772,14 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		}
 		return n
 	}
-	if count() < plan.Bars && (state.BackfillThrough < end || state.BackfillBars < plan.Bars) {
+	// Imported older bars and newly corrected provisional bars can invalidate
+	// the earliest-history anchor independently of the current close.
+	first = end
+	for ts := range bars {
+		first = min(first, ts)
+	}
+	olderChecked = state.OlderBackfill.reusable(first, from, end, d, plan.Bars, authoritativeHistory())
+	if count() < plan.Bars && !olderChecked {
 		horizon := int64(50000)
 		if source == "hyperliquid" {
 			horizon = 5000
@@ -763,17 +787,22 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 				horizon = 5000 / 7
 			}
 		}
+		// An isolated older download must not jump over an unfetched gap
+		// immediately before the current window. Search back from that window,
+		// counting all retained actual bars as additional reusable context.
 		cursor := from
-		for ts := range bars {
-			cursor = min(cursor, ts)
-		}
 		floor := max(int64(0), end-horizon*d)
+		emptyFrom, emptyTo := int64(0), int64(0)
 		for count() < plan.Bars && cursor > floor {
 			start := max(floor, cursor-1000*d)
 			before := count()
 			report("Downloading older indicator warm-up history")
-			if e := fetch(start, cursor); e != nil {
+			empty, e := fetch(start, cursor)
+			if e != nil {
 				return "", e
+			}
+			if empty {
+				emptyFrom, emptyTo = start, cursor
 			}
 			cursor = start
 			if count() == before {
@@ -781,12 +810,24 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			}
 		}
 		state.BackfillThrough, state.BackfillBars = end, plan.Bars
+		if authoritativeHistory() {
+			first = end
+			for ts := range bars {
+				first = min(first, ts)
+			}
+			// Imported islands can predate this empty span. They do not prove
+			// the intervening gap absent, so retain only exact-cutoff evidence.
+			if emptyTo > first {
+				emptyFrom, emptyTo = 0, 0
+			}
+			state.OlderBackfill = &publicAlertBackfillEvidence{Cutoff: end, Bars: plan.Bars, First: first, EmptyFrom: emptyFrom, EmptyTo: emptyTo}
+		}
 	}
 	// Repair publication races with one narrow request, rather than waiting for
 	// the next full-universe check. Never substitute an older or synthetic bar.
 	if latest, ok := bars[end-d]; !ok || latest.Quality != "authoritative" {
 		report("Downloading latest closed candle")
-		if e := fetch(end-d, end); e != nil {
+		if _, e := fetch(end-d, end); e != nil {
 			return "", e
 		}
 	}
@@ -846,7 +887,15 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		return "", fmt.Errorf("%w; latest public candle is provisional", errLiveAlertsPendingBar)
 	}
 	if len(eligible) < plan.Bars {
-		return "", fmt.Errorf("indicator/rule warm-up needs %d closed bars; only %d available after older-history backfill (saved for reuse; a new listing or provider history limit can prevent warm-up)", plan.Bars, len(eligible))
+		for _, c := range eligible {
+			if c.Quality != "authoritative" {
+				return "", errors.New("required public candles are provisional; awaiting authoritative history")
+			}
+		}
+		if !authoritativeHistory() {
+			return "", errors.New("older public history was incomplete or outside the requested range; awaiting authoritative history")
+		}
+		return "", &publicAlertInsufficientHistory{Required: plan.Bars, Available: len(eligible), Period: period}
 	}
 	for _, c := range eligible[len(eligible)-plan.Bars:] {
 		if c.Quality != "authoritative" {

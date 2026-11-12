@@ -2407,6 +2407,7 @@ export namespace screener {
 	    name: string;
 	    assetsScanned: number;
 	    assetsSkipped?: number;
+	    assetsWarmingUp?: number;
 	    lastChecked: number;
 	    nextCheck: number;
 	    sentAlerts: number;
@@ -2432,6 +2433,7 @@ export namespace screener {
 	        this.name = source["name"];
 	        this.assetsScanned = source["assetsScanned"];
 	        this.assetsSkipped = source["assetsSkipped"];
+	        this.assetsWarmingUp = source["assetsWarmingUp"];
 	        this.lastChecked = source["lastChecked"];
 	        this.nextCheck = source["nextCheck"];
 	        this.sentAlerts = source["sentAlerts"];

@@ -24,6 +24,7 @@ type LiveAlertCheck struct {
 	Name             string  `json:"name"`
 	AssetsScanned    int     `json:"assetsScanned"`
 	AssetsSkipped    int     `json:"assetsSkipped,omitempty"`
+	AssetsWarmingUp  int     `json:"assetsWarmingUp,omitempty"`
 	LastChecked      int64   `json:"lastChecked"`
 	NextCheck        int64   `json:"nextCheck"`
 	SentAlerts       int64   `json:"sentAlerts"`
@@ -34,19 +35,21 @@ type LiveAlertCheck struct {
 }
 
 type liveAlertCheckState struct {
-	AssetsScanned int    `json:"assetsScanned"`
-	AssetsSkipped int    `json:"assetsSkipped,omitempty"`
-	LastChecked   int64  `json:"lastChecked"`
-	SentAlerts    int64  `json:"sentAlerts"`
-	Status        string `json:"status"`
-	Manual        bool   `json:"manual"`
-	Error         string `json:"error,omitempty"`
+	AssetsScanned   int    `json:"assetsScanned"`
+	AssetsSkipped   int    `json:"assetsSkipped,omitempty"`
+	AssetsWarmingUp int    `json:"assetsWarmingUp,omitempty"`
+	LastChecked     int64  `json:"lastChecked"`
+	SentAlerts      int64  `json:"sentAlerts"`
+	Status          string `json:"status"`
+	Manual          bool   `json:"manual"`
+	Error           string `json:"error,omitempty"`
 }
 
 type liveAlertCheckRun struct {
 	live           *LiveAlerts
 	scannedSymbols map[string]map[string]bool
 	skippedSymbols map[string]map[string]bool
+	warmingSymbols map[string]map[string]bool
 	expectedPairs  map[string]map[string]bool
 	processedPairs map[string]map[string]bool
 	failures       map[string]error
@@ -71,7 +74,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 		if err := validateLiveAlertsConfig(LiveAlertsConfig{ConditionIDs: []string{id}}); err != nil {
 			return err
 		}
-		if record.AssetsSkipped < 0 || record.AssetsSkipped > 20000 || record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
+		if record.AssetsWarmingUp < 0 || record.AssetsWarmingUp > 20000 || record.AssetsSkipped < 0 || record.AssetsSkipped > 20000 || record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
 			return errors.New("invalid Live Alerts condition check counts or timestamp")
 		}
 		switch record.Status {
@@ -88,7 +91,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 }
 
 func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*liveAlertCheckRun, error) {
-	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, skippedSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}}
+	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, skippedSymbols: map[string]map[string]bool{}, warmingSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.blocked || l.closed {
@@ -104,6 +107,7 @@ func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*l
 		}
 		run.scannedSymbols[id] = map[string]bool{}
 		run.skippedSymbols[id] = map[string]bool{}
+		run.warmingSymbols[id] = map[string]bool{}
 		run.expectedPairs[id] = map[string]bool{}
 		run.processedPairs[id] = map[string]bool{}
 		prior := l.state.Checks[id]
@@ -164,6 +168,27 @@ func (r *liveAlertCheckRun) scanned(conditionID, symbol string) {
 	if state, exists := r.live.state.Checks[conditionID]; exists {
 		state.AssetsScanned = len(symbols)
 		r.live.state.Checks[conditionID] = state
+	}
+}
+
+// Waiting for genuine history is a completed inspection, not an invalid rule
+// or provider outage. Account for this pair only in the current run; do not
+// claim its candle, so the next eligible close can become ready normally.
+func (r *liveAlertCheckRun) warmingUp(id, symbol, period string) {
+	if r == nil {
+		return
+	}
+	r.live.mu.Lock()
+	defer r.live.mu.Unlock()
+	if r.finished {
+		return
+	}
+	if symbols, known := r.warmingSymbols[id]; known {
+		symbols[symbol] = true
+		state := r.live.state.Checks[id]
+		state.AssetsWarmingUp = len(symbols)
+		r.live.state.Checks[id] = state
+		r.processedPairs[id][symbol+"/"+period] = true
 	}
 }
 
@@ -284,6 +309,7 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 		} // A deleted condition cannot be restored by a late cycle.
 		state.AssetsScanned = len(symbols)
 		state.AssetsSkipped = len(r.skippedSymbols[id])
+		state.AssetsWarmingUp = len(r.warmingSymbols[id])
 		state.LastChecked = l.now().UTC().UnixMilli()
 		state.Status, state.Error = "completed", ""
 		if completedLiveAlertScan(cycleErr) {
@@ -344,7 +370,7 @@ func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertCondit
 			continue
 		}
 		state, checked := states[condition.ID]
-		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, AssetsWarmingUp: state.AssetsWarmingUp, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
 		if named {
 			row.AlertID, row.SavedConditionID = entry.ID, entry.ConditionID
 		}

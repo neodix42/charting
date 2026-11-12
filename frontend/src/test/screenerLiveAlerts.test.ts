@@ -164,3 +164,17 @@ it('renders successful legacy outcomes with no message without suppressing other
  expect(liveAlertOutcomePresentation({...outcome,status:'failed',message:'Missing indicator sma_20'})).toEqual({label:'Failed',message:'Missing indicator sma_20',className:'failed'});
  expect(outcome).not.toHaveProperty('message');
 });
+
+
+it('presents immature assets as a history wait and clears an omitted zero count on the next check',()=>{
+ const row:LiveAlertCheck={conditionId:'young',name:'Young markets',assetsScanned:1,assetsWarmingUp:2,lastChecked:10,nextCheck:100,sentAlerts:1,status:'completed',manual:false,error:''};
+ expect(liveAlertCheckProgress(row)).toMatchObject({state:'completed',phase:'Completed; waiting for more history'});
+ expect(visibleLiveAlertCheck(row)).toMatchObject({error:'',assetsWarmingUp:2,status:'completed'});
+ expect(liveAlertCheckProgress({...row,error:'Real network error'}).phase).toBe('Completed with errors');
+ const previous={...result({enabled:true}),checks:[row]};
+ const ready={...row};delete ready.assetsWarmingUp;
+ const current={...result({enabled:true}),checks:[{...ready,lastChecked:20,assetsScanned:3}]};
+ expect(mergeLiveAlertsProgress(previous,current).checks[0].assetsWarmingUp).toBe(0);
+ expect(mergeLiveAlertsMetadata(current,previous).checks[0].assetsWarmingUp).toBe(0);
+ expect(row.assetsWarmingUp).toBe(2);
+});

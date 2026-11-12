@@ -148,6 +148,11 @@ func (l *LiveAlerts) finishCheckProgressLocked(id string, err error, asOf int64)
 	default:
 		progress.state, progress.phase, progress.percent = "completed", "Completed", 100
 	}
+	if progress.state == "completed" {
+		if check, ok := l.state.Checks[id]; ok && check.Error == "" && check.AssetsWarmingUp > 0 {
+			progress.phase = "Completed; waiting for more history"
+		}
+	}
 	progress.asset = ""
 	l.checkProgress[id] = progress
 }
