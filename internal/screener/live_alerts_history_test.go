@@ -308,8 +308,8 @@ func TestLiveAlertsActualDedupVisitCompletesDespiteOtherAssetRefreshFailure(t *t
 		t.Fatal("fixture refresh did not fail", err)
 	}
 	rows := l.Info().Checks
-	if rows[0].Status != "completed" || rows[0].AssetsScanned != 0 || rows[0].Error != "" || rows[1].Status != "completed" || rows[1].AssetsSkipped != 1 || rows[1].Error == "" || rows[1].AssetsScanned != 0 {
-		t.Fatal("real dedup visit inherited the unrelated refresh failure", rows)
+	if rows[0].Status != "completed" || rows[0].AssetsScanned != 1 || rows[0].Error != "" || rows[1].Status != "completed" || rows[1].AssetsSkipped != 1 || rows[1].Error == "" || rows[1].AssetsScanned != 0 {
+		t.Fatal("real dedup visit was miscounted or inherited the unrelated refresh failure", rows)
 	}
 }
 

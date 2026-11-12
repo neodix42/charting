@@ -1,5 +1,11 @@
 # Release checklist — observed 2026-10-19
 
+## Dukascopy repeated-check counts — 2026-11-12
+
+- [x] Count valid inspected closed candles even when saved checkpoints skip repeated evaluation; never inflate missing/failed/pending histories.
+- [x] Before-fix reproduction, focused regressions and complete Screener race suite pass; repeat/restart retain original checkpoints and send no further notifications.
+- [x] Scan-count semantics documented; hosted checks are tracked by Actions for this revision.
+
 ## Native trade-screen images — 2026-11-12
 
 - [x] Native file-drop option and scoped Wails callbacks route image files to the trade store; original bytes and dimensions are retained.

@@ -1,5 +1,9 @@
 # Implementation status — updated 2026-11-12
 
+## Repeated Dukascopy check scan counts — 2026-11-12
+
+A manual Dukascopy check refreshed and inspected its probability-qualified files but reported zero assets because counting occurred after the already-processed-candle guard. Count a valid inspected latest closed candle before that guard, once per distinct asset; retain saved checkpoints and no repeated evaluation/notification. Missing, failed or unpublished candle histories remain unscanned. Public-source completed assets skipped before history preparation retain their existing semantics. Focused regression tests and the complete Screener race suite pass for five eligible assets, repeated checks/restart, unchanged watermarks/outcomes/files and exactly five total notifications. A before-fix Go overlay reproduces the zero count without modifying the worktree. The prior failure-isolation test now expects the inspected deduplicated asset to count once while the failed peer remains unscanned. Logs: ignored .tools/verification/screens-live-check-count-*.log. Only isolated test data/substituted deliveries were used.
+
 ## Native trade-screen paste/drop and original-size viewer — 2026-11-12
 
 The previous UI relied only on DOM ClipboardEvent.files and browser drag/drop. WebKitGTK can omit those image files even while the desktop clipboard contains an image, and the native Wails file-drop option was disabled. The add panel now handles clipboard items as well as files, offers an explicit Paste image action, and uses a bounded native GTK clipboard fallback on Linux. Native file-drop paths are accepted only while the add panel is open, validated as bounded regular image files and saved through the existing local-trade attachment store. Original encoded files and trade associations remain intact. The viewer opens at actual pixels, scrolls large originals, supports resizing in both directions and retains optional fitting and image navigation.

@@ -394,6 +394,10 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			if err = ctx.Err(); err != nil {
 				return err
 			}
+			// The refreshed asset's latest closed candle has been inspected even
+			// when its durable watermark suppresses a repeated evaluation/send.
+			// Count it here rather than reporting zero work on Check now repeats.
+			run.scanned(saved.ID, s.metadata.Symbol)
 			key := saved.ID + "/" + s.metadata.Symbol + "/" + s.metadata.Timeframe
 			l.mu.Lock()
 			previous, seen := l.state.Watermarks[key]
@@ -406,7 +410,6 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			// Base scope inherits the saved period and recorded matching assets;
 			// historical categories do not change an already-qualified live pair.
 			a.request.Period, a.request.Categories = "all", nil
-			run.scanned(saved.ID, s.metadata.Symbol)
 			matched, e := evaluateLiveAlertLatest(ctx, a, s, closed)
 			if e != nil {
 				failures = append(failures, fmt.Errorf("%s %s, %s: %w", strings.ToUpper(s.metadata.Symbol), s.metadata.Timeframe, saved.Name, e))
