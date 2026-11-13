@@ -3,6 +3,7 @@
 ## Stable check rows and concise public downloads — 2026-11-13
 
 - [x] Fixed-height alert summaries reserve a full-width single-line status strip; long messages truncate with ellipsis and retain a full title.
+- [x] Reserved heights scale with the app font; 16 follow-up browser cases verify stable geometry and usable controls at supported font extremes.
 - [x] Parallel download presentation selects one explicit asset display name without changing concurrency, percentage counts, pacing or genuine failure handling.
 - [x] Complete native race/bindings/production-root/vet, 288 frontend unit/typecheck/lint and 35 focused browser checks pass; 1600px/760px geometry and screenshots reviewed.
 - [ ] Latest production packaging and hosted Tests/release are tracked; real-provider/native desktop interaction remains unrun.

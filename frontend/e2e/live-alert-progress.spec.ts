@@ -1,4 +1,4 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Locator,type Page} from '@playwright/test';
 import {openTestApp} from './helpers/testApp';
 
 const names=['Top Bybit','Middle Binance','Bottom Bybit','Disabled Hyperliquid'];
@@ -304,9 +304,16 @@ test('Duration shows total backend elapsed time and trigger, updates through all
  await expect(duration(names[0])).toContainText('Triggered 2026-11-06 12:05:00 UTC');
 });
 
-for(const width of [1600,760])test(`check history reserves stable rows and truncates changing status at ${width}px`,async({page})=>{
+for(const {width,fontSize} of [{width:1600,fontSize:15},{width:760,fontSize:15},{width:1600,fontSize:24},{width:760,fontSize:24},{width:760,fontSize:10}])test(`check history reserves stable rows and truncates changing status at ${width}px with ${fontSize}px font`,async({page})=>{
  await page.setViewportSize({width,height:1000});
  await openProgressApp(page);
+ if(fontSize!==15){
+  await page.getByRole('button',{name:'Open settings',exact:true}).click();
+  const settings=page.getByRole('dialog',{name:'Workspace settings',exact:true});
+  await settings.getByLabel('Font size',{exact:true}).selectOption(String(fontSize));
+  await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).fontSize)).toBe(`${fontSize}px`);
+  await settings.getByRole('button',{name:'Close settings',exact:true}).click();
+ }
  await history(page).scrollIntoViewIfNeeded();
  const first=group(page,names[0]),second=group(page,names[1]),strip=status(page,names[0]);
  await expect(first.getByRole('row')).toHaveCount(2);
@@ -331,12 +338,27 @@ for(const width of [1600,760])test(`check history reserves stable rows and trunc
    (window as any).__testSetLiveAlertsInfo({checks:info.checks.map((old:any)=>old.name==='Top Bybit'?{...old,...value}:old),running:value.progressState==='running'||value.progressState==='queued'});
   },value);
  };
+ const fitsCell=async(element:Locator)=>{
+  const metrics=await element.evaluate(element=>{
+   const child=element.getBoundingClientRect(),parent=element.closest('.live-alert-cell-content')!.getBoundingClientRect();
+   return{child:{top:child.top,bottom:child.bottom,left:child.left,right:child.right},parent:{top:parent.top,bottom:parent.bottom,left:parent.left,right:parent.right},scrollHeight:element.scrollHeight,clientHeight:element.clientHeight,scrollWidth:element.scrollWidth,clientWidth:element.clientWidth};
+  });
+  expect(metrics.child.top).toBeGreaterThanOrEqual(metrics.parent.top-1);
+  expect(metrics.child.bottom).toBeLessThanOrEqual(metrics.parent.bottom+1);
+  expect(metrics.child.left).toBeGreaterThanOrEqual(metrics.parent.left-1);
+  expect(metrics.child.right).toBeLessThanOrEqual(metrics.parent.right+1);
+  expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight+1);
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth+1);
+ };
  await setFirst({phase:'Queued',progressState:'queued',progressMode:'manual',progress:0,currentAsset:''});
  await expect(strip).toContainText('Queued');await stable();
  await setFirst({lastChecked:currentClose,status:'running',phase:'Downloading CAPPY/USDC',progressState:'running',progressMode:'manual',progress:25,currentAsset:'',durationKnown:true,durationMs:65000,triggeredAt:currentClose});
  await expect(strip).toHaveText('Downloading CAPPY/USDC');
  await expect(first.getByText('Downloading CAPPY/USDC',{exact:true})).toHaveCount(1);
  await expect(row(page,names[0]).getByRole('cell').first()).not.toContainText('Downloading CAPPY/USDC');
+ await fitsCell(first.getByText('Manual check',{exact:true}));
+ const triggered=first.getByText('Triggered 2026-11-06 12:00:00 UTC',{exact:true});
+ await expect(triggered).toBeVisible();await fitsCell(triggered);
  await stable();
  const longPhase='Waiting for provider pacing while downloading required historical candles; '.repeat(12).trim();
  const longAsset=`Hyperliquid ${'XYZ:VERY_LONG_ASSET_SYMBOL_'.repeat(25)} perpetual d1`;
@@ -348,9 +370,21 @@ for(const width of [1600,760])test(`check history reserves stable rows and trunc
  await expect(strip).toHaveCSS('text-overflow','ellipsis');
  expect(await strip.evaluate(element=>element.scrollWidth>element.clientWidth)).toBe(true);
  await stable();
- await history(page).screenshot({path:test.info().outputPath(`fixed-check-history-${width}.png`)});
+ await history(page).screenshot({path:test.info().outputPath(`fixed-check-history-${width}-font-${fontSize}.png`)});
  await setFirst({status:'completed',phase:'Completed',progressState:'completed',progress:100,currentAsset:'',assetsSkipped:0,assetsWarmingUp:0,durationMs:125000});
  await expect(strip).toContainText('Completed');
  await expect(first.getByRole('progressbar',{name:`Progress for ${names[0]}`,exact:true})).toHaveAttribute('value','100');
  await stable();
+ await setFirst({phase:'Completed with errors',error:'Explicit exchange history failure',assetsSkipped:1});
+ const error=first.getByRole('button',{name:'Manual · Completed with errors',exact:true});
+ await expect(error).toBeVisible();await fitsCell(error);
+ await fitsCell(first.getByText('Manual check',{exact:true}));await fitsCell(triggered);
+ await stable();
+ await error.click();
+ const details=page.getByRole('dialog',{name:`Check for ${names[0]}`,exact:true});
+ await expect(details).toContainText('Explicit exchange history failure');
+ await page.keyboard.press('Escape');await expect(details).toHaveCount(0);
+ await expect(error).toBeFocused();
+ await page.keyboard.press('Enter');await expect(details).toBeVisible();
+ await details.getByRole('button',{name:'Close check error',exact:true}).click();
 });
