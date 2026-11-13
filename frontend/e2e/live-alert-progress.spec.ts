@@ -4,8 +4,10 @@ import {openTestApp} from './helpers/testApp';
 const names=['Top Bybit','Middle Binance','Bottom Bybit','Disabled Hyperliquid'];
 const previousClose=Date.UTC(2026,10,5,10),currentClose=Date.UTC(2026,10,6,12);
 const history=(page:Page)=>page.getByRole('table',{name:'Alert check history',exact:true});
-const row=(page:Page,name:string)=>history(page).locator('tbody tr').filter({has:page.getByRole('rowheader',{name,exact:true})});
-const progress=(page:Page,name:string)=>row(page,name).getByRole('cell').first();
+const group=(page:Page,name:string)=>history(page).locator('tbody').filter({has:page.getByRole('rowheader',{name,exact:true})});
+const row=(page:Page,name:string)=>group(page,name).locator('tr.live-alert-check-main');
+const progress=(page:Page,name:string)=>group(page,name);
+const status=(page:Page,name:string)=>group(page,name).getByLabel(`Status for ${name}`,{exact:true});
 
 test('finished scans with skipped assets reach 100 percent and show errors only in the row details',async({page})=>{
  await openProgressApp(page);
@@ -300,4 +302,55 @@ test('Duration shows total backend elapsed time and trigger, updates through all
  });
  await expect(duration(names[0])).toContainText('0s');
  await expect(duration(names[0])).toContainText('Triggered 2026-11-06 12:05:00 UTC');
+});
+
+for(const width of [1600,760])test(`check history reserves stable rows and truncates changing status at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:1000});
+ await openProgressApp(page);
+ await history(page).scrollIntoViewIfNeeded();
+ const first=group(page,names[0]),second=group(page,names[1]),strip=status(page,names[0]);
+ await expect(first.getByRole('row')).toHaveCount(2);
+ await expect(first.locator('.live-alert-check-status-row td')).toHaveAttribute('colspan','7');
+ await expect(strip).toHaveCount(1);
+ const geometry=async()=>({
+  first:await first.boundingBox(),second:await second.boundingBox(),table:await history(page).boundingBox(),
+ });
+ const original=await geometry();
+ expect(original.first).not.toBeNull();expect(original.second).not.toBeNull();expect(original.table).not.toBeNull();
+ const stable=async()=>{
+  const next=await geometry();
+  expect(next.first).not.toBeNull();expect(next.second).not.toBeNull();expect(next.table).not.toBeNull();
+  expect(Math.abs(next.first!.height-original.first!.height)).toBeLessThan(1);
+  expect(Math.abs(next.first!.y-original.first!.y)).toBeLessThan(1);
+  expect(Math.abs(next.second!.y-original.second!.y)).toBeLessThan(1);
+  expect(Math.abs(next.table!.width-original.table!.width)).toBeLessThan(1);
+ };
+ const setFirst=async(value:Record<string,unknown>)=>{
+  await page.evaluate(value=>{
+   const info=(window as any).__testLiveAlertsInfo();
+   (window as any).__testSetLiveAlertsInfo({checks:info.checks.map((old:any)=>old.name==='Top Bybit'?{...old,...value}:old),running:value.progressState==='running'||value.progressState==='queued'});
+  },value);
+ };
+ await setFirst({phase:'Queued',progressState:'queued',progressMode:'manual',progress:0,currentAsset:''});
+ await expect(strip).toContainText('Queued');await stable();
+ await setFirst({lastChecked:currentClose,status:'running',phase:'Downloading CAPPY/USDC',progressState:'running',progressMode:'manual',progress:25,currentAsset:'',durationKnown:true,durationMs:65000,triggeredAt:currentClose});
+ await expect(strip).toHaveText('Downloading CAPPY/USDC');
+ await expect(first.getByText('Downloading CAPPY/USDC',{exact:true})).toHaveCount(1);
+ await expect(row(page,names[0]).getByRole('cell').first()).not.toContainText('Downloading CAPPY/USDC');
+ await stable();
+ const longPhase='Waiting for provider pacing while downloading required historical candles; '.repeat(12).trim();
+ const longAsset=`Hyperliquid ${'XYZ:VERY_LONG_ASSET_SYMBOL_'.repeat(25)} perpetual d1`;
+ await setFirst({phase:longPhase,currentAsset:longAsset,progress:63,assetsSkipped:3,assetsWarmingUp:12});
+ await expect(strip).toContainText(longPhase);await expect(strip).toContainText(longAsset);
+ await expect(strip).toHaveAttribute('title',new RegExp('Waiting for provider pacing'));
+ await expect(strip).toHaveCSS('white-space','nowrap');
+ await expect(strip).toHaveCSS('overflow','hidden');
+ await expect(strip).toHaveCSS('text-overflow','ellipsis');
+ expect(await strip.evaluate(element=>element.scrollWidth>element.clientWidth)).toBe(true);
+ await stable();
+ await history(page).screenshot({path:test.info().outputPath(`fixed-check-history-${width}.png`)});
+ await setFirst({status:'completed',phase:'Completed',progressState:'completed',progress:100,currentAsset:'',assetsSkipped:0,assetsWarmingUp:0,durationMs:125000});
+ await expect(strip).toContainText('Completed');
+ await expect(first.getByRole('progressbar',{name:`Progress for ${names[0]}`,exact:true})).toHaveAttribute('value','100');
+ await stable();
 });

@@ -6,7 +6,7 @@ const ids=['a'.repeat(32),'b'.repeat(32),'c'.repeat(32)];
 const table=(page:Page)=>page.getByRole('table',{name:'Configured alerts',exact:true});
 const history=(page:Page)=>page.getByRole('table',{name:'Alert check history',exact:true});
 const historyRow=(page:Page,name:string)=>history(page).locator('tbody tr').filter({has:page.getByRole('rowheader',{name,exact:true})});
-const progress=(page:Page,name:string)=>historyRow(page,name).getByRole('cell').first();
+const progress=(page:Page,name:string)=>historyRow(page,name).locator('..');
 const check=(page:Page,name:string)=>table(page).getByRole('button',{name:`Check alert ${name} now`,exact:true});
 
 async function open(page:Page,enabled=true){

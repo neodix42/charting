@@ -14,11 +14,12 @@ func (l *LiveAlerts) publicAlertStep(ctx context.Context, phase, asset string) {
 	l.mu.Unlock()
 }
 
-type publicAlertPreparationStep struct{ phase, asset string }
+type publicAlertPreparationStep struct{ phase, asset, displayName string }
 
-// A row can have several assets at different stages. Keep all active workers in
-// its presentation, removing finished workers so an old download never masks a
-// remaining enrichment or cache wait. Only completed series advance percentage.
+// A row can have several assets at different stages. Show one active download
+// instead of repeating every worker's status, removing finished workers so an
+// old download cannot mask remaining enrichment or cache waits. Only completed
+// series advance percentage.
 type publicAlertPreparationProgress struct {
 	mu               sync.Mutex
 	live             *LiveAlerts
@@ -30,11 +31,22 @@ type publicAlertPreparationProgress struct {
 func newPublicAlertPreparationProgress(live *LiveAlerts, ctx context.Context, total int) *publicAlertPreparationProgress {
 	return &publicAlertPreparationProgress{live: live, ctx: ctx, total: total, active: map[int]publicAlertPreparationStep{}}
 }
-func (p *publicAlertPreparationProgress) step(worker int, phase, asset string) {
+func (p *publicAlertPreparationProgress) step(worker int, phase, asset string, displayNames ...string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.active[worker] = publicAlertPreparationStep{phase, asset}
+	name := asset
+	if len(displayNames) > 0 {
+		name = displayNames[0]
+	}
+	p.active[worker] = publicAlertPreparationStep{phase: phase, asset: asset, displayName: name}
 	p.publishLocked()
+}
+
+func publicAlertProgressName(asset publicAlertAsset) string {
+	if name := strings.TrimSpace(asset.Name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(asset.Symbol)
 }
 func (p *publicAlertPreparationProgress) complete(worker int) {
 	p.mu.Lock()
@@ -55,6 +67,15 @@ func (p *publicAlertPreparationProgress) publishLocked() {
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
+	// Keep the selected download stable while it is active. Worker IDs provide
+	// a deterministic choice independent of goroutine report order.
+	for _, id := range ids {
+		step := p.active[id]
+		if strings.HasPrefix(step.phase, "Downloading ") {
+			p.publishRowLocked(strings.TrimSpace("Downloading "+step.displayName), "")
+			return
+		}
+	}
 	phases := []string{}
 	counts := map[string]int{}
 	assets := []string{}
@@ -77,7 +98,11 @@ func (p *publicAlertPreparationProgress) publishLocked() {
 	if phase == "" {
 		phase = "Finishing public data preparation"
 	}
+	p.publishRowLocked(phase, strings.Join(assets, " · "))
+}
+
+func (p *publicAlertPreparationProgress) publishRowLocked(phase, asset string) {
 	p.live.mu.Lock()
-	p.live.updateCheckProgressContextLocked(p.ctx, phase, 70*float64(p.completed)/float64(max(1, p.total)), strings.Join(assets, " · "))
+	p.live.updateCheckProgressContextLocked(p.ctx, phase, 70*float64(p.completed)/float64(max(1, p.total)), asset)
 	p.live.mu.Unlock()
 }

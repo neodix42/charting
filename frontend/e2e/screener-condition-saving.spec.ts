@@ -115,7 +115,7 @@ test('Analysis rename follows copied alert names before Live Alerts is opened an
  await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
  const table=page.getByRole('table',{name:'Configured alerts',exact:true});await expect(table.locator('tbody th')).toHaveText(['Renamed condition','Renamed condition','Custom signal']);await expect(table.locator('tbody tr td:nth-child(3)')).toHaveText(['Renamed condition','Renamed condition','Renamed condition']);
  await expect(page.getByRole('button',{name:'Stop alerts',exact:true})).toBeVisible();
- await expect(page.getByRole('table',{name:'Alert check history',exact:true}).locator('tbody tr td:last-child')).toHaveText(['2','3','4']);
+ await expect(page.getByRole('table',{name:'Alert check history',exact:true}).locator('tbody tr:has(th[scope="row"]) td:nth-child(6)')).toHaveText(['2','3','4']);
  await reloadTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();await expect(table.locator('tbody th')).toHaveText(['Renamed condition','Renamed condition','Custom signal']);
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().config)).toEqual(expected);
 });

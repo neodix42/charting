@@ -514,7 +514,7 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 				next++
 				resultMu.Unlock()
 				assetLabel := source + " " + job.asset.Name + " " + job.asset.Market + " " + job.period
-				report := func(phase string) { progress.step(index, phase, assetLabel) }
+				report := func(phase string) { progress.step(index, phase, assetLabel, publicAlertProgressName(job.asset)) }
 				if current == nil {
 					report("Starting indicator worker")
 					var err error

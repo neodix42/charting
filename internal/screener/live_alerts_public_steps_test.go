@@ -88,17 +88,27 @@ func TestPublicAlertStepsIdentifyWorkerAndSharedHistoryWaits(t *testing.T) {
 	}
 }
 
-func TestPublicAlertStepsShowConcurrentDownloadsAndRemoveCompletedWorkers(t *testing.T) {
-	l, _, adapter, gate := parallelPublicFixture(t, 4)
+func TestPublicAlertStepsShowOneNamedConcurrentDownloadAndRemoveCompletedWorkers(t *testing.T) {
+	l, fake, adapter, gate := parallelPublicFixture(t, 4)
+	for index := range fake.items {
+		fake.items[index].ProviderMetadata = map[string]string{"displaySymbol": []string{"CAPPY/USDC", "SELL/USDC", "xyz:AAPL", "BTC"}[index]}
+	}
 	ctx, cancel := context.WithCancel(publicProgressContext(l))
 	defer cancel()
 	c := publicAlertTestCondition()
 	c.Request.Conditions = c.Request.Conditions[:1]
 	result := runParallelPublic(l, ctx, c)
-	awaitParallelPublicStarts(t, adapter, 2)
+	awaitParallelPublicStarts(t, adapter, publicAlertConcurrency)
 	current := publicProgressPhase(l)
-	if !strings.Contains(current.phase, "Downloading history") || !strings.Contains(current.asset, "hyperliquid @") || !strings.Contains(current.asset, "Downloading history") {
-		t.Fatalf("active provider operation was hidden: %+v", current)
+	if !strings.HasPrefix(current.phase, "Downloading ") || strings.Count(current.phase, "Downloading") != 1 || current.asset != "" {
+		t.Fatalf("concurrent downloads were repeated instead of summarized: %+v", current)
+	}
+	name := strings.TrimPrefix(current.phase, "Downloading ")
+	if name != "CAPPY/USDC" && name != "SELL/USDC" && name != "xyz:AAPL" && name != "BTC" {
+		t.Fatalf("download label lost the actual asset's display name: %+v", current)
+	}
+	if current.percent != 0 {
+		t.Fatal("active worker labels advanced unfinished series count", current)
 	}
 	close(gate)
 	r := awaitParallelPublic(t, result)
@@ -155,8 +165,8 @@ func TestPublicAlertStepsAggregateDifferentActiveStages(t *testing.T) {
 	p.step(0, "Downloading history", "BTC")
 	p.step(1, "Enriching indicators", "ETH")
 	current := publicProgressPhase(l)
-	if !strings.Contains(current.phase, "Downloading history") || !strings.Contains(current.phase, "Enriching indicators") || !strings.Contains(current.asset, "BTC: Downloading history") || !strings.Contains(current.asset, "ETH: Enriching indicators") {
-		t.Fatalf("concurrent work hidden: %+v", current)
+	if current.phase != "Downloading BTC" || current.asset != "" {
+		t.Fatalf("active download was not concise: %+v", current)
 	}
 	p.complete(0)
 	current = publicProgressPhase(l)
@@ -166,6 +176,57 @@ func TestPublicAlertStepsAggregateDifferentActiveStages(t *testing.T) {
 	p.step(2, "Enriching indicators", "SOL")
 	if got := publicProgressPhase(l).phase; got != "Enriching indicators (2)" {
 		t.Fatalf("matching steps not counted: %s", got)
+	}
+}
+
+func TestPublicAlertStepsChooseOneDownloadAndSwitchWhenItsWorkerFinishes(t *testing.T) {
+	l, _, _, _ := parallelPublicFixture(t, 1)
+	p := newPublicAlertPreparationProgress(l, publicProgressContext(l), 4)
+	p.step(3, "Downloading latest closed candle", "hyperliquid SELL/USDC spot d1", "SELL/USDC")
+	p.step(1, "Downloading older indicator warm-up history", "hyperliquid CAPPY/USDC spot d1", "CAPPY/USDC")
+	p.step(2, "Downloading history (provider pacing and network)", "hyperliquid BTC perpetual d1", "BTC")
+	p.step(0, "Enriching indicators", "hyperliquid ETH perpetual d1", "ETH")
+	assertDownload := func(name string, percent float64) {
+		t.Helper()
+		current := publicProgressPhase(l)
+		if current.phase != "Downloading "+name || current.asset != "" || current.percent != percent {
+			t.Fatalf("unstable/duplicated active download or incorrect completion count: %+v", current)
+		}
+	}
+	assertDownload("CAPPY/USDC", 0)
+	// Reporting a higher worker again cannot replace the selected lower-index
+	// download, and a finishing series advances percentage exactly once.
+	p.step(3, "Downloading latest closed candle", "hyperliquid SELL/USDC spot d1", "SELL/USDC")
+	assertDownload("CAPPY/USDC", 0)
+	p.complete(1)
+	assertDownload("BTC", 17.5)
+	p.remove(2)
+	assertDownload("SELL/USDC", 17.5)
+	p.step(3, "Enriching indicators", "hyperliquid SELL/USDC spot d1", "SELL/USDC")
+	current := publicProgressPhase(l)
+	if current.phase != "Enriching indicators (2)" || !strings.Contains(current.asset, "ETH") || !strings.Contains(current.asset, "SELL/USDC") || current.percent != 17.5 {
+		t.Fatal("completed download hid remaining enrichment", current)
+	}
+	p.remove(0)
+	p.complete(3)
+	current = publicProgressPhase(l)
+	if current.phase != "Finishing public data preparation" || current.asset != "" || current.percent != 35 {
+		t.Fatal("removed workers left stale download text or changed series counts", current)
+	}
+}
+
+func TestPublicAlertProgressNameUsesDisplayNameWithSymbolFallback(t *testing.T) {
+	for _, test := range []struct {
+		asset publicAlertAsset
+		want  string
+	}{
+		{asset: publicAlertAsset{Name: " CAPPY/USDC ", Symbol: "internal-spot-id"}, want: "CAPPY/USDC"},
+		{asset: publicAlertAsset{Symbol: "xyz:BTC"}, want: "xyz:BTC"},
+		{asset: publicAlertAsset{Name: " ", Symbol: "BTC"}, want: "BTC"},
+	} {
+		if got := publicAlertProgressName(test.asset); got != test.want {
+			t.Fatalf("asset display name=%q, want %q", got, test.want)
+		}
 	}
 }
 
