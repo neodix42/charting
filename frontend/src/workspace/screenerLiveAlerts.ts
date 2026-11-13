@@ -12,7 +12,7 @@ export interface LiveAlertOutcome {alertId?:string;alertName?:string;savedCondit
 export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertConditionScope {alertId?:string;savedConditionId?:string;conditionId:string;period:string;dataSource?:LiveAlertDataSource;allAssets?:boolean;availableTargets?:LiveAlertTarget[];targets:LiveAlertTarget[];error:string}
 export type LiveAlertProgressState='queued'|'running'|'completed'|'failed'|'cancelled'|'skipped';
-export interface LiveAlertCheck {assetsWarmingUp?:number;assetsSkipped?:number;progress?:number;phase?:string;currentAsset?:string;progressState?:LiveAlertProgressState;progressMode?:'manual'|'scheduled';alertId?:string;savedConditionId?:string;conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;sentAlertsKnown?:boolean;lifetimeSentAlerts?:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
+export interface LiveAlertCheck {triggeredAt?:number;durationMs?:number;durationKnown?:boolean;assetsWarmingUp?:number;assetsSkipped?:number;progress?:number;phase?:string;currentAsset?:string;progressState?:LiveAlertProgressState;progressMode?:'manual'|'scheduled';alertId?:string;savedConditionId?:string;conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;sentAlertsKnown?:boolean;lifetimeSentAlerts?:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
 /** Follow the visible alert list even when a compact Stop response orders IDs. */
 export function orderedLiveAlertChecks(entries:LiveAlertDefinition[],checks:LiveAlertCheck[]):LiveAlertCheck[]{
  const byID=new Map(checks.map(check=>[check.alertId??check.conditionId,check]));
@@ -31,6 +31,19 @@ export function liveAlertSentCount(check:LiveAlertCheck):{text:string;title:stri
  const total=check.lifetimeSentAlerts??check.sentAlerts;
  if(check.sentAlertsKnown===false)return{text:'—',title:`This older record has no per-check delivery count. Lifetime confirmed signals: ${total.toLocaleString('en-US')}.`};
  return{text:check.sentAlerts.toLocaleString('en-US'),title:`Signals confirmed by at least one recipient during this check. A partial recipient batch counts once. Lifetime confirmed signals: ${total.toLocaleString('en-US')}.`};
+}
+
+/** Backend elapsed time covers the whole attempt, rather than page-open time. */
+export function liveAlertDuration(check:LiveAlertCheck):string {
+ const elapsed=check.durationMs;
+ if(!check.durationKnown||typeof elapsed!=='number'||!Number.isFinite(elapsed)||elapsed<0)return '—';
+ if(elapsed>0&&elapsed<1000)return '<1s';
+ const seconds=Math.floor(elapsed/1000),parts:string[]=[];
+ if(seconds>=86400)parts.push(`${Math.floor(seconds/86400)}d`);
+ if(seconds>=3600)parts.push(`${Math.floor(seconds/3600)%24}h`);
+ if(seconds>=60)parts.push(`${Math.floor(seconds/60)%60}m`);
+ parts.push(`${seconds%60}s`);
+ return parts.join(' ');
 }
 
 /** Suppressed recipient failures affect presentation only, never persisted results. */

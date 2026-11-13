@@ -30,6 +30,7 @@ func (l *LiveAlerts) checkCycle(ctx context.Context, config LiveAlertsConfig, as
 		return errLiveAlertsBusy
 	}
 	l.checkExecuting = true
+	ctx = context.WithValue(ctx, liveAlertTriggerKey{}, l.checkTriggerTime(ctx))
 	l.queueCheckProgressLocked(config.ConditionIDs, !scheduled)
 	l.prepareCheckProgressLocked(config.ConditionIDs, "Preparing saved conditions")
 	l.mu.Unlock()

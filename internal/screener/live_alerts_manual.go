@@ -1,5 +1,7 @@
 package screener
 
+import "time"
+
 // Keep the execution subset coherent through canonicalization: named Alerts,
 // projected IDs, source choices and runtime calendars all refer to the same rows.
 // The stored configuration and the scheduler's full calendar are never mutated.
@@ -57,5 +59,6 @@ func subsetLiveAlertsConfig(config LiveAlertsConfig, ids []string) LiveAlertsCon
 func (l *LiveAlerts) clearRequestedCheckLocked() {
 	l.requested = false
 	l.requestedIDs = nil
+	l.requestedAt = time.Time{}
 	l.requestRevision++
 }

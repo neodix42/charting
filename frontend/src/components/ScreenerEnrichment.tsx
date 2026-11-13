@@ -4,7 +4,7 @@ import {errorText} from '../types';
 import './ScreenerRefresh.css';
 import {isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 
-const pageSize=20;
+const pageSize=5;
 const requirements={low:'low',high:'high',price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume',timestamp:'timestamp (UTC); no price fields required'};
 function size(bytes:number){return bytes<1024?`${bytes} B`:bytes<1024*1024?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1024/1024).toFixed(1)} MiB`;}
 function utcTime(value:number){return new Date(value).toISOString().replace('T',' ').replace(/(?:\.000)?Z$/,' UTC');}
@@ -134,7 +134,7 @@ export function ScreenerEnrichment({api,visible,timeframes}:{api:Backend;visible
     const job=jobs.get(file.id);
     return <tr key={file.id} data-file={file.name}><td><strong>{file.name}</strong><small>{file.timeframe||'Custom CSV'} · {size(file.bytes)}</small></td><td>{file.firstTimestamp!==undefined&&file.lastTimestamp!==undefined?<><time>{utcTime(file.firstTimestamp)}</time><span> → </span><time>{utcTime(file.lastTimestamp)}</time><small>{file.timeframe==='tick'?'Available tick times':'Available bar open times'}</small></>:<span className="muted">Period unavailable</span>}</td><td><code>{file.fields.join(', ')}</code>{file.error&&<p className="enrichment-file-error">{file.error}</p>}</td><td className={`enrichment-file-status ${job?.status??''}`}>{job?<><span>{job.status} · {Math.round(job.progress)}%</span><progress aria-label={`${file.name} ${showRefresh?'refresh':'enrichment'} progress`} max={100} value={job.progress}/><small>{job.message}</small>{showRefresh&&'addedRows' in job&&'updatedRows' in job&&<small>{String(job.addedRows)} rows added · {String(job.updatedRows)} rows updated</small>}{!!job.columns.length&&<code>{job.columns.join(', ')}</code>}{job.backupPath&&<small title={job.backupPath}>Original backup retained</small>}</>:<span className="muted">Ready</span>}</td></tr>;
    })}</tbody></table></div>}
-   {!!files?.total&&<nav className="enrichment-pagination" aria-label="Data file pages"><button type="button" disabled={page===0} onClick={()=>setPage(value=>value-1)}>Previous files</button><span>{page*pageSize+1}–{Math.min((page+1)*pageSize,files.total)} of {files.total} files</span><button type="button" disabled={(page+1)*pageSize>=files.total} onClick={()=>setPage(value=>value+1)}>Next files</button></nav>}
+   {!!files?.total&&<nav className="enrichment-pagination" aria-label="Data file pages"><button type="button" disabled={page===0} onClick={()=>setPage(value=>value-1)}>Previous files</button><span aria-live="polite">{page*pageSize+1}–{Math.min((page+1)*pageSize,files.total)} of {files.total} files</span><button type="button" disabled={(page+1)*pageSize>=files.total} onClick={()=>setPage(value=>value+1)}>Next files</button></nav>}
   </section>
  </div>;
 }

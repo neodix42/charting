@@ -45,7 +45,7 @@ async function openProgressApp(page:Page){
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
  await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
- await expect(history(page).getByRole('columnheader')).toHaveText(['Alert name','Progress','Number of assets scanned','Last checked','Next check','Sent alerts']);
+ await expect(history(page).getByRole('columnheader')).toHaveText(['Alert name','Progress','Number of assets scanned','Last checked','Next check','Sent alerts','Duration']);
  await expect(history(page).locator('tbody th')).toHaveText(names);
 }
 
@@ -250,7 +250,7 @@ test('Sent alerts resets for each real check while lifetime totals remain separa
    return api.GetScreenerLiveAlerts();
   };
  },{currentClose});
- const count=row(page,names[0]).getByRole('cell').last();
+ const count=row(page,names[0]).getByRole('cell').nth(4);
  await expect(count).toHaveText('—');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 37/);
  await expect(page.getByText('Lifetime total: 52',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Check now',exact:true}).click();
@@ -265,4 +265,39 @@ test('Sent alerts resets for each real check while lifetime totals remain separa
  await page.getByRole('button',{name:'Check now',exact:true}).click();
  await expect(count).toHaveText('0');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 38/);
  await expect(page.getByText('Lifetime total: 53',{exact:true})).toBeVisible();
+});
+
+test('Duration shows total backend elapsed time and trigger, updates through all phases and keeps finished and legacy rows stable',async({page})=>{
+ await openProgressApp(page);
+ const duration=(name:string)=>row(page,name).getByRole('cell').last();
+ await expect(duration(names[0])).toHaveText('—');
+ await expect(duration(names[0])).toHaveAttribute('title','Duration was not recorded for this check.');
+ await page.evaluate(({currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>index===0?{...old,triggeredAt:currentClose,durationKnown:true,durationMs:65000,status:'running',progressState:'running',progress:20,phase:'Downloading required history',currentAsset:'BTCUSDT'}:old);
+  (window as any).__testSetLiveAlertsInfo({checks,running:true});
+ },{currentClose});
+ await expect(duration(names[0])).toContainText('1m 5s');
+ await expect(duration(names[0])).toContainText('Triggered 2026-11-06 12:00:00 UTC');
+ await expect(duration(names[0])).toHaveAttribute('title',/worker wait, downloads, enrichment, evaluation and delivery/);
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo();
+  (window as any).__testSetLiveAlertsInfo({checks:info.checks.map((old:any)=>old.name==='Top Bybit'?{...old,durationMs:126000,progress:60,phase:'Enriching all required assets',currentAsset:'ETHUSDT'}:old)});
+ });
+ await expect(progress(page,names[0])).toContainText('Enriching all required assets');
+ await expect(duration(names[0])).toContainText('2m 6s');
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo();
+  (window as any).__testSetLiveAlertsInfo({checks:info.checks.map((old:any)=>old.name==='Top Bybit'?{...old,durationMs:130000,status:'completed',progressState:'completed',progress:100,phase:'Completed',currentAsset:''}:old),running:false});
+ });
+ await expect(duration(names[0])).toContainText('2m 10s');
+ await expect(duration(names[1])).toHaveText('—');
+ await page.getByRole('button',{name:'Check now',exact:true}).click();
+ await expect(progress(page,names[0])).toContainText('Queued');
+ await expect(duration(names[0])).toContainText('2m 10s');
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo();
+  (window as any).__testSetLiveAlertsInfo({checks:info.checks.map((old:any)=>old.name==='Top Bybit'?{...old,durationKnown:true,triggeredAt:old.triggeredAt+300000,durationMs:0,status:'running',progressState:'running',phase:'Downloading required history'}:old),running:true});
+ });
+ await expect(duration(names[0])).toContainText('0s');
+ await expect(duration(names[0])).toContainText('Triggered 2026-11-06 12:05:00 UTC');
 });

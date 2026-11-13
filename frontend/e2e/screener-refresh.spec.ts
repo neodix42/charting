@@ -12,24 +12,24 @@ async function open(page:Page,count=2){
 const panel=(page:Page)=>page.locator('#screener-enrichment');
 
 test('Refresh updates all existing files and applied indicators, independently of the new indicator controls',async({page})=>{
- await open(page,57);
+ await open(page,12);
  await page.getByLabel('Period',{exact:true}).fill('3');
- await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(20);
- await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page).locator('tbody tr')).toHaveCount(17);
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page)).toContainText('6–10 of 12 files');await expect(panel(page).locator('tbody tr')).toHaveCount(5);
+ await page.getByRole('button',{name:'Next files',exact:true}).click();await expect(panel(page)).toContainText('11–12 of 12 files');await expect(panel(page).locator('tbody tr')).toHaveCount(2);
  await page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true}).click();
  const info=await page.evaluate(()=>(window as any).__testRefresh()) as ScreenerRefreshInfo;
- expect(info.jobs).toHaveLength(57);expect(info.jobs[0].columns).toEqual(fields.slice(6));
+ expect(info.jobs).toHaveLength(12);expect(info.jobs[0].columns).toEqual(fields.slice(6));
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toBeNull();
  expect(await page.evaluate(()=>(window as any).__testRefreshStarts())).toBe(1);
  await expect(panel(page).locator('.enrichment-refresh-help')).toContainText('This refresh checks through');
- await page.evaluate(info=>(window as any).__testSetRefresh({...info,currentFile:info.jobs[56].name,currentProgress:36,jobs:info.jobs.map((job,i)=>({...job,status:i===56?'running':'queued',progress:i===56?36:0,message:'Downloading new rows and recalculating saved indicators'}))}),info);
+ await page.evaluate(info=>(window as any).__testSetRefresh({...info,currentFile:info.jobs[11].name,currentProgress:36,jobs:info.jobs.map((job,i)=>({...job,status:i===11?'running':'queued',progress:i===11?36:0,message:'Downloading new rows and recalculating saved indicators'}))}),info);
  await expect(panel(page).locator('tbody tr').last().getByRole('progressbar')).toHaveAttribute('value','36');
- await expect(page.getByRole('button',{name:'Enrich 57 files',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Enrich 12 files',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Refresh Dukascopy data and indicators',exact:true})).toBeDisabled();
  await page.getByRole('tab',{name:'Downloader',exact:true}).click();await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(panel(page).locator('tbody tr').last()).toContainText('Downloading new rows');
  await page.getByRole('button',{name:'Cancel refresh',exact:true}).click();
- await expect(panel(page)).toContainText('57 cancelled');
+ await expect(panel(page)).toContainText('12 cancelled');
  expect((await page.evaluate(()=>(window as any).__testEnrichmentFiles()))[0].fields).toEqual(fields);
 });
 

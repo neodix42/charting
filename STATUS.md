@@ -1,4 +1,10 @@
-# Implementation status — updated 2026-11-12
+# Implementation status — updated 2026-11-13
+
+## Alert check duration and five-file Enrichment pages — 2026-11-13
+
+Additive per-attempt timing records the backend trigger separately from candle cutoff and Last checked, and reports total elapsed time through queue, preparation, all-asset downloads/enrichment, evaluation and delivery. The Check history table adds Duration and the UTC trigger time. Completed/error/cancelled durations are frozen; older or interrupted attempts do not invent a completion time. Enrichment changes its existing source/period-aware pagination to five files, preserving the all-matching-files scope of enrichment.
+
+Verification passes: all 160 Python checks, 110 Screener-runtime tests/catalog check, 288 frontend unit tests/typecheck/lint/build, all 27 Enrichment/Refresh and ten Live Alerts browser cases, and complete native Go race/bindings/production-root checks plus vet. Eight backend regressions cover accepted manual and scheduled triggers before blocked metadata, all-asset/tier waits, live compact reads without writes, completion/failure/Stop/drain/retry timing, persisted frozen values, interrupted/legacy unknowns, pointer-copy validation and obsolete ownership. The first Duration browser run exposed an outdated explicit fixture whitelist; forwarding the new DTO fields fixes it, and all ten cases pass. The five-file table screenshot was reviewed. Logs: ignored .tools/verification/alert-duration-*.log, enrichment-five-files-browser.log and live-alert-duration-browser.log. Production packaging and hosted CI/release are tracked for this revision. No real alert checks, Telegram messages, trades or user-profile changes were used; native Wayland/Windows interaction and real-provider timing remain unrun.
 
 ## Per-check confirmed delivery counts — 2026-11-12
 

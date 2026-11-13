@@ -2409,6 +2409,9 @@ export namespace screener {
 	    assetsSkipped?: number;
 	    assetsWarmingUp?: number;
 	    lastChecked: number;
+	    triggeredAt: number;
+	    durationMs: number;
+	    durationKnown: boolean;
 	    nextCheck: number;
 	    sentAlerts: number;
 	    sentAlertsKnown: boolean;
@@ -2437,6 +2440,9 @@ export namespace screener {
 	        this.assetsSkipped = source["assetsSkipped"];
 	        this.assetsWarmingUp = source["assetsWarmingUp"];
 	        this.lastChecked = source["lastChecked"];
+	        this.triggeredAt = source["triggeredAt"];
+	        this.durationMs = source["durationMs"];
+	        this.durationKnown = source["durationKnown"];
 	        this.nextCheck = source["nextCheck"];
 	        this.sentAlerts = source["sentAlerts"];
 	        this.sentAlertsKnown = source["sentAlertsKnown"];

@@ -128,6 +128,15 @@ func runPriorityAlertWork(parent context.Context, work []liveAlertWork, run func
 }
 
 type liveAlertHistoryGroupKey struct{}
+type liveAlertTriggerKey struct{}
+
+func (l *LiveAlerts) checkTriggerTime(ctx context.Context) time.Time {
+	if trigger, ok := ctx.Value(liveAlertTriggerKey{}).(time.Time); ok && !trigger.IsZero() {
+		return trigger
+	}
+	return l.now()
+}
+
 type liveAlertHistoryGroup struct {
 	once sync.Once
 	run  *liveAlertCheckRun
@@ -137,9 +146,9 @@ type liveAlertHistoryGroup struct {
 func (l *LiveAlerts) beginScopedCheckHistory(ctx context.Context, config LiveAlertsConfig, manual bool) (*liveAlertCheckRun, error) {
 	group, _ := ctx.Value(liveAlertHistoryGroupKey{}).(*liveAlertHistoryGroup)
 	if group == nil {
-		return l.beginCheckHistory(config, manual)
+		return l.beginCheckHistory(config, manual, l.checkTriggerTime(ctx))
 	}
-	group.once.Do(func() { group.run, group.err = l.beginCheckHistory(config, manual) })
+	group.once.Do(func() { group.run, group.err = l.beginCheckHistory(config, manual, l.checkTriggerTime(ctx)) })
 	if group.err != nil {
 		return nil, group.err
 	}

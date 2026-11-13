@@ -1,5 +1,14 @@
 # Release checklist — observed 2026-10-19
 
+## Alert duration and Enrichment pagination — 2026-11-13
+
+- [x] Actual backend trigger and total elapsed include queue/preparation, all-asset downloads/enrichment, evaluation and delivery; no candle-time substitution.
+- [x] Frozen duration persistence, Stop/drain, retries, legacy/interrupted unknowns, immutable snapshots and obsolete-attempt ownership have focused race regressions.
+- [x] Five-file Enrichment pagination retains source/period resets, shrinking-list bounds and batch scope; 27 Enrichment/Refresh and ten Live Alerts browser cases pass.
+- [x] Complete native Go race/bindings/production-root/vet, 160 Python, 110 runtime and 288 frontend unit checks/typecheck/lint/build pass.
+- [ ] Production packaging and hosted Tests/release are tracked for this revision.
+- [ ] Real-provider timing and native Wayland/Windows interaction are not claimed; no Telegram or funded actions performed.
+
 ## Confirmed signals per check — 2026-11-12
 
 - [x] Current-attempt delivery counters reset at actual start; lifetime totals and durable no-resend markers are retained separately.

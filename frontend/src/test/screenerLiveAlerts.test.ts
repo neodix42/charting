@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertCheck,LiveAlertOutcome,LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertSentCount,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertSentCount,liveAlertDuration,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -142,14 +142,17 @@ it('follows renamed conditions only for exact copied alert names while preservin
 });
 
 it('merges compact live work without erasing schedule/evidence, and late metadata without rewinding progress',()=>{
- const row={conditionId:'a',name:'Rule',assetsScanned:0,lastChecked:10,nextCheck:100,sentAlerts:0,status:'completed' as const,manual:true,error:'',timingHint:'Daily close'};
+ const row={conditionId:'a',name:'Rule',assetsScanned:0,lastChecked:10,nextCheck:100,sentAlerts:0,status:'completed' as const,manual:true,error:'',timingHint:'Daily close',triggeredAt:1,durationKnown:true,durationMs:100};
  const metadata={...result({enabled:true}),savedConditionsRevision:7,checks:[row],assets:[{symbol:'btc',name:'BTC',category:'Crypto',periods:['d1']}]};
- const compact={...result({enabled:true}),running:true,status:'Enriching indicators',checks:[{...row,progressState:'running' as const,phase:'Enriching indicators',progress:40,nextCheck:0,timingHint:undefined}]};
+ const compact={...result({enabled:true}),running:true,status:'Enriching indicators',checks:[{...row,progressState:'running' as const,phase:'Enriching indicators',progress:40,nextCheck:0,timingHint:undefined,durationMs:500}]};
  const live=mergeLiveAlertsProgress(metadata,compact);
  expect(live.checks[0]).toMatchObject({phase:'Enriching indicators',progress:40,nextCheck:100,timingHint:'Daily close'});
+ expect(live.checks[0]).toMatchObject({triggeredAt:1,durationKnown:true,durationMs:500});
+ const unknown=mergeLiveAlertsProgress(live,{...compact,checks:[{...compact.checks[0],triggeredAt:0,durationMs:0,durationKnown:false}]});
+ expect(unknown.checks[0]).toMatchObject({triggeredAt:0,durationMs:0,durationKnown:false});
  expect(live.assets).toEqual(metadata.assets);expect(live.savedConditionsRevision).toBe(7);
  const late=mergeLiveAlertsMetadata(live,{...metadata,savedConditionsRevision:8,checks:[{...row,nextCheck:200,timingHint:'New daily close'}]});
- expect(late.running).toBe(true);expect(late.checks[0]).toMatchObject({phase:'Enriching indicators',progress:40,nextCheck:200,timingHint:'New daily close'});
+ expect(late.running).toBe(true);expect(late.checks[0]).toMatchObject({phase:'Enriching indicators',progress:40,nextCheck:200,timingHint:'New daily close',triggeredAt:1,durationKnown:true,durationMs:500});
  expect(late.savedConditionsRevision).toBe(8);
  const paused={...live,config:{enabled:true,alerts:[{id:'a',name:'Rule',conditionId:'saved',period:'d1' as const,dataSource:'hyperliquid' as const,enabled:false}]}};
  expect(mergeLiveAlertsMetadata(paused,metadata).checks[0].nextCheck).toBe(0);
@@ -190,4 +193,15 @@ it('renders per-check confirmed signals independently of legacy lifetime totals'
  const metadata={...result({enabled:true}),checks:[{...running,sentAlerts:1,lifetimeSentAlerts:38}]};
  const compact={...result({enabled:true}),checks:[{...running,sentAlerts:0,lifetimeSentAlerts:undefined}]};
  expect(mergeLiveAlertsProgress(metadata,compact).checks[0]).toMatchObject({sentAlerts:0,lifetimeSentAlerts:0});
+});
+
+
+it('formats recorded total alert duration without inventing legacy or invalid timings',()=>{
+ const check:LiveAlertCheck={conditionId:'a',name:'Rule',assetsScanned:0,lastChecked:10,nextCheck:0,sentAlerts:0,status:'completed',manual:true,error:''};
+ expect(liveAlertDuration(check)).toBe('—');
+ expect(liveAlertDuration({...check,durationMs:90000,durationKnown:false})).toBe('—');
+ for(const [durationMs,label] of [[0,'0s'],[1,'<1s'],[999,'<1s'],[1000,'1s'],[65000,'1m 5s'],[3661000,'1h 1m 1s'],[90061000,'1d 1h 1m 1s']] as const){
+  expect(liveAlertDuration({...check,durationKnown:true,durationMs})).toBe(label);
+ }
+ for(const durationMs of [-1,NaN,Infinity])expect(liveAlertDuration({...check,durationKnown:true,durationMs})).toBe('—');
 });

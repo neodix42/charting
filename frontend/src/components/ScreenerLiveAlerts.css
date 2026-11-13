@@ -15,3 +15,5 @@
 .live-alert-asset-choice{display:flex;gap:12px;align-items:flex-start;min-width:0;flex:1;cursor:pointer}.live-alert-asset-choice>input{width:16px;height:16px;min-height:16px;margin-top:3px;accent-color:var(--accent);flex-shrink:0}.live-alert-asset-choice>div{min-width:0}.live-alert-assets-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.live-alert-assets-actions small{color:var(--muted);margin-left:auto}.live-alerts-configuration-error{display:flex;align-items:flex-start;gap:12px;color:var(--danger);font-size:.85rem;margin:12px 0}.live-alerts-configuration-error>button{margin-left:auto}
 
 .live-alerts-row-check{white-space:nowrap}.live-alerts-row-check button{font-size:.8rem}
+
+.live-alert-duration{min-width:170px;font-variant-numeric:tabular-nums}.live-alert-duration>small{max-width:200px}

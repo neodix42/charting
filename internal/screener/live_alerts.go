@@ -161,6 +161,7 @@ type LiveAlerts struct {
 	blocked, started, closed        bool
 	running, requested              bool
 	requestedIDs                    []string
+	requestedAt                     time.Time
 	requestRevision                 uint64
 	watermarksDirty                 bool
 	lastRun, nextRun, nextBoundary  int64
@@ -891,6 +892,7 @@ func (l *LiveAlerts) requestCheckNow(id string) (LiveAlertsInfo, error) {
 	}
 	l.requestRevision++
 	l.requested, l.status = true, "Waiting for scheduler"
+	l.requestedAt = l.now()
 	l.queueCheckProgressLocked(ids, true)
 	phase := l.resolutionPhase
 	if phase == "" {
@@ -997,7 +999,12 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		l.mu.Lock()
 		current, revision, requestRevision := copyLiveAlertsConfig(l.state.Config), l.configRevision, l.requestRevision
 		preparing := current.Enabled && (l.requested || (l.nextRun > 0 && l.now().UnixMilli() >= l.nextRun))
+		var triggeredAt time.Time
 		if preparing {
+			triggeredAt = l.now()
+			if l.requested && !l.requestedAt.IsZero() {
+				triggeredAt = l.requestedAt
+			}
 			ids := current.ConditionIDs
 			if l.requested && l.requestedIDs != nil {
 				ids = l.requestedIDs
@@ -1042,6 +1049,9 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 		run := enabled && (l.requested || (l.nextRun > 0 && now.UnixMilli() >= l.nextRun))
 		config := copyLiveAlertsConfig(resolved)
 		if run {
+			if triggeredAt.IsZero() {
+				triggeredAt = now
+			}
 			manual := l.requested
 			targeted := manual && l.requestedIDs != nil
 			if targeted {
@@ -1093,6 +1103,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 			l.retryConfig = nil
 			l.retryTargeted = false
 			cycle, cancel := context.WithCancel(ctx)
+			cycle = context.WithValue(cycle, liveAlertTriggerKey{}, triggeredAt)
 			executionRevision := l.configRevision
 			executionRequestRevision := l.requestRevision
 			l.cycleCancel = cancel

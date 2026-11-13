@@ -29,6 +29,9 @@ type LiveAlertCheck struct {
 	AssetsSkipped      int     `json:"assetsSkipped,omitempty"`
 	AssetsWarmingUp    int     `json:"assetsWarmingUp,omitempty"`
 	LastChecked        int64   `json:"lastChecked"`
+	TriggeredAt        int64   `json:"triggeredAt"`
+	DurationMs         int64   `json:"durationMs"`
+	DurationKnown      bool    `json:"durationKnown"`
 	NextCheck          int64   `json:"nextCheck"`
 	SentAlerts         int64   `json:"sentAlerts"`
 	SentAlertsKnown    bool    `json:"sentAlertsKnown"`
@@ -44,12 +47,18 @@ type liveAlertCheckState struct {
 	AssetsSkipped       int    `json:"assetsSkipped,omitempty"`
 	AssetsWarmingUp     int    `json:"assetsWarmingUp,omitempty"`
 	LastChecked         int64  `json:"lastChecked"`
+	TriggeredAt         int64  `json:"triggeredAt,omitempty"`
+	DurationMs          *int64 `json:"durationMs,omitempty"`
 	SentAlerts          int64  `json:"sentAlerts"`
 	LastCheckSentAlerts *int64 `json:"lastCheckSentAlerts,omitempty"`
 	CheckID             string `json:"checkId,omitempty"`
 	Status              string `json:"status"`
 	Manual              bool   `json:"manual"`
 	Error               string `json:"error,omitempty"`
+	// The original time retains Go's monotonic clock while this process owns
+	// the attempt. It is deliberately absent from the saved file: an interrupted
+	// check has no trustworthy finish instant after restarting the application.
+	triggerTime time.Time
 }
 
 type liveAlertCheckRun struct {
@@ -71,6 +80,10 @@ func copyLiveCheckStates(values map[string]liveAlertCheckState) map[string]liveA
 		if value.LastCheckSentAlerts != nil {
 			count := *value.LastCheckSentAlerts
 			value.LastCheckSentAlerts = &count
+		}
+		if value.DurationMs != nil {
+			duration := *value.DurationMs
+			value.DurationMs = &duration
 		}
 		copies[id] = value
 	}
@@ -96,6 +109,12 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 		} else if record.CheckID != "" {
 			return errors.New("Live Alerts check identity has no delivery counter")
 		}
+		if record.TriggeredAt < 0 || record.TriggeredAt > 253402300799999 || record.TriggeredAt > 0 && !validLiveAlertID(record.CheckID) {
+			return errors.New("invalid Live Alerts check trigger timestamp")
+		}
+		if record.DurationMs != nil && (record.TriggeredAt == 0 || *record.DurationMs < 0 || *record.DurationMs > 253402300799999 || record.Status == "running") {
+			return errors.New("invalid Live Alerts check duration")
+		}
 		switch record.Status {
 		case "running", "completed", "failed", "cancelled":
 		default:
@@ -109,12 +128,16 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 	return nil
 }
 
-func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*liveAlertCheckRun, error) {
+func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool, triggers ...time.Time) (*liveAlertCheckRun, error) {
 	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, skippedSymbols: map[string]map[string]bool{}, warmingSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}, checkIDs: map[string]string{}}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.blocked || l.closed {
 		return nil, errors.New("Live Alerts check history is closed or invalid")
+	}
+	trigger := l.now()
+	if len(triggers) > 0 && !triggers[0].IsZero() {
+		trigger = triggers[0]
 	}
 	previous := copyLiveCheckStates(l.state.Checks)
 	if l.state.Checks == nil {
@@ -138,7 +161,7 @@ func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool) (*l
 		zero := int64(0)
 		run.checkIDs[id] = checkID
 		prior := l.state.Checks[id]
-		l.state.Checks[id] = liveAlertCheckState{LastChecked: l.now().UTC().UnixMilli(), SentAlerts: prior.SentAlerts, LastCheckSentAlerts: &zero, CheckID: checkID, Status: "running", Manual: manual}
+		l.state.Checks[id] = liveAlertCheckState{LastChecked: l.now().UTC().UnixMilli(), TriggeredAt: trigger.UTC().UnixMilli(), triggerTime: trigger, SentAlerts: prior.SentAlerts, LastCheckSentAlerts: &zero, CheckID: checkID, Status: "running", Manual: manual}
 	}
 	if len(run.scannedSymbols) == 0 {
 		return run, nil
@@ -339,7 +362,12 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 		state.AssetsScanned = len(symbols)
 		state.AssetsSkipped = len(r.skippedSymbols[id])
 		state.AssetsWarmingUp = len(r.warmingSymbols[id])
-		state.LastChecked = l.now().UTC().UnixMilli()
+		finishedAt := l.now()
+		state.LastChecked = finishedAt.UTC().UnixMilli()
+		if !state.triggerTime.IsZero() {
+			duration := liveAlertElapsedMs(state.triggerTime, finishedAt)
+			state.DurationMs = &duration
+		}
 		state.Status, state.Error = "completed", ""
 		if completedLiveAlertScan(cycleErr) {
 			state.Error = checkHistoryMessage(r.failures[id])
@@ -422,6 +450,21 @@ func applyLiveAlertSentCounts(row *LiveAlertCheck, state liveAlertCheckState) {
 	}
 }
 
+// A running snapshot uses the same backend clock as the check. Finished values
+// are frozen and persisted; legacy/interrupted checks remain explicitly unknown.
+func applyLiveAlertCheckTiming(row *LiveAlertCheck, state liveAlertCheckState, now time.Time) {
+	row.TriggeredAt, row.DurationMs, row.DurationKnown = state.TriggeredAt, 0, false
+	if state.DurationMs != nil {
+		row.DurationMs, row.DurationKnown = *state.DurationMs, true
+	} else if state.Status == "running" && !state.triggerTime.IsZero() {
+		row.DurationMs, row.DurationKnown = liveAlertElapsedMs(state.triggerTime, now), true
+	}
+}
+
+func liveAlertElapsedMs(trigger, now time.Time) int64 {
+	return max(int64(0), now.Sub(trigger).Milliseconds())
+}
+
 func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertConditionScope, config LiveAlertsConfig, states map[string]liveAlertCheckState, now time.Time, retry *LiveAlertsConfig, retryAt, retryAsOf int64, retryManual bool) []LiveAlertCheck {
 	rows := []LiveAlertCheck{}
 	for _, condition := range saved {
@@ -432,6 +475,7 @@ func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertCondit
 		state, checked := states[condition.ID]
 		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, AssetsWarmingUp: state.AssetsWarmingUp, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
 		applyLiveAlertSentCounts(&row, state)
+		applyLiveAlertCheckTiming(&row, state, now)
 		if named {
 			row.AlertID, row.SavedConditionID = entry.ID, entry.ConditionID
 		}
