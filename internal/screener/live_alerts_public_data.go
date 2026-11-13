@@ -333,6 +333,7 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	batch := publicAlertBatch{Files: map[string]string{}, Failures: map[string]error{}, Processed: map[string]bool{}}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx = context.WithValue(ctx, publicAlertClockKey{}, l.now)
 	data := l.publicAlertDataState()
 	l.publicAlertStep(ctx, "Planning required history and indicators", source)
 	plans, err := publicAlertPlans(conditions, periods)
@@ -363,27 +364,6 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 		batch.Failures["catalog"] = err
 	}
 	a = publicAlertReadAdapter{Adapter: a, data: data, source: source}
-	l.publicAlertStep(ctx, "Waiting for public data worker", source)
-	releaseInitial, err := data.acquireSlot(ctx)
-	if err != nil {
-		return batch, err
-	}
-	l.publicAlertStep(ctx, "Starting indicator worker", source)
-	worker, preparedPlans, err := startPublicAlertWorker(ctx, runtime, plans)
-	if err != nil {
-		releaseInitial()
-		if ctx.Err() != nil {
-			return batch, ctx.Err()
-		}
-		return batch, err
-	}
-	defer func() {
-		if worker != nil {
-			worker.close()
-			releaseInitial()
-		}
-	}()
-	plans = preparedPlans
 	l.publicAlertStep(ctx, "Preparing market history tasks", source)
 	for _, dir := range []string{root, filepath.Join(root, "raw"), cacheDirectory} {
 		if err = os.MkdirAll(dir, 0700); err != nil {
@@ -476,6 +456,27 @@ func (l *LiveAlerts) preparePublicAlertData(ctx context.Context, source string, 
 	if len(tasks) == 0 {
 		return batch, nil
 	}
+	l.publicAlertStep(ctx, "Waiting for public data worker", source)
+	releaseInitial, err := data.acquireSlot(ctx)
+	if err != nil {
+		return batch, err
+	}
+	l.publicAlertStep(ctx, "Starting indicator worker", source)
+	worker, preparedPlans, err := startPublicAlertWorker(ctx, runtime, plans)
+	if err != nil {
+		releaseInitial()
+		if ctx.Err() != nil {
+			return batch, ctx.Err()
+		}
+		return batch, err
+	}
+	defer func() {
+		if worker != nil {
+			worker.close()
+			releaseInitial()
+		}
+	}()
+	plans = preparedPlans
 	var resultMu sync.Mutex
 	var next int
 	progress := newPublicAlertPreparationProgress(l, ctx, len(tasks))
@@ -584,15 +585,16 @@ func publicAlertSnapshot(source, target string) error {
 }
 
 type publicAlertRawState struct {
-	Source          string                       `json:"source"`
-	Market          string                       `json:"market"`
-	NativeID        string                       `json:"nativeId"`
-	Period          string                       `json:"period"`
-	Checksum        string                       `json:"checksum"`
-	CheckedThrough  int64                        `json:"checkedThrough"`
-	BackfillThrough int64                        `json:"backfillThrough,omitempty"`
-	BackfillBars    int                          `json:"backfillBars,omitempty"`
-	OlderBackfill   *publicAlertBackfillEvidence `json:"olderBackfill,omitempty"`
+	Source          string                            `json:"source"`
+	Market          string                            `json:"market"`
+	NativeID        string                            `json:"nativeId"`
+	Period          string                            `json:"period"`
+	Checksum        string                            `json:"checksum"`
+	CheckedThrough  int64                             `json:"checkedThrough"`
+	BackfillThrough int64                             `json:"backfillThrough,omitempty"`
+	BackfillBars    int                               `json:"backfillBars,omitempty"`
+	OlderBackfill   *publicAlertBackfillEvidence      `json:"olderBackfill,omitempty"`
+	LatestMissing   *publicAlertMissingCandleEvidence `json:"latestMissing,omitempty"`
 }
 
 func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, worker *publicAlertWorker, root, directory, source string, asset publicAlertAsset, period string, plan publicAlertPlan, asOf int64, reporters ...func(string)) (string, error) {
@@ -707,6 +709,22 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		return true
 	}
 	olderChecked := state.OlderBackfill.reusable(first, from, end, d, plan.Bars, authoritativeHistory())
+	latestReady := func() bool {
+		latest, ok := bars[end-d]
+		return ok && latest.Quality == "authoritative"
+	}
+	_, hasLatest := bars[end-d]
+	missingCooldown := publicAlertMissingCandleCooldown(source, asset.Market, end, d, bars)
+	missingMemo := !hasLatest && authoritativeHistory() && state.LatestMissing.valid(end, d, publicAlertSeriesNow(ctx))
+	// Existing inactive/empty Hyperliquid spot caches predate absence memos.
+	// Give those one narrow probe on upgrade; a normal one-bar advance retains
+	// its overlap request so provider corrections remain observable.
+	legacyInactive := raw != nil && !hasLatest && authoritativeHistory() && missingCooldown == 30*time.Minute
+	latestOnly := missingMemo || legacyInactive
+	if missingMemo && publicAlertSeriesNow(ctx).Sub(time.UnixMilli(state.LatestMissing.CheckedAt)) < missingCooldown {
+		report("Reusing known missing closed candle; waiting to recheck publication")
+		return "", publicAlertMissingCandleError(end, d)
+	}
 	type span struct{ from, to int64 }
 	ranges := []span{}
 	if len(bars) == 0 {
@@ -725,6 +743,16 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		if state.CheckedThrough < end || !hasLatest || latest.Quality != "authoritative" || repairFrom < max(from, state.CheckedThrough-d) {
 			ranges = append(ranges, span{repairFrom, end})
 		}
+	}
+	if len(ranges) == 2 && ranges[0].to >= ranges[1].from {
+		ranges = []span{{min(ranges[0].from, ranges[1].from), max(ranges[0].to, ranges[1].to)}}
+	}
+	var deferredRanges []span
+	if latestOnly {
+		// The previous successful current-window read found no latest candle.
+		// Retry that one bucket first instead of repeatedly downloading an empty
+		// warm-up window; only actual publication can make this series useful.
+		deferredRanges, ranges = ranges, nil
 	}
 	fetch := func(from, to int64) (bool, error) {
 		var rows []domain.Candle
@@ -760,6 +788,24 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			cursor = pageEnd
 		}
 	}
+	// Keep one narrow publication-race repair on the initial check. On later
+	// checks an expired absence memo reaches this directly, with no full window
+	// or older-history reads before the latest candle is actually available.
+	if !latestReady() {
+		report("Downloading latest closed candle")
+		empty, e := fetch(end-d, end)
+		if e != nil {
+			return "", e
+		}
+		_, present := bars[end-d]
+		if empty && !present && authoritativeHistory() {
+			state.LatestMissing = &publicAlertMissingCandleEvidence{Cutoff: end, CheckedAt: publicAlertSeriesNow(ctx).UnixMilli()}
+		} else {
+			state.LatestMissing = nil
+		}
+	} else {
+		state.LatestMissing = nil
+	}
 	// Warm-up counts actual bars, not calendar slots. Sparse markets can need
 	// a longer window. Probe older pages before enrichment, with a hard horizon
 	// and a wide empty-page stop for newly listed/retention-limited assets.
@@ -772,6 +818,21 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		}
 		return n
 	}
+	if latestOnly && latestReady() {
+		// Publishing the latest candle can coincide with older candles becoming
+		// available or corrected. Resume the original repair/overlap ranges
+		// before enrichment or any search farther back.
+		for _, r := range deferredRanges {
+			for cursor := r.from; cursor < r.to; {
+				pageEnd := min(r.to, cursor+1000*d)
+				report("Downloading history (provider pacing and network)")
+				if _, e := fetch(cursor, pageEnd); e != nil {
+					return "", e
+				}
+				cursor = pageEnd
+			}
+		}
+	}
 	// Imported older bars and newly corrected provisional bars can invalidate
 	// the earliest-history anchor independently of the current close.
 	first = end
@@ -779,7 +840,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		first = min(first, ts)
 	}
 	olderChecked = state.OlderBackfill.reusable(first, from, end, d, plan.Bars, authoritativeHistory())
-	if count() < plan.Bars && !olderChecked {
+	if latestReady() && count() < plan.Bars && !olderChecked {
 		horizon := int64(50000)
 		if source == "hyperliquid" {
 			horizon = 5000
@@ -823,14 +884,6 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			state.OlderBackfill = &publicAlertBackfillEvidence{Cutoff: end, Bars: plan.Bars, First: first, EmptyFrom: emptyFrom, EmptyTo: emptyTo}
 		}
 	}
-	// Repair publication races with one narrow request, rather than waiting for
-	// the next full-universe check. Never substitute an older or synthetic bar.
-	if latest, ok := bars[end-d]; !ok || latest.Quality != "authoritative" {
-		report("Downloading latest closed candle")
-		if _, e := fetch(end-d, end); e != nil {
-			return "", e
-		}
-	}
 	// A successful empty/provisional response does not prove publication of
 	// the closing candle. Keep the checkpoint behind its first unverified bar
 	// so a retry at this same scheduled cutoff actually contacts the provider.
@@ -842,6 +895,11 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		if c.Time >= from && c.Time < end && c.Quality != "authoritative" {
 			provenThrough = min(provenThrough, c.Time)
 		}
+	}
+	if latestOnly && !latestReady() {
+		// A successful absence probe verifies just the latest bucket. It must
+		// not invent coverage of an intervening gap in a legacy retained series.
+		provenThrough = state.CheckedThrough
 	}
 	state.CheckedThrough = max(state.CheckedThrough, provenThrough)
 	ordered := make([]domain.Candle, 0, len(bars))
@@ -881,7 +939,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		}
 	}
 	if len(eligible) == 0 || eligible[len(eligible)-1].Time != end-d {
-		return "", fmt.Errorf("%w; requested %s UTC explicitly but the provider returned no closed candle (no stale or synthetic substitution)", errLiveAlertsPendingBar, time.Unix(end-d, 0).UTC().Format("2006-01-02 15:04"))
+		return "", publicAlertMissingCandleError(end, d)
 	}
 	if eligible[len(eligible)-1].Quality != "authoritative" {
 		return "", fmt.Errorf("%w; latest public candle is provisional", errLiveAlertsPendingBar)

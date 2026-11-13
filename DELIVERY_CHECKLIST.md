@@ -1,5 +1,13 @@
 # Release checklist — observed 2026-10-19
 
+## Repeated public check history reuse — 2026-11-13
+
+- [x] Read-only profile/code audit confirms shared retained bars/derived caches and identifies repeated empty/missing spot reads, without provider calls or profile changes.
+- [x] Healthy same-cutoff/restart checks preserve bytes, mtimes, indicator caches and delivery claims; next close fetches only its overlap/delta. Fully processed checks start no indicator worker.
+- [x] Missing-candle tests cover bounded reuse, restart, inactive/recent boundaries, narrow expiry and legacy probes, positive imports/publication, authoritative repairs, provisional/errors and unchanged coverage/claims.
+- [x] Complete native Go race/bindings/production-root/vet, 288 frontend units/typecheck/lint and before-fix overlay regressions pass.
+- [ ] Production packaging and hosted Tests/release are tracked; real-provider performance and Telegram delivery are not claimed.
+
 ## Stable check rows and concise public downloads — 2026-11-13
 
 - [x] Fixed-height alert summaries reserve a full-width single-line status strip; long messages truncate with ellipsis and retain a full title.

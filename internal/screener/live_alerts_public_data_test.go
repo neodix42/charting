@@ -337,6 +337,8 @@ func TestPublicAlertLatePublicationRetriesSameCutoff(t *testing.T) {
 			c.Request.Conditions = c.Request.Conditions[:1]
 			periods := map[string][]string{c.ID: {"m1"}}
 			cutoff := time.Date(2026, 11, 5, 12, 0, 5, 0, time.UTC).UnixMilli()
+			now := time.UnixMilli(cutoff)
+			l.now = func() time.Time { return now }
 			first, err := l.preparePublicAlertData(context.Background(), "hyperliquid", []SavedAnalysisCondition{c}, periods, cutoff)
 			if err != nil || len(first.Files) != 0 || len(first.Failures) != 1 {
 				t.Fatalf("late initial publication: %+v %v", first, err)
@@ -348,6 +350,7 @@ func TestPublicAlertLatePublicationRetriesSameCutoff(t *testing.T) {
 			}
 			count := len(fake.historyKeys)
 			fake.pending, fake.provisional = false, false
+			now = now.Add(30 * time.Second) // Successful absence reads have a bounded publication retry delay.
 			next, err := l.preparePublicAlertData(context.Background(), "hyperliquid", []SavedAnalysisCondition{c}, periods, cutoff)
 			if err != nil || len(next.Files) != 1 || len(next.Failures) != 0 || len(fake.historyKeys) <= count {
 				t.Fatalf("same-cutoff retry never repaired data: %+v %v", next, err)

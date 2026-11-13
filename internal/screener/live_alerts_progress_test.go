@@ -35,6 +35,7 @@ func TestLiveAlertRowProgressKeepsPendingPublicationRetryAndThenCompletes(t *tes
 		t.Fatalf("actual pending attempt was overwritten as unstarted: %+v sent=%d", row, sent)
 	}
 	fake.pending = false
+	now = now.Add(30 * time.Second)
 	if err = l.check(context.Background(), config, now.UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
