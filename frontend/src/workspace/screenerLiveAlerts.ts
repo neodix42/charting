@@ -26,11 +26,10 @@ export function liveAlertCheckProgress(check:LiveAlertCheck):{state:string;phase
  return{state,phase:check.phase||(state==='completed'&&check.error?'Completed with errors':state==='completed'&&check.assetsWarmingUp?'Completed; waiting for more history':labels[state])||state,value};
 }
 
-/** A row describes one attempt; historical aggregate counts remain separate. */
+/** Confirmed totals survive retries, manual checks and application restarts. */
 export function liveAlertSentCount(check:LiveAlertCheck):{text:string;title:string}{
  const total=check.lifetimeSentAlerts??check.sentAlerts;
- if(check.sentAlertsKnown===false)return{text:'—',title:`This older record has no per-check delivery count. Lifetime confirmed signals: ${total.toLocaleString('en-US')}.`};
- return{text:check.sentAlerts.toLocaleString('en-US'),title:`Signals confirmed by at least one recipient during this check. A partial recipient batch counts once. Lifetime confirmed signals: ${total.toLocaleString('en-US')}.`};
+ return{text:total.toLocaleString('en-US'),title:'Total signals confirmed by at least one recipient for this alert across all checks. A partial recipient batch counts once; retries do not reset this total.'};
 }
 
 /** Backend elapsed time covers the whole attempt, rather than page-open time. */

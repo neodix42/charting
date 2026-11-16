@@ -32,6 +32,59 @@ type liveAlertWorkIssue struct {
 	error
 }
 
+type liveAlertAttempt struct {
+	cutoff int64
+	count  int
+}
+
+// Bounded to the latest cutoff per alert/period. Schedules are not replayed on
+// restart; startup always waits for the next natural close.
+type liveAlertAttempts map[string]liveAlertAttempt
+
+func liveAlertAttemptScopes(config LiveAlertsConfig) []LiveAlertConditionPeriod {
+	if len(config.scope) > 0 {
+		return config.scope
+	}
+	var scopes []LiveAlertConditionPeriod
+	for _, id := range config.ConditionIDs {
+		scopes = append(scopes, LiveAlertConditionPeriod{ConditionID: id})
+	}
+	return scopes
+}
+
+func (a liveAlertAttempts) record(config LiveAlertsConfig, asOf int64, manual, fresh bool) {
+	for _, scope := range liveAlertAttemptScopes(config) {
+		cutoff := asOf
+		if !manual && supportedLiveAlertPeriod(scope.Period) {
+			cutoff = liveAlertPeriodStart(time.UnixMilli(asOf), scope.Period).UnixMilli()
+		}
+		key := scope.ConditionID + "/" + scope.Period
+		attempt := a[key]
+		if fresh || attempt.cutoff != cutoff {
+			attempt = liveAlertAttempt{cutoff: cutoff}
+		}
+		attempt.count++
+		a[key] = attempt
+	}
+}
+
+func (a liveAlertAttempts) remaining(config LiveAlertsConfig) LiveAlertsConfig {
+	var ids []string
+	var scopes []LiveAlertConditionPeriod
+	for _, scope := range liveAlertAttemptScopes(config) {
+		if a[scope.ConditionID+"/"+scope.Period].count >= 1+liveAlertMaxRetries {
+			continue
+		}
+		scopes = append(scopes, scope)
+		if !containsLiveValue(ids, scope.ConditionID) {
+			ids = append(ids, scope.ConditionID)
+		}
+	}
+	config = subsetLiveAlertsConfig(config, ids)
+	config.scope = scopes
+	return config
+}
+
 func (e *liveAlertWorkIssue) Unwrap() error { return e.error }
 
 func liveAlertRetryWindow(err error, period string) time.Duration {

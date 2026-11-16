@@ -238,7 +238,7 @@ test('young listings finish without red errors and show a bounded history-wait c
 });
 
 
-test('Sent alerts resets for each real check while lifetime totals remain separate from legacy records',async({page})=>{
+test('Sent alerts retains confirmed totals through retries and removes the global lifetime label',async({page})=>{
  await openProgressApp(page);
  await page.evaluate(({currentClose})=>{
   const checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:true,progressState:'completed',phase:'Completed',progress:100,sentAlerts:0,sentAlertsKnown:false,lifetimeSentAlerts:index===0?37:old.sentAlerts}));
@@ -253,20 +253,20 @@ test('Sent alerts resets for each real check while lifetime totals remain separa
   };
  },{currentClose});
  const count=row(page,names[0]).getByRole('cell').nth(4);
- await expect(count).toHaveText('—');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 37/);
- await expect(page.getByText('Lifetime total: 52',{exact:true})).toBeVisible();
+ await expect(count).toHaveText('37');await expect(count).toHaveAttribute('title',/across all checks/);
+ await expect(page.getByText(/Lifetime total:/)).toHaveCount(0);
  await page.getByRole('button',{name:'Check now',exact:true}).click();
- await expect(count).toHaveText('0');await expect(count).toHaveAttribute('title',/at least one recipient/);
- await expect(page.getByText('Lifetime total: 52',{exact:true})).toBeVisible();
+ await expect(count).toHaveText('37');await expect(count).toHaveAttribute('title',/at least one recipient/);
+ await expect(page.getByText(/Lifetime total:/)).toHaveCount(0);
  await page.evaluate(()=>{
   const info=(window as any).__testLiveAlertsInfo();const checks=info.checks.map((old:any)=>({...old,status:'completed',progressState:'completed',progress:100,phase:'Completed',...(old.name==='Top Bybit'?{sentAlerts:1,lifetimeSentAlerts:38}:{})}));
   (window as any).__testSetLiveAlertsInfo({checks,running:false,sent:53,status:'Waiting for next closed bar'});
  });
- await expect(count).toHaveText('1');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 38/);
+ await expect(count).toHaveText('38');await expect(count).toHaveAttribute('title',/across all checks/);
  await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Check now',exact:true}).click();
- await expect(count).toHaveText('0');await expect(count).toHaveAttribute('title',/Lifetime confirmed signals: 38/);
- await expect(page.getByText('Lifetime total: 53',{exact:true})).toBeVisible();
+ await expect(count).toHaveText('38');await expect(count).toHaveAttribute('title',/across all checks/);
+ await expect(page.getByText(/Lifetime total:/)).toHaveCount(0);
 });
 
 test('Duration shows total backend elapsed time and trigger, updates through all phases and keeps finished and legacy rows stable',async({page})=>{

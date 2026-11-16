@@ -52,15 +52,12 @@ func TestLiveAlertsPublicationRetryKeepsOriginalCutoffAndExpires(t *testing.T) {
 			clock.Store(retryAt.UnixMilli())
 			l.signal()
 			info = waitLiveSchedule(t, l, func(info LiveAlertsInfo) bool { return !info.Running && info.LastRun == retryAt.UnixMilli() })
-			for attempt := range 2 {
+			for range 2 {
 				select {
 				case got := <-cutoff:
 					want := due.UnixMilli()
-					if attempt == 1 {
-						want = retryAt.UnixMilli()
-					}
 					if got != want {
-						t.Fatalf("refresh did not catch up through attempt execution: %d want %d", got, want)
+						t.Fatalf("refresh changed the original closed-bar cutoff: %d want %d", got, want)
 					}
 				case <-time.After(time.Second):
 					t.Fatal("refresh cutoff missing")
@@ -170,5 +167,107 @@ func TestLiveAlertsBusyManualRetryRetainsLatestActualClosedSemantics(t *testing.
 	info := waitLiveSchedule(t, l, func(info LiveAlertsInfo) bool { return !info.Running && info.LastRun == retryAt.UnixMilli() })
 	if sends.Load() != 1 || info.Error != "" || info.NextRun != start.Truncate(time.Hour).Add(time.Hour).UnixMilli() {
 		t.Fatalf("busy manual retry changed to strict scheduled semantics or moved boundary: %+v sends=%d", info, sends.Load())
+	}
+}
+
+func TestLiveAlertsStopAfterThreeRetriesPerClosedCandle(t *testing.T) {
+	for _, period := range []string{"h1", "d1", "w1"} {
+		for _, busy := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/busy=%t", period, busy), func(t *testing.T) {
+				start := time.Date(2024, 1, 7, 23, 30, 0, 0, time.UTC)
+				m, l, config, clock := scheduledAlertsFixture(t, start)
+				id := config.ConditionIDs[0]
+				if period == "h1" {
+					writeDataFile(t, m, "eurusd-h1-2024-01-01-2024-01-04.csv", reviewHourlyCSV(start.Truncate(time.Hour).Add(-2*time.Hour).UnixMilli(), []float64{10, 11}))
+				} else if period == "d1" {
+					id = config.ConditionIDs[1]
+				} else {
+					name := "eurusd-w1-2023-12-25-2024-01-08.csv"
+					writeDataFile(t, m, name, "timestamp,open,high,low,close\n1703462400000,10,12,9,11\n")
+					saved := saveWeeklyLiveCondition(t, m, weeklyLiveRequest(), name)
+					id = saved.ID
+				}
+				config.ConditionIDs = []string{id}
+				if _, err := l.Configure(config); err != nil {
+					t.Fatal(err)
+				}
+				var refreshes atomic.Int64
+				refresh := l.refresh
+				l.refresh = func(ctx context.Context, directory string, groups []historyGroup, asOf int64) (map[string]bool, error) {
+					refreshes.Add(1)
+					return refresh(ctx, directory, groups, asOf)
+				}
+				if busy {
+					m.mu.Lock()
+					m.active = true
+					m.mu.Unlock()
+				}
+				l.Start(context.Background())
+				due := start.Truncate(time.Hour).Add(time.Hour)
+				for attempt := 0; attempt <= liveAlertMaxRetries; attempt++ {
+					at := due.Add(time.Duration(attempt) * liveAlertRetryDelay)
+					clock.Store(at.UnixMilli())
+					l.signal()
+					info := waitLiveSchedule(t, l, func(info LiveAlertsInfo) bool { return !info.Running && info.LastRun == at.UnixMilli() })
+					if attempt < liveAlertMaxRetries {
+						if info.Status != "Waiting to retry closed-bar check" || info.NextRun != at.Add(liveAlertRetryDelay).UnixMilli() {
+							t.Fatal("retry missing", attempt, info)
+						}
+					} else {
+						if info.Status != "Retry limit reached; waiting for next eligible bar close" || info.NextRun != nextLiveAlertCheck(due, []string{period}).UnixMilli() {
+							t.Fatal("retry budget renewed", info)
+						}
+						if len(info.Checks) != 1 || info.Checks[0].ProgressState == "queued" {
+							t.Fatal("exhausted row still queued", info.Checks)
+						}
+					}
+				}
+				expected := int64(1 + liveAlertMaxRetries)
+				if busy {
+					expected = 0
+				}
+				if refreshes.Load() != expected {
+					t.Fatalf("refreshes=%d want %d", refreshes.Load(), expected)
+				}
+				// Repeated wakes (or the old morning retry) must not restart this candle.
+				later := due.Add(8 * time.Hour)
+				if period == "h1" {
+					later = due.Add(10 * time.Minute)
+				}
+				clock.Store(later.UnixMilli())
+				l.signal()
+				time.Sleep(15 * time.Millisecond)
+				if l.Info().LastRun != due.Add(3*liveAlertRetryDelay).UnixMilli() || refreshes.Load() != expected {
+					t.Fatal("exhausted candle ran again", l.Info())
+				}
+				if busy {
+					m.mu.Lock()
+					m.active = false
+					m.mu.Unlock()
+				}
+			})
+		}
+	}
+}
+
+func TestLiveAlertRetryBudgetSurvivesNewlyDuePeers(t *testing.T) {
+	id, peer := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	monday := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	weekly := LiveAlertsConfig{ConditionIDs: []string{id}, scope: []LiveAlertConditionPeriod{{ConditionID: id, Period: "w1"}}}
+	attempts := liveAlertAttempts{}
+	attempts.record(weekly, monday.UnixMilli(), false, true)
+	for i := 1; i <= liveAlertMaxRetries; i++ {
+		joined := copyLiveAlertsConfig(weekly)
+		joined.ConditionIDs = append(joined.ConditionIDs, peer)
+		joined.scope = append(joined.scope, LiveAlertConditionPeriod{ConditionID: peer, Period: "h1"})
+		attempts.record(joined, monday.Add(time.Duration(i)*time.Hour).UnixMilli(), false, false)
+		remaining := attempts.remaining(joined)
+		if containsLiveValue(remaining.ConditionIDs, id) != (i < liveAlertMaxRetries) || !containsLiveValue(remaining.ConditionIDs, peer) {
+			t.Fatal("peer renewed weekly budget or lost new hourly budget", i, remaining)
+		}
+	}
+	attempts.record(weekly, monday.AddDate(0, 0, 7).UnixMilli(), false, false)
+	if len(attempts.remaining(weekly).ConditionIDs) != 1 {
+		t.Fatal("next week did not get a fresh budget")
 	}
 }

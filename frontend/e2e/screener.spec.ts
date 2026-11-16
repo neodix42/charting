@@ -54,7 +54,7 @@ test('completed queue history alone does not count as an existing downloaded ass
  await expect(page.getByRole('form',{name:'Download historical data',exact:true})).toContainText('Download fetches only missing earlier or later ranges');
 });
 
-test('reopening restores selected symbols, timeframe, dates and every category expansion',async({page})=>{
+test('reopening restores selections and From date while To defaults to today',async({page})=>{
  await openTestApp(page);await downloader(page);
  await page.getByRole('checkbox',{name:'Select all Cryptocurrencies',exact:true}).check();
  await page.getByRole('combobox',{name:'Download timeframe',exact:true}).selectOption('m15');
@@ -62,9 +62,11 @@ test('reopening restores selected symbols, timeframe, dates and every category e
  const forex=page.locator('details').filter({has:page.locator('summary',{hasText:'Forex'})}),crypto=page.locator('details').filter({has:page.locator('summary',{hasText:'Cryptocurrencies'})});
  await forex.locator('summary').click();await expect(forex).not.toHaveAttribute('open','');
  await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null'))).toMatchObject({symbols:['btcusd','ethusd'],timeframe:'m15',concurrency:5,collapsedCategories:['Forex']});
+ await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();
+ await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue(new Date().toISOString().slice(0,10));
  await page.reload();await downloader(page);
  await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m15');await expect(page.getByRole('combobox',{name:'Parallel downloads',exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue('2024-01-01');
+ await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue(new Date().toISOString().slice(0,10));
  await expect(forex).not.toHaveAttribute('open','');await expect(crypto).toHaveAttribute('open','');
  await expect(page.getByRole('checkbox',{name:'BTCUSD — Bitcoin vs US Dollar',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'ETHUSD — Ethereum vs US Dollar',exact:true})).toBeChecked();
  await forex.locator('summary').click();await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null').collapsedCategories)).toEqual([]);
@@ -166,11 +168,11 @@ test('legacy worker metadata cannot override the shared setting or change saved 
  await expect(page.getByLabel('Download summary',{exact:true})).toContainText('7 worker threads');
  await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null'))).toEqual(legacy);
  await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true})).toHaveValue('m15');
- await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue('2024-01-01');
+ await expect(page.getByLabel('Download from date',{exact:true})).toHaveValue('2021-01-01');await expect(page.getByLabel('Download to date',{exact:true})).toHaveValue(new Date().toISOString().slice(0,10));
  await expect(page.locator('details').filter({has:page.locator('summary',{hasText:'Forex'})})).not.toHaveAttribute('open','');
  await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await chartTabs(page).first().click();await mainTab(page).click();
  await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();
- expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toEqual({symbols:legacy.symbols,timeframe:legacy.timeframe,from:legacy.from,to:legacy.to,concurrency:7});
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toEqual({symbols:legacy.symbols,timeframe:legacy.timeframe,from:legacy.from,to:new Date().toISOString().slice(0,10),concurrency:7});
  await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await expect(page.getByRole('button',{name:'Download 2 symbols',exact:true})).toBeEnabled();
 });
 

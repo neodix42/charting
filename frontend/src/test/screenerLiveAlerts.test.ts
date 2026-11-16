@@ -183,12 +183,12 @@ it('presents immature assets as a history wait and clears an omitted zero count 
 });
 
 
-it('renders per-check confirmed signals independently of legacy lifetime totals',()=>{
+it('keeps confirmed totals visible across legacy records and retry attempts',()=>{
  const legacy:LiveAlertCheck={conditionId:'old',name:'Legacy',assetsScanned:1,lastChecked:10,nextCheck:100,sentAlerts:0,sentAlertsKnown:false,lifetimeSentAlerts:37,status:'completed',manual:true,error:''};
- expect(liveAlertSentCount(legacy)).toMatchObject({text:'—'});expect(liveAlertSentCount(legacy).title).toContain('Lifetime confirmed signals: 37');
+ expect(liveAlertSentCount(legacy)).toMatchObject({text:'37'});
  const running={...legacy,sentAlertsKnown:true,status:'running' as const};
- expect(liveAlertSentCount(running).text).toBe('0');
- expect(liveAlertSentCount({...running,sentAlerts:1,lifetimeSentAlerts:38}).text).toBe('1');
+ expect(liveAlertSentCount(running).text).toBe('37');
+ expect(liveAlertSentCount({...running,sentAlerts:1,lifetimeSentAlerts:38}).text).toBe('38');
  expect(liveAlertSentCount({...running,sentAlerts:1}).title).toContain('at least one recipient');
  const metadata={...result({enabled:true}),checks:[{...running,sentAlerts:1,lifetimeSentAlerts:38}]};
  const compact={...result({enabled:true}),checks:[{...running,sentAlerts:0,lifetimeSentAlerts:undefined}]};

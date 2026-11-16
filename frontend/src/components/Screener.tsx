@@ -44,8 +44,13 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  if(!writer.current)writer.current=new ScreenerViewWriter(value=>api.SaveScreenerView(value),error=>{if(alive.current)setViewError(errorText(error));});
  useImperativeHandle(ref,()=>({flush:async()=>{await writer.current!.flush();await analysis.current?.flush();await liveAlerts.current?.flush();}}),[]);
  useEffect(()=>{alive.current=true;lifetime.current++;return ()=>{alive.current=false;lifetime.current++;};},[]);
- useEffect(()=>{if(!visible||viewReady)return;let active=true;void Promise.resolve().then(()=>api.GetScreenerView()).then(value=>{if(active){const next=normalizeScreenerView(value);draft.current=next;setView(next);setViewReady(true);setViewError('');}}).catch(error=>{if(active)setViewError(errorText(error));});return ()=>{active=false;};},[api,visible,viewReady,viewReload]);
+ useEffect(()=>{if(!visible||viewReady)return;let active=true;void Promise.resolve().then(()=>api.GetScreenerView()).then(value=>{if(active){const next=normalizeScreenerView({...value,to:initialScreenerView().to});draft.current=next;setView(next);setViewReady(true);setViewError('');}}).catch(error=>{if(active)setViewError(errorText(error));});return ()=>{active=false;};},[api,visible,viewReady,viewReload]);
  const changeView=(patch:Partial<ScreenerView>)=>{const next={...draft.current,...patch};draft.current=next;setView(next);setViewError('');writer.current!.edit(next);};
+ useEffect(()=>{
+  if(!visible||!viewReady||tab!=='downloader')return;
+  const today=initialScreenerView().to;
+  if(draft.current.to!==today)changeView({to:today});
+ },[visible,viewReady,tab]);
  useEffect(()=>{
   if(!visible||!viewReady)return;
   let active=true;setCatalog(null);setCatalogError('');

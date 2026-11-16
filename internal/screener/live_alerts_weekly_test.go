@@ -327,3 +327,82 @@ func TestLiveWeeklyCompanionRefreshesRetainedDailyButNeverBecomesAnAlertTarget(t
 		})
 	}
 }
+
+func TestScheduledWeeklyRetryRefreshesOnlyUnprocessedAssetsAndTheirDependencies(t *testing.T) {
+	m := analysisTestManager(t)
+	const eur = "eurusd-w1-2024-01-01-2024-01-22.csv"
+	const gbp = "gbpusd-w1-2024-01-01-2024-01-22.csv"
+	current := "timestamp,open,high,low,close\n1704067200000,10,12,9,11\n1704672000000,20,22,19,21\n"
+	stale := "timestamp,open,high,low,close\n1704067200000,10,12,9,11\n"
+	writeDataFile(t, m, eur, current)
+	writeDataFile(t, m, gbp, stale)
+	for _, symbol := range []string{"eurusd", "gbpusd"} {
+		writeDataFile(t, m, symbol+"-d1-2024-01-01-2024-01-22.csv", weeklyDailyCSV(0, 14, false))
+	}
+	saved := saveWeeklyLiveCondition(t, m, weeklyLiveRequest(), eur)
+	saved.Analysis.Assets[1].ProfitablePercent = 80
+	saved.Analysis.Assets[1].TakeProfitHits = 8
+	// Retain real saved qualification evidence for both base assets.
+	if err := writeState(filepath.Join(m.profile, "screener-saved-conditions.json"), savedAnalysisConditions{Version: 1, Conditions: []SavedAnalysisCondition{saved}}); err != nil {
+		t.Fatal(err)
+	}
+	var sent []string
+	l, err := NewLiveAlerts(m, func(_ context.Context, a LiveAlert) error { sent = append(sent, a.Symbol); return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	cutoff := calendarAlertTime("2024-01-15T00:00:00Z")
+	l.now = func() time.Time { return cutoff.Add(8 * time.Hour) }
+	config := LiveAlertsConfig{Enabled: true, ConditionIDs: []string{saved.ID}}
+	if _, err = l.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	var refreshed []string
+	l.refresh = func(ctx context.Context, _ string, groups []historyGroup, asOf int64) (map[string]bool, error) {
+		if asOf != cutoff.UnixMilli() {
+			t.Errorf("retry fetched beyond its original closed candle: %d", asOf)
+		}
+		pairs := map[string]bool{}
+		for _, group := range groups {
+			match := downloadFilename.FindStringSubmatch(group.name)
+			pair := match[1] + "/" + match[2]
+			pairs[pair] = true
+			refreshed = append(refreshed, pair)
+		}
+		return pairs, ctx.Err()
+	}
+	if err = l.checkCycle(context.Background(), config, cutoff.UnixMilli(), true); !errors.Is(err, errLiveAlertsPendingBar) {
+		t.Fatal("missing week not reported", err)
+	}
+	if len(refreshed) != 4 || !reflect.DeepEqual(sent, []string{"eurusd"}) {
+		t.Fatal("initial scan", refreshed, sent)
+	}
+	refreshed = nil
+	if err = l.checkCycle(context.Background(), config, cutoff.UnixMilli(), true); !errors.Is(err, errLiveAlertsPendingBar) {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(refreshed, []string{"gbpusd/d1", "gbpusd/w1"}) || len(sent) != 1 {
+		t.Fatal("retry refreshed completed asset", refreshed, sent)
+	}
+	writeDataFile(t, m, gbp, current)
+	refreshed = nil
+	if err = l.checkCycle(context.Background(), config, cutoff.UnixMilli(), true); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(refreshed, []string{"gbpusd/d1", "gbpusd/w1"}) || !reflect.DeepEqual(sent, []string{"eurusd", "gbpusd"}) {
+		t.Fatal("pending publication lost", refreshed, sent)
+	}
+	restored, err := NewLiveAlerts(m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	restored.refresh = func(context.Context, string, []historyGroup, int64) (map[string]bool, error) {
+		t.Error("restart downloaded completed week")
+		return nil, errors.New("unexpected refresh")
+	}
+	if err = restored.checkCycle(context.Background(), config, cutoff.UnixMilli(), true); err != nil {
+		t.Fatal(err)
+	}
+}

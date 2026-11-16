@@ -244,6 +244,34 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		return err
 	}
 	defer func() { cycleErr = errors.Join(cycleErr, run.finish(cycleErr)) }()
+	if scheduled {
+		// Completed candles already have durable evaluation/delivery claims.
+		// Refresh only pending bases and their own companion dependencies.
+		basePairs = map[string]bool{}
+		for _, saved := range conditions {
+			for pair := range qualified[saved.ID] {
+				symbol, period, _ := strings.Cut(pair, "/")
+				if !liveAlertsScopeAllows(config, saved.ID, period) {
+					continue
+				}
+				run.expectPair(saved.ID, symbol, period)
+				interval, _, _ := liveAlertCalendarPeriod(saved, period)
+				expected := liveAlertPeriodStart(time.UnixMilli(asOf), period).Add(-interval).UnixMilli()
+				l.mu.Lock()
+				watermark, known := l.state.Watermarks[saved.ID+"/"+pair]
+				l.mu.Unlock()
+				if known && watermark >= expected {
+					run.processedPair(saved.ID, symbol, period)
+					delete(qualified[saved.ID], pair)
+				} else {
+					basePairs[pair] = true
+				}
+			}
+		}
+		if len(basePairs) == 0 {
+			return nil
+		}
+	}
 	if runtimeMessage != "" {
 		return errors.New(runtimeMessage)
 	}
@@ -262,7 +290,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		return fmt.Errorf("recover saved history: %w", err)
 	}
 	l.reportCheckPreparation(ctx, config.ConditionIDs, "Selecting assets and required companion history")
-	groups, err := liveAlertGroups(directory, config, conditions)
+	groups, err := liveAlertGroups(directory, config, conditions, basePairs)
 	if err != nil {
 		return err
 	}
@@ -288,11 +316,6 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		}
 	}
 	refreshAsOf := asOf
-	if scheduled {
-		// A publication/busy retry retains its original signal cutoff, but
-		// refresh still catches data up through this attempt's execution time.
-		refreshAsOf = max(asOf, l.now().UTC().UnixMilli())
-	}
 	m.mu.Lock()
 	m.refreshAsOf = refreshAsOf
 	m.mu.Unlock()
@@ -503,7 +526,7 @@ func (l *LiveAlerts) claimCurrentCondition(ctx context.Context, evaluated SavedA
 	return false, nil
 }
 
-func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []SavedAnalysisCondition) ([]historyGroup, error) {
+func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []SavedAnalysisCondition, pending ...map[string]bool) ([]historyGroup, error) {
 	names, err := csvNames(directory)
 	if err != nil {
 		return nil, err
@@ -523,6 +546,9 @@ func liveAlertGroups(directory string, config LiveAlertsConfig, conditions []Sav
 				continue
 			}
 			found = true
+			if len(pending) > 0 && !pending[0][match[1]+"/"+match[2]] {
+				continue
+			}
 			pairs[match[1]+"/"+match[2]] = true
 			for _, condition := range saved.Request.Conditions {
 				for _, operand := range conditionOperands(condition) {

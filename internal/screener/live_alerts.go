@@ -144,6 +144,7 @@ type liveAlertsState struct {
 const liveAlertsStateBytes = 64 * 1024 * 1024
 const liveAlertRetryDelay = 30 * time.Second
 const liveAlertPublicationWindow = 5 * time.Minute
+const liveAlertMaxRetries = 3
 
 var errLiveAlertsPendingBar = errors.New("the newly closed bar is not yet available from the provider")
 
@@ -992,6 +993,9 @@ func dueLiveAlertsConfig(config LiveAlertsConfig, scheduled, now time.Time) Live
 
 func (l *LiveAlerts) loop(ctx context.Context) {
 	defer l.wg.Done()
+	// Retry budgets belong to each alert/period/closed candle, not the batch.
+	// Joining a newly due peer must not renew an older weekly check's budget.
+	attempts := liveAlertAttempts{}
 	for {
 		if ctx.Err() != nil {
 			return
@@ -1053,6 +1057,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				triggeredAt = now
 			}
 			manual := l.requested
+			retrying := l.retryConfig != nil && !manual
 			targeted := manual && l.requestedIDs != nil
 			if targeted {
 				config = subsetLiveAlertsConfig(config, l.requestedIDs)
@@ -1093,6 +1098,7 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 				continue
 			}
 			l.running, l.lastRun = true, now.UnixMilli()
+			attempts.record(config, asOf, manual, !retrying)
 			l.clearRequestedCheckLocked()
 			l.progress, l.errorText, l.status = 0, "", "Refreshing selected data and indicators"
 			// Retain the next original boundary even if this cycle takes a long time.
@@ -1129,16 +1135,31 @@ func (l *LiveAlerts) loop(ctx context.Context) {
 					l.progress, l.status = 100, "Check completed with errors; waiting for next closed bar"
 				}
 				if retry, eligible := retryLiveAlertConfig(config, err, asOf, l.now(), manual); eligible {
-					l.retryConfig, l.retryAsOf, l.retryManual = &retry, asOf, manual
-					l.retryTargeted = targeted
-					retryAt := l.now().Add(liveAlertRetryDelay).UnixMilli()
-					if targeted || l.nextRun <= 0 {
-						l.nextRun = retryAt
-					} else {
-						l.nextRun = min(l.nextRun, retryAt)
+					eligibleIDs := append([]string(nil), retry.ConditionIDs...)
+					retry = attempts.remaining(retry)
+					for _, id := range eligibleIDs {
+						if containsLiveValue(retry.ConditionIDs, id) {
+							continue
+						}
+						if progress, ok := l.checkProgress[id]; ok && (progress.state == "queued" || progress.state == "failed" || progress.phase == "Completed with errors") {
+							progress.state, progress.phase = "failed", "Retry limit reached; waiting for next eligible bar close"
+							l.checkProgress[id] = progress
+						}
 					}
-					l.status = "Waiting to retry closed-bar check"
-					l.markReadRetryProgressLocked(retry, err)
+					if len(retry.ConditionIDs) == 0 {
+						l.status = "Retry limit reached; waiting for next eligible bar close"
+					} else {
+						l.retryConfig, l.retryAsOf, l.retryManual = &retry, asOf, manual
+						l.retryTargeted = targeted
+						retryAt := l.now().Add(liveAlertRetryDelay).UnixMilli()
+						if targeted || l.nextRun <= 0 {
+							l.nextRun = retryAt
+						} else {
+							l.nextRun = min(l.nextRun, retryAt)
+						}
+						l.status = "Waiting to retry closed-bar check"
+						l.markReadRetryProgressLocked(retry, err)
+					}
 				}
 			} else {
 				l.progress, l.status = 100, "Waiting for next closed bar"
