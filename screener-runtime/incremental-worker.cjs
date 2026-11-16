@@ -155,7 +155,7 @@ async function extendDownload(request,options={}){
     if(!(await fs.lstat(folder)).isDirectory())throw Error('Saved range folder must be a real directory.');
     try{if(!(await fs.lstat(output)).isFile())throw Error('Saved range partial must be a regular file.');}catch(error){if(error.code!=='ENOENT')throw error;}
     const handle=await fs.open(output,'a',0o600);await handle.close();
-    emit({type:'progress',progress:2+index/Math.max(1,snapshot.ranges.length)*68,message:`Downloading missing range ${index+1}/${snapshot.ranges.length}: ${new Date(range.from).toISOString()} → ${new Date(range.to).toISOString()}`});
+    emit({type:'progress',progress:2+index/Math.max(1,snapshot.ranges.length)*68,message:`Downloading missing range ${index+1}/${snapshot.ranges.length}: ${new Date(range.from).toISOString().replace(/\.\d{3}Z$/, 'Z')} → ${new Date(range.to).toISOString().replace(/\.\d{3}Z$/, 'Z')}`});
     let rows=0;
     try{
       await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(range.from).toISOString(),to:new Date(range.to).toISOString(),output,resume:true,sourceBatchSize:request.sourceBatchSize??1,asOf:plan.asOf,providerSession:request.providerSession},

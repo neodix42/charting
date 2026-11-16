@@ -1,7 +1,7 @@
 import {describe,expect,it,vi} from 'vitest';
 import {analysisEntryLabel,analysisExitLabels,analysisMatchMarkers,analysisTradeExecutionDetails,profitableMatchColor} from '../charts/analysisMarkers';
 import type {AnalysisChart} from '../workspace/screenerAnalysis';
-import {AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,analysisRollingField,analysisEnrichmentMessage,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
+import {analysisDate,AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,analysisFieldLabel,analysisInputError,analysisPriceOverlay,analysisRequestIdentity,analysisRollingField,analysisEnrichmentMessage,changeSimulationDirection,fieldOperand,initialAnalysisView,newAnalysisCondition,numberOperand} from '../workspace/screenerAnalysis';
 import type {AnalysisCatalog} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
@@ -292,4 +292,14 @@ describe('Selected simulated trade timing and outcome',()=>{
   }
   expect(analysisTradeExecutionDetails({...chart,tradeExecution:{entryTime:Date.UTC(2025,0,9),outcome:'expired',exitTime:Date.UTC(2025,0,10)}}).at(-1)).toEqual({label:'Exit bar start',value:'2025-01-10 00:00:00 UTC'});
  });
+});
+
+
+it('truncates fractional UTC display seconds without rounding or changing the timestamp',()=>{
+ const instant=Date.UTC(2026,10,16,8,12,49,999);
+ expect(analysisDate(instant)).toBe('2026-11-16 08:12:49 UTC');
+ expect(analysisDate(Date.UTC(2026,10,16,23,59,59,999))).toBe('2026-11-16 23:59:59 UTC');
+ expect(new Date(instant).getUTCMilliseconds()).toBe(999);
+ expect(analysisDate()).toBe('—');expect(analysisDate(NaN)).toBe('—');
+ expect(analysisDate(1e20)).toBe('Invalid UTC time');
 });

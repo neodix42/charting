@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {initialPredictionSelection,predictionBarLabel,predictionBytes,predictionModelKey,PredictionSelectionWriter} from '../workspace/predictions';
+import {predictionDate,initialPredictionSelection,predictionBarLabel,predictionBytes,predictionModelKey,PredictionSelectionWriter} from '../workspace/predictions';
 
 it('serializes prediction selections and flushes the latest edit after an in-flight write',async()=>{
  let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
@@ -23,4 +23,10 @@ it('maps history to real UTC times and future bars to offsets without fabricatin
  const data={history:[{time:Date.UTC(2026,9,23),close:100},{time:Date.UTC(2026,9,26),close:101}]};
  expect(predictionBarLabel(data,1)).toBe('2026-10-23 00:00');expect(predictionBarLabel(data,2,true)).toBe('2026-10-26 00:00:00 UTC');expect(predictionBarLabel(data,3)).toBe('+1');expect(predictionBarLabel(data,22,true)).toBe('+20');
  expect(predictionModelKey({model:'a',modelDirectory:'b'})).not.toBe(predictionModelKey({model:'a',modelDirectory:'c'}));expect(predictionBytes(104857600)).toBe('100 MiB');expect(predictionBytes(0)).toBe('0 B');
+});
+
+
+it('displays prediction UTC timestamps at truncated whole seconds',()=>{
+ expect(predictionDate(Date.UTC(2026,10,16,23,59,59,999))).toBe('2026-11-16 23:59:59 UTC');
+ expect(predictionDate(Date.UTC(2026,10,16,8,12,49,555))).toBe('2026-11-16 08:12:49 UTC');
 });

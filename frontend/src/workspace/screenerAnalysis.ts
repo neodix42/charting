@@ -91,7 +91,7 @@ export function analysisFieldGroups(fields:string[]){
  const groups=new Map<string,string[]>();for(const field of fields){if(field.toLowerCase()==='timestamp')continue;const group=analysisFieldGroup(field),items=groups.get(group);if(items)items.push(field);else groups.set(group,[field]);}return [...groups].sort(([a],[b])=>a==='Price / OHLC'?-1:b==='Price / OHLC'?1:a.localeCompare(b));
 }
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return isCalendarRange(base.toLowerCase())||priceFields.has(base.toLowerCase())||/^(?:low|high|sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
-export function analysisDate(value?:number){if(value===undefined||!Number.isFinite(value))return'—';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC'):'Invalid UTC time';}
+export {utcDate as analysisDate} from './time';
 export function analysisInputError(view:AnalysisRequest){
  if(view.dataSource&&!['dukascopy','hyperliquid'].includes(view.dataSource))return'Choose Dukascopy or Hyperliquid as the data source.';
  if(view.profitabilityFilter!==undefined&&(!Number.isInteger(view.profitabilityFilter)||view.profitabilityFilter<0||view.profitabilityFilter>100||view.profitabilityFilter%5!==0))return'Profitability must be 0–100 in steps of 5.';

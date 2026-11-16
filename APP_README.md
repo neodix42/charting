@@ -12,6 +12,8 @@ Explicit live checks: `go run ./cmd/smoke -providers hyperliquid -market spot -i
 
 **First launch has exactly one tab and one chart in a 1×1 grid.** Add tabs and charts as needed, up to 20 tabs and 9 charts per tab. Selecting a larger grid adds empty controls, not chart configurations. New tabs start with one chart. Later launches restore your actual saved workspace.
 
+UTC timestamps displayed in the interface, chart inspections, alert details, predictions and download status messages omit fractional seconds. For example, `08:12:49.999 UTC` displays as `08:12:49 UTC`, without rounding. Stored timestamps, candle data and provider request boundaries retain their full precision.
+
 The original specification bundle is retained at the repository root. [STATUS.md](STATUS.md) describes observed verification and remaining limits.
 
 ## Run the built release

@@ -1,3 +1,5 @@
+import {utcDate} from './time';
+
 export interface PredictionSettings {model:string;modelDirectory:string}
 export interface PredictionSelection {asset:string;period:string;contextLength:number;horizon:number;forecastId?:string}
 export interface PredictionDataset {id:string;symbol:string;name:string;period:string;filename:string}
@@ -18,7 +20,7 @@ export interface PredictionsBackend {
 }
 export const initialPredictionSelection=():PredictionSelection=>({asset:'',period:'d1',contextLength:512,horizon:20,forecastId:''});
 export const predictionModelKey=(settings:PredictionSettings)=>JSON.stringify([settings.model,settings.modelDirectory]);
-export const predictionDate=(time:number)=>Number.isFinite(time)?new Date(time).toISOString().replace('T',' ').replace('.000Z',' UTC'):'—';
+export const predictionDate=utcDate;
 export function predictionBytes(bytes:number){if(!Number.isFinite(bytes)||bytes<0)return '0 B';const unit=Math.min(3,Math.floor(Math.log(Math.max(1,bytes))/Math.log(1024)));return `${(bytes/1024**unit).toLocaleString('en-US',{maximumFractionDigits:unit?1:0})} ${['B','KiB','MiB','GiB'][unit]}`;}
 /** Ordered, coalesced durable writes; an unacknowledged selection stays retryable. */
 export class PredictionSelectionWriter {

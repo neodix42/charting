@@ -1,5 +1,12 @@
 # Implementation status — updated 2026-11-16
 
+## UTC display precision — 2026-11-16
+
+UTC display formatting is shared across Analysis, Match Inspection, Live Alerts (last checked, trigger, next check, recent outcomes), Enrichment and Predictions, removing all fractional seconds without rounding. Downloader missing-range progress and provider cooldown text also omit fractions. Chart/timezone and trade-history formatters already omit milliseconds. Stored timestamps, provider request ranges, market data and machine diagnostics retain their original precision.
+
+Verification passed so far: frontend `npm test` (290 tests), `npm run typecheck`, `npm run lint`, and `cd screener-runtime && node --test provider-transport.test.cjs incremental-worker.test.cjs` (25 tests). Boundary tests verify `.999` remains in the same displayed second/day, Analysis and Prediction formatting share the policy, and invalid Analysis times retain their fallback. All 49 focused browser cases passed: `npm run test:e2e -- e2e/live-alert-progress.spec.ts e2e/screener-enrichment.spec.ts e2e/predictions.spec.ts`. Production packaging uses `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`; its result is recorded in `.tools/verification/utc-display-build.log`. Actual desktop interaction and live checks remain unrun; the user's running profile is untouched.
+
+
 ## Larger Match Inspection default — 2026-11-16
 
 Increase the Match Inspection width limit from 1400px to 1680px and its chart height by 20% (420px minimum to 504px); scale the plot viewport cap from 56vh to 67.2vh while retaining overall screen bounds. The shared signal-image renderer keeps its existing dimensions. APP_README.md describes the new default. Verification passed: frontend `npm run typecheck`, `npm run lint`, and all three existing Match Inspection Playwright cases (`npm run test:e2e -- e2e/screener-analysis.spec.ts -g "Match Inspection"`). The first browser run was interrupted by source hot reload before opening the third case; the stable-source rerun passed. Production packaging uses `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`, with its result recorded in `.tools/verification/match-inspection-size-build.log`. Actual desktop interaction remains unrun.

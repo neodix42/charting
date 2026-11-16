@@ -80,7 +80,7 @@ function installProviderTransport(lines, request, send = event => process.stdout
     async failure(error) {
       if (!/\b(?:HTTP(?: status:)?|status)\s*403\b/i.test(String(error?.message))) return error;
       const result = await observe(403, '');
-      return new Error(`${error.message} Next manual attempt after ${new Date(result.cooldownUntil).toISOString()} (saved access-denial cooldown).`);
+      return new Error(`${error.message} Next manual attempt after ${new Date(result.cooldownUntil).toISOString().replace(/\.\d{3}Z$/, 'Z')} (saved access-denial cooldown).`);
     },
     close() {
       global.fetch = originalFetch;

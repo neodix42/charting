@@ -287,3 +287,6 @@ performance results or assertions of current exchange availability.
 
 
 | D185 | 2026-11-16: enlarge Match Inspection defaults by twenty percent | Increase the desktop inspector width from 1400px to 1680px, multiply its chart height by 1.2, and expand its scroll viewport allowance proportionally. Retain screen-size caps, chart interactions and the shared Telegram image renderer's existing dimensions. |
+
+
+| D186 | 2026-11-16: display UTC timestamps at whole-second precision | Share one UTC presentation formatter across Analysis/Live Alerts, Enrichment and Predictions; truncate the fractional ISO suffix without rounding or changing the source timestamp. Remove fractional seconds from downloader range progress and provider cooldown messages too. Existing locale-based chart/history displays already omit fractions. Retain full precision in stored state, raw market data, diagnostics and provider request boundaries. |
