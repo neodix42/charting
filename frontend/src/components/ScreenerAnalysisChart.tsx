@@ -19,12 +19,12 @@ const format=(number:number|undefined)=>number===undefined?'—':number.toLocale
 
 // The desktop match inspector and background signal-image renderer share this
 // exact plot, including candles, indicator panes, price labels and match markers.
-export function AnalysisPlot({data}:{data:AnalysisChart}){
+export function AnalysisPlot({data,heightScale=1}:{data:AnalysisChart;heightScale?:number}){
  const fontSize=useAppearanceFontSize(),[theme,setTheme]=useState(()=>document.documentElement.dataset.theme??'light'),chartRef=useRef<IChartApi|null>(null),applyTheme=useRef<(theme:string)=>void>(()=>{});
  const host=useRef<HTMLDivElement>(null),[shown,setShown]=useState<string[]>(()=>data.fields.filter(field=>!rawFields.has(field.toLowerCase()))),[hover,setHover]=useState<AnalysisBar|null>(null),[chartError,setChartError]=useState('');
  const plotFields=data.fields.filter(field=>!rawFields.has(field.toLowerCase())),selected=shown.filter(field=>plotFields.includes(field));
  const groups=[...new Set(selected.filter(field=>!analysisPriceOverlay(field)).map(analysisFieldGroup))];
- const height=Math.max(420,290+groups.length*115);
+ const height=Math.round(Math.max(420,290+groups.length*115)*heightScale);
  const signature=selected.join('|');
  const row=hover??data.bars.find(bar=>bar.index===data.matchIndex)??data.bars.find(bar=>bar.time===data.matchTime);
  const duplicates=new Set(data.bars.map(bar=>bar.time)).size!==data.bars.length;
@@ -160,7 +160,7 @@ export function ScreenerAnalysisChart({api,selection,onClose,onNavigate}:{api:Sc
   <p className="analysis-chart-note">Closed bars from downloaded files. Previous / Next visits every occurrence, continuing across matching files.</p>
   {error&&<div className="analysis-error" role="alert">{error}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry chart</button></div>}
   {loading&&<p className="analysis-empty" role="status">Loading bars and enriched indicators around this match…</p>}
-  {data&&<AnalysisPlot key={`${data.resultId}:${data.occurrence}`} data={data}/>}
+  {data&&<AnalysisPlot key={`${data.resultId}:${data.occurrence}`} data={data} heightScale={1.2}/>}
   <footer>{data&&<span>{data.bars.length} nearby rows · matched row {data.matchIndex+1} · UTC</span>}<span>Lightweight Charts™ by TradingView</span></footer>
  </section></div>;
 }

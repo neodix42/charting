@@ -1,5 +1,10 @@
 # Implementation status — updated 2026-11-16
 
+## Larger Match Inspection default — 2026-11-16
+
+Increase the Match Inspection width limit from 1400px to 1680px and its chart height by 20% (420px minimum to 504px); scale the plot viewport cap from 56vh to 67.2vh while retaining overall screen bounds. The shared signal-image renderer keeps its existing dimensions. APP_README.md describes the new default. Verification passed: frontend `npm run typecheck`, `npm run lint`, and all three existing Match Inspection Playwright cases (`npm run test:e2e -- e2e/screener-analysis.spec.ts -g "Match Inspection"`). The first browser run was interrupted by source hot reload before opening the third case; the stable-source rerun passed. Production packaging uses `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`, with its result recorded in `.tools/verification/match-inspection-size-build.log`. Actual desktop interaction remains unrun.
+
+
 ## Bounded alert retries, retained sent totals and Downloader date — 2026-11-16
 
 Read-only inspection of the existing profile explains the morning weekly/daily checks: D1/W1 publication/network failures had a 24-hour retry window with no attempt count. The weekly Dukascopy row retained a BTFUSUSD W1 missing-candle error (expected 2026-11-09; latest 2026-10-19); daily Dukascopy histories included Friday bars while the scheduled close expected Sunday. Retained Hyperliquid histories report missing current candles for inactive spot markets. The weekly Hyperliquid alert retained 55 confirmed signals and the daily alert 49, while fresh retry-attempt counters were zero. These are per-alert cumulative totals, not a reconstructed midnight-only count. Existing files/claims were inspected without modifying the live profile or sending Telegram messages.
