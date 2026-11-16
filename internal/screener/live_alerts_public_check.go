@@ -15,6 +15,9 @@ import (
 // own historical inputs. Historical profitability from another venue is never
 // assigned to these assets.
 func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConfig, source string, asOf int64, scheduled bool) (cycleErr error) {
+	if !scheduled {
+		ctx = context.WithValue(ctx, publicAlertReuseClosedHistoryKey{}, true)
+	}
 	conditions, err := l.selectedConditionsForCheck(ctx, config)
 	if err != nil {
 		return err

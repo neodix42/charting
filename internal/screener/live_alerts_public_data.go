@@ -595,6 +595,7 @@ type publicAlertRawState struct {
 	BackfillBars    int                               `json:"backfillBars,omitempty"`
 	OlderBackfill   *publicAlertBackfillEvidence      `json:"olderBackfill,omitempty"`
 	LatestMissing   *publicAlertMissingCandleEvidence `json:"latestMissing,omitempty"`
+	HistoryRead     *publicAlertHistoryReadEvidence   `json:"historyRead,omitempty"`
 }
 
 func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, worker *publicAlertWorker, root, directory, source string, asset publicAlertAsset, period string, plan publicAlertPlan, asOf int64, reporters ...func(string)) (string, error) {
@@ -696,6 +697,36 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	for ts := range bars {
 		first = min(first, ts)
 	}
+	preferRetained, _ := ctx.Value(publicAlertReuseClosedHistoryKey{}).(bool)
+	// Use the start of inspection, so a slow warm-up search cannot turn a
+	// near-midnight latest-candle probe into mature publication evidence.
+	historyReadAt := publicAlertSeriesNow(ctx)
+	cacheableRead := period == "d1" || period == "w1"
+	reuseRead := false
+	if preferRetained && cacheableRead {
+		checksum, e := publicAlertBarsChecksum(bars)
+		if e != nil {
+			return "", e
+		}
+		now := publicAlertSeriesNow(ctx)
+		evidence := state.HistoryRead
+		if _, hasLatest := bars[end-d]; evidence == nil && !hasLatest && checksum == state.Checksum && state.LatestMissing.valid(end, d, now) {
+			// Older builds already saved successful narrow absence checks. They
+			// can avoid an upgrade re-download too; absent latest bars can never
+			// be evaluated, regardless of the indicator warm-up requirement.
+			evidence = &publicAlertHistoryReadEvidence{Cutoff: end, Bars: plan.Bars, CheckedAt: state.LatestMissing.CheckedAt, Checksum: checksum}
+		}
+		if latest, ok := bars[end-d]; evidence == nil && ok && latest.Quality == "authoritative" && checksum == state.Checksum && state.BackfillThrough == end && state.BackfillBars >= plan.Bars && state.BackfillBars <= 50000 {
+			// Legacy short-listing caches already record the successful bounded
+			// older-history search and have the real latest candle. Reuse that
+			// search even if an incomplete first week prevented OlderBackfill.
+			evidence = &publicAlertHistoryReadEvidence{Cutoff: end, Bars: state.BackfillBars, CheckedAt: now.UnixMilli(), Checksum: checksum}
+		}
+		reuseRead = evidence.reusable(end, plan.Bars, checksum, now)
+		if reuseRead {
+			report("Reusing saved closed-period history check")
+		}
+	}
 	fetchedAuthoritative := true
 	authoritativeHistory := func() bool {
 		if !fetchedAuthoritative {
@@ -720,14 +751,17 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	// Give those one narrow probe on upgrade; a normal one-bar advance retains
 	// its overlap request so provider corrections remain observable.
 	legacyInactive := raw != nil && !hasLatest && authoritativeHistory() && missingCooldown == 30*time.Minute
-	latestOnly := missingMemo || legacyInactive
-	if missingMemo && publicAlertSeriesNow(ctx).Sub(time.UnixMilli(state.LatestMissing.CheckedAt)) < missingCooldown {
+	latestOnly := !reuseRead && (missingMemo || legacyInactive)
+	if !reuseRead && missingMemo && publicAlertSeriesNow(ctx).Sub(time.UnixMilli(state.LatestMissing.CheckedAt)) < missingCooldown {
 		report("Reusing known missing closed candle; waiting to recheck publication")
 		return "", publicAlertMissingCandleError(end, d)
 	}
 	type span struct{ from, to int64 }
 	ranges := []span{}
-	if len(bars) == 0 {
+	if reuseRead {
+		// Successful prior absence/partial reads remain unavailable; reuse their
+		// saved inputs without claiming a complete candle or hiding its error.
+	} else if len(bars) == 0 {
 		ranges = append(ranges, span{from, end})
 	} else {
 		if first > from && !olderChecked {
@@ -791,7 +825,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	// Keep one narrow publication-race repair on the initial check. On later
 	// checks an expired absence memo reaches this directly, with no full window
 	// or older-history reads before the latest candle is actually available.
-	if !latestReady() {
+	if !reuseRead && !latestReady() {
 		report("Downloading latest closed candle")
 		empty, e := fetch(end-d, end)
 		if e != nil {
@@ -803,7 +837,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		} else {
 			state.LatestMissing = nil
 		}
-	} else {
+	} else if latestReady() {
 		state.LatestMissing = nil
 	}
 	// Warm-up counts actual bars, not calendar slots. Sparse markets can need
@@ -840,7 +874,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		first = min(first, ts)
 	}
 	olderChecked = state.OlderBackfill.reusable(first, from, end, d, plan.Bars, authoritativeHistory())
-	if latestReady() && count() < plan.Bars && !olderChecked {
+	if !reuseRead && latestReady() && count() < plan.Bars && !olderChecked {
 		horizon := int64(50000)
 		if source == "hyperliquid" {
 			horizon = 5000
@@ -901,7 +935,9 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 		// not invent coverage of an intervening gap in a legacy retained series.
 		provenThrough = state.CheckedThrough
 	}
-	state.CheckedThrough = max(state.CheckedThrough, provenThrough)
+	if !reuseRead {
+		state.CheckedThrough = max(state.CheckedThrough, provenThrough)
+	}
 	ordered := make([]domain.Candle, 0, len(bars))
 	for _, c := range bars {
 		ordered = append(ordered, c)
@@ -916,6 +952,9 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	}
 	digest := sha256.Sum256(encoded)
 	state.Checksum = hex.EncodeToString(digest[:])
+	if cacheableRead && !reuseRead {
+		state.HistoryRead = &publicAlertHistoryReadEvidence{Cutoff: end, Bars: plan.Bars, CheckedAt: historyReadAt.UnixMilli(), Checksum: state.Checksum}
+	}
 	previousChecksum := ""
 	if raw != nil {
 		previous := sha256.Sum256(raw)
