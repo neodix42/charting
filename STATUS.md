@@ -1,4 +1,11 @@
-# Implementation status — updated 2026-11-16
+# Implementation status — updated 2026-11-18
+
+## Trade History actual/requested size — 2026-11-18
+
+Rename the Size column to **Size (act/req)**, display actual opening fills followed by requested size in parentheses (for example `58.8 (100)`), and explain the order/base units/unavailable values in the heading hint. Remaining size after partial closes stays on its own line. Add optional RequestedSize to the backend and bridge models, derive it from the immutable provider request for both new and legacy Hyperliquid/Dukascopy records, and recover it locally without network access or read-time writes. Pending requests no longer masquerade as actual fills. Submission quantities, execution rules, position management and risk calculations retain their existing ownership.
+
+Verification passed: frontend `npm run typecheck`, `npm run lint`, `npm test` (290 tests), and all 14 Trade History browser cases, including partial-fill `58.8 (100)`, full fills, partial closes, pending/unknown values and reload. `go test -race ./internal/trading ./internal/hyperliquid ./internal/jforex`, binding-root and native production-root race tests, and vet of the affected Go packages passed. Provider tests cover local legacy recovery without network/login or file mutation, original quantities through reconciliation/partial exits, and unconfirmed fills. An isolated copy of the actual NATGAS journal loaded through the production parser returns actual58.8/requested100/remaining58.8; the real profile was read only. Production packaging uses `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`, with its result in `.tools/verification/size-act-req-build.log`. No live order/account changes or actual desktop smoke have been performed for this change.
+
 
 ## Repeat manual D1/W1 checks retain unavailable-history reads — 2026-11-16
 

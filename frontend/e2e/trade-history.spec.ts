@@ -13,7 +13,7 @@ test('Trade history follows Predictions, stays lazy, labels actual currencies an
  await seed(page,[record(),record({id:'dukascopy:'+'b'.repeat(32),provider:'dukascopy',environment:'demo',account:'demo-account',instrument:'EUR/USD',orderId:'D-202',size:'1000',remainingSize:'1000',entryPrice:'1.1003',stopLoss:'1.09',takeProfit:'1.12',slAmount:'-9.27',tpAmount:'17.73',currency:'EUR',balanceAtOpen:'0',balanceCurrency:'EUR',marginUsed:'',marginCurrency:'',marginBasis:'JForex does not expose reliable per-position margin'})]);
  expect(await page.locator('.tab-row > button[role=tab]').allTextContents()).toEqual(['Screener','Predictions','Trade history']);await enter(page);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(0);await expect(page.getByTestId('chart-cell')).toHaveCount(0);
- const headers=await panel(page).getByRole('columnheader').allTextContents();for(const name of ['Order ID','Open date','Close date','Size','Direction','SL price','TP price','SL amount (est.)','TP amount (est.)','Balance at open','Margin used'])expect(headers).toContain(name);
+ const headers=await panel(page).getByRole('columnheader').allTextContents();for(const name of ['Order ID','Open date','Close date','Size (act/req)','Direction','SL price','TP price','SL amount (est.)','TP amount (est.)','Balance at open','Margin used'])expect(headers).toContain(name);
  const eur=panel(page).getByRole('row').filter({hasText:'EUR/USD'});await expect(eur).toContainText('-9.27 EUR');await expect(eur).toContainText('17.73 EUR');await expect(eur).toContainText('0.00 EUR');await expect(eur.getByRole('cell').nth(17)).toHaveText('—');
  const btc=panel(page).getByRole('row').filter({hasText:'BTC'});await expect(btc).toContainText('-10.00 USDC');await expect(btc).toContainText('20.00 USDC');await expect(btc).toContainText('203.33 USDC');await expect(close(page)).toBeDisabled();
  await page.clock.install();const reads=await page.evaluate(()=>(window as any).__testTradeHistoryReads());await page.locator('[data-tab-id]').first().click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);await page.clock.fastForward(30000);expect(await page.evaluate(()=>(window as any).__testTradeHistoryReads())).toBe(reads);
@@ -141,4 +141,23 @@ test('an older exchange refresh cannot replace an edited draft or a just-saved e
  await page.evaluate(()=>delete(window as any).__releaseEntryRefresh);await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseEntryRefresh)).toBe('function');await edit.click();await row.getByRole('textbox').fill('Saved during refresh');await row.getByRole('textbox').press('Enter');await expect(edit).toHaveText('Saved during refresh');
  await page.evaluate(()=>(window as any).__releaseEntryRefresh());await expect(edit).toHaveText('Saved during refresh');
  await reloadTestApp(page);await enter(page);await expect(edit).toHaveText('Saved during refresh');
+});
+
+
+test('Size shows actual opening fills with the original request and retains remaining size separately',async({page})=>{
+ await openTestApp(page);
+ await seed(page,[
+  record({instrument:'xyz:NATGAS',orderId:'608848221881',size:'58.8',requestedSize:'100',remainingSize:'58.8'}),
+  record({id:'dukascopy:'+'b'.repeat(32),provider:'dukascopy',instrument:'EUR/USD',orderId:'D-202',size:'1000',requestedSize:'1000',remainingSize:'600'}),
+  record({id:'hyperliquid:'+'c'.repeat(32),instrument:'PENDING',orderId:'',size:'',requestedSize:'100',remainingSize:'',entryPrice:'',openDate:0,status:'unconfirmed',canClose:false}),
+  record({id:'hyperliquid:'+'d'.repeat(32),instrument:'LEGACY',orderId:'104',size:'2',requestedSize:undefined,remainingSize:'2'}),
+ ]);
+ await enter(page);
+ const header=panel(page).getByRole('columnheader',{name:'Size (act/req)',exact:true});
+ await expect(header).toHaveAttribute('title',/Actual filled opening size.*originally requested size in parentheses.*base units/);
+ const size=(instrument:string)=>panel(page).getByRole('row').filter({has:page.getByRole('cell',{name:instrument,exact:true})}).getByRole('cell').nth(6);
+ await expect(size('xyz:NATGAS')).toHaveText('58.8 (100)');
+ await expect(size('EUR/USD')).toContainText('1,000 (1,000)');await expect(size('EUR/USD').locator('small')).toHaveText('600 remaining');
+ await expect(size('PENDING')).toHaveText('— (100)');await expect(size('LEGACY')).toHaveText('2 (—)');
+ await reloadTestApp(page);await enter(page);await expect(size('xyz:NATGAS')).toHaveText('58.8 (100)');
 });

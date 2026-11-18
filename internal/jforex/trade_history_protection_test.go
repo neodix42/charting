@@ -15,7 +15,7 @@ func protectionJournal() brokerJournal {
 	j := brokerJournal{ID: strings.Repeat("c", 32), Request: sampleTrade(), Environment: "demo", CreatedAt: time.Now().Add(-time.Hour).UnixMilli()}
 	j.History = newBrokerHistory(j)
 	j.History.Status, j.History.OrderID = "open", "owned-protection-test"
-	j.History.EntryPrice, j.History.RemainingSize = "1.1003", "1000"
+	j.History.EntryPrice, j.History.Size, j.History.RemainingSize = "1.1003", "1000", "1000"
 	j.History.Currency, j.History.ProfitPerPriceUnit = "EUR", ".9"
 	return j
 }

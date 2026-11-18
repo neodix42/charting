@@ -6,6 +6,7 @@ export interface TradeScreenPage {screens:TradeScreen[];total:number;offset:numb
 export interface TradeRecord {
  screens?:TradeScreen[];
  entryCondition?:string;
+ requestedSize?:string;
  stopLossSource?:string;takeProfitSource?:string;
  exitPrice?:string;pipSize?:string;profitLossPips?:string;profitLossPipsUnit?:string;profitLossPipsTime?:number;profitLossPipsState?:string;profitLossPipsBasis?:string;profitLossPipsError?:string;
  profitPerPriceUnit?:string;valuationTime?:number;valuationError?:string;profitLoss?:string;profitLossCurrency?:string;profitLossTime?:number;profitLossState?:string;profitLossBasis?:string;profitLossError?:string;

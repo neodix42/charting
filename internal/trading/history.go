@@ -28,6 +28,7 @@ type Trade struct {
 	OpenDate            int64         `json:"openDate"`
 	CloseDate           int64         `json:"closeDate"`
 	Size                string        `json:"size"`
+	RequestedSize       string        `json:"requestedSize,omitempty"`
 	RemainingSize       string        `json:"remainingSize"`
 	Direction           string        `json:"direction"`
 	EntryPrice          string        `json:"entryPrice"`

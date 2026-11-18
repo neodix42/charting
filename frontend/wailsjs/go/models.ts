@@ -3259,6 +3259,7 @@ export namespace trading {
 	    openDate: number;
 	    closeDate: number;
 	    size: string;
+	    requestedSize?: string;
 	    remainingSize: string;
 	    direction: string;
 	    entryPrice: string;
@@ -3318,6 +3319,7 @@ export namespace trading {
 	        this.openDate = source["openDate"];
 	        this.closeDate = source["closeDate"];
 	        this.size = source["size"];
+	        this.requestedSize = source["requestedSize"];
 	        this.remainingSize = source["remainingSize"];
 	        this.direction = source["direction"];
 	        this.entryPrice = source["entryPrice"];

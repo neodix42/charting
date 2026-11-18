@@ -45,7 +45,7 @@ func newHistoryTrade(p Preview, metrics Metrics, at int64) trading.Trade {
 			direction = "short"
 		}
 	}
-	return trading.Trade{ID: "hyperliquid:" + p.ID, Provider: "hyperliquid", Account: p.AccountAddress, Environment: p.Network, Instrument: p.Request.Instrument, Market: p.Request.Market, Direction: direction, SubmittedAt: at, Size: p.Request.Quantity, StopLoss: p.Request.StopLoss, TakeProfit: p.Request.TakeProfit, Currency: p.AccountCurrency, BalanceAtOpen: metrics.AccountBalance, BalanceCurrency: metrics.AvailableBalanceCurrency, BalanceTime: metrics.MetricsTime, BalanceBasis: metrics.AvailableBalanceBasis, Status: "unconfirmed", CloseReason: "Refresh exchange status before closing"}
+	return trading.Trade{ID: "hyperliquid:" + p.ID, Provider: "hyperliquid", Account: p.AccountAddress, Environment: p.Network, Instrument: p.Request.Instrument, Market: p.Request.Market, Direction: direction, SubmittedAt: at, RequestedSize: p.Request.Quantity, StopLoss: p.Request.StopLoss, TakeProfit: p.Request.TakeProfit, Currency: p.AccountCurrency, BalanceAtOpen: metrics.AccountBalance, BalanceCurrency: metrics.AvailableBalanceCurrency, BalanceTime: metrics.MetricsTime, BalanceBasis: metrics.AvailableBalanceBasis, Status: "unconfirmed", CloseReason: "Refresh exchange status before closing"}
 }
 func applySubmission(j *orderJournal) {
 	r := &j.History
@@ -99,6 +99,17 @@ func (s *Store) readOrderJournal(id string) (*orderJournal, error) {
 	}
 	if len(j.Closes) > 100 {
 		return nil, errors.New("Too many close attempts in the local trade journal")
+	}
+	// Recover the original request locally for legacy rows, independently of
+	// fill reconciliation or account access. An unconfirmed request is not a fill.
+	j.History.RequestedSize = ""
+	if requested, err := positive(p.Request.Quantity); err == nil {
+		j.History.RequestedSize = requested.String()
+		filled, hasFill := trading.Numeric(j.Result.FilledQuantity)
+		actual, hasActual := trading.Numeric(j.History.Size)
+		if j.History.Status == "unconfirmed" && j.History.OpenDate == 0 && j.History.EntryPrice == "" && j.History.RemainingSize == "" && (!hasFill || !filled.IsPositive()) && hasActual && actual.Equal(requested) {
+			j.History.Size = ""
+		}
 	}
 	return &j, nil
 }

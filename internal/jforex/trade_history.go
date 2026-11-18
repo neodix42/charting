@@ -90,7 +90,7 @@ func newBrokerHistory(j brokerJournal) trading.Trade {
 	if j.Request.Side == "sell" {
 		direction = "short"
 	}
-	r := trading.Trade{ID: "dukascopy:" + j.ID, Provider: "dukascopy", Environment: j.Environment, Account: j.Account, Instrument: j.Request.Instrument, Market: "jforex", Direction: direction, SubmittedAt: j.CreatedAt, Size: numberText(j.Request.Quantity), StopLoss: optionalPrice(j.Request.StopLoss), TakeProfit: optionalPrice(j.Request.TakeProfit), Currency: j.Preview.AccountCurrency, Status: "unconfirmed", CloseReason: "Refresh to verify this platform position", MarginBasis: "JForex does not expose reliable per-position margin"}
+	r := trading.Trade{ID: "dukascopy:" + j.ID, Provider: "dukascopy", Environment: j.Environment, Account: j.Account, Instrument: j.Request.Instrument, Market: "jforex", Direction: direction, SubmittedAt: j.CreatedAt, RequestedSize: numberText(j.Request.Quantity), StopLoss: optionalPrice(j.Request.StopLoss), TakeProfit: optionalPrice(j.Request.TakeProfit), Currency: j.Preview.AccountCurrency, Status: "unconfirmed", CloseReason: "Refresh to verify this platform position", MarginBasis: "JForex does not expose reliable per-position margin"}
 	if r.StopLoss != "" {
 		r.StopLossSource = "submitted"
 	}
@@ -280,6 +280,10 @@ func (m *Manager) readTradeJournal(id string) (*brokerJournal, error) {
 	}
 	if j.History.ID != "dukascopy:"+id || j.History.Environment != j.Environment || j.History.Account != j.Account || j.History.Instrument != j.Request.Instrument || len(j.Closes) > 100 {
 		return nil, errors.New("Dukascopy journal identity mismatch; original preserved")
+	}
+	j.History.RequestedSize = numberText(j.Request.Quantity)
+	if actual, ok := trading.Numeric(j.History.Size); j.History.Status == "unconfirmed" && j.History.OpenDate == 0 && j.History.EntryPrice == "" && j.History.RemainingSize == "" && j.Result.FilledQuantity <= 0 && ok && actual.String() == j.History.RequestedSize {
+		j.History.Size = ""
 	}
 	// Repair old rows in memory before login/network work, without rewriting the
 	// claim on a read. The next ordinary successful refresh persists the repair.
