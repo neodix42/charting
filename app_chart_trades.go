@@ -4,10 +4,12 @@ import (
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/trading"
 	"errors"
+	"sort"
 )
 
-// GetChartTrades finds local candidates without logging in or importing external
-// orders. RefreshTradeHistory must verify their current executions before display.
+// GetChartTrades restores the last locally confirmed opening for each chart
+// identity without logging in or importing external orders. Closed trade levels
+// remain useful history until a newer confirmed opening replaces them.
 func (a *App) GetChartTrades(keys []domain.FeedKey) (trading.HistoryPage, error) {
 	if err := a.beginTradeWork(); err != nil {
 		return trading.HistoryPage{}, err
@@ -34,7 +36,23 @@ func (a *App) GetChartTrades(keys []domain.FeedKey) (trading.HistoryPage, error)
 		sources[key.Exchange] = true
 		wanted[identity(key.Exchange, key.Market, key.Instrument)] = true
 	}
-	out := trading.HistoryPage{Rows: []trading.Trade{}, Errors: []string{}, Limit: 100}
+	out := trading.HistoryPage{Rows: []trading.Trade{}, Errors: []string{}, Limit: 9}
+	latest := map[string]trading.Trade{}
+	openingTime := func(row trading.Trade) int64 {
+		if row.OpenDate > 0 {
+			return row.OpenDate
+		}
+		return row.SubmittedAt
+	}
+	newer := func(row, prior trading.Trade) bool {
+		if openingTime(row) != openingTime(prior) {
+			return openingTime(row) > openingTime(prior)
+		}
+		if row.SubmittedAt != prior.SubmittedAt {
+			return row.SubmittedAt > prior.SubmittedAt
+		}
+		return row.ID > prior.ID
+	}
 	add := func(rows []trading.Trade, issues []string, account, environment string, legacy bool) {
 		out.Errors = append(out.Errors, issues...)
 		for _, row := range rows {
@@ -42,10 +60,19 @@ func (a *App) GetChartTrades(keys []domain.FeedKey) (trading.HistoryPage, error)
 				continue
 			}
 			switch row.Status {
-			case "closed", "rejected", "cancelled", "filled":
+			case "open", "closing", "closed", "filled", "cancelled":
+			default:
 				continue
 			}
-			out.Rows = append(out.Rows, row)
+			quantity, quantityOK := trading.Numeric(row.Size)
+			entry, entryOK := trading.Numeric(row.EntryPrice)
+			if !quantityOK || !quantity.IsPositive() || !entryOK || !entry.IsPositive() || openingTime(row) <= 0 {
+				continue
+			}
+			key := identity(row.Provider, row.Market, row.Instrument)
+			if prior, exists := latest[key]; !exists || newer(row, prior) {
+				latest[key] = row
+			}
 		}
 	}
 	if sources["hyperliquid"] && a.hyperliquid != nil {
@@ -62,8 +89,13 @@ func (a *App) GetChartTrades(keys []domain.FeedKey) (trading.HistoryPage, error)
 			add(rows, issues, info.Username, info.Environment, true)
 		}
 	}
-	if len(out.Rows) > out.Limit {
-		return trading.HistoryPage{}, errors.New("More than 100 open platform trades match these charts; trade-level refresh is unavailable")
+	identities := make([]string, 0, len(latest))
+	for key := range latest {
+		identities = append(identities, key)
+	}
+	sort.Strings(identities)
+	for _, key := range identities {
+		out.Rows = append(out.Rows, latest[key])
 	}
 	out.Total = len(out.Rows)
 	return out, nil

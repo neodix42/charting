@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,7 +189,7 @@ func TestChartTradeCandidatesRequireMatchingSourceMarketAccountAndEnvironment(t 
 		write("hyperliquid-orders", id, map[string]any{"preview": hyperliquid.Preview{ID: id, AccountAddress: tc.account, Network: tc.network, ValuationTime: 1000, Request: hyperliquid.OrderRequest{Instrument: tc.symbol, Market: tc.market, Side: "buy", Quantity: "1"}}, "result": hyperliquid.OrderResult{Status: "filled", FilledQuantity: "1", AveragePrice: "61000", OrderIDs: []int64{101}}})
 	}
 	duka := strings.Repeat("f", 32)
-	write("dukascopy-trade-claims", duka, map[string]any{"id": duka, "createdAt": 1000, "environment": "demo", "status": "claimed", "request": jforex.TradeRequest{Instrument: "EURUSD", Side: "buy", Quantity: 1000}})
+	write("dukascopy-trade-claims", duka, map[string]any{"id": duka, "createdAt": 1000, "environment": "demo", "status": "claimed", "request": jforex.TradeRequest{Instrument: "EURUSD", Side: "buy", Quantity: 1000}, "result": jforex.TradeResult{Status: "filled", FilledQuantity: 1000, EntryPrice: 1.1, OrderID: "D-101"}})
 	keys := []domain.FeedKey{{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1h"}, {Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1d"}, {Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"}, {Exchange: "binance", Market: "spot", Instrument: "BTCUSDT", Timeframe: "1h"}}
 	page, err := a.GetChartTrades(keys)
 	if err != nil || len(page.Rows) != 2 || len(page.Errors) != 0 {
@@ -208,5 +209,106 @@ func TestChartTradeCandidatesRequireMatchingSourceMarketAccountAndEnvironment(t 
 	}
 	if _, err = a.GetChartTrades([]domain.FeedKey{{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "nonsense"}}); err == nil {
 		t.Fatal("invalid chart identity accepted")
+	}
+}
+
+func TestChartTradesRestoreNewestConfirmedOpeningIncludingClosedAndImmediateFills(t *testing.T) {
+	profile := t.TempDir()
+	a := &App{hyperliquid: hyperliquid.NewStore(profile), jforex: jforex.New(profile)}
+	defer a.jforex.Close()
+	account := "0x" + strings.Repeat("1", 40)
+	if _, err := a.hyperliquid.Configure(hyperliquid.Settings{AccountAddress: account, Network: "testnet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.jforex.Configure(jforex.Settings{Username: "local-position-user", Password: "offline-password", Environment: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	before := map[string][]byte{}
+	write := func(folder, id string, value any) {
+		t.Helper()
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(profile, folder, id+".json")
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, encoded, 0600); err != nil {
+			t.Fatal(err)
+		}
+		before[path] = encoded
+	}
+	hyper := func(n int, status string, submitted, opened int64, qty, entry, address, network, symbol string) string {
+		id := fmt.Sprintf("%032x", n)
+		p := hyperliquid.Preview{ID: id, AccountAddress: address, Network: network, ValuationTime: submitted, Request: hyperliquid.OrderRequest{Market: "perpetual", Instrument: symbol, Side: "buy", Quantity: "100"}}
+		r := trading.Trade{ID: "hyperliquid:" + id, Provider: "hyperliquid", Environment: network, Account: address, Instrument: symbol, Market: "perpetual", SubmittedAt: submitted, OpenDate: opened, Size: qty, EntryPrice: entry, Direction: "long", OrderID: fmt.Sprint(n), Status: status, StopLoss: "60000", TakeProfit: "62000"}
+		if status == "closed" {
+			r.CloseDate = opened + 10
+			r.RemainingSize = "0"
+		} else {
+			r.RemainingSize = qty
+		}
+		write("hyperliquid-orders", id, map[string]any{"preview": p, "history": r})
+		return r.ID
+	}
+	// A large number of old orders must not exceed an open-order refresh cap;
+	// only the latest actual opening is needed for each of the at-most-nine feeds.
+	for n := 1; n <= 120; n++ {
+		hyper(n, "open", int64(n), int64(n), "1", "61000", account, "testnet", "BTC")
+	}
+	closedID := hyper(121, "closed", 1000, 2000, "58.8", "61001", account, "testnet", "BTC")
+	hyper(122, "unconfirmed", 9000, 0, "", "", account, "testnet", "BTC")
+	hyper(123, "open", 9000, 9000, "1", "61000", "0x"+strings.Repeat("2", 40), "testnet", "BTC")
+	hyper(124, "open", 9000, 9000, "1", "61000", account, "mainnet", "BTC")
+	hyper(125, "open", 9000, 9000, "1", "61000", account, "testnet", "xyz:BTC")
+	hyper(126, "open", 9000, 9000, "0", "61000", account, "testnet", "BTC")
+	hyper(127, "open", 9000, 9000, "1", "NaN", account, "testnet", "BTC")
+	hyper(128, "rejected", 9000, 9000, "1", "61000", account, "testnet", "BTC")
+
+	broker := func(n int, status, acct, environment string, submitted, opened int64, qty, entry string) string {
+		id := fmt.Sprintf("%032x", n)
+		r := trading.Trade{ID: "dukascopy:" + id, Provider: "dukascopy", Account: acct, Environment: environment, Instrument: "EURUSD", Market: "jforex", SubmittedAt: submitted, OpenDate: opened, Size: qty, EntryPrice: entry, Direction: "long", OrderID: fmt.Sprint(n), Status: status, StopLoss: "1.09", TakeProfit: "1.12"}
+		if status == "closed" {
+			r.CloseDate, r.RemainingSize = opened+10, "0"
+		} else {
+			r.RemainingSize = qty
+		}
+		write("dukascopy-trade-claims", id, map[string]any{"id": id, "createdAt": submitted, "account": acct, "environment": environment, "status": "claimed", "request": jforex.TradeRequest{Instrument: "EURUSD", Side: "buy", Quantity: 1000}, "history": r})
+		return r.ID
+	}
+	broker(1, "open", "", "demo", 1000, 1100, "1000", "1.1")
+	brokerID := broker(2, "closed", "", "demo", 2000, 2100, "1000", "1.11")
+	broker(3, "unconfirmed", "", "demo", 9000, 0, "", "")
+	broker(4, "open", "other-account", "demo", 9000, 9000, "1000", "1.1")
+	broker(5, "open", "", "live", 9000, 9000, "1000", "1.1")
+	keys := []domain.FeedKey{{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1h"}, {Exchange: "dukascopy", Market: "forex", Instrument: "EURUSD", Timeframe: "1h"}}
+	assertRows := func(hyperID string) {
+		t.Helper()
+		page, err := a.GetChartTrades(keys)
+		if err != nil || len(page.Rows) != 2 || page.Total != 2 || page.Limit != 9 || len(page.Errors) > 0 {
+			t.Fatal(page, err)
+		}
+		found := map[string]bool{}
+		for _, row := range page.Rows {
+			found[row.ID] = true
+		}
+		if !found[hyperID] || !found[brokerID] {
+			t.Fatal("wrong latest opening restored", found)
+		}
+	}
+	assertRows(closedID)
+	// A confirmed submission has actual fill data before the first exchange
+	// history refresh supplies OpenDate; restore it from SubmittedAt immediately.
+	immediateID := hyper(129, "open", 3000, 0, "2", "61002", account, "testnet", "BTC")
+	assertRows(immediateID)
+	// Equal timestamps use a stable identity tie-break independent of file order.
+	tiedID := hyper(130, "open", 3000, 0, "3", "61003", account, "testnet", "BTC")
+	assertRows(tiedID)
+	for path, original := range before {
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(original, after) {
+			t.Fatal("restoring chart levels rewrote the original trade journal", path, err)
+		}
 	}
 }
