@@ -1,5 +1,5 @@
 import {intervalSeconds,type Candle,type IndicatorConfig,type Interval} from '../../types';
-import {calendarRange,calendarRangeOffset,isCalendarRange,isIntradayPeriod,type CalendarRangeType} from '../../../../screener-runtime/calendar-ranges.mjs';
+import {calendarRange,calendarRangeField,calendarRangeOffset,isCalendarRange,isIntradayPeriod,type CalendarRangeType} from '../../../../screener-runtime/calendar-ranges.mjs';
 
 export interface IndicatorPoint {time:number;value:number}
 export interface CloudPoint {time:number;a:number;b:number}
@@ -30,7 +30,7 @@ export function indicatorHistoryLimit(configs:readonly IndicatorConfig[],timefra
 
 export function calendarRangeValues(bars:readonly Candle[],type:CalendarRangeType,timeframe:Interval):IndicatorPoint[]{
  if(!isIntradayPeriod(timeframe))return [];
- const next=calendarRange(type),field=type.endsWith('_low')?'low':'high',result:IndicatorPoint[]=[];
+ const next=calendarRange(type),field=calendarRangeField(type),result:IndicatorPoint[]=[];
  for(const bar of bars){const value=next(bar.time*1000,Number(bar[field]));if(value!==undefined)result.push({time:bar.time,value});}
  return result;
 }

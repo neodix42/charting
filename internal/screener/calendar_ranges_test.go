@@ -15,7 +15,7 @@ import (
 	"cryptodesk/internal/domain"
 )
 
-var calendarRangeIDs = []string{"today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high", "two_days_ago_low", "two_days_ago_high", "three_days_ago_low", "three_days_ago_high"}
+var calendarRangeIDs = []string{"today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high", "two_days_ago_low", "two_days_ago_high", "three_days_ago_low", "three_days_ago_high", "today_open", "today_close", "previous_day_open", "previous_day_close", "two_days_ago_open", "two_days_ago_close", "three_days_ago_open", "three_days_ago_close", "week_open", "week_close", "previous_week_open", "previous_week_close"}
 
 func TestDayWeekRangeCatalogAndScope(t *testing.T) {
 	m := &Manager{}
@@ -159,5 +159,41 @@ func TestPublicAlertDayWeekRangeWarmupAndEnrichment(t *testing.T) {
 	encoded, _ := json.Marshal(plans)
 	if !strings.Contains(string(encoded), "20162") {
 		t.Fatal("warmup plan lost")
+	}
+}
+
+func TestDayWeekOpenCloseEnrichmentFeedsAnalysisAndSavedRules(t *testing.T) {
+	m := sourceEnrichmentManager(t, false)
+	const name = "eurusd-h1-2024-01-01-2024-01-09.csv"
+	const source = "timestamp,open,high,low,close,volume\n1704067200000,100,120,80,110,1\n1704150000000,111,200,70,150,1\n1704153600000,160,180,90,140,1\n1704236400000,141,210,60,170,1\n1704240000000,180,220,50,190,1\n1704672000000,200,240,40,210,1\n"
+	writeDataFile(t, m, name, source)
+	if info, err := m.StartEnrichment(EnrichmentRequest{Group: "Day / Week ranges", Period: "h1"}); err != nil || info.Total != 1 {
+		t.Fatal(info, err)
+	}
+	enriched := waitEnrichment(t, m, []string{dataFileID(m.directory, name)})
+	if enriched.Completed != 1 || enriched.Failed != 0 {
+		t.Fatal(enriched)
+	}
+	condition := analysisCondition("above", analysisField("today_close"), analysisField("previous_day_close"))
+	request := AnalysisRequest{Period: "h1", Conditions: []AnalysisCondition{condition}}
+	if _, err := m.StartAnalysis(request); err != nil {
+		t.Fatal(err)
+	}
+	info := waitAnalysis(t, m)
+	if info.TotalMatches != 3 || info.Failed != 0 {
+		t.Fatal(info)
+	}
+	result := resultNamed(t, info, name)
+	chart, err := m.AnalysisChart(result.ID, 0, 0, 0)
+	if err != nil || chart.MatchIndex != 3 {
+		t.Fatal(chart, err)
+	}
+	values := chart.Bars[0].Values
+	if values["today_open"] != 160 || values["today_close"] != 170 || values["previous_day_open"] != 100 || values["previous_day_close"] != 150 || values["week_open"] != 100 || values["week_close"] != 170 {
+		t.Fatalf("OHLC range mapping lost actual fields: %+v", values)
+	}
+	saved, err := m.SaveAnalysisCondition("Observed close above previous day close", request)
+	if err != nil || saved.Request.Conditions[0].Left.Field != "today_close" || saved.Request.Conditions[0].Right.Field != "previous_day_close" {
+		t.Fatal(saved, err)
 	}
 }

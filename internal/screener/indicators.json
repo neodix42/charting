@@ -867,6 +867,114 @@
       "parameters": [],
       "intradayOnly": true,
       "note": "High of the single completed UTC day three available days ago; not a rolling 72-hour range. Intraday candle periods only."
+    },
+    {
+      "id": "today_open",
+      "name": "Today's open",
+      "category": "Day / Week ranges",
+      "input": "open",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "today_close",
+      "name": "Today's close",
+      "category": "Day / Week ranges",
+      "input": "close",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "previous_day_open",
+      "name": "Previous day open",
+      "category": "Day / Week ranges",
+      "input": "open",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "previous_day_close",
+      "name": "Previous day close",
+      "category": "Day / Week ranges",
+      "input": "close",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "two_days_ago_open",
+      "name": "2 days ago open",
+      "category": "Day / Week ranges",
+      "input": "open",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "two_days_ago_close",
+      "name": "2 days ago close",
+      "category": "Day / Week ranges",
+      "input": "close",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "three_days_ago_open",
+      "name": "3 days ago open",
+      "category": "Day / Week ranges",
+      "input": "open",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "three_days_ago_close",
+      "name": "3 days ago close",
+      "category": "Day / Week ranges",
+      "input": "close",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "week_open",
+      "name": "Week's open",
+      "category": "Day / Week ranges",
+      "input": "open",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "week_close",
+      "name": "Week's close",
+      "category": "Day / Week ranges",
+      "input": "close",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "previous_week_open",
+      "name": "Previous Week open",
+      "category": "Day / Week ranges",
+      "input": "open",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
+    },
+    {
+      "id": "previous_week_close",
+      "name": "Previous Week close",
+      "category": "Day / Week ranges",
+      "input": "close",
+      "parameters": [],
+      "intradayOnly": true,
+      "note": "Intraday candles only. UTC days and Monday-start weeks. Open uses the first candle open; close uses the latest observed candle close. Previous periods use the preceding available completed period; empty periods are skipped and incomplete leading history stays blank."
     }
   ]
 }

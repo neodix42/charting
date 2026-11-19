@@ -975,7 +975,19 @@
                 "two_days_ago_low",
                 "two_days_ago_high",
                 "three_days_ago_low",
-                "three_days_ago_high"
+                "three_days_ago_high",
+                "today_open",
+                "today_close",
+                "previous_day_open",
+                "previous_day_close",
+                "two_days_ago_open",
+                "two_days_ago_close",
+                "three_days_ago_open",
+                "three_days_ago_close",
+                "week_open",
+                "week_close",
+                "previous_week_open",
+                "previous_week_close"
               ]
             },
             "parameters": {

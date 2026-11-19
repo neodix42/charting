@@ -9,7 +9,7 @@ const file=(id:string,timeframe:string,dataSource:'dukascopy'|'hyperliquid'='duk
 const control=(page:Page,name:string)=>page.getByLabel(name,{exact:true});
 async function screener(page:Page,tab:string){await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:tab,exact:true}).click();}
 
-test('Enrichment offers all twelve parameterless UTC ranges only below D1 and All periods targets only intraday candles',async({page})=>{
+test('Enrichment offers all twenty-four parameterless UTC ranges only below D1 and All periods targets only intraday candles',async({page})=>{
  await openTestApp(page);await page.evaluate(files=>(window as any).__testSetEnrichmentFiles(files),[file('eurusd','h1'),file('btcusd','m5'),file('eurusd','d1'),file('eurusd','w1'),file('eurusd','mn1'),file('eurusd','tick'),{...file('custom',''),name:'custom.csv'},file('btc','d1','hyperliquid')]);
  await screener(page,'Enrichment');const indicator=control(page,'Enrichment indicator'),period=control(page,'Enrichment period');
  await expect(indicator.locator('optgroup[label="Day / Week ranges"] option')).toHaveText(['All Day / Week ranges indicators',...names]);
@@ -42,27 +42,31 @@ test('Analysis compares Today and Previous day fields on hourly files, reports m
  expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toMatchObject({period:'h1',conditions:[{operator:'below',left:{field:'today_low',timeframe:'same'},right:{field:'previous_day_low',timeframe:'same'}}]});
 });
 
-test('all twelve chart overlays configure without a lookback, persist, suspend on D1/W1 and keep the existing feed lease',async({page})=>{
+for(const family of ['extrema','open/close']){
+ const entries=Object.entries(calendarRangeNames).filter(([id])=>family==='extrema'?/_(low|high)$/.test(id):/_(open|close)$/.test(id));
+ test(`all twelve ${family} chart overlays configure, persist and suspend on D1/W1 without another feed lease`,async({page})=>{
+ const ids=entries.map(([id])=>id),firstName=entries[0][1];
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await openTestApp(page);
- const chart=page.getByTestId('chart-cell');await expect(chart.getByLabel('OHLCV')).toContainText('C');const attachments=await page.evaluate(()=>(window as any).__testAttachCount());
- for(const [id,name]of Object.entries(calendarRangeNames)){
+ const chart=page.getByTestId('chart-cell');await expect(chart.getByLabel('Indicators',{exact:true}).locator('optgroup[label="Day / Week ranges"] option')).toHaveText(names);await expect(page.getByLabel('Indicators for current tab',{exact:true}).locator('optgroup[label="Day / Week ranges"] option')).toHaveText(names);await expect(chart.getByLabel('OHLCV')).toContainText('C');const attachments=await page.evaluate(()=>(window as any).__testAttachCount());
+ for(const [id,name]of entries){
   await chart.getByLabel('Indicators',{exact:true}).selectOption(id);const dialog=page.getByRole('dialog',{name:`${name} parameters`,exact:true});
   await expect(dialog.getByLabel('Period',{exact:true})).toHaveCount(0);await expect(dialog).toContainText('UTC');await dialog.getByRole('button',{name:'OK',exact:true}).click();
  }
- await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);await expect(page.getByRole('button',{name:'All changes saved'})).toBeVisible();
+ await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);await expect(chart.getByLabel('Indicators',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'All changes saved'})).toBeVisible();
  const saved=await page.evaluate(()=>(window as any).__testWorkspace().tabs[0].charts[0].indicators);expect(saved.map((item:any)=>item.type)).toEqual(ids);expect(saved.every((item:any)=>Object.keys(item.parameters).length===0)).toBe(true);
  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
  await reloadTestApp(page);await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);
- await chart.getByRole('button',{name:"Edit Today's low",exact:true}).click();let dialog=page.getByRole('dialog',{name:"Today's low parameters",exact:true});await dialog.getByLabel('Indicator color',{exact:true}).fill('#123456');await dialog.getByRole('button',{name:'OK',exact:true}).click();
+ await chart.getByRole('button',{name:`Edit ${firstName}`,exact:true}).click();let dialog=page.getByRole('dialog',{name:`${firstName} parameters`,exact:true});await dialog.getByLabel('Indicator color',{exact:true}).fill('#123456');await dialog.getByRole('button',{name:'OK',exact:true}).click();
  for(const timeframe of ['1d','1w']){
   await chart.getByRole('button',{name:`Timeframe ${timeframe}`,exact:true}).click();
   for(const id of ids)await expect(chart.getByLabel('Indicators',{exact:true}).locator(`option[value="${id}"]`)).toBeDisabled();
   await expect(chart.locator('.indicator-chip .indicator-warmup')).toHaveText(Array(ids.length).fill(' · intraday only'));
  }
  await chart.getByRole('button',{name:'Timeframe 1h',exact:true}).click();for(const id of ids)await expect(chart.getByLabel('Indicators',{exact:true}).locator(`option[value="${id}"]`)).toBeEnabled();
- await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);await chart.getByRole('button',{name:"Remove Today's low",exact:true}).click();await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length-1);
+ await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length);await chart.getByRole('button',{name:`Remove ${firstName}`,exact:true}).click();await expect(chart.locator('.indicator-chip')).toHaveCount(ids.length-1);
  expect(errors).toEqual([]);
 });
+}
 
 test('previous-week overlays can load a bounded full two weeks of minute bars without another market subscription',async({page})=>{
  await openTestApp(page);const chart=page.getByTestId('chart-cell');await chart.getByRole('button',{name:'Timeframe 1m',exact:true}).click();await expect(chart.getByLabel('OHLCV')).toContainText('C');
@@ -76,4 +80,17 @@ test('previous-week overlays can load a bounded full two weeks of minute bars wi
  await expect(chart.locator('.indicator-warmup')).toHaveCount(0,{timeout:30000});
  const requests=await page.evaluate(()=>(window as any).__calendarHistory);expect(requests.length).toBeGreaterThan(10);expect(requests.length).toBeLessThanOrEqual(21);expect(requests.every((request:any)=>request.maxBars===1000&&(request.to-request.from)<=60000)).toBe(true);
  expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
+});
+
+test('the Day / Week ranges tab category applies open/close overlays to every chart and respects mixed periods',async({page})=>{
+ await openTestApp(page);await page.getByRole('button',{name:'Add chart',exact:true}).click();const charts=page.getByTestId('chart-cell');await expect(charts).toHaveCount(2);
+ const attachments=await page.evaluate(()=>(window as any).__testAttachCount()),picker=page.getByLabel('Indicators for current tab',{exact:true});
+ for(const [id,name] of [['today_open',"Today's open"],['today_close',"Today's close"]]){
+  await picker.selectOption(id);const dialog=page.getByRole('dialog',{name:`${name} parameters`,exact:true});await expect(dialog).toContainText('Applies to all 2 charts');await expect(dialog.getByLabel('Period',{exact:true})).toHaveCount(0);await dialog.getByRole('button',{name:'OK',exact:true}).click();
+ }
+ await expect(charts.first().locator('.indicator-chip')).toHaveCount(2);await expect(charts.last().locator('.indicator-chip')).toHaveCount(2);await expect(page.getByRole('button',{name:'All changes saved',exact:true})).toBeVisible();
+ const configs=await page.evaluate(()=>(window as any).__testWorkspace().tabs[0].charts.map((chart:any)=>chart.indicators));
+ expect(configs.map((items:any[])=>items.map(item=>item.type))).toEqual([['today_open','today_close'],['today_open','today_close']]);expect(new Set(configs.flat().map((item:any)=>item.id)).size).toBe(4);
+ expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(attachments);
+ await charts.first().getByRole('button',{name:'Timeframe 1d',exact:true}).click();await expect(picker.locator('option[value="previous_week_close"]')).toBeDisabled();await expect(charts.last().getByLabel('Indicators',{exact:true}).locator('option[value="previous_week_close"]')).toBeEnabled();
 });

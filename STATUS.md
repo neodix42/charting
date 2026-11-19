@@ -1,4 +1,13 @@
-# Implementation status — updated 2026-11-18
+# Implementation status — updated 2026-11-19
+
+## Day / Week open and close indicators — 2026-11-19
+
+Add all twelve requested parameterless chart/CSV fields: today_open/close, previous_day_open/close, two_days_ago_open/close, three_days_ago_open/close, week_open/close and previous_week_open/close. Both chart pickers now group all 24 calendar indicators under Day / Week ranges; Screener Enrichment and Analysis use the same group and labels. Current open holds the first observed candle open, current close follows the latest observed close including a live bar, and previous values come from completed available periods. UTC midnight/Monday boundaries, skipped empty market periods, partial leading history, no-future-data rules and the 12-indicator chart cap remain. Rendering/warm-up/history limits use the shared calculator and input selector. Workspace schema/domain validation and SQLite restart/export support the new IDs without changing existing IDs or saved parameters.
+
+Verification passed: frontend typecheck/lint and all 292 unit tests; all 111 Screener runtime tests; final 23 Playwright calendar-range, Hyperliquid H1 group, tab-control and indicator cases; domain/storage race tests; full Screener race suite (116.095s, `.tools/verification/open-close-ranges-screener-race.log`); binding-root and native production-root race tests; and vet for affected Go packages. Coverage includes distinct OHLC inputs, current-close revisions, previous day/week offsets with gaps, incomplete prefixes, causal replay, group/individual enrichment, Analysis/saved-rule use, public-alert recipe/warm-up handling, chart/tab controls, color editing, D1/W1 suspension, bounded history, no extra market leases, schema validation and SQLite save/restart/export. Initial count assertions were updated from 56 to 68 catalog entries and from 12 to 24 calendar choices; a new UI persistence assertion now waits for the real save acknowledgment, and an older H1 Downloader test follows the established current-date To default.
+
+Production packaging uses `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`, with the outcome in `.tools/verification/open-close-ranges-build.log`. Actual desktop/live rollover checks remain unrun. No user profile, broker orders, system installs or global configuration changes were used.
+
 
 ## Retain the last chart trade levels — 2026-11-18
 

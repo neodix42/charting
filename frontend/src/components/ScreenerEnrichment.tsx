@@ -6,7 +6,7 @@ import './ScreenerRefresh.css';
 import {isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 
 const pageSize=5;
-const requirements={low:'low',high:'high',price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume',timestamp:'timestamp (UTC); no price fields required'};
+const requirements={low:'low',high:'high',open:'open',close:'close',price:'close, bidPrice or askPrice',hl:'high, low',hlc:'high, low, close',hlcv:'high, low, close, volume',ohlcv:'open, high, low, close, volume',timestamp:'timestamp (UTC); no price fields required'};
 function size(bytes:number){return bytes<1024?`${bytes} B`:bytes<1024*1024?`${(bytes/1024).toFixed(1)} KiB`:`${(bytes/1024/1024).toFixed(1)} MiB`;}
 function terminalCount(info:{completed:number;failed:number;cancelled:number}){return info.completed+info.failed+info.cancelled;}
 function renamedJobs(jobs:{id:string;fileId:string}[],ids:string[],seen:Set<string>){

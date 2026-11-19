@@ -8,7 +8,7 @@ const fields=['timestamp','open','high','low','close','volume'];
 const file=(id:string,timeframe:string,dataSource:'hyperliquid'|'dukascopy'='hyperliquid'):ScreenerDataFile=>({id,name:`${dataSource}_${id}-${timeframe}-2024-01-01-2024-02-01.csv`,symbol:id,timeframe,dataSource,fields:[...fields],bytes:1000});
 async function screen(page:Page,tab:string){await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:tab,exact:true}).click();}
 
-test('Hyperliquid H1 downloads retain the selected dates/timeframe and queue only native hourly jobs',async({page})=>{
+test('Hyperliquid H1 downloads retain From/timeframe, default To to today and queue only native hourly jobs',async({page})=>{
  await openTestApp(page);await screen(page,'Downloader');await control(page,'Download data source').selectOption('hyperliquid');
  await expect(control(page,'Download timeframe').locator('option')).toHaveText(['h1','d1','w1']);await control(page,'Download timeframe').selectOption('h1');
  await control(page,'Download from date').fill('2000-01-01');await control(page,'Download to date').fill('2026-11-09');
@@ -16,16 +16,16 @@ test('Hyperliquid H1 downloads retain the selected dates/timeframe and queue onl
  await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('cryptodesk-explicit-test-screener-view')||'null').timeframe)).toBe('h1');
  await reloadTestApp(page);await screen(page,'Downloader');await expect(control(page,'Download data source')).toHaveValue('hyperliquid');await expect(control(page,'Download timeframe')).toHaveValue('h1');
  await page.getByRole('button',{name:'Download 3 symbols',exact:true}).click();
- expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toMatchObject({dataSource:'hyperliquid',timeframe:'h1',from:'2000-01-01',to:'2026-11-09'});
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toMatchObject({dataSource:'hyperliquid',timeframe:'h1',from:'2000-01-01',to:new Date().toISOString().slice(0,10)});
  await expect(page.locator('.screener-job')).toHaveCount(3);await expect(page.locator('.screener-job-title>span:first-of-type')).toHaveText(['h1','h1','h1']);
  await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
 });
 
-test('a Hyperliquid H1 range group submits one operation for all twelve indicators and exposes the resulting Analysis fields',async({page})=>{
+test('a Hyperliquid H1 range group submits one operation for all twenty-four indicators and exposes the resulting Analysis fields',async({page})=>{
  await openTestApp(page);await page.evaluate(files=>{(window as any).__testSetEnrichmentFiles(files);(window as any).__testSetAnalysisView({...((window as any).__testAnalysisView()),profitabilityFilter:0});},[file('btc','h1'),file('hype','h1'),file('btc-daily','d1'),file('eurusd','h1','dukascopy')]);
  await screen(page,'Enrichment');await control(page,'Enrichment data source').selectOption('hyperliquid');await expect(control(page,'Enrichment period').locator('option')).toHaveText(['All periods','h1','d1','w1']);
  await control(page,'Enrichment period').selectOption('h1');await control(page,'Enrichment indicator').selectOption('group:Day / Week ranges');
- await expect(control(page,'Period')).toHaveCount(0);await expect(control(page,'Enrichment price source')).toBeDisabled();await expect(page.locator('.enrichment-help')).toContainText('Adds all 12 indicators');
+ await expect(control(page,'Period')).toHaveCount(0);await expect(control(page,'Enrichment price source')).toBeDisabled();await expect(page.locator('.enrichment-help')).toContainText('Adds all 24 indicators');
  for(const name of Object.values(calendarRangeNames))await expect(page.locator('.enrichment-help')).toContainText(name);
  await page.getByRole('button',{name:'Enrich 2 files',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).__testEnrichmentRequest())).toEqual({dataSource:'hyperliquid',indicator:'',group:'Day / Week ranges',parameters:{},source:'auto',period:'h1'});

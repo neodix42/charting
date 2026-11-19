@@ -32,7 +32,7 @@ function validate(request) {
   if ('fast' in parameters && parameters.fast >= parameters.slow) throw new Error('Fast period must be smaller than slow period.');
   let source = request.source || 'auto';
   if (!['auto', 'close', 'open', 'high', 'low', 'bidprice', 'askprice'].includes(source)) throw new Error('Unsupported price source.');
-  if(['timestamp','low','high'].includes(definition.input))source='auto';
+  if(['timestamp','open','close','low','high'].includes(definition.input))source='auto';
   return {definition, parameters, source};
 }
 

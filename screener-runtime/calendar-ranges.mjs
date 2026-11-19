@@ -13,14 +13,30 @@ export const calendarRangeNames = Object.freeze({
   two_days_ago_high: '2 days ago high',
   three_days_ago_low: '3 days ago low',
   three_days_ago_high: '3 days ago high',
+  today_open: "Today's open",
+  today_close: "Today's close",
+  previous_day_open: 'Previous day open',
+  previous_day_close: 'Previous day close',
+  two_days_ago_open: '2 days ago open',
+  two_days_ago_close: '2 days ago close',
+  three_days_ago_open: '3 days ago open',
+  three_days_ago_close: '3 days ago close',
+  week_open: "Week's open",
+  week_close: "Week's close",
+  previous_week_open: 'Previous Week open',
+  previous_week_close: 'Previous Week close',
 });
 export const isCalendarRange = id => Object.hasOwn(calendarRangeNames, id);
 export const isIntradayPeriod = period => ['s1','m1','m5','m15','m30','h1','h4','1m','5m','15m','1h','4h'].includes(period);
+export const calendarRangeField = id => {
+  if (!isCalendarRange(id)) throw Error('Unsupported day/week range.');
+  return id.slice(id.lastIndexOf('_') + 1);
+};
 export const calendarRangeOffset = id => id.startsWith('three_days_ago_') ? 3 : id.startsWith('two_days_ago_') ? 2 : id.startsWith('previous_') ? 1 : 0;
 
 export function calendarRange(id, coveredFrom) {
   if (!isCalendarRange(id)) throw Error('Unsupported day/week range.');
-  const weekly = id.includes('week'), offset = calendarRangeOffset(id), lowest = id.endsWith('_low');
+  const weekly = id.includes('week'), offset = calendarRangeOffset(id), field = calendarRangeField(id);
   const duration = (weekly ? 7 : 1) * 86400000, origin = weekly ? -3 * 86400000 : 0; // Monday before the Unix epoch.
   let bucket, current, complete = false, last = -Infinity;
   const previous = [];
@@ -33,7 +49,9 @@ export function calendarRange(id, coveredFrom) {
       if(bucket!==undefined&&offset){previous.unshift(complete?current:undefined);previous.length=Math.min(previous.length,offset);}
       current = value; bucket = next;
       complete = next * duration + origin >= coveredFrom;
-    } else current = lowest ? Math.min(current, value) : Math.max(current, value);
+    } else if(field==='low') current=Math.min(current,value);
+    else if(field==='high') current=Math.max(current,value);
+    else if(field==='close') current=value;
     last = timestamp;
     return offset ? previous[offset-1] : complete ? current : undefined;
   };

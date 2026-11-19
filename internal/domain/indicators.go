@@ -34,7 +34,8 @@ func validateIndicator(i Indicator) error {
 		names = []string{"conversion", "base", "spanB", "displacement"}
 	case "macd":
 		names = []string{"fast", "slow", "signal"}
-	case "today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high", "two_days_ago_low", "two_days_ago_high", "three_days_ago_low", "three_days_ago_high":
+	case "today_low", "today_high", "previous_day_low", "previous_day_high", "week_low", "week_high", "previous_week_low", "previous_week_high", "two_days_ago_low", "two_days_ago_high", "three_days_ago_low", "three_days_ago_high",
+		"today_open", "today_close", "previous_day_open", "previous_day_close", "two_days_ago_open", "two_days_ago_close", "three_days_ago_open", "three_days_ago_close", "week_open", "week_close", "previous_week_open", "previous_week_close":
 		// UTC calendar ranges have no configurable row period. Configurations
 		// survive timeframe changes; rendering is suspended on D1/W1 charts.
 	default:

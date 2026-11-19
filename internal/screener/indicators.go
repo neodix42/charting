@@ -115,7 +115,7 @@ func (m *Manager) validateEnrichment(request EnrichmentRequest) (EnrichmentReque
 	default:
 		return request, errors.New("unsupported price source")
 	}
-	if indicator.Input == "timestamp" || indicator.Input == "low" || indicator.Input == "high" {
+	if indicator.Input == "timestamp" || indicator.Input == "open" || indicator.Input == "close" || indicator.Input == "low" || indicator.Input == "high" {
 		request.Source = "auto"
 	}
 	parameters := make(map[string]float64, len(indicator.Parameters))

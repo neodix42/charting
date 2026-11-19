@@ -21,6 +21,24 @@ describe('calendar range chart calculations',()=>{
   expect(calendarRangeValues(revised,'previous_week_high','1h').at(-1)!.value).toBe(20);
   expect(bars).toEqual(copy);
  });
+ it('uses the first candle open and latest observed close for day/week ranges and completed available periods',()=>{
+  const times=['2024-01-01T00:00Z','2024-01-01T23:00Z','2024-01-02T00:00Z','2024-01-03T00:00Z','2024-01-05T16:00Z','2024-01-08T00:00Z'];
+  const opens=[10,12,20,30,40,50],closes=[11,14,21,31,41,51];
+  const bars=times.map((time,index)=>({...bar(time,opens[index]-2,closes[index]+3),open:opens[index],close:closes[index]}));
+  bars[5].closed=false;
+  const values=(type:CalendarRangeType)=>calendarRangeValues(bars,type,'1h').map(point=>point.value);
+  expect(values('today_open')).toEqual([10,10,20,30,40,50]);expect(values('today_close')).toEqual(closes);
+  expect(values('previous_day_open')).toEqual([10,20,30,40]);expect(values('previous_day_close')).toEqual([14,21,31,41]);
+  expect(values('two_days_ago_open')).toEqual([10,20,30]);expect(values('two_days_ago_close')).toEqual([14,21,31]);
+  expect(values('three_days_ago_open')).toEqual([10,20]);expect(values('three_days_ago_close')).toEqual([14,21]);
+  expect(values('week_open')).toEqual([10,10,10,10,10,50]);expect(values('week_close')).toEqual(closes);
+  expect(values('previous_week_open')).toEqual([10]);expect(values('previous_week_close')).toEqual([41]);
+  const before=structuredClone(bars),revised=[...bars.slice(0,-1),{...bars[5],close:52,high:55}];
+  expect(calendarRangeValues(revised,'today_open','1h').at(-1)!.value).toBe(50);
+  expect(calendarRangeValues(revised,'today_close','1h').at(-1)!.value).toBe(52);
+  expect(calendarRangeValues(revised,'week_close','1h').at(-1)!.value).toBe(52);
+  expect(calendarRangeValues(revised,'previous_week_close','1h').at(-1)!.value).toBe(41);expect(bars).toEqual(before);
+ });
  it('keeps incomplete first periods blank and never uses later rows in earlier ranges',()=>{
   const bars=[bar('2024-01-01T12:00Z',6,10),bar('2024-01-02T00:00Z',5,12),bar('2024-01-03T00:00Z',4,13),bar('2024-01-08T00:00Z',3,14),bar('2024-01-15T00:00Z',2,15)];
   expect(calendarRangeValues(bars,'today_low','1h')[0]).toEqual({time:bars[1].time,value:5});
@@ -44,6 +62,8 @@ describe('calendar range chart calculations',()=>{
  it('bounds ordinary chart history at 10,000 and loads enough minute bars for complete day/week boundaries',()=>{
   expect(indicatorHistoryLimit([],'1m')).toBe(10000);
   expect(indicatorWarmupBars(config('today_low'),'1m')).toBe(1441);
+  expect(indicatorWarmupBars(config('today_open'),'1m')).toBe(1441);
+  expect(indicatorHistoryLimit([config('previous_week_close')],'1m')).toBe(20161);
   expect(indicatorWarmupBars(config('previous_day_low'),'1m')).toBe(2881);
   expect(indicatorWarmupBars(config('two_days_ago_low'),'1m')).toBe(4321);
   expect(indicatorWarmupBars(config('three_days_ago_high'),'1m')).toBe(5761);

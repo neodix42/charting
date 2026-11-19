@@ -19,6 +19,12 @@ const expected={
  previous_week_low:['','','','','','5','5','5','4'],previous_week_high:['','','','','','20','20','20','25'],
  two_days_ago_low:['','','','','6','5','5','7','4'],two_days_ago_high:['','','','','15','20','20','19','25'],
  three_days_ago_low:['','','','','','6','6','5','7'],three_days_ago_high:['','','','','','15','15','20','19'],
+ today_open:['10','10','10','10','13','14','14','8','8'],today_close:['10','10.5','10','12.5','13','14','14.5','8','8'],
+ previous_day_open:['','','10','10','10','13','13','14','8'],previous_day_close:['','','10.5','10.5','12.5','13','13','14.5','8'],
+ two_days_ago_open:['','','','','10','10','10','13','14'],two_days_ago_close:['','','','','10.5','12.5','12.5','13','14.5'],
+ three_days_ago_open:['','','','','','10','10','10','13'],three_days_ago_close:['','','','','','10.5','10.5','12.5','13'],
+ week_open:['10','10','10','10','10','14','14','14','8'],week_close:['10','10.5','10','12.5','13','14','14.5','8','8'],
+ previous_week_open:['','','','','','10','10','10','14'],previous_week_close:['','','','','','13','13','13','8'],
 };
 const request=indicator=>({indicator,parameters:{},source:'askprice',timeframe:'h1'});
 const csv=(data=rows)=>`${headers.join(',')}\n${data.map(row=>row.join(',')).join('\n')}\n`;
@@ -45,7 +51,7 @@ test('an incomplete initial day cannot supply a two/three-days-ago range',async(
  }
 });
 
-test('all twelve ranges use UTC day/Monday week boundaries, carry the previous available period, and never leak future extrema',async()=>{
+test('all 24 ranges use UTC day/Monday week boundaries, carry the previous available period, and never leak future extrema',async()=>{
  const {calendarRangeNames}=await import('./calendar-ranges.mjs');
  assert.deepEqual(Object.keys(calendarRangeNames),Object.keys(expected));
  for(const [id,values] of Object.entries(expected)){
@@ -87,15 +93,15 @@ test('only supported intraday candle periods are accepted; prices/timestamps mus
  for(const id of Object.keys(expected)){
   for(const timeframe of ['tick','d1','w1','mn1','',undefined])await assert.rejects(calculator({...request(id),timeframe},headers),/below D1/);
   for(const timeframe of ['s1','m1','m5','m15','m30','h1','h4'])await calculator({...request(id),timeframe},headers);
-  await assert.rejects(calculator(request(id),['timestamp','close','bidprice']),/Requires timestamp/);
+  await assert.rejects(calculator(request(id),headers.filter(name=>name!==id.slice(id.lastIndexOf('_')+1))),/Requires timestamp/);
   for(const invalid of ['', 'NaN','Infinity']){
-   const calculate=await calculator(request(id),headers),bad=[...rows[0]];bad[id.endsWith('_low')?3:2]=invalid;
+   const calculate=await calculator(request(id),headers),bad=[...rows[0]];bad[headers.indexOf(id.slice(id.lastIndexOf('_')+1))]=invalid;
    assert.throws(()=>calculate.next(bad,2),/finite|candle prices/);
   }
  }
 });
 
-test('CSV publication appends/replaces exact columns and recipe recovery includes all twelve fields',async t=>{
+test('CSV publication appends/replaces exact columns and recipe recovery includes all 24 fields',async t=>{
  let {input,output}=await fixture(t);
  const original=await fs.readFile(input);
  for(const id of Object.keys(expected)){
@@ -131,4 +137,36 @@ test('extending history recovers range recipes and repairs warmup after an earli
  const actual=parse(await fs.readFile(output),{columns:true});
  assert.deepEqual(actual.map(row=>row.today_low),['8','6','9','5']);assert.deepEqual(actual.map(row=>row.previous_day_low),['','','6','6']);
  assert.equal(await fs.readFile(paths.input,'utf8'),original);
+});
+
+test('open and close ranges use actual distinct candle fields, skip empty sessions and remain causal',async t=>{
+ const data=[
+  ['2024-01-01T00:00Z',100,120,80,110],['2024-01-01T23:00Z',111,200,70,150],
+  ['2024-01-02T00:00Z',130,180,90,140],['2024-01-02T23:00Z',141,210,60,160],
+  ['2024-01-04T00:00Z',170,220,50,180],['2024-01-05T00:00Z',190,240,40,200],
+  ['2024-01-08T00:00Z',210,250,30,220],['2024-01-08T23:00Z',221,260,20,230],
+  ['2024-01-09T00:00Z',240,280,10,250],['2024-01-15T00:00Z',260,290,5,270],
+ ].map(([time,...prices])=>[Date.parse(time),...prices,1].map(String));
+ const paths=await fixture(t,csv(data));
+ await enrich({...paths,group:'Day / Week ranges',source:'askprice',parameters:{},timeframe:'h1'},{emit:()=>{}});
+ const actual=parse(await fs.readFile(paths.output),{columns:true});
+ assert.equal(actual[1].today_open,'100');assert.equal(actual[1].today_close,'150');
+ assert.equal(actual[2].previous_day_open,'100');assert.equal(actual[2].previous_day_close,'150');
+ assert.equal(actual[4].two_days_ago_open,'100');assert.equal(actual[4].two_days_ago_close,'150');
+ assert.equal(actual[5].three_days_ago_open,'100');assert.equal(actual[5].three_days_ago_close,'150');
+ assert.equal(actual[6].previous_week_open,'100');assert.equal(actual[6].previous_week_close,'200');
+ assert.equal(actual[7].week_open,'210');assert.equal(actual[7].week_close,'230');
+ assert.equal(actual[9].previous_week_open,'210');assert.equal(actual[9].previous_week_close,'250');
+ const {calendarRangeField}=await import('./calendar-ranges.mjs');
+ for(const id of Object.keys(expected)){
+  assert.equal(calendarRangeField(id),id.slice(id.lastIndexOf('_')+1));
+  for(let count=1;count<=data.length;count++){
+   const calculate=await calculator(request(id),headers);
+   assert.deepEqual(data.slice(0,count).map((row,i)=>calculate.next(row,i+2)[0]),actual.slice(0,count).map(row=>row[id]),`${id} prefix ${count}`);
+  }
+ }
+ const changed=data.map(row=>[...row]);changed[7][4]='235';
+ const close=await calculator(request('week_close'),headers),open=await calculator(request('week_open'),headers);
+ const closes=changed.map((row,i)=>close.next(row,i+2)[0]),opens=changed.map((row,i)=>open.next(row,i+2)[0]);
+ assert.equal(closes[7],'235');assert.equal(opens[7],'210');assert.equal(closes[6],actual[6].week_close);
 });
