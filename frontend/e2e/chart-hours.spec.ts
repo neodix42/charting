@@ -48,22 +48,20 @@ test('Dukascopy regular hours follow the instrument and coexist with last-trade 
  expect(badge!.y).toBeLessThan(chart!.y+35);
  expect(trade!.y).toBeGreaterThanOrEqual(badge!.y+badge!.height);
  await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
- await expect(hours(page)).toContainText(/hours unavailable/i);
- await expect(hours(page)).not.toContainText('Asia/Hong_Kong');
+ await expect(hours(page)).toHaveCount(0);
  await exchange(page).selectOption('binance');
  await expect(hours(page)).toHaveCount(0);
 });
 
-test('missing or malformed Dukascopy session metadata never implies continuous trading',async({page})=>{
+test('missing or malformed Dukascopy session metadata hides the hours badge',async({page})=>{
  const invalid=item('INVALIDHKHKD','INVALID.HK/HKD',{...session,marketHoursOpen:'09:60:00'});
  await dukascopyFixtures(page,[invalid]);
  // The default EURUSD is absent from this synthetic catalog.
- await expect(hours(page)).toContainText(/hours unavailable/i);
+ await expect(hours(page)).toHaveCount(0);
  await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
- await expect(hours(page)).toContainText(/hours unavailable/i);
+ await expect(hours(page)).toHaveCount(0);
  await selectInstrument(page,'INVALID.HK/HKD CFD');
- await expect(hours(page)).toContainText(/hours unavailable/i);
- await expect(hours(page)).not.toContainText(/24.?7|09:30|16:00/);
+ await expect(hours(page)).toHaveCount(0);
 });
 
 test('instrument search preserves inside interaction and closes on Escape, chart or toolbar clicks',async({page})=>{

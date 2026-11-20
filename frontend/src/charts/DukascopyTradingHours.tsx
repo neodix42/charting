@@ -12,10 +12,10 @@ export function regularMarketHours(metadata:Instrument['providerMetadata']):stri
  return `${workingDays} · ${displayTime(open)}–${displayTime(close)} · ${zone}`;
 }
 
-export function DukascopyTradingHours({instrument,loading}:{instrument?:Instrument;loading:boolean}) {
+export function DukascopyTradingHours({instrument}:{instrument?:Instrument}) {
  const hours=regularMarketHours(instrument?.providerMetadata);
- const pending=!instrument?.providerMetadata?.marketHoursStatus&&loading;
- const text=hours?`Regular hours ${hours}`:pending?'Loading market hours…':'Regular hours unavailable';
- const hint=hours?'Regular daily session window in the market timezone. Intraday breaks, holidays and trading halts may change actual tradability.':'Dukascopy has not supplied a regular market session for this instrument.';
+ if(!hours)return null;
+ const text=`Regular hours ${hours}`;
+ const hint='Regular daily session window in the market timezone. Intraday breaks, holidays and trading halts may change actual tradability.';
  return <aside className="chart-market-hours" aria-label="Dukascopy trading hours" title={`${text}. ${hint}`}>{text}</aside>;
 }

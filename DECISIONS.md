@@ -305,3 +305,6 @@ performance results or assertions of current exchange availability.
 
 
 | D191 | 2026-11-20: display provider regular market hours and dismiss asset search outside | Add JForex Instrument.getMarketInfo() session metadata to the account-scoped persisted catalog: ISO weekdays, whole-second clocks and the original market ZoneId. Show Regular hours above Last trade details at the top-right of the plot, with explicit unavailable state and a hint about breaks, holidays and halts. Do not infer exact current tradability from this single daily window or hardcode individual markets. Keep legacy lists immediately selectable, migrate metadata once through the shared refresh and persist the upgrade even when a session is unavailable. Close every provider's chart asset picker on outside pointerdown or Escape, preserve inside actions and outside event behavior, restore trigger focus for Escape, and clean up listeners on dismissal/unmount. |
+
+
+| D192 | 2026-11-20: hide unavailable Dukascopy chart hours | Supersede only D191's unavailable-state presentation at the user's request. Render the hours badge only for valid provider session metadata; absent, unavailable, invalid or still-loading hours produce no placeholder. Retain supplied hours, the session limitation hint, catalog metadata, shared refresh and persistence behavior. |
