@@ -219,7 +219,8 @@ public final class BridgeTest {
         }
         check(Bridge.isFiatForex(Instrument.EURUSD) && Bridge.isFiatForex(offshoreYuan)
             && !Bridge.isFiatForex(Instrument.BTCUSD), "fiat including non-ISO CNH stays separate from crypto");
-        System.out.println("JForex bridge offline SDK protocol checks passed");
+        BridgeMarketHoursTest.run();
+        System.out.println("JForex bridge offline SDK protocol and regular market-hours checks passed");
         Files.delete(cache);
     }
 }

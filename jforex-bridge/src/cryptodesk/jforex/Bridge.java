@@ -2,12 +2,14 @@ package cryptodesk.jforex;
 
 import com.dukascopy.api.*;
 import com.dukascopy.api.instrument.IFinancialInstrument;
+import com.dukascopy.api.instrument.IMarketInfo;
 import com.dukascopy.api.system.*;
 import com.google.gson.*;
 import java.io.*;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -22,6 +24,7 @@ public final class Bridge implements AutoCloseable {
     static final List<String> INTERVALS = List.of("1m", "5m", "15m", "1h", "4h", "1d", "1w");
     static final int MAX_LINE = 65536;
     static final int SEED_RANGE_BARS = 1000;
+    private static final DateTimeFormatter MARKET_HOURS_TIME = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
     // SDK predefined instruments have no group until account metadata loads.
     // Explicit provider crypto codes are a fallback, never an ISO-currency test:
     // offshore yuan (CNH), for example, is fiat despite having no Java Currency.
@@ -343,6 +346,7 @@ public final class Bridge implements AutoCloseable {
             if (instrument.getDescription() != null) metadata.put("description", instrument.getDescription());
             if (instrument.getGroup() != null && instrument.getGroup().getName() != null)
                 metadata.put("group", instrument.getGroup().getName());
+            metadata.putAll(marketHoursMetadata(instrument));
             result.add(Map.of("nativeId", instrument.name(), "market", market(instrument),
                 "baseAsset", instrument.getPrimaryJFCurrency().getCurrencyCode(), "quoteAsset", instrument.getSecondaryJFCurrency().getCurrencyCode(),
                 "priceIncrement", BigDecimal.ONE.movePointLeft(instrument.getTickScale()).toPlainString(),
@@ -350,6 +354,35 @@ public final class Bridge implements AutoCloseable {
                 "providerMetadata", metadata));
         }
         return result;
+    }
+
+    private static Map<String, String> marketHoursMetadata(Instrument instrument) {
+        try {
+            IMarketInfo info = instrument.getMarketInfo();
+            if (info != null) {
+                var zone = info.getZoneId();
+                var firstDay = info.getFirstWorkingDay();
+                var lastDay = info.getLastWorkingDay();
+                var open = info.getOpenTime();
+                var close = info.getCloseTime();
+                if (zone != null && firstDay != null && lastDay != null && open != null && close != null) {
+                    // This is the SDK's regular market-session envelope, not
+                    // instrument tradability: it cannot describe intraday
+                    // breaks, holidays or trading halts. Keep the market zone
+                    // so daylight-saving changes do not become fixed UTC hours.
+                    return Map.of("marketHoursStatus", "available",
+                        "marketHoursSource", "JForex regular market session",
+                        "marketHoursTimeZone", zone.getId(),
+                        "marketHoursFirstDay", Integer.toString(firstDay.getValue()),
+                        "marketHoursLastDay", Integer.toString(lastDay.getValue()),
+                        "marketHoursOpen", open.format(MARKET_HOURS_TIME),
+                        "marketHoursClose", close.format(MARKET_HOURS_TIME));
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // One unavailable SDK market record must not hide the catalog.
+        }
+        return Map.of("marketHoursStatus", "unavailable");
     }
 
     private List<JsonObject> history(JsonObject request) throws Exception {

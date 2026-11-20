@@ -1,4 +1,15 @@
-# Implementation status — updated 2026-11-19
+# Implementation status — updated 2026-11-20
+
+## Dukascopy regular hours and asset-picker dismissal — 2026-11-20
+
+Dukascopy charts show the provider's regular market-session weekday range, opening/closing times and market timezone at the top right of the plot. The badge sits above retained Last trade details and follows instrument/source changes. The pinned JForex API 2.13.99 supplies a single daily session window, not lunch breaks, holidays, halts or exact current tradability; the badge and hover explanation make this limitation explicit. Missing, incomplete or throwing provider records show Regular hours unavailable instead of inferred continuous trading. Times omit fractional seconds. Instrument catalog metadata persists with the existing account/environment snapshot; a fresh legacy catalog stays usable immediately and upgrades once through the existing shared refresh, with its migration marker retained across restart. No extra subscriptions or per-instrument polling are added.
+
+Asset search now dismisses on outside pointer presses anywhere, including the chart and other chart/tool controls, or on Escape. Inside search and selection continue to work; the trigger toggles correctly, Escape restores its focus, and outside events retain their normal action. Listener lifetime follows the open picker and chart mount.
+
+Verification passed: frontend typecheck/lint and all 296 unit tests; all 18 focused hours/picker, retained trade-level, existing catalog and drawing-pointer browser tests; offline Java bridge fixture suites via `python3 scripts/jforex_bundle.py --test --cache .tools/jforex-sdk/cache`; `go test -race ./internal/jforex`; binding-root and native production-root race tests; and `go vet ./internal/jforex`. Fixtures cover synthetic Hong Kong hours and provider metadata extraction, non-Monday weekday ranges/timezones, fraction truncation, missing/incomplete/throwing records, unavailable values, source changes, badge/trade nonoverlap, search filtering/selection, Escape, outside controls and multiple charts. Catalog tests cover readable legacy snapshots, eight concurrent selections sharing one upgrade and no reconnect after restart of a fresh upgraded snapshot.
+
+Production packaging passed with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`: the root executable, matching JForex runtime and Linux archive are rebuilt, and `sha256sum -c cryptodesk-SHA256SUMS` passes. Build log: `.tools/verification/dukascopy-hours-build.log`. Actual desktop and live account checks, including the live schedule returned for 0941.HK/HKD, remain unrun. Browser Hong Kong hours are explicit synthetic fixtures, not verified live hours. No user profile, broker order, system install or global configuration is changed.
+
 
 ## Day / Week open and close indicators — 2026-11-19
 

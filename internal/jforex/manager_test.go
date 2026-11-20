@@ -888,7 +888,7 @@ func TestBridgeHelperProcess(t *testing.T) {
 			challenge = true
 			respond(id, LoginChallenge{ImageDataURL: pngImage})
 		case "instruments":
-			if scenario == "catalog-gated" {
+			if scenario == "catalog-gated" || scenario == "catalog-market-hours-gated" {
 				folder := os.Getenv("CRYPTODESK_JFOREX_CATALOG_GATE")
 				_ = os.WriteFile(filepath.Join(folder, "started"), []byte("started"), 0600)
 				for {
@@ -916,6 +916,14 @@ func TestBridgeHelperProcess(t *testing.T) {
 				case "catalog-unsafe-id":
 					items[0].NativeID = "https://invalid.example/symbol"
 				}
+			}
+			if scenario == "catalog-market-hours-gated" {
+				items[0].ProviderMetadata = map[string]string{
+					"marketHoursStatus": "available", "marketHoursSource": "JForex regular market session",
+					"marketHoursTimeZone": "America/Sao_Paulo", "marketHoursFirstDay": "3", "marketHoursLastDay": "7",
+					"marketHoursOpen": "08:12:34", "marketHoursClose": "17:45:00",
+				}
+				items[1].ProviderMetadata = map[string]string{"marketHoursStatus": "unavailable"}
 			}
 			respond(id, items)
 		case "history":

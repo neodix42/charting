@@ -15,14 +15,16 @@ import (
 
 const instrumentCatalogMaxBytes = 16 * 1024 * 1024
 const instrumentCatalogFreshFor = time.Hour
+const instrumentMarketHoursVersion = 1
 
 type savedInstrumentCatalog struct {
-	Version     int                 `json:"version"`
-	Account     string              `json:"account"`
-	Environment string              `json:"environment"`
-	Capability  string              `json:"capability"`
-	FetchedAt   int64               `json:"fetchedAt"`
-	Items       []domain.Instrument `json:"items"`
+	Version            int                 `json:"version"`
+	Account            string              `json:"account"`
+	Environment        string              `json:"environment"`
+	Capability         string              `json:"capability"`
+	FetchedAt          int64               `json:"fetchedAt"`
+	MarketHoursVersion int                 `json:"marketHoursVersion,omitempty"`
+	Items              []domain.Instrument `json:"items"`
 }
 
 type instrumentCatalogFlight struct {
@@ -100,7 +102,10 @@ func (m *Manager) RefreshInstruments(ctx context.Context, force bool) ([]domain.
 		m.mu.Unlock()
 		return nil, loadErr
 	}
-	if !force && m.catalog != nil && time.Since(time.UnixMilli(m.catalog.FetchedAt)) < instrumentCatalogFreshFor {
+	// Older snapshots stay available to Instruments while their first normal
+	// selection refresh upgrades the additive market-hours metadata. Remember
+	// the successful attempt even when a bridge cannot supply those fields.
+	if !force && m.catalog != nil && m.catalog.MarketHoursVersion == instrumentMarketHoursVersion && time.Since(time.UnixMilli(m.catalog.FetchedAt)) < instrumentCatalogFreshFor {
 		items := cloneInstruments(m.catalog.Items)
 		m.mu.Unlock()
 		return items, nil
@@ -137,7 +142,7 @@ func (m *Manager) refreshInstrumentCatalog(flight *instrumentCatalogFlight) {
 		err = errors.New("JForex account changed; retry instrument discovery")
 	}
 	if err == nil {
-		snapshot := savedInstrumentCatalog{Version: 1, Account: filepath.Base(m.cachePath(flight.config)), Environment: flight.config.Environment, Capability: bridgeInstrumentCatalog, FetchedAt: time.Now().UnixMilli(), Items: cloneInstruments(items)}
+		snapshot := savedInstrumentCatalog{Version: 1, Account: filepath.Base(m.cachePath(flight.config)), Environment: flight.config.Environment, Capability: bridgeInstrumentCatalog, FetchedAt: time.Now().UnixMilli(), MarketHoursVersion: instrumentMarketHoursVersion, Items: cloneInstruments(items)}
 		err = m.writeInstrumentCatalogLocked(snapshot)
 		if err == nil {
 			m.catalog, m.catalogError, m.catalogLoaded = &snapshot, nil, true

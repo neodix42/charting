@@ -147,6 +147,88 @@ func TestStaleCatalogRefreshSharesWorkKeepsPickerImmediateAndSurvivesCallerCance
 	}
 }
 
+func TestLegacyCatalogRefreshesMarketHoursOnceAcrossSelectionsAndRestarts(t *testing.T) {
+	m, _ := testManager(t, "all-assets")
+	want, err := m.Instruments(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Dir(m.path)
+	path := filepath.Join(m.cachePath(m.config), "instruments.json")
+	m.Close()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot savedInstrumentCatalog
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	// A catalog fetched moments ago by an older build must still upgrade once.
+	snapshot.MarketHoursVersion = 0
+	snapshot.FetchedAt = time.Now().UnixMilli()
+	data, err = json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	gate := t.TempDir()
+	t.Setenv("CRYPTODESK_JFOREX_CATALOG_GATE", gate)
+	trace := filepath.Join(t.TempDir(), "trace")
+	t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
+	restored, count := restoredCatalogManager(t, profile, "catalog-market-hours-gated")
+	if items, err := restored.Instruments(context.Background()); err != nil || !reflect.DeepEqual(items, want) || count.Load() != 0 {
+		t.Fatal("legacy metadata blocked the saved catalog", items, err, count.Load())
+	}
+	results := make(chan error, 8)
+	for range 8 {
+		go func() {
+			items, err := restored.RefreshInstruments(context.Background(), false)
+			if err == nil && (len(items) != 2 || items[0].ProviderMetadata["marketHoursStatus"] != "unavailable" || items[1].ProviderMetadata["marketHoursOpen"] != "08:12:34") {
+				err = errors.New("regular-session metadata was not returned")
+			}
+			results <- err
+		}()
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(gate, "started")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("legacy catalog did not refresh")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if items, err := restored.Instruments(context.Background()); err != nil || !reflect.DeepEqual(items, want) {
+		t.Fatal("refresh hid the legacy catalog", items, err)
+	}
+	if err := os.WriteFile(filepath.Join(gate, "release"), []byte("release"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for range 8 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	operations, err := os.ReadFile(trace)
+	if err != nil || count.Load() != 1 || strings.Count(string(operations), "instruments\n") != 1 {
+		t.Fatal("selections repeated the metadata upgrade", count.Load(), string(operations), err)
+	}
+	upgraded, err := restored.Instruments(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored.Close()
+	reopened, reopenedCount := restoredCatalogManager(t, profile, "error")
+	items, err := reopened.RefreshInstruments(context.Background(), false)
+	if err != nil || !reflect.DeepEqual(items, upgraded) || reopenedCount.Load() != 0 {
+		t.Fatal("metadata upgrade or unavailable hours were not persisted", items, err, reopenedCount.Load())
+	}
+}
+
 func TestCatalogRefreshFailureAndCorruptionPreserveSavedData(t *testing.T) {
 	m, _ := testManager(t, "all-assets")
 	want, err := m.Instruments(context.Background())
