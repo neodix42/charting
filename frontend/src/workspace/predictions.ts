@@ -1,8 +1,10 @@
 import {utcDate} from './time';
+import type {ScreenerDataSource} from '../types';
+import type {PredictionStatisticsBackend} from './predictionStatistics';
 
 export interface PredictionSettings {model:string;modelDirectory:string}
 export interface PredictionSelection {asset:string;period:string;contextLength:number;horizon:number;forecastId?:string}
-export interface PredictionDataset {id:string;symbol:string;name:string;period:string;filename:string}
+export interface PredictionDataset {id:string;symbol:string;name:string;period:string;filename:string;dataSource?:ScreenerDataSource}
 export interface PredictionObservation {time:number;close:number}
 export interface PredictionPoint {step:number;lower:number;median:number;upper:number}
 export interface PredictionSummary {id:string;createdAt:number;asOf:number;model:string;symbol:string;assetName:string;period:string;contextLength:number;horizon:number}
@@ -12,7 +14,7 @@ export interface PredictionInfo {
  runtime:{ready:boolean;modelReady:boolean;runtimeReady:boolean;error?:string};active:boolean;
  event:{phase:string;progress:number;message:string;downloaded?:number;total?:number};error?:string;forecasts:PredictionSummary[];
 }
-export interface PredictionsBackend {
+export interface PredictionsBackend extends PredictionStatisticsBackend {
  GetPredictions():Promise<PredictionInfo>;GetPredictionDatasets():Promise<PredictionDataset[]>;
  ConfigurePredictions(settings:PredictionSettings):Promise<PredictionInfo>;SavePredictionSelection(selection:PredictionSelection):Promise<PredictionSelection>;
  PreparePredictionModel():Promise<PredictionInfo>;StartPrediction(selection:PredictionSelection):Promise<PredictionInfo>;CancelPrediction():Promise<PredictionInfo>;

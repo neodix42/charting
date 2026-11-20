@@ -174,6 +174,14 @@ export function GetPredictionForecast(arg1) {
   return window['go']['main']['App']['GetPredictionForecast'](arg1);
 }
 
+export function GetPredictionStatistics(arg1) {
+  return window['go']['main']['App']['GetPredictionStatistics'](arg1);
+}
+
+export function GetPredictionStatisticsDatasets() {
+  return window['go']['main']['App']['GetPredictionStatisticsDatasets']();
+}
+
 export function GetPredictions() {
   return window['go']['main']['App']['GetPredictions']();
 }

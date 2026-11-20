@@ -1,5 +1,6 @@
 import type {PredictionDataset,PredictionForecast,PredictionInfo,PredictionSelection,PredictionsBackend} from '../workspace/predictions';
 import {initialPredictionSelection} from '../workspace/predictions';
+import {predictionStatisticsBridge} from './predictionStatisticsBridge';
 
 /** Explicit, offline browser fixture. This module is never a production fallback. */
 export function predictionsBridge():PredictionsBackend {
@@ -21,6 +22,7 @@ export function predictionsBridge():PredictionsBackend {
  };
  Object.assign(window,{__testPredictionInfo:snapshot,__testPredictionCalls:()=>({...calls}),__testSetPredictions:(patch:Partial<PredictionInfo>)=>{info={...info,...structuredClone(patch)};persist();},__testPredictionReady:()=>{info={...info,active:false,error:'',runtime:{ready:true,runtimeReady:true,modelReady:true},event:{phase:'ready',progress:100,message:'Model ready'}};persist();},__testFinishPrediction:finish});
  return {
+  ...predictionStatisticsBridge(),
   async GetPredictions(){calls.get++;return snapshot();},async GetPredictionDatasets(){calls.datasets++;return structuredClone(datasets);},
   async ConfigurePredictions(settings){calls.configure++;if(info.active)throw Error('Finish or cancel the active prediction before changing model settings');if(!info.models.some(model=>model.id===settings.model))throw Error('Unknown model');info={...info,settings:{...settings,modelDirectory:settings.modelDirectory||info.defaultModelDirectory},runtime:{ready:false,modelReady:false,runtimeReady:true},event:{phase:'idle',progress:0,message:''},error:''};persist();return snapshot();},
   async SavePredictionSelection(selection){calls.save++;validate(selection);if(selection.forecastId&&!forecasts.some(value=>value.id===selection.forecastId))throw Error('Stored forecast not found');info={...info,selection:structuredClone(selection)};persist();return structuredClone(info.selection);},

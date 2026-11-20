@@ -633,6 +633,7 @@ export namespace market {
 export namespace predictions {
 
 	export class Dataset {
+	    dataSource?: string;
 	    id: string;
 	    symbol: string;
 	    name: string;
@@ -645,6 +646,7 @@ export namespace predictions {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
 	        this.id = source["id"];
 	        this.symbol = source["symbol"];
 	        this.name = source["name"];
@@ -908,6 +910,193 @@ export namespace predictions {
 
 
 
+
+	export class StatisticsCandle {
+	    time: number;
+	    open: number;
+	    high: number;
+	    low: number;
+	    close: number;
+
+	    static createFrom(source: any = {}) {
+	        return new StatisticsCandle(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.open = source["open"];
+	        this.high = source["high"];
+	        this.low = source["low"];
+	        this.close = source["close"];
+	    }
+	}
+	export class StatisticsForecast {
+	    dataSource: string;
+	    symbol: string;
+	    assetName: string;
+	    period: string;
+	    lookbackWeeks: number;
+	    asOf: number;
+	    weekStart: number;
+	    sourceFile: string;
+	    sourceHash: string;
+	    history: StatisticsCandle[];
+	    anchor: StatisticsCandle;
+	    prefix: StatisticsPrefix[];
+	    scenarios: StatisticsScenario[];
+	    matchedWeeks: number;
+	    eligibleWeeks: number;
+	    excludedIncompleteWeeks: number;
+	    excludedDojiWeeks: number;
+	    excludedInvalidWeeks: number;
+	    excludedCheckpointWeeks?: number;
+	    theoreticalScenarios: number;
+	    warnings: string[];
+	    conditioning?: string;
+	    companionSourceFile?: string;
+	    companionSourceHash?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new StatisticsForecast(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
+	        this.symbol = source["symbol"];
+	        this.assetName = source["assetName"];
+	        this.period = source["period"];
+	        this.lookbackWeeks = source["lookbackWeeks"];
+	        this.asOf = source["asOf"];
+	        this.weekStart = source["weekStart"];
+	        this.sourceFile = source["sourceFile"];
+	        this.sourceHash = source["sourceHash"];
+	        this.history = this.convertValues(source["history"], StatisticsCandle);
+	        this.anchor = this.convertValues(source["anchor"], StatisticsCandle);
+	        this.prefix = this.convertValues(source["prefix"], StatisticsPrefix);
+	        this.scenarios = this.convertValues(source["scenarios"], StatisticsScenario);
+	        this.matchedWeeks = source["matchedWeeks"];
+	        this.eligibleWeeks = source["eligibleWeeks"];
+	        this.excludedIncompleteWeeks = source["excludedIncompleteWeeks"];
+	        this.excludedDojiWeeks = source["excludedDojiWeeks"];
+	        this.excludedInvalidWeeks = source["excludedInvalidWeeks"];
+	        this.excludedCheckpointWeeks = source["excludedCheckpointWeeks"];
+	        this.theoreticalScenarios = source["theoreticalScenarios"];
+	        this.warnings = source["warnings"];
+	        this.conditioning = source["conditioning"];
+	        this.companionSourceFile = source["companionSourceFile"];
+	        this.companionSourceHash = source["companionSourceHash"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class StatisticsPoint {
+	    time: number;
+	    close: number;
+	    direction: string;
+	    observed?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new StatisticsPoint(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.close = source["close"];
+	        this.direction = source["direction"];
+	        this.observed = source["observed"];
+	    }
+	}
+	export class StatisticsPrefix {
+	    time: number;
+	    day: string;
+	    direction: string;
+
+	    static createFrom(source: any = {}) {
+	        return new StatisticsPrefix(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.day = source["day"];
+	        this.direction = source["direction"];
+	    }
+	}
+	export class StatisticsRequest {
+	    dataSource: string;
+	    asset: string;
+	    period?: string;
+	    lookbackWeeks: number;
+
+	    static createFrom(source: any = {}) {
+	        return new StatisticsRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dataSource = source["dataSource"];
+	        this.asset = source["asset"];
+	        this.period = source["period"];
+	        this.lookbackWeeks = source["lookbackWeeks"];
+	    }
+	}
+	export class StatisticsScenario {
+	    id: string;
+	    label: string;
+	    probability: number;
+	    count: number;
+	    points: StatisticsPoint[];
+
+	    static createFrom(source: any = {}) {
+	        return new StatisticsScenario(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.probability = source["probability"];
+	        this.count = source["count"];
+	        this.points = this.convertValues(source["points"], StatisticsPoint);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 }
 
 export namespace screener {

@@ -25,12 +25,13 @@ type Selection struct {
 }
 
 type Dataset struct {
-	ID        string `json:"id"`
-	Symbol    string `json:"symbol"`
-	Name      string `json:"name"`
-	Period    string `json:"period"`
-	Filename  string `json:"filename"`
-	Directory string `json:"-"`
+	DataSource string `json:"dataSource,omitempty"`
+	ID         string `json:"id"`
+	Symbol     string `json:"symbol"`
+	Name       string `json:"name"`
+	Period     string `json:"period"`
+	Filename   string `json:"filename"`
+	Directory  string `json:"-"`
 }
 
 type Observation struct {

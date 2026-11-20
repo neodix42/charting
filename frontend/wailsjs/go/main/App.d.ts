@@ -98,6 +98,10 @@ export function GetPredictionDatasets():Promise<Array<predictions.Dataset>>;
 
 export function GetPredictionForecast(arg1:string):Promise<predictions.Forecast>;
 
+export function GetPredictionStatistics(arg1:predictions.StatisticsRequest):Promise<predictions.StatisticsForecast>;
+
+export function GetPredictionStatisticsDatasets():Promise<Array<predictions.Dataset>>;
+
 export function GetPredictions():Promise<predictions.Info>;
 
 export function GetScreener():Promise<screener.Info>;
