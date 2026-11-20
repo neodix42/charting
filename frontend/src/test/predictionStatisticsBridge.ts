@@ -20,7 +20,7 @@ export function predictionStatisticsBridge():PredictionStatisticsBackend {
  history[history.length-1]=anchor;
  const template:PredictionStatisticsForecast={
   dataSource:'dukascopy',symbol:'eurusd',assetName:'Euro vs US Dollar',period:'d1',lookbackWeeks:0,
-  asOf:weekStart+day,weekStart,sourceFile:'eurusd-d1.csv',sourceHash:'e'.repeat(64),history,anchor,
+  asOf:weekStart+day,firstClosedBar:Date.UTC(2018,0,1),weekStart,sourceFile:'eurusd-d1.csv',sourceHash:'e'.repeat(64),history,anchor,
   prefix:[{time:weekStart,day:'Mon',direction:'up'}],
   scenarios:[
    {id:'UDDD',label:'Tue ↑ · Wed ↓ · Thu ↓ · Fri ↓',probability:.75,count:3,points:[
@@ -52,6 +52,7 @@ export function predictionStatisticsBridge():PredictionStatisticsBackend {
    if(!dataset)throw Error('Choose a downloaded asset and time period from the selected data source');
    const result:PredictionStatisticsForecast={...template,dataSource:request.dataSource,symbol:dataset.symbol,assetName:dataset.name,period:request.period,lookbackWeeks:request.lookbackWeeks,sourceFile:dataset.filename};
    if(request.period==='h1'){
+    result.firstClosedBar=Date.UTC(2019,0,1);
     const hour=3600000,time=weekStart+day+11*hour;
     result.anchor={time,open:99,high:101,low:98,close:100};
     result.asOf=time+hour;
@@ -62,6 +63,7 @@ export function predictionStatisticsBridge():PredictionStatisticsBackend {
     result.companionSourceHash='d'.repeat(64);
     result.excludedCheckpointWeeks=0;
    }else if(request.period==='w1'){
+    result.firstClosedBar=Date.UTC(2017,0,2);
     const time=weekStart-7*day;
     result.anchor={time,open:89,high:91,low:88,close:90};
     result.history=Array.from({length:160},(_,index)=>({...result.anchor,time:time-(159-index)*7*day}));

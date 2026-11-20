@@ -938,6 +938,7 @@ export namespace predictions {
 	    period: string;
 	    lookbackWeeks: number;
 	    asOf: number;
+	    firstClosedBar: number;
 	    weekStart: number;
 	    sourceFile: string;
 	    sourceHash: string;
@@ -969,6 +970,7 @@ export namespace predictions {
 	        this.period = source["period"];
 	        this.lookbackWeeks = source["lookbackWeeks"];
 	        this.asOf = source["asOf"];
+	        this.firstClosedBar = source["firstClosedBar"];
 	        this.weekStart = source["weekStart"];
 	        this.sourceFile = source["sourceFile"];
 	        this.sourceHash = source["sourceHash"];

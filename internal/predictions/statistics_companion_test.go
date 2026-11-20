@@ -49,6 +49,9 @@ func TestStatisticsH1UsesNativeAnchorSameHourBodyAndDailyJointSequences(t *testi
 	if err != nil || got.Period != "h1" || got.Anchor.Time != target+10*3_600_000 || got.Anchor.Close != 150 || got.WeekStart != target || len(got.History) != 5 || got.MatchedWeeks != 3 || got.EligibleWeeks != 4 || got.TheoreticalScenarios != 32 || len(got.Scenarios) != 2 {
 		t.Fatalf("H1 anchor, same-hour conditioning or daily suffix probabilities changed: %+v %v", got, err)
 	}
+	if got.FirstClosedBar != target-4*7*statisticsDay+10*3_600_000 {
+		t.Fatal("H1 source coverage start came from its D1 companion", got.FirstClosedBar)
+	}
 	if len(got.Prefix) != 1 || got.Prefix[0].Day != "Mon 10:00 H1" || got.Prefix[0].Direction != "up" || got.Conditioning == "" {
 		t.Fatal("H1 body condition was hidden or daily prefix invented", got.Prefix, got.Conditioning)
 	}
@@ -62,7 +65,7 @@ func TestStatisticsH1UsesNativeAnchorSameHourBodyAndDailyJointSequences(t *testi
 			t.Fatalf("H1 path is not normalized by historical same-hour closes: %+v", first.Points)
 		}
 	}
-	if before, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, cutoff-1); err != nil || before.Anchor.Time == got.Anchor.Time || len(before.History) != 4 {
+	if before, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, cutoff-1); err != nil || before.Anchor.Time == got.Anchor.Time || len(before.History) != 4 || before.FirstClosedBar != got.FirstClosedBar {
 		t.Fatal("unclosed H1 anchor entered the model before its exact close", before, err)
 	}
 	for dataset, want := range map[string]string{native.Filename: got.SourceHash, daily.Filename: got.CompanionSourceHash} {
@@ -151,10 +154,13 @@ func TestStatisticsW1UsesLastClosedWeeklyBodyAndObservedDailyBridge(t *testing.T
 	if err != nil || got.Period != "w1" || got.Anchor.Time != target-7*statisticsDay || got.Anchor.Close != 150 || got.WeekStart != target || len(got.History) != 5 || got.MatchedWeeks != 3 || got.TheoreticalScenarios != 32 || len(got.Scenarios) != 2 || len(got.Prefix) != 1 || got.Prefix[0].Day != "Previous W1" {
 		t.Fatalf("weekly Monday cutoff or previous-body conditioning changed: %+v %v", got, err)
 	}
+	if got.FirstClosedBar != target-5*7*statisticsDay {
+		t.Fatal("W1 source coverage start came from its D1 companion", got.FirstClosedBar)
+	}
 	if first := got.Scenarios[0]; first.ID != "UUDDU" || first.Probability != 2.0/3 || len(first.Points) != 5 || first.Points[0].Time != target || first.Points[0].Close != 300 || first.Points[0].Observed {
 		t.Fatal("W1 empty-prefix paths did not use previous historical weekly closes", first)
 	}
-	if before, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, target-1); err != nil || before.Anchor.Time != target-14*statisticsDay || before.WeekStart != target-7*statisticsDay {
+	if before, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, target-1); err != nil || before.Anchor.Time != target-14*statisticsDay || before.WeekStart != target-7*statisticsDay || before.FirstClosedBar != got.FirstClosedBar {
 		t.Fatal("W1 current candle was treated as closed before Monday 00:00 UTC", before, err)
 	}
 	observed, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, target+statisticsDay)

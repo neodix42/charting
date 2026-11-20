@@ -57,6 +57,7 @@ test('weekly scenarios paint Monday anchor, Friday prices and joint probabilitie
   CanvasRenderingContext2D.prototype.fillText=function(...args:Parameters<CanvasRenderingContext2D['fillText']>){(window as any).__statisticsPaintedText.push(String(args[0]));return original.apply(this,args);};
  });
  await enter(page);await completed(page);
+ await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2018-01-01 00:00:00 UTC');
  await expect(panel(page)).toContainText(/Matching weeks\s*4/);
  await expect(panel(page)).toContainText(/Eligible weeks\s*12/);
  await expect(panel(page)).toContainText(/Possible sequences\s*16/);
@@ -87,6 +88,7 @@ test('time period uses downloaded H1 D1 and W1 bars independently from historica
  await period(page).selectOption('h1');await completed(page);
  expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'h1',lookbackWeeks:156});
  await expect(chart(page)).toHaveAttribute('data-period','h1');
+ await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2019-01-01 00:00:00 UTC');
  await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,17,11)));
  await expect(chart(page)).toHaveAttribute('data-friday-time',String(Date.UTC(2026,10,20,23)));
  await expect(chart(page)).toHaveAttribute('data-forecast-grid-bars','84');
@@ -98,6 +100,7 @@ test('time period uses downloaded H1 D1 and W1 bars independently from historica
  await period(page).selectOption('w1');await expect(chart(page)).toHaveCount(0);await completed(page);
  expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'w1',lookbackWeeks:156});
  await expect(chart(page)).toHaveAttribute('data-period','w1');
+ await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2017-01-02 00:00:00 UTC');
  await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,9)));
  await expect(chart(page)).toHaveAttribute('data-friday-time',String(Date.UTC(2026,10,20)));
  await chart(page).screenshot({path:'test-results/statistics-weekly.png'});

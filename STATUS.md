@@ -1,5 +1,10 @@
 # Implementation status — updated 2026-11-20
 
+## Statistics first closed bar metadata — 2026-11-20
+
+Add First closed bar beside Last closed bar in Statistics. The timestamp covers the selected source file's earliest fully closed candle, before historical lookback filtering and the 160-candle chart limit; H1/W1 use their native source rather than the D1 companion. The existing CSV pass supplies the value and the shared formatter displays UTC whole seconds. Verification passed: frontend typecheck/lint; both focused Statistics browser cases covering D1/H1/W1 first-bar labels; Predictions, binding-root and native production-root race tests; and Predictions vet. Existing regression cases verify that source coverage begins before trimmed chart history and stays unchanged by a shorter lookback, while native H1/W1 cutoffs retain their own source start. Wails StatisticsForecast was regenerated without unrelated wrapper changes. Production packaging passed; the root executable, matching runtime and Linux archive are rebuilt, and their checksums verify. Build log: `.tools/verification/statistics-first-closed-build.log`. Actual desktop/live checks remain unrun.
+
+
 ## Statistics candle timeframe selection — 2026-11-20
 
 Correct Time period to mean H1/D1/W1 candle timeframe, with a separate Historical lookback. Inventory, selection, source/asset reconciliation and result identity now include the actual downloaded period. H1/W1 paths use real D1 companion data, retaining the daily weekday scenario groups while conditioning on the selected native checkpoint. H1 uses the last closed hour and historical same-hour body; W1 uses the previous closed weekly body and any observed daily prefix in the forecast week. Native timeframe history and the last closed native anchor remain visible; a W1 daily bridge is explicitly observed. Companion filename/checksum and exclusions remain visible. Missing or ambiguous companion data cannot silently fall back to another period or synthetic candles.

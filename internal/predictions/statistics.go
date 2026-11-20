@@ -57,6 +57,7 @@ type StatisticsForecast struct {
 	Period                  string               `json:"period"`
 	LookbackWeeks           int                  `json:"lookbackWeeks"`
 	AsOf                    int64                `json:"asOf"`
+	FirstClosedBar          int64                `json:"firstClosedBar"`
 	WeekStart               int64                `json:"weekStart"`
 	SourceFile              string               `json:"sourceFile"`
 	SourceHash              string               `json:"sourceHash"`
@@ -155,7 +156,7 @@ func CalculateStatistics(ctx context.Context, dataset Dataset, request Statistic
 	anchorDay := int((source.anchor.Time - weekStart) / statisticsDay)
 	result = StatisticsForecast{DataSource: request.DataSource, Symbol: dataset.Symbol, AssetName: dataset.Name,
 		Period: "d1", LookbackWeeks: request.LookbackWeeks, AsOf: asOf, WeekStart: weekStart,
-		SourceFile: dataset.Filename, SourceHash: source.snapshot.checksum, History: source.history, Anchor: source.anchor,
+		SourceFile: dataset.Filename, SourceHash: source.snapshot.checksum, FirstClosedBar: source.firstClosedBar, History: source.history, Anchor: source.anchor,
 		Prefix: []StatisticsPrefix{}, Scenarios: []StatisticsScenario{}, Warnings: []string{}}
 	if result.AssetName == "" {
 		result.AssetName = strings.ToUpper(dataset.Symbol)

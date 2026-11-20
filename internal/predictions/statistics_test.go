@@ -310,6 +310,9 @@ func TestStatisticsHistoryBoundAndUTCYearBoundary(t *testing.T) {
 	if err != nil || len(got.History) != 160 || got.History[0] != candles[41] || got.History[159] != candles[200] || got.EligibleWeeks != 40 || got.MatchedWeeks != 40 {
 		t.Fatalf("bounded history changed ordering, retained synthetic sessions or lost training weeks: %+v %v", got, err)
 	}
+	if got.FirstClosedBar != candles[0].Time || got.FirstClosedBar == got.History[0].Time {
+		t.Fatal("first closed bar was taken from trimmed chart history instead of the full source", got.FirstClosedBar, got.History[0].Time)
+	}
 	if len(got.Scenarios) != 1 || got.Scenarios[0].Points[3].Time != time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC).UnixMilli() {
 		t.Fatal("Friday projection crossed the UTC year boundary incorrectly", got.Scenarios)
 	}
@@ -320,6 +323,11 @@ func TestStatisticsHistoryBoundAndUTCYearBoundary(t *testing.T) {
 		if point.Time <= got.Anchor.Time || point.Time%statisticsDay != 0 {
 			t.Fatal("projected time lost its daily UTC opening timestamp", point)
 		}
+	}
+	request.LookbackWeeks = 1
+	limited, err := CalculateStatistics(context.Background(), dataset, request, anchor+statisticsDay)
+	if err != nil || limited.FirstClosedBar != candles[0].Time || limited.EligibleWeeks != 1 {
+		t.Fatal("a statistics lookback changed the actual source coverage start", limited.FirstClosedBar, limited.EligibleWeeks, err)
 	}
 }
 

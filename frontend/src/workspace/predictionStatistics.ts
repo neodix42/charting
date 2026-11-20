@@ -8,7 +8,7 @@ export interface PredictionStatisticsPrefix {time:number;day:string;direction:'u
 export interface PredictionStatisticsPoint {time:number;close:number;direction:'up'|'down';observed?:boolean}
 export interface PredictionStatisticsScenario {id:string;label:string;probability:number;count:number;points:PredictionStatisticsPoint[]}
 export interface PredictionStatisticsForecast {
- dataSource:ScreenerDataSource;symbol:string;assetName:string;period:PredictionStatisticsPeriod;lookbackWeeks:number;asOf:number;weekStart:number;sourceFile:string;sourceHash:string;
+ dataSource:ScreenerDataSource;symbol:string;assetName:string;period:PredictionStatisticsPeriod;lookbackWeeks:number;asOf:number;firstClosedBar:number;weekStart:number;sourceFile:string;sourceHash:string;
  history:PredictionStatisticsCandle[];anchor:PredictionStatisticsCandle;prefix:PredictionStatisticsPrefix[];scenarios:PredictionStatisticsScenario[];
  matchedWeeks:number;eligibleWeeks:number;excludedIncompleteWeeks:number;excludedDojiWeeks:number;excludedInvalidWeeks:number;theoreticalScenarios:number;warnings:string[];
  conditioning?:string;companionSourceFile?:string;companionSourceHash?:string;excludedCheckpointWeeks?:number;

@@ -52,7 +52,7 @@ func CalculateStatisticsWithCompanion(ctx context.Context, selectedDataset, dail
 		Period: period, LookbackWeeks: request.LookbackWeeks, AsOf: asOf, WeekStart: targetWeek,
 		SourceFile: selectedDataset.Filename, SourceHash: native.snapshot.checksum,
 		CompanionSourceFile: dailyDataset.Filename, CompanionSourceHash: daily.snapshot.checksum,
-		History: native.history, Anchor: native.anchor, Prefix: []StatisticsPrefix{}, Scenarios: []StatisticsScenario{}, Warnings: []string{}}
+		FirstClosedBar: native.firstClosedBar, History: native.history, Anchor: native.anchor, Prefix: []StatisticsPrefix{}, Scenarios: []StatisticsScenario{}, Warnings: []string{}}
 	if result.AssetName == "" {
 		result.AssetName = strings.ToUpper(selectedDataset.Symbol)
 	}

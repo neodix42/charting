@@ -24,6 +24,7 @@ type statisticsSource struct {
 	history        []StatisticsCandle
 	anchor         StatisticsCandle
 	firstWeek      int64
+	firstClosedBar int64
 	invalidHistory int
 	checkpoints    map[int64]StatisticsCandle
 }
@@ -118,6 +119,7 @@ func readStatisticsCandleSource(ctx context.Context, dataset Dataset, asOf int64
 		weekStart := statisticsWeekStart(timestamp)
 		if closedCount == 0 {
 			result.firstWeek = weekStart
+			result.firstClosedBar = timestamp
 		}
 		ring[closedCount%160] = candle
 		closedCount++

@@ -314,3 +314,6 @@ performance results or assertions of current exchange availability.
 
 
 | D194 | 2026-11-20: distinguish Statistics candle timeframe from historical lookback | Follow the user clarification: Time period selects a downloaded H1/D1/W1 source/asset file, and historical lookback stays independent. Include period in catalog resolution, request/result identity, stale-reply rejection and chart timestamps. Preserve D1 weekday probabilities. H1 and W1 use real same-source/asset D1 companion candles to resolve weekday paths; condition additionally on the selected closed hourly checkpoint or prior weekly body, respectively. Show native selected-frame history/anchor, observed W1 daily bridge prices separately, hourly future whitespace for chart spacing, and explicit missing/ambiguous companion states. Never infer weekday prices from W1 aggregates or fill missing hourly sessions as candles. |
+
+
+| D195 | 2026-11-20: show complete-source first closed candle in Statistics metadata | Return FirstClosedBar from the earliest fully closed candle in the selected source file, using the existing CSV pass and selected period close cutoff. Keep this independent of the 160-candle chart cap, lookback filters and any D1 companion. Display First closed bar beside Last closed bar with the shared whole-second UTC formatter. |
