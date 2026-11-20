@@ -317,3 +317,6 @@ performance results or assertions of current exchange availability.
 
 
 | D195 | 2026-11-20: show complete-source first closed candle in Statistics metadata | Return FirstClosedBar from the earliest fully closed candle in the selected source file, using the existing CSV pass and selected period close cutoff. Keep this independent of the 160-candle chart cap, lookback filters and any D1 companion. Display First closed bar beside Last closed bar with the shared whole-second UTC formatter. |
+
+
+| D196 | 2026-11-20: download selected Statistics gaps explicitly | Add Download missing data for the selected source, asset and H1/D1/W1 timeframe. Resolve existing history ranges on the backend and reuse the normal incremental Screener queue, adding a D1 companion for H1/W1. Start from native history without widening H1 coverage to an older companion; retain existing candles/indicators and derive the closed-bar cutoff from the click time. Preserve busy and persisted-queue guards. Track the complete accepted job-ID set for status/cancel, rejecting replaced queues before and after cancellation drains. Refresh inventory and recalculate only after every owned job succeeds and the captured selection still matches; expose progress, pauses, partial failures and explicit status recovery without automatic provider retries or hidden polling. |

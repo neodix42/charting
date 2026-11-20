@@ -18,6 +18,10 @@ export function CancelDucascopyConnectionTest() {
   return window['go']['main']['App']['CancelDucascopyConnectionTest']();
 }
 
+export function CancelPredictionStatisticsDownload(arg1) {
+  return window['go']['main']['App']['CancelPredictionStatisticsDownload'](arg1);
+}
+
 export function CancelPrediction() {
   return window['go']['main']['App']['CancelPrediction']();
 }
@@ -118,6 +122,10 @@ export function EstimateTrade(arg1, arg2) {
   return window['go']['main']['App']['EstimateTrade'](arg1, arg2);
 }
 
+export function DownloadPredictionStatisticsData(arg1) {
+  return window['go']['main']['App']['DownloadPredictionStatisticsData'](arg1);
+}
+
 export function ExportWorkspace() {
   return window['go']['main']['App']['ExportWorkspace']();
 }
@@ -176,6 +184,10 @@ export function GetPredictionForecast(arg1) {
 
 export function GetPredictionStatistics(arg1) {
   return window['go']['main']['App']['GetPredictionStatistics'](arg1);
+}
+
+export function GetPredictionStatisticsDownload(arg1) {
+  return window['go']['main']['App']['GetPredictionStatisticsDownload'](arg1);
 }
 
 export function GetPredictionStatisticsDatasets() {

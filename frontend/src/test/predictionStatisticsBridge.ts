@@ -1,4 +1,5 @@
 import type {PredictionDataset} from '../workspace/predictions';
+import type {ScreenerInfo,ScreenerJob} from '../types';
 import type {PredictionStatisticsBackend,PredictionStatisticsForecast,PredictionStatisticsRequest} from '../workspace/predictionStatistics';
 
 /** Explicit offline fixtures; no estimator or generated result is used in production. */
@@ -38,11 +39,56 @@ export function predictionStatisticsBridge():PredictionStatisticsBackend {
  let override:PredictionStatisticsForecast|{error:string}|null=null;
  let datasetReads=0;
  const requests:PredictionStatisticsRequest[]=[];
+ const downloadRequests:PredictionStatisticsRequest[]=[],statusRequests:string[][]=[],cancelRequests:string[][]=[];
+ let batch=0,latestJobIDs:string[]=[];
+ let downloadInfo:ScreenerInfo={directory:'/explicit-test/screener',runtimeAvailable:true,concurrency:2,maxConcurrency:20,active:false,jobs:[]};
+ const ownership=new Map<string,string>();
+ const identity=(job:ScreenerJob)=>JSON.stringify([job.dataSource,job.symbol,job.timeframe]);
+ const ownedDownload=(jobIDs:string[]):ScreenerInfo=>{
+  if(!jobIDs.length||new Set(jobIDs).size!==jobIDs.length)throw Error('Statistics download jobs are missing or were replaced');
+  const jobs=jobIDs.map(id=>{
+   const job=downloadInfo.jobs.find(job=>job.id===id);
+   if(!job||!ownership.has(id)||ownership.get(id)!==identity(job))throw Error('Statistics download jobs are missing or were replaced');
+   return job;
+  });
+  return structuredClone({...downloadInfo,active:jobs.some(job=>job.status==='queued'||job.status==='running'),jobs});
+ };
  Object.assign(window,{
   __testStatisticsCalls:()=>({datasets:datasetReads,calculate:requests.length,requests:structuredClone(requests)}),
   __testSetStatisticsForecast:(value:PredictionStatisticsForecast|{error:string}|null)=>{override=structuredClone(value);},
+  __testStatisticsDownloadCalls:()=>structuredClone({start:downloadRequests.length,status:statusRequests.length,cancel:cancelRequests.length,requests:downloadRequests,statusRequests,cancelRequests,jobIDs:latestJobIDs}),
+  __testStatisticsDownloadInfo:()=>structuredClone(downloadInfo),
+  __testSetStatisticsDownloadInfo:(value:Partial<ScreenerInfo>)=>{
+   downloadInfo={...downloadInfo,...structuredClone(value)};
+   if(value.active===undefined)downloadInfo.active=downloadInfo.jobs.some(job=>job.status==='queued'||job.status==='running');
+  },
+  __testFinishStatisticsDownload:(value?:PredictionStatisticsForecast|null)=>{
+   const ids=new Set(latestJobIDs);
+   downloadInfo={...downloadInfo,jobs:downloadInfo.jobs.map(job=>ids.has(job.id)?{...job,status:'completed',progress:100,message:'Downloaded explicit fixture candles'}:job)};
+   downloadInfo.active=downloadInfo.jobs.some(job=>job.status==='queued'||job.status==='running');
+   if(value!==undefined)override=structuredClone(value);
+   return ownedDownload(latestJobIDs);
+  },
  });
  return {
+  async DownloadPredictionStatisticsData(request){
+   if(downloadInfo.jobs.some(job=>ownership.has(job.id)&&(job.status==='queued'||job.status==='running')))throw Error('A Statistics data download is already running');
+   downloadRequests.push(structuredClone(request));batch++;
+   const periods=request.period==='d1'?['d1']:[request.period,'d1'];
+   const jobs:ScreenerJob[]=periods.map(timeframe=>({id:`explicit-statistics-download-${batch}-${timeframe}`,dataSource:request.dataSource,symbol:request.asset,timeframe,from:'2018-01-01',to:'2026-11-20',status:'queued',progress:0,message:'Queued explicit fixture download'}));
+   latestJobIDs=jobs.map(job=>job.id);
+   for(const job of jobs)ownership.set(job.id,identity(job));
+   downloadInfo={...downloadInfo,error:undefined,downloadsPaused:false,active:true,jobs:[...downloadInfo.jobs.filter(job=>!ownership.has(job.id)),...jobs]};
+   return ownedDownload(latestJobIDs);
+  },
+  async GetPredictionStatisticsDownload(jobIDs){statusRequests.push([...jobIDs]);return ownedDownload(jobIDs);},
+  async CancelPredictionStatisticsDownload(jobIDs){
+   cancelRequests.push([...jobIDs]);ownedDownload(jobIDs);
+   const ids=new Set(jobIDs);
+   downloadInfo={...downloadInfo,jobs:downloadInfo.jobs.map(job=>ids.has(job.id)&&(job.status==='queued'||job.status==='running')?{...job,status:'cancelled',message:'Cancelled explicit fixture download'}:job)};
+   downloadInfo.active=downloadInfo.jobs.some(job=>job.status==='queued'||job.status==='running');
+   return ownedDownload(jobIDs);
+  },
   async GetPredictionStatisticsDatasets(){datasetReads++;return structuredClone(datasets);},
   async GetPredictionStatistics(request){
    requests.push(structuredClone(request));

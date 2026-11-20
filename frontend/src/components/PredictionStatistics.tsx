@@ -5,6 +5,7 @@ import type {PredictionStatisticsForecast,PredictionStatisticsPeriod,PredictionS
 import {initialStatisticsRequest,statisticsKey,statisticsPrice,statisticsProbability,statisticsResultKey} from '../workspace/predictionStatistics';
 import {errorText,type ScreenerDataSource} from '../types';
 import {PredictionStatisticsChart,statisticsChartResources,statisticsScenarioColor} from './PredictionStatisticsChart';
+import {usePredictionStatisticsDownload} from './usePredictionStatisticsDownload';
 import './PredictionStatistics.css';
 
 const windows=[[0,'All downloaded history'],[52,'Last 52 weeks'],[156,'Last 156 weeks'],[260,'Last 260 weeks'],[520,'Last 520 weeks']] as const;
@@ -33,8 +34,34 @@ export function PredictionStatistics({api,visible,suspended=false}:{api:Predicti
  const query=filter.trim().toLowerCase(),filtered=assets.filter(item=>`${item.symbol} ${item.name}`.toLowerCase().includes(query)),selected=assets.find(item=>item.symbol===request.asset);
  const periods=assetPeriods(datasets,request),selectedDataset=datasets.find(item=>item.dataSource===request.dataSource&&item.symbol===request.asset&&item.period===request.period);
  const result=forecast&&statisticsResultKey(forecast)===statisticsKey(request)?forecast:null;
+ const finishDownload=async(input:PredictionStatisticsRequest):Promise<'done'|'deferred'|'recalculated'>=>{
+  if(!foreground.current)return 'deferred';
+  setLoading(true);setCatalogError('');
+  try{
+   const items=await api.GetPredictionStatisticsDatasets();
+   if(!mounted.current)return 'done';
+   if(!foreground.current)return 'deferred';
+   const files=items.filter(item=>supportedPeriods.some(period=>period===item.period)&&(item.dataSource==='dukascopy'||item.dataSource==='hyperliquid'));
+   setDatasets(files);const next=reconcilePeriod(current.current,files);
+   if(next!==current.current){generation.current++;current.current=next;setRequest(next);setForecast(null);setError('');}
+  }catch(reason){if(mounted.current&&foreground.current)setCatalogError(errorText(reason));throw reason;}
+  finally{if(mounted.current)setLoading(false);}
+  if(!foreground.current)return 'deferred';
+  if(statisticsKey(input)!==statisticsKey(current.current))return 'done';
+  const id=++generation.current;flight.current=true;setCalculating(true);setForecast(null);setError('');
+  try{
+   const next=await api.GetPredictionStatistics(input);
+   if(mounted.current&&foreground.current&&id===generation.current){if(statisticsResultKey(next)!==statisticsKey(input))throw Error('Statistics result does not match the downloaded source, asset, time period and historical lookback.');setForecast(next);return 'recalculated';}
+   return !foreground.current&&statisticsKey(input)===statisticsKey(current.current)?'deferred':'done';
+  }catch(reason){if(mounted.current&&foreground.current&&id===generation.current)setError(errorText(reason));return !foreground.current&&statisticsKey(input)===statisticsKey(current.current)?'deferred':'done';}
+  finally{flight.current=false;if(mounted.current)setCalculating(false);}
+ };
+ const dataDownload=usePredictionStatisticsDownload({api,visible:visible&&!suspended,onComplete:finishDownload});
+ const download=dataDownload.download;
+ const downloadAsset=download?datasets.find(item=>item.dataSource===download.request.dataSource&&item.symbol===download.request.asset)?.name||download.request.asset:'';
+ const startDownload=()=>{if(flight.current||loading||!selectedDataset||dataDownload.isLocked()||!foreground.current)return;generation.current++;setError('');void dataDownload.start(structuredClone(current.current));};
  const calculate=async()=>{
-  if(flight.current||!selectedDataset||!foreground.current)return;
+  if(flight.current||dataDownload.isLocked()||!selectedDataset||!foreground.current)return;
   const input=structuredClone(current.current),id=++generation.current;flight.current=true;setCalculating(true);setForecast(null);setError('');
   try{
    const next=await api.GetPredictionStatistics(input);
@@ -43,20 +70,31 @@ export function PredictionStatistics({api,visible,suspended=false}:{api:Predicti
   finally{flight.current=false;if(mounted.current)setCalculating(false);}
  };
  return <div className="prediction-statistics">
-  <header className="prediction-section-heading"><div><h2>Statistics</h2><p>Compare daily candle directions, conditioned on the selected time period.</p></div><button type="button" disabled={loading||calculating} onClick={()=>setRetry(value=>value+1)}>Refresh assets</button></header>
-  {catalogError&&<p className="screener-error" role="alert">Could not read downloaded candle data: {catalogError}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry assets</button></p>}
+  <header className="prediction-section-heading"><div><h2>Statistics</h2><p>Compare daily candle directions, conditioned on the selected time period.</p></div><button type="button" disabled={loading||calculating||dataDownload.locked} onClick={()=>setRetry(value=>value+1)}>Refresh assets</button></header>
+  {catalogError&&<p className="screener-error" role="alert">Could not read downloaded candle data: {catalogError}<button type="button" disabled={dataDownload.locked} onClick={()=>setRetry(value=>value+1)}>Retry assets</button></p>}
   <form className="prediction-controls" aria-label="Statistics inputs" onSubmit={event=>{event.preventDefault();void calculate();}}>
    <label>Data source<select aria-label="Statistics data source" value={request.dataSource} onChange={event=>{change({dataSource:event.target.value as ScreenerDataSource,asset:''});setFilter('');}}><option value="dukascopy">Dukascopy</option><option value="hyperliquid">Hyperliquid</option></select></label>
    <label className="prediction-asset-choice">Asset<select aria-label="Statistics asset" value={request.asset} disabled={loading} onChange={event=>change({asset:event.target.value})}><option value="">Select a downloaded asset</option>{selected&&!filtered.some(item=>item.symbol===selected.symbol)&&<option value={selected.symbol} hidden>{selected.name} · {selected.symbol}</option>}{filtered.map(item=><option key={item.symbol} value={item.symbol}>{item.name} · {item.symbol}</option>)}</select></label>
    <label>Time period<select aria-label="Statistics time period" value={request.period} disabled={loading||!periods.length} onChange={event=>change({period:event.target.value as PredictionStatisticsPeriod})}>{!periods.length&&<option value={request.period}>Select an asset first</option>}{periods.map(period=><option key={period} value={period}>{period.toUpperCase()}</option>)}</select></label>
    <label>Historical lookback<select aria-label="Statistics history period" value={request.lookbackWeeks} onChange={event=>change({lookbackWeeks:Number(event.target.value)})}>{windows.map(([weeks,label])=><option key={weeks} value={weeks}>{label}</option>)}</select></label>
-   <button className="primary" type="submit" aria-label="Calculate scenarios" disabled={loading||calculating||!selectedDataset}>{calculating?'Calculating…':'Calculate scenarios'}</button>
+   <button className="primary" type="submit" aria-label="Calculate scenarios" disabled={loading||calculating||dataDownload.locked||!selectedDataset}>{calculating?'Calculating…':'Calculate scenarios'}</button>
+   <button type="button" aria-label="Download missing data" disabled={loading||calculating||dataDownload.locked||!selectedDataset} onClick={startDownload}>Download missing data</button>
    <label className="prediction-asset-filter">Filter assets<input type="search" aria-label="Filter statistics assets" placeholder="Search by asset name or symbol" value={filter} onChange={event=>setFilter(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')event.preventDefault();}}/></label>
    <p className="prediction-input-help">Time period selects the downloaded candle interval; historical lookback selects the historical weeks to compare. UP means close above that candle's own open; DOWN means close below its own open.</p>
    {request.period!=='d1'&&<p className="prediction-input-help">H1 and W1 require matching downloaded D1 companion data for the same asset and source. Scenarios describe the remaining daily candle directions.</p>}
    {!loading&&!catalogError&&!assets.length&&<p className="prediction-input-help" role="status">No downloaded {sourceName(request.dataSource)} H1, D1 or W1 candles found. Download data in Screener → Downloader first.</p>}
    {query&&assets.length>0&&!filtered.length&&<p className="prediction-input-help" role="status">No matching assets. Clear the filter to show all downloaded assets.</p>}
   </form>
+  {download&&<section className="statistics-download" role="region" aria-label="Statistics data download">
+   <header><strong>Data download</strong><span>{sourceName(download.request.dataSource)} · {downloadAsset} · {download.request.period.toUpperCase()}</span></header>
+   {download.phase==='starting'&&<p role="status">Starting missing-data download…</p>}
+   {download.info?.downloadsPaused&&download.phase==='running'&&<p role="status">Downloads are paused for Live Alerts and will resume automatically.</p>}
+   {download.info?.jobs.map(job=><div className="statistics-download-job" key={job.id}><div><strong>{job.timeframe.toUpperCase()}</strong><span>{job.status}</span><span>{Math.round(Math.min(100,Math.max(0,job.progress||0)))}%</span></div><progress aria-label={`${job.timeframe.toUpperCase()} missing data progress`} max={100} value={Math.min(100,Math.max(0,job.progress||0))}/>{job.message&&<p>{job.message}</p>}</div>)}
+   {download.info?.error&&download.info.error!==download.error&&<p className="screener-error" role="alert">Downloader: {download.info.error}</p>}
+   {download.error&&<p className="screener-error" role="alert">{download.error}</p>}{download.notice&&<p role="status">{download.notice}</p>}
+   {dataDownload.cancelPending&&<p role="status">Cancelling data download…</p>}
+   <div className="statistics-download-actions">{['running','status-error'].includes(download.phase)&&<button type="button" disabled={dataDownload.actionBusy||dataDownload.cancelPending} onClick={()=>void dataDownload.cancel()}>Cancel data download</button>}{download.phase==='status-error'&&<><button type="button" disabled={dataDownload.actionBusy||dataDownload.cancelPending} onClick={dataDownload.retryStatus}>Retry download status</button><button type="button" disabled={dataDownload.actionBusy||dataDownload.cancelPending} onClick={dataDownload.stopTracking}>Stop tracking download</button></>}</div>
+  </section>}
   {loading&&<p role="status">Loading downloaded assets…</p>}{calculating&&<p role="status">Calculating historical weekly scenarios…</p>}{error&&<p className="screener-error" role="alert">{error}</p>}
   {result&&<section className="prediction-result statistics-result" aria-label="Weekly statistics forecast">
    <h2>{result.assetName||result.symbol} <span>{sourceName(result.dataSource)} · {result.period.toUpperCase()}</span></h2>

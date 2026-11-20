@@ -1,4 +1,4 @@
-import type {ScreenerDataSource} from '../types';
+import type {ScreenerDataSource,ScreenerInfo} from '../types';
 import type {PredictionDataset} from './predictions';
 
 export type PredictionStatisticsPeriod='h1'|'d1'|'w1';
@@ -16,6 +16,9 @@ export interface PredictionStatisticsForecast {
 export interface PredictionStatisticsBackend {
  GetPredictionStatisticsDatasets():Promise<PredictionDataset[]>;
  GetPredictionStatistics(request:PredictionStatisticsRequest):Promise<PredictionStatisticsForecast>;
+ DownloadPredictionStatisticsData(request:PredictionStatisticsRequest):Promise<ScreenerInfo>;
+ GetPredictionStatisticsDownload(jobIDs:string[]):Promise<ScreenerInfo>;
+ CancelPredictionStatisticsDownload(jobIDs:string[]):Promise<ScreenerInfo>;
 }
 export const initialStatisticsRequest=():PredictionStatisticsRequest=>({dataSource:'dukascopy',asset:'',period:'d1',lookbackWeeks:260});
 export const statisticsProbability=(value:number)=>`${(value*100).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})}%`;

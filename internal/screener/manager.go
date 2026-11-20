@@ -324,6 +324,19 @@ func validateRequest(request Request, now time.Time) error {
 }
 
 func (m *Manager) Start(request Request) (Info, error) {
+	return m.start(request, false)
+}
+
+// StartWithDailyCompanion uses the normal incremental download pipeline while
+// including a real D1 source for a selected H1 or W1 history.
+func (m *Manager) StartWithDailyCompanion(request Request) (Info, error) {
+	if request.Timeframe != "h1" && request.Timeframe != "d1" && request.Timeframe != "w1" {
+		return m.Info(), errors.New("daily companion downloads require H1, D1 or W1 candles")
+	}
+	return m.start(request, true)
+}
+
+func (m *Manager) start(request Request, dailyCompanion bool) (Info, error) {
 	request.DataSource = normalizeDataSource(request.DataSource)
 	if err := validateRequest(request, time.Now()); err != nil {
 		return m.Info(), err
@@ -376,8 +389,8 @@ func (m *Manager) Start(request Request) (Info, error) {
 		return m.infoLocked(), err
 	}
 	periods := []string{request.Timeframe}
-	if request.Timeframe == "w1" {
-		periods = []string{"d1", "w1"}
+	if request.Timeframe == "w1" || (dailyCompanion && request.Timeframe == "h1") {
+		periods = []string{"d1", request.Timeframe}
 	}
 	jobs := make([]Job, 0, len(request.Symbols)*len(periods))
 	asOf := time.Now().UnixMilli()

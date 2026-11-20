@@ -1,6 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import {openTestApp} from './helpers/testApp';
 import type {PredictionStatisticsForecast} from '../src/workspace/predictionStatistics';
+import type {ScreenerInfo} from '../src/types';
 
 const panel=(page:Page)=>page.getByRole('tabpanel',{name:'Predictions',exact:true});
 const section=(page:Page,name:'LLM'|'Statistics')=>panel(page).getByRole('tab',{name,exact:true});
@@ -12,6 +13,13 @@ const source=(page:Page)=>panel(page).getByLabel('Statistics data source',{exact
 const asset=(page:Page)=>panel(page).getByLabel('Statistics asset',{exact:true});
 const period=(page:Page)=>panel(page).getByLabel('Statistics time period',{exact:true});
 const calculate=(page:Page)=>panel(page).getByRole('button',{name:/^(Calculate scenarios|Calculating…)$/});
+const downloadButton=(page:Page)=>panel(page).getByRole('button',{name:'Download missing data',exact:true});
+const downloadRegion=(page:Page)=>panel(page).getByRole('region',{name:'Statistics data download',exact:true});
+const cancelDownload=(page:Page)=>downloadRegion(page).getByRole('button',{name:'Cancel data download',exact:true});
+const downloadCalls=(page:Page)=>page.evaluate(()=>(window as any).__testStatisticsDownloadCalls());
+const downloadInfo=(page:Page):Promise<ScreenerInfo>=>page.evaluate(()=>(window as any).__testStatisticsDownloadInfo());
+async function startDownload(page:Page){await downloadButton(page).click();await expect(downloadRegion(page)).toBeVisible();await expect(cancelDownload(page)).toBeEnabled();}
+
 
 async function enter(page:Page){
  await openTestApp(page);
@@ -218,4 +226,118 @@ test('statistics releases charts on navigation and leaves saved LLM results unto
  await page.getByRole('tab',{name:'Screener',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testStatisticsResources())).toEqual({charts:0,observers:0,listeners:0});
  await page.locator('[data-tab-id]').first().click();await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);
+});
+
+
+test('Download missing data reports D1 progress and recalculates from the newly closed candle once',async({page})=>{
+ await enter(page);const base=await forecast(page);await completed(page);
+ const before=await statisticsCalls(page),models=await llmCalls(page);
+ await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,16)));
+ await startDownload(page);
+ expect((await downloadCalls(page)).requests).toEqual([{dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260}]);
+ const queued=await downloadInfo(page);expect(queued.jobs.map(job=>job.timeframe)).toEqual(['d1']);
+ await expect(downloadButton(page)).toBeDisabled();await expect(calculate(page)).toBeDisabled();
+ await expect(panel(page).getByRole('button',{name:'Refresh assets',exact:true})).toBeDisabled();
+ await expect(downloadRegion(page).getByRole('progressbar')).toHaveCount(1);
+ await page.evaluate(()=>{
+  const info=(window as any).__testStatisticsDownloadInfo();
+  (window as any).__testSetStatisticsDownloadInfo({jobs:info.jobs.map((job:any)=>({...job,status:'running',progress:42,message:'Downloading missing daily candles'}))});
+ });
+ await expect(downloadRegion(page)).toContainText('Downloading missing daily candles');
+ await expect(downloadRegion(page).getByRole('progressbar')).toHaveAttribute('value','42');
+ const anchor={time:Date.UTC(2026,10,17),open:100,high:106,low:99,close:105};
+ const refreshed:PredictionStatisticsForecast={...base,asOf:Date.UTC(2026,10,18),anchor,history:[...base.history,anchor],prefix:[...base.prefix,{time:anchor.time,day:'Tue',direction:'up'}],scenarios:base.scenarios.map(scenario=>({...scenario,id:scenario.id.slice(1),label:scenario.label.split(' · ').slice(1).join(' · '),points:scenario.points.slice(1)})),theoreticalScenarios:8};
+ await page.evaluate(value=>(window as any).__testFinishStatisticsDownload(value),refreshed);
+ await expect(chart(page)).toHaveAttribute('data-anchor-time',String(anchor.time));
+ await expect(downloadButton(page)).toBeEnabled();
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate+1);
+ expect((await statisticsCalls(page)).datasets).toBeGreaterThan(before.datasets);
+ expect((await downloadCalls(page)).start).toBe(1);
+ const after=await llmCalls(page);expect(after.prepare).toBe(models.prepare);expect(after.start).toBe(models.start);
+});
+
+test('non-daily download repairs missing companions and scopes each H1 or W1 batch to its D1 dependency',async({page})=>{
+ await enter(page);await period(page).selectOption('h1');
+ await setForecast(page,{error:'Downloaded D1 companion data is required for H1 weekly scenarios.'});
+ await calculate(page).click();await expect(panel(page).getByRole('alert')).toContainText('D1 companion data is required');
+ for(const selectedPeriod of ['h1','w1']){
+  await period(page).selectOption(selectedPeriod);await startDownload(page);
+  const info=await downloadInfo(page);
+  expect(info.jobs.map(job=>job.timeframe).sort()).toEqual(['d1',selectedPeriod].sort());
+  expect(info.jobs.every(job=>job.symbol==='eurusd'&&job.dataSource==='dukascopy')).toBe(true);
+  expect(new Set(info.jobs.map(job=>job.id)).size).toBe(2);
+  await expect(downloadRegion(page).getByRole('progressbar')).toHaveCount(2);
+  await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));
+  await expect(chart(page)).toHaveAttribute('data-period',selectedPeriod);await expect(downloadButton(page)).toBeEnabled();
+  await expect(panel(page).getByRole('alert')).toHaveCount(0);
+ }
+ expect((await downloadCalls(page)).requests.map((request:any)=>request.period)).toEqual(['h1','w1']);
+});
+
+test('a failed companion remains visible while another job is running and never causes an automatic retry',async({page})=>{
+ await enter(page);await page.clock.install();await period(page).selectOption('h1');await startDownload(page);
+ const before=await statisticsCalls(page);
+ await page.evaluate(()=>{
+  const info=(window as any).__testStatisticsDownloadInfo();
+  (window as any).__testSetStatisticsDownloadInfo({active:true,downloadsPaused:true,jobs:info.jobs.map((job:any)=>job.timeframe==='d1'?{...job,status:'failed',progress:20,message:'Daily provider rejected the missing range'}:{...job,status:'running',progress:40,message:'Hourly candles still downloading'})});
+ });
+ await expect(downloadRegion(page)).toContainText('Daily provider rejected the missing range');
+ await expect(downloadRegion(page)).toContainText(/paused/i);
+ await expect(downloadButton(page)).toBeDisabled();await expect(calculate(page)).toBeDisabled();await expect(cancelDownload(page)).toBeEnabled();
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate);
+ await page.evaluate(()=>{
+  const info=(window as any).__testStatisticsDownloadInfo();
+  (window as any).__testSetStatisticsDownloadInfo({active:false,downloadsPaused:false,jobs:info.jobs.map((job:any)=>job.status==='running'?{...job,status:'completed',progress:100,message:'Hourly candles completed'}:job)});
+ });
+ await expect(downloadButton(page)).toBeEnabled();
+ const terminal=await downloadCalls(page);await page.clock.fastForward(2500);
+ expect((await downloadCalls(page)).start).toBe(1);expect((await downloadCalls(page)).status).toBe(terminal.status);
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+});
+
+test('Cancel data download cancels only the owned source asset and period jobs',async({page})=>{
+ await enter(page);await source(page).selectOption('hyperliquid');await asset(page).selectOption('perp-BTC');await period(page).selectOption('h1');
+ await startDownload(page);const owned=(await downloadInfo(page)).jobs.map(job=>job.id),before=await statisticsCalls(page);
+ await page.evaluate(()=>{
+  const info=(window as any).__testStatisticsDownloadInfo();
+  (window as any).__testSetStatisticsDownloadInfo({jobs:[...info.jobs,{id:'unrelated-screener-download',dataSource:'dukascopy',symbol:'eurusd',timeframe:'d1',from:'2026-01-01',to:'2026-11-20',status:'running',progress:30,message:'Unrelated active screener job'}]});
+ });
+ await cancelDownload(page).click();await expect(downloadButton(page)).toBeEnabled();
+ const calls=await downloadCalls(page);expect(calls.cancelRequests).toHaveLength(1);expect([...calls.cancelRequests[0]].sort()).toEqual([...owned].sort());
+ const info=await downloadInfo(page);expect(info.jobs.filter(job=>owned.includes(job.id)).every(job=>job.status==='cancelled')).toBe(true);
+ expect(info.jobs.find(job=>job.id==='unrelated-screener-download')?.status).toBe('running');
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+});
+
+test('hidden Statistics pauses download status polling and an old selection completion cannot paint the new source',async({page})=>{
+ await enter(page);await page.clock.install();await startDownload(page);
+ await expect.poll(async()=>(await downloadCalls(page)).status).toBeGreaterThan(0);
+ await source(page).selectOption('hyperliquid');await asset(page).selectOption('perp-BTC');await period(page).selectOption('h1');
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect(downloadRegion(page)).not.toBeVisible();
+ const hidden=await downloadCalls(page),before=await statisticsCalls(page);await page.clock.fastForward(2500);
+ expect((await downloadCalls(page)).status).toBe(hidden.status);
+ await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate);
+ await page.locator('#predictions-tab').click();await expect(downloadButton(page)).toBeEnabled();
+ await expect.poll(async()=>(await downloadCalls(page)).status).toBeGreaterThan(hidden.status);
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+ await completed(page);await expect(chart(page)).toHaveAttribute('data-period','h1');
+ await expect(panel(page)).toContainText('hyperliquid-perp-BTC-h1.csv');
+});
+
+test('a missing or replaced download job stops monitoring without recalculating or cancelling another job',async({page})=>{
+ await enter(page);await page.clock.install();await startDownload(page);const before=await statisticsCalls(page);
+ await page.evaluate(()=>{
+  const info=(window as any).__testStatisticsDownloadInfo();
+  (window as any).__testSetStatisticsDownloadInfo({jobs:info.jobs.map((job:any)=>({...job,id:'replacement-download',symbol:'btcusd',status:'running',progress:50,message:'Different replacement download'}))});
+ });
+ await expect(downloadRegion(page)).toContainText(/missing or were replaced/i);
+ const stopped=await downloadCalls(page);await page.clock.fastForward(2500);
+ expect((await downloadCalls(page)).status).toBe(stopped.status);expect((await downloadCalls(page)).start).toBe(1);
+ expect((await downloadCalls(page)).cancel).toBe(0);expect((await statisticsCalls(page)).calculate).toBe(before.calculate);
+ expect((await downloadInfo(page)).jobs[0].status).toBe('running');await expect(chart(page)).toHaveCount(0);
+ await downloadRegion(page).getByRole('button',{name:'Stop tracking download',exact:true}).click();
+ await expect(downloadButton(page)).toBeEnabled();await expect(calculate(page)).toBeEnabled();
+ expect((await downloadCalls(page)).cancel).toBe(0);expect((await downloadCalls(page)).start).toBe(1);
+ expect((await downloadInfo(page)).jobs[0].status).toBe('running');
 });

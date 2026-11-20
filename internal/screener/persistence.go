@@ -457,8 +457,8 @@ func (m *Manager) Resume() (Info, error) {
 	return m.infoLocked(), nil
 }
 
-// Weekly requests retain an explicit daily job for each symbol. Validate the
-// exact two-phase shape on restore instead of accepting arbitrary mixed batches.
+// Weekly requests and H1 Statistics repairs retain explicit daily jobs. Validate
+// their exact paired shape instead of accepting arbitrary mixed saved batches.
 func downloadBatchRequest(jobs []Job, concurrency int) (Request, error) {
 	request := Request{Concurrency: concurrency}
 	if len(jobs) == 0 {
@@ -467,30 +467,36 @@ func downloadBatchRequest(jobs []Job, concurrency int) (Request, error) {
 	first := jobs[0]
 	request.DataSource = first.DataSource
 	request.Timeframe, request.From, request.To = first.Timeframe, first.From, first.To
-	weekly := false
+	weekly, daily, hourly := false, false, false
 	for _, job := range jobs {
 		weekly = weekly || job.Timeframe == "w1"
+		daily = daily || job.Timeframe == "d1"
+		hourly = hourly || job.Timeframe == "h1"
 	}
+	companion := weekly || (daily && hourly)
 	count := len(jobs)
-	if weekly {
+	if companion {
 		if count%2 != 0 {
-			return request, errors.New("weekly batch is missing its daily prerequisites")
+			return request, errors.New("companion batch is missing its daily prerequisites")
 		}
 		count /= 2
-		request.Timeframe = "w1"
+		request.Timeframe = "h1"
+		if weekly {
+			request.Timeframe = "w1"
+		}
 	}
 	for i, job := range jobs {
 		period := request.Timeframe
-		if weekly && i < count {
+		if companion && i < count {
 			period = "d1"
 		}
-		if normalizeDataSource(job.DataSource) != normalizeDataSource(first.DataSource) || job.Timeframe != period || job.From != first.From || job.To != first.To || (weekly && job.AsOf != first.AsOf) {
+		if normalizeDataSource(job.DataSource) != normalizeDataSource(first.DataSource) || job.Timeframe != period || job.From != first.From || job.To != first.To || (companion && job.AsOf != first.AsOf) {
 			return request, errors.New("saved jobs do not belong to one batch")
 		}
 		if i < count {
 			request.Symbols = append(request.Symbols, job.Symbol)
 		} else if job.Symbol != jobs[i-count].Symbol {
-			return request, errors.New("weekly batch has mismatched daily prerequisites")
+			return request, errors.New("companion batch has mismatched daily prerequisites")
 		}
 	}
 	return request, nil

@@ -20,6 +20,8 @@ export function AttachChart(arg1:string,arg2:number,arg3:domain.FeedKey,arg4:num
 
 export function CancelDucascopyConnectionTest():Promise<jforex.Info>;
 
+export function CancelPredictionStatisticsDownload(arg1:Array<string>):Promise<screener.Info>;
+
 export function CancelPrediction():Promise<predictions.Info>;
 
 export function CancelScreenerAnalysis():Promise<screener.AnalysisInfo>;
@@ -70,6 +72,8 @@ export function DetachChart(arg1:string):Promise<void>;
 
 export function EstimateTrade(arg1:domain.FeedKey,arg2:string):Promise<trading.Estimate>;
 
+export function DownloadPredictionStatisticsData(arg1:predictions.StatisticsRequest):Promise<screener.Info>;
+
 export function ExportWorkspace():Promise<string>;
 
 export function FrontendReady():Promise<void>;
@@ -99,6 +103,8 @@ export function GetPredictionDatasets():Promise<Array<predictions.Dataset>>;
 export function GetPredictionForecast(arg1:string):Promise<predictions.Forecast>;
 
 export function GetPredictionStatistics(arg1:predictions.StatisticsRequest):Promise<predictions.StatisticsForecast>;
+
+export function GetPredictionStatisticsDownload(arg1:Array<string>):Promise<screener.Info>;
 
 export function GetPredictionStatisticsDatasets():Promise<Array<predictions.Dataset>>;
 
