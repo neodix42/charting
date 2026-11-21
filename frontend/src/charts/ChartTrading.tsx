@@ -5,6 +5,7 @@ import type {Backend,FeedKey,TradeEstimate,TradePreview,TradeResult,TradingStatu
 import {errorText} from '../types';
 import {formatTradeLevelEstimate,tradeLevelEstimate} from '../workspace/tradeEstimates';
 import {maximumOrderQuantity} from '../workspace/tradeQuantity';
+import {forexRiskSizing} from '../workspace/forexRiskSizing';
 import {useTradeMetrics} from './useTradeMetrics';
 import {TradeMetricsPanel} from './TradeMetricsPanel';
 import {HyperliquidBalancesPanel} from './HyperliquidBalancesPanel';
@@ -75,6 +76,18 @@ export function ChartTrading({api,feedKey:currentKey,target}:{api:Backend;feedKe
  const valuationProblem=preview?.valuationError||(!preview&&estimateError)||(valuation&&(!valuation.accountCurrency?.trim()||!Number.isFinite(Number(valuation.profitPerPriceUnit))||Number(valuation.profitPerPriceUnit)<=0)?dukascopy?'No usable account-currency conversion was returned. Refresh quote; if your installed JForex bridge lacks valuation support, update the installed bridge and restart CryptoDesk.':'The provider did not return a verified collateral conversion. Refresh quote to retry.':'');
  const levelEstimate=(level:string)=>formatTradeLevelEstimate(tradeLevelEstimate(ticket?.side??'buy',entry,estimateQuantity,level,quoteStale?{...valuation,valuationError:'Quote stale'}:valuation??{}),dukascopy?'Account amount unavailable':'Collateral amount unavailable');
  const maximum=maximumOrderQuantity(preview??metrics,!preview&&metricsLoading,preview?'':metricsError,clock,!!preview);
+ const sourceMetrics=preview??metrics;
+ const slPrice=Number(preview?.stopLoss??stopLoss),entryNumber=Number(entry);
+ const forexSizing=dukascopy&&stopLoss.trim()&&!quoteStale&&!valuationProblem&&!metricsLoading&&!metricsError&&sourceMetrics?.equity!==undefined&&sourceMetrics.usedMargin!==undefined
+  ?forexRiskSizing({equity:Number(sourceMetrics.equity),usedMargin:Number(sourceMetrics.usedMargin),
+   entry:entryNumber,stop:slPrice,side:ticket!.side,profitPerPriceUnit:Number(valuation?.profitPerPriceUnit),
+   marginPerUnit:Number(sourceMetrics.marginPerUnit),step:Number(sourceMetrics.quantityStep),
+   maxQuantity:Number(maximum.text),marginCutUsePercent:sourceMetrics.marginCutUsePercent,accountEquityStopLoss:Number(sourceMetrics.accountEquityStopLoss??0),targetLevel:150}):null;
+ const entered=Number(preview?.quantity??quantity),unitLoss=Math.abs(entryNumber-slPrice)*Number(valuation?.profitPerPriceUnit);
+ const proposedLoss=unitLoss*entered,proposedMargin=Number(sourceMetrics?.usedMargin)+entered*Number(sourceMetrics?.marginPerUnit);
+ const proposedLevel=proposedMargin>0?(Number(sourceMetrics?.equity)-proposedLoss)/proposedMargin*100:NaN;
+ const printable=(n:number)=>Number.isFinite(n)?n.toLocaleString('en-US',{maximumFractionDigits:2}):'—';
+
 
  return <>
   {error&&!ticket&&createPortal(<div className="trade-context-error" role="alert">{error}<button onClick={()=>setError('')}>Close</button></div>,document.body)}
@@ -88,6 +101,20 @@ export function ChartTrading({api,feedKey:currentKey,target}:{api:Backend;feedKe
    {ticket.key.exchange==='dukascopy'&&<p>Dukascopy leverage is set by your account contract and cannot be changed per order. Its current value appears in the review.</p>}
    {!result&&<div className="trade-valuation" aria-label="Order valuation"><p><strong>Indicative entry:</strong> {entry||'Unavailable'}{quoteStale?' (stale)':''}{valuation?.accountCurrency?` · ${valuation.accountCurrency} ${dukascopy?'account':ticket.key.market==='spot'?'quote currency':'collateral'}`:''}{valuation?.valuationTime?` · Quote ${new Date(valuation.valuationTime).toLocaleTimeString('en-GB',{hour12:false})}`:''}</p><p className="muted">Estimates use entry-price basis points and {dukascopy?'your account currency':'the asset’s settlement currency'}, before fees, financing and slippage.</p>{valuation?.valuationNotice&&<p className="muted" title={valuation.valuationSource}>{valuation.valuationNotice}</p>}{quoteStale&&<p role="status">Quote stale. Currency estimates are unavailable until a fresh quote arrives.</p>}{valuationProblem&&<p role="status">{dukascopy?'Account-currency':'Collateral-currency'} estimate unavailable: {valuationProblem}</p>}<button type="button" disabled={busy||transferOpen||ticketInvalidated||submitted.current||(!preview&&estimateLoading)} onClick={refreshQuote} title="Refresh the market quote and account conversion. An existing review is discarded; review again before confirming.">{estimateLoading&&!preview?'Refreshing quote…':'Refresh quote'}</button></div>}
    {!result&&<TradeMetricsPanel value={preview??metrics} entryPrice={preview?.entryPrice??metrics?.entryPrice} loading={!preview&&metricsLoading} error={preview?'':metricsError} now={clock} reviewed={!!preview}/>}
+   {!result&&dukascopy&&<section className="trade-risk-sizing" aria-label="Forex risk and margin">
+    <strong>Forex position sizing · target loss 50% of equity</strong>
+    {!stopLoss.trim()?<p>Enter a stop loss to calculate a quantity for the target risk.</p>:forexSizing&&!forexSizing.error?<>
+     <p>50% risk quantity: <b>{forexSizing.riskQuantity.toLocaleString('en-US')}</b> base units.
+      Safe quantity (150% margin level at stop, liquidity capped): <b>{forexSizing.safeQuantity.toLocaleString('en-US')}</b>.</p>
+     <p>Safe quantity loss at stop: <b>{printable(forexSizing.riskAmount)} {valuation?.accountCurrency}</b> ({printable(100*forexSizing.riskAmount/Number(sourceMetrics?.equity))}% equity).</p>
+     <p>Projected equity: <b>{printable(forexSizing.projectedEquity)}</b> · margin used: <b>{printable(forexSizing.projectedUsedMargin)}</b> · margin level at stop: <b>{printable(forexSizing.projectedMarginLevel)}%</b>.</p>
+     <p>Broker margin cut: <b>{printable(forexSizing.cutLevel??NaN)}%</b> margin level · account equity stop: <b>{sourceMetrics?.accountEquityStopLoss??'—'} {valuation?.accountCurrency}</b> · target buffer: <b>150%</b>.</p>
+     <button type="button" disabled={busy||!!preview||forexSizing.safeQuantity<=0} onClick={()=>{setQuantity(String(forexSizing.safeQuantity));edit();}}>Use safe risk-sized quantity</button>
+     {!forexSizing.canTargetRisk&&<p role="status">A 50% loss target is not achievable with the requested 150% margin buffer and the current executable-size limit. The suggested size risks less.</p>}
+     {quantity.trim()&&Number.isFinite(proposedLevel)&&<p role={proposedLevel<150?'alert':'status'}>Entered position: estimated loss {printable(proposedLoss)} {valuation?.accountCurrency}; margin level at stop {printable(proposedLevel)}%. {proposedLevel<150?'Below buffer — reduce quantity.':'Above buffer under current assumptions.'}</p>}
+    </>:<p role="status">{forexSizing?.error||'Risk sizing requires a fresh account snapshot, stop, conversion rate and verified liquidity/margin limits. Refresh quote to retry.'}</p>}
+    <small>Advisory calculation only. Market gaps, commissions, existing exposure, weekend leverage, dynamic tiers and broker changes can cause earlier margin cut or a larger loss. Partial execution cannot be ruled out.</small>
+   </section>}
    {!result&&ticket.key.exchange==='hyperliquid'&&<HyperliquidBalancesPanel api={api} network={ticket.status.environment} selectedDex={ticket.key.market==='spot'?'spot':ticket.key.instrument.includes(':')?ticket.key.instrument.split(':')[0]:''} orderReviewed={!!preview} disabled={busy||submitted.current||ticketInvalidated} onInvalidateOrder={()=>{setPreview(null);setEstimate(null);setEstimateError('');setEstimateLoading(false);setError('');}} onTransferActivity={(open,active)=>{transferOpenRef.current=open;transferBusyRef.current=active;setTransferOpen(open);setTransferBusy(active);}} onRefreshOrder={()=>setQuoteRefresh(value=>value+1)}/>}
    {!result&&<form onSubmit={event=>{event.preventDefault();if(!preview)review();}}>
     <label><span>Quantity ({ticket.status.quantityLabel||'base units'}), maximum (<span aria-label="Maximum quantity" title={maximum.reason}>{maximum.text}</span>)</span><input autoFocus aria-label="Order quantity" inputMode="decimal" required value={quantity} disabled={busy||!!preview} onChange={event=>{setQuantity(event.target.value);edit();}}/></label>

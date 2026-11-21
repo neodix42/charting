@@ -327,6 +327,12 @@ def day_week_smoke(runtime, node, directory):
         "previous_week_low": ["", "", "", "3"], "previous_week_high": ["", "", "", "15"],
         "two_days_ago_low": ["", "", "", "6"], "two_days_ago_high": ["", "", "", "15"],
         "three_days_ago_low": ["", "", "", ""], "three_days_ago_high": ["", "", "", ""],
+        "today_open": ["10", "10", "8", "14"], "today_close": ["10", "10", "8", "14"],
+        "previous_day_open": ["", "", "10", "8"], "previous_day_close": ["", "", "10", "8"],
+        "two_days_ago_open": ["", "", "", "10"], "two_days_ago_close": ["", "", "", "10"],
+        "three_days_ago_open": ["", "", "", ""], "three_days_ago_close": ["", "", "", ""],
+        "week_open": ["10", "10", "10", "14"], "week_close": ["10", "10", "8", "14"],
+        "previous_week_open": ["", "", "", "10"], "previous_week_close": ["", "", "", "8"],
     }
     current = source
     for indicator in expected:
@@ -349,8 +355,17 @@ def day_week_smoke(runtime, node, directory):
                    input=json.dumps(request) + "\n", text=True, capture_output=True,
                    cwd=directory, timeout=20, check=True)
     with grouped.open(newline="") as stream:
-        if list(csv.DictReader(stream)) != rows:
-            raise ValueError("Packaged grouped range enrichment differs from individual calculations")
+        reader = csv.DictReader(stream)
+        group_rows = list(reader)
+        if set(reader.fieldnames or []) != set(rows[0]) or len(reader.fieldnames or []) != len(rows[0]):
+            raise ValueError("Packaged grouped range enrichment has missing, extra or duplicate columns")
+        if group_rows != rows:
+            for index, (group_row, individual_row) in enumerate(zip(group_rows, rows), start=1):
+                differences = {column: (individual_row[column], group_row.get(column))
+                               for column in individual_row if individual_row[column] != group_row.get(column)}
+                if differences:
+                    raise ValueError(f"Packaged grouped range enrichment differs at row {index}: {differences}")
+            raise ValueError(f"Packaged grouped range enrichment has {len(group_rows)} rows, expected {len(rows)}")
     if source.read_text() != original:
         raise ValueError("Packaged day/week ranges changed their original input")
     return {"passed": True, "columns": list(expected), "utc": True, "causal": True,

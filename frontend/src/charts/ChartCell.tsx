@@ -25,6 +25,7 @@ import {ChartTrading} from './ChartTrading';
 import {instrumentLabel} from './instrumentLabel';
 import {AssetPicker,marketLabel} from '../components/AssetPicker';
 import {DukascopyTradingHours} from './DukascopyTradingHours';
+import {DukascopyMarginOverlay} from './DukascopyMarginOverlay';
 const matchesDrawing=(drawing:DrawingConfig,config:ChartConfig)=>drawing.exchange===config.exchange&&drawing.market===config.market&&drawing.instrument===config.instrument;
 export const viewportCaptures=new Map<string,()=>void>();
 export function captureAllViewports(){for(const capture of viewportCaptures.values())capture();}
@@ -155,6 +156,7 @@ export function ChartCell(p:Props){
   <div className="chart-canvas" ref={host} data-testid="chart-canvas"/>
   <div className="chart-overlays">
   {jforex&&<DukascopyTradingHours instrument={metadata}/>}
+  {jforex&&<DukascopyMarginOverlay api={api} feedKey={feedKey(c)} trades={p.tradeRows}/>}
   {(tradeLevels.length>0||tradeError)&&<aside className="chart-trade-levels" aria-label="Last trade levels">{tradeLevels.length>0&&<><div className="muted">Last trade</div><ul>{tradeLevels.map(level=><li key={level.id} className={level.kind}><span>{level.title}</span><strong>{price(level.price)}</strong></li>)}</ul></>}{tradeError&&<p role="status">Trade levels: {tradeError}</p>}</aside>}
   </div>
   {(failed||(status==='loading'&&barCount===0))&&<div className={`chart-message ${barCount?'compact':''}`}><span className={`status-dot ${status}`}/><strong>{status==='loading'?(jforex?'Connecting to JForex Bid feed…':`Connecting to public ${c.market} feed…`):status}</strong>{health.reason&&<p>{health.reason}</p>}{status!=='loading'&&<button onClick={()=>setRetry(x=>x+1)}>Retry feed</button>}</div>}

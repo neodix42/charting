@@ -28,6 +28,13 @@ type TradeMetrics struct {
 	UsedMargin           *float64 `json:"usedMargin,omitempty"`
 	AvailableBalance     *float64 `json:"availableBalance,omitempty"`
 	AccountLeverage      float64  `json:"accountLeverage"`
+    WeekendLeverage float64 `json:"weekendLeverage,omitempty"`
+    InstrumentMaxLeverage float64 `json:"instrumentMaxLeverage,omitempty"`
+    EffectiveLeverage float64 `json:"effectiveLeverage,omitempty"`
+    MarginCutUsePercent float64 `json:"marginCutUsePercent,omitempty"`
+    AccountEquityStopLoss float64 `json:"accountEquityStopLoss,omitempty"`
+    MarginPerUnit *float64 `json:"marginPerUnit,omitempty"`
+    QuantityStep float64 `json:"quantityStep,omitempty"`
 	AccountTime          int64    `json:"accountTime"`
 	AccountNote          string   `json:"accountNote,omitempty"`
 	AccountError         string   `json:"accountError,omitempty"`
