@@ -124,7 +124,7 @@ func TestStatisticsH1FridayStillProjectsUntilTheFinalHourCloses(t *testing.T) {
 		t.Fatal("Friday H1 lost its remaining final close checkpoint", got, err)
 	}
 	completed, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, target+5*statisticsDay)
-	if err != nil || completed.Anchor.Time != target+4*statisticsDay+23*3_600_000 || completed.TheoreticalScenarios != 0 || len(completed.Scenarios) != 0 {
+	if err != nil || completed.Anchor.Time != target+4*statisticsDay+23*3_600_000 || completed.TheoreticalScenarios != 0 || len(completed.Scenarios) != 0 || completed.EligibleWeeks != 4 || completed.MatchedWeeks != 2 {
 		t.Fatal("completed Friday H1 rolled into another week", completed, err)
 	}
 }
@@ -172,8 +172,70 @@ func TestStatisticsW1UsesLastClosedWeeklyBodyAndObservedDailyBridge(t *testing.T
 		t.Fatal("known D1 close was forecast or normalized to the old W1 price", first.Points)
 	}
 	completed, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, target+5*statisticsDay)
-	if err != nil || completed.TheoreticalScenarios != 0 || len(completed.Scenarios) != 0 {
+	if err != nil || completed.TheoreticalScenarios != 0 || len(completed.Scenarios) != 0 || completed.EligibleWeeks != 4 || completed.MatchedWeeks != 2 {
 		t.Fatal("W1 with a complete Friday prefix rolled forward", completed, err)
+	}
+}
+
+func TestStatisticsCompletedCompanionWeeksCountMatchesCheckpointsAndLookback(t *testing.T) {
+	for _, period := range []string{"h1", "w1"} {
+		t.Run(period, func(t *testing.T) {
+			native, daily, request, target := statisticsCompanionFixture(t, period)
+			rows := []StatisticsCandle{}
+			for index, direction := range []string{"U", "U", "U", "D", "U"} {
+				if index == 0 {
+					continue // The first complete daily week has no native checkpoint.
+				}
+				timestamp := target - int64(4-index)*7*statisticsDay + 4*statisticsDay + 23*3_600_000
+				if period == "w1" {
+					timestamp = target - int64(5-index)*7*statisticsDay
+				}
+				rows = append(rows, statisticsNativeCandle(timestamp, direction, 100))
+			}
+			if err := os.WriteFile(filepath.Join(native.Directory, native.Filename), []byte(statisticsCSV(rows)), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cutoff := target + 5*statisticsDay
+			got, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, cutoff)
+			if err != nil || got.EligibleWeeks != 3 || got.MatchedWeeks != 1 || got.ExcludedCheckpointWeeks != 1 || got.TheoreticalScenarios != 0 || len(got.Scenarios) != 0 {
+				t.Fatal("completed companion week skipped native-conditioned counts or invented a suffix", got, err)
+			}
+			request.LookbackWeeks = 2
+			limited, err := CalculateStatisticsWithCompanion(context.Background(), native, daily, request, cutoff)
+			warnings := strings.Join(limited.Warnings, " ")
+			if err != nil || limited.EligibleWeeks != 2 || limited.MatchedWeeks != 0 || limited.ExcludedCheckpointWeeks != 0 || !strings.Contains(warnings, "No complete historical weeks match the completed daily sequence") || strings.Contains(warnings, "No scenario probabilities") {
+				t.Fatal("completed native-conditioned sample ignored lookback or concealed true no-match", limited, err)
+			}
+			request.LookbackWeeks = 0
+			for _, check := range []int{5, 6} {
+				base, cancel := context.WithCancel(context.Background())
+				ctx := &statisticsCancellingContext{Context: base, cancel: cancel, cancelAt: check}
+				_, err := CalculateStatisticsWithCompanion(ctx, native, daily, request, cutoff)
+				cancel()
+				if err != context.Canceled {
+					t.Fatal("completed companion calculation ignored cancellation during counting", check, ctx.calls, err)
+				}
+			}
+			for _, source := range []Dataset{native, daily} {
+				path := filepath.Join(source.Directory, source.Filename)
+				original, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx := &statisticsMutatingContext{Context: context.Background(), mutateAt: 6, mutate: func() {
+					if err := os.WriteFile(path, append(original, '\n'), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}}
+				_, err = CalculateStatisticsWithCompanion(ctx, native, daily, request, cutoff)
+				if err == nil || !strings.Contains(err.Error(), "changed during prediction") {
+					t.Fatal("completed companion counts escaped a final source mutation", source.Period, ctx.calls, err)
+				}
+				if err := os.WriteFile(path, original, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

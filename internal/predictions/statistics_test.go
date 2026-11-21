@@ -127,6 +127,9 @@ func TestStatisticsWeekdayHorizonsRespectExactClosedBarCutoffsThroughFriday(t *t
 		} else if len(got.Scenarios) != 0 || len(got.Warnings) == 0 {
 			t.Fatal("Friday completion invented a next-week forecast", got)
 		}
+		if day == 4 && (got.EligibleWeeks != 4 || got.MatchedWeeks != 2) {
+			t.Fatal("Friday completion hid historical full-sequence counts", got)
+		}
 		if day > 0 {
 			before, err := CalculateStatistics(context.Background(), dataset, request, cutoff-1)
 			if err != nil || before.Anchor.Time != anchor+int64(day-1)*statisticsDay {
@@ -136,9 +139,60 @@ func TestStatisticsWeekdayHorizonsRespectExactClosedBarCutoffsThroughFriday(t *t
 	}
 	for _, weekend := range []int64{6, 7} {
 		got, err := CalculateStatistics(context.Background(), dataset, request, anchor+weekend*statisticsDay)
-		if err != nil || got.TheoreticalScenarios != 0 || len(got.Scenarios) != 0 || got.WeekStart != anchor {
+		if err != nil || got.TheoreticalScenarios != 0 || len(got.Scenarios) != 0 || got.WeekStart != anchor || got.EligibleWeeks != 4 || got.MatchedWeeks != 2 {
 			t.Fatal("weekend without a new closed weekday rolled forward", got, err)
 		}
+	}
+}
+
+func TestStatisticsCompletedBearishWeekCountsHistoryAndExclusionsWithinLookback(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	candles := []StatisticsCandle{}
+	for index, pattern := range []string{"DDDDD", "DDDDD", "D=DDD", "DDDDD", "DDDDU", "DDDDD", "DDDDD"} {
+		week := statisticsTestWeek(start+int64(index)*7*statisticsDay, pattern, []float64{100, 99, 98, 97, 96})
+		if index == 1 {
+			week = append(week[:2], week[3:]...) // Missing Wednesday.
+		}
+		if index == 3 {
+			week[3].High = week[3].Low - 1
+		}
+		candles = append(candles, week...)
+	}
+	dataset, request, original := statisticsTestDataset(t, candles)
+	anchor := start + 6*7*statisticsDay
+	for _, elapsed := range []int64{5, 6, 7} {
+		got, err := CalculateStatistics(context.Background(), dataset, request, anchor+elapsed*statisticsDay)
+		if err != nil || got.EligibleWeeks != 3 || got.MatchedWeeks != 2 || got.ExcludedIncompleteWeeks != 1 || got.ExcludedDojiWeeks != 1 || got.ExcludedInvalidWeeks != 1 {
+			t.Fatalf("completed all-bearish history was skipped or the current week counted: %+v %v", got, err)
+		}
+		if len(got.Prefix) != 5 || got.TheoreticalScenarios != 0 || len(got.Scenarios) != 0 || got.WeekStart != anchor {
+			t.Fatal("historical matches became an empty or next-week scenario", got)
+		}
+		for _, day := range got.Prefix {
+			if day.Direction != "down" {
+				t.Fatal("all-bearish prefix changed", got.Prefix)
+			}
+		}
+	}
+	request.LookbackWeeks = 2
+	limited, err := CalculateStatistics(context.Background(), dataset, request, anchor+5*statisticsDay)
+	if err != nil || limited.EligibleWeeks != 2 || limited.MatchedWeeks != 1 || limited.ExcludedIncompleteWeeks+limited.ExcludedDojiWeeks+limited.ExcludedInvalidWeeks != 0 {
+		t.Fatal("completed-week counts ignored historical lookback", limited, err)
+	}
+	if after, err := os.ReadFile(filepath.Join(dataset.Directory, dataset.Filename)); err != nil || string(after) != original {
+		t.Fatal("completed-week statistics changed source data", err)
+	}
+	// A genuinely absent completed pattern must still report the inspected
+	// eligible sample and must not claim that a future path was requested.
+	candles[len(candles)-1].Open = candles[len(candles)-1].Close - 1
+	if err := os.WriteFile(filepath.Join(dataset.Directory, dataset.Filename), []byte(statisticsCSV(candles)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	request.LookbackWeeks = 1
+	missing, err := CalculateStatistics(context.Background(), dataset, request, anchor+5*statisticsDay)
+	warnings := strings.Join(missing.Warnings, " ")
+	if err != nil || missing.EligibleWeeks != 1 || missing.MatchedWeeks != 0 || !strings.Contains(warnings, "No complete historical weeks match the completed observed") || strings.Contains(warnings, "No scenario probabilities") {
+		t.Fatal("genuine no-match completion concealed the historical sample", missing, err)
 	}
 }
 
@@ -351,14 +405,47 @@ func (ctx *statisticsMutatingContext) Err() error {
 }
 
 func TestStatisticsDetectsSourceMutationAfterReadingBeforeReturningResult(t *testing.T) {
-	candles, anchor := statisticsTestHistory()
-	dataset, request, original := statisticsTestDataset(t, candles)
-	ctx := &statisticsMutatingContext{Context: context.Background(), mutate: func() {
-		if err := os.WriteFile(filepath.Join(dataset.Directory, dataset.Filename), []byte(original+"\n"), 0600); err != nil {
-			t.Fatal(err)
+	for _, elapsed := range []int64{1, 5} {
+		t.Run(fmt.Sprintf("closed-days-%d", elapsed), func(t *testing.T) {
+			candles, anchor := statisticsTestHistory()
+			dataset, request, original := statisticsTestDataset(t, candles)
+			ctx := &statisticsMutatingContext{Context: context.Background(), mutate: func() {
+				if err := os.WriteFile(filepath.Join(dataset.Directory, dataset.Filename), []byte(original+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}}
+			if _, err := CalculateStatistics(ctx, dataset, request, anchor+elapsed*statisticsDay); err == nil || !strings.Contains(err.Error(), "changed during prediction") {
+				t.Fatal("a mixed CSV snapshot escaped after the file changed during calculation", err)
+			}
+		})
+	}
+}
+
+type statisticsCancellingContext struct {
+	context.Context
+	cancel   context.CancelFunc
+	calls    int
+	cancelAt int
+}
+
+func (ctx *statisticsCancellingContext) Err() error {
+	ctx.calls++
+	if ctx.calls == ctx.cancelAt {
+		ctx.cancel()
+	}
+	return ctx.Context.Err()
+}
+
+func TestStatisticsCompletedWeekHonorsCancellationDuringHistoricalCounting(t *testing.T) {
+	for _, check := range []int{3, 4} {
+		candles, anchor := statisticsTestHistory()
+		dataset, request, _ := statisticsTestDataset(t, candles)
+		base, cancel := context.WithCancel(context.Background())
+		ctx := &statisticsCancellingContext{Context: base, cancel: cancel, cancelAt: check}
+		_, err := CalculateStatistics(ctx, dataset, request, anchor+5*statisticsDay)
+		cancel()
+		if err != context.Canceled {
+			t.Fatal("completed-week calculation ignored cancellation after source read", check, ctx.calls, err)
 		}
-	}}
-	if _, err := CalculateStatistics(ctx, dataset, request, anchor+statisticsDay); err == nil || !strings.Contains(err.Error(), "changed during prediction") {
-		t.Fatal("a mixed CSV snapshot escaped after the file changed during calculation", err)
 	}
 }

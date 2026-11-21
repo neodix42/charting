@@ -107,11 +107,12 @@ func CalculateStatisticsWithCompanion(ctx context.Context, selectedDataset, dail
 	} else if asOf-closedAt(native.anchor.Time, period) >= 3_600_000 {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Latest downloaded closed H1 candle: %s UTC. Scenarios use its historical cutoff; refresh Screener data for a newer anchor.", time.UnixMilli(native.anchor.Time).UTC().Format("2006-01-02 15:04:05")))
 	}
-	if prefixLength >= 5 || (period == "h1" && (native.anchor.Time-targetWeek)/statisticsDay >= 5) {
+	completedWeek := prefixLength >= 5 || (period == "h1" && (native.anchor.Time-targetWeek)/statisticsDay >= 5)
+	if completedWeek {
 		result.Warnings = append(result.Warnings, "Friday is already closed in the target week. There are no remaining Monday–Friday scenarios for that week.")
-		return result, unchangedStatisticsSources(ctx, native, daily)
+	} else {
+		result.TheoreticalScenarios = 1 << (5 - prefixLength)
 	}
-	result.TheoreticalScenarios = 1 << (5 - prefixLength)
 	priceAnchor := native.anchor.Close
 	if period == "w1" && observed != nil {
 		priceAnchor = observed.Close
@@ -173,6 +174,9 @@ func CalculateStatisticsWithCompanion(ctx context.Context, selectedDataset, dail
 			continue
 		}
 		result.MatchedWeeks++
+		if completedWeek {
+			continue
+		}
 		var suffix strings.Builder
 		for day := prefixLength; day < 5; day++ {
 			if statisticsDirection(*week.days[day]) == "up" {
@@ -234,7 +238,11 @@ func CalculateStatisticsWithCompanion(ctx context.Context, selectedDataset, dail
 		return result.Scenarios[i].ID < result.Scenarios[j].ID
 	})
 	if result.MatchedWeeks == 0 {
-		result.Warnings = append(result.Warnings, "No complete historical weeks match the daily prefix and selected-timeframe candle body. No scenario probabilities or prices can be estimated.")
+		if completedWeek {
+			result.Warnings = append(result.Warnings, "No complete historical weeks match the completed daily sequence and selected-timeframe candle body in the selected lookback.")
+		} else {
+			result.Warnings = append(result.Warnings, "No complete historical weeks match the daily prefix and selected-timeframe candle body. No scenario probabilities or prices can be estimated.")
+		}
 	} else if result.MatchedWeeks < 30 {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Only %d matching historical weeks; these frequencies have a small sample size and may be unstable.", result.MatchedWeeks))
 	}

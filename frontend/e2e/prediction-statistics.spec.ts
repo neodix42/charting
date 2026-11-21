@@ -72,7 +72,7 @@ test('weekly scenarios paint Monday anchor, Friday prices and joint probabilitie
  await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2018-01-01 00:00:00 UTC');
  await expect(panel(page)).toContainText(/Matching weeks\s*4/);
  await expect(panel(page)).toContainText(/Eligible weeks\s*12/);
- await expect(panel(page)).toContainText(/Possible sequences\s*16/);
+ await expect(panel(page)).toContainText(/Remaining-week sequences\s*16/);
  await expect(panel(page)).toContainText(/small sample/i);
  const rows=scenarios(page).getByRole('row');await expect(rows).toHaveCount(3);
  await expect(rows.nth(1)).toContainText(/75(?:\.0+)?%/);await expect(rows.nth(1)).toContainText('98');
@@ -139,6 +139,30 @@ test('no matching history and a finished Friday show empty outcomes without inve
  await setForecast(page,{...base,asOf:friday+86400000,anchor:fridayBar,history:[...base.history,...completedWeek.map(value=>({...fridayBar,time:value.time}))],prefix:[...base.prefix,...completedWeek],theoreticalScenarios:0,scenarios:[],warnings:['Friday is closed. No weekdays remain in this week.']});
  await calculate(page).click();await expect(panel(page)).toContainText('No weekdays remain');await expect(scenarios(page).getByRole('row')).toHaveCount(0);
  await expect(panel(page)).not.toContainText(/75(?:\.0+)?%/);
+});
+
+test('completed bearish weeks retain historical match counts and distinguish lookback from file coverage',async({page})=>{
+ await enter(page);const base=await forecast(page);
+ const prefix=['Mon','Tue','Wed','Thu','Fri'].map((day,index)=>({time:base.weekStart+index*86400000,day,direction:'down' as const}));
+ const friday={time:prefix[4].time,open:100,high:101,low:98,close:99};
+ await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('520');
+ await setForecast(page,{...base,lookbackWeeks:520,firstClosedBar:Date.UTC(2006,0,1),asOf:friday.time+86400000,anchor:friday,history:[friday],prefix,matchedWeeks:13,eligibleWeeks:513,theoreticalScenarios:0,scenarios:[],warnings:[]});
+ await calculate(page).click();await expect(chart(page)).toBeVisible();
+ await expect(panel(page)).toContainText('Mon ↓ · Tue ↓ · Wed ↓ · Thu ↓ · Fri ↓');
+ await expect(panel(page).getByLabel('Statistics sample scope',{exact:true})).toContainText('last 520 weeks');
+ await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2006-01-01');
+ await expect(panel(page).locator('.statistics-summary>div').filter({hasText:'Matching weeks'}).locator('strong')).toHaveText('13');
+ await expect(panel(page).locator('.statistics-summary>div').filter({hasText:'Eligible weeks'}).locator('strong')).toHaveText('513');
+ await expect(panel(page).locator('.statistics-summary>div').filter({hasText:'Remaining-week sequences'}).locator('strong')).toHaveText('0');
+ await expect(panel(page)).toContainText('The observed sequence matches 13 of 513 eligible historical weeks.');
+ await expect(panel(page)).toContainText('Friday is already complete');
+ await expect(scenarios(page)).toHaveCount(0);await expect(chart(page)).toHaveAttribute('data-scenario-count','0');
+ await panel(page).locator('.prediction-statistics').screenshot({path:'test-results/statistics-completed-bearish-week.png'});
+ await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('0');
+ await setForecast(page,{...base,lookbackWeeks:0,firstClosedBar:Date.UTC(2006,0,1),asOf:friday.time+86400000,anchor:friday,history:[friday],prefix,matchedWeeks:29,eligibleWeeks:1080,theoreticalScenarios:0,scenarios:[],warnings:[]});
+ await calculate(page).click();await expect(panel(page).getByLabel('Statistics sample scope',{exact:true})).toContainText('all downloaded history');
+ await expect(panel(page)).toContainText('The observed sequence matches 29 of 1080 eligible historical weeks.');
+ await expect(scenarios(page)).toHaveCount(0);await expect(chart(page)).toHaveAttribute('data-scenario-count','0');
 });
 
 test('statistics calculation errors remain visible until an explicit retry',async({page})=>{

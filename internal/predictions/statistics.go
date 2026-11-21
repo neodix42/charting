@@ -185,11 +185,12 @@ func CalculateStatistics(ctx context.Context, dataset Dataset, request Statistic
 	if asOf-closedAt(source.anchor.Time, "d1") >= statisticsDay {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Latest downloaded closed candle: %s UTC. These scenarios use that candle's week; refresh Screener data for a newer cutoff.", time.UnixMilli(source.anchor.Time).UTC().Format("2006-01-02 15:04:05")))
 	}
-	if anchorDay >= 4 {
+	completedWeek := anchorDay >= 4
+	if completedWeek {
 		result.Warnings = append(result.Warnings, "Friday is already closed in the anchor week. There are no remaining Monday–Friday scenarios for that week.")
-		return result, source.snapshot.unchanged()
+	} else {
+		result.TheoreticalScenarios = 1 << (4 - anchorDay)
 	}
-	result.TheoreticalScenarios = 1 << (4 - anchorDay)
 	firstWeek := source.firstWeek
 	if request.LookbackWeeks > 0 {
 		firstWeek = max(firstWeek, weekStart-int64(request.LookbackWeeks)*7*statisticsDay)
@@ -238,6 +239,11 @@ func CalculateStatistics(ctx context.Context, dataset Dataset, request Statistic
 			continue
 		}
 		result.MatchedWeeks++
+		// Historical matches remain meaningful after Friday, but there is no
+		// unobserved suffix to group, price or present as a future scenario.
+		if completedWeek {
+			continue
+		}
 		var suffix strings.Builder
 		for day := anchorDay + 1; day < 5; day++ {
 			if statisticsDirection(*week.days[day]) == "up" {
@@ -288,7 +294,11 @@ func CalculateStatistics(ctx context.Context, dataset Dataset, request Statistic
 		return result.Scenarios[i].ID < result.Scenarios[j].ID
 	})
 	if result.MatchedWeeks == 0 {
-		result.Warnings = append(result.Warnings, "No complete historical weeks match the observed up/down prefix. No scenario probabilities or prices can be estimated.")
+		if completedWeek {
+			result.Warnings = append(result.Warnings, "No complete historical weeks match the completed observed up/down sequence in the selected lookback.")
+		} else {
+			result.Warnings = append(result.Warnings, "No complete historical weeks match the observed up/down prefix. No scenario probabilities or prices can be estimated.")
+		}
 	} else if result.MatchedWeeks < 30 {
 		// Thirty is a presentation heuristic, not a calibration or confidence
 		// guarantee. The exact matching count remains visible to the user.
