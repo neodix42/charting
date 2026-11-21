@@ -3,6 +3,14 @@ import type {TradeValuation} from '../types';
 export interface TradeLevelEstimate {basisPoints:number|null;amount:number|null;currency:string|null}
 const positive=(value:string|undefined)=>{if(!value?.trim())return null;const number=Number(value);return Number.isFinite(number)&&number>0?number:null;};
 
+/** Old quotes can value an explicitly identified planning reference, never a live order. */
+export function tradeValuationIsStale(valuation:TradeValuation|null,now:number,allowReference=false):boolean {
+ if(!valuation)return false;
+ const time=valuation.valuationTime;
+ const maxAge=allowReference&&valuation.referenceOnly===true?14*86400000:30000;
+ return !time||!Number.isFinite(time)||time<=0||time>now+5000||now-time>maxAge;
+}
+
 /** Providers supply the denomination and conversion; never infer it from a symbol name. */
 export function tradeLevelEstimate(side:'buy'|'sell',entryPrice:string,quantity:string,exitPrice:string,valuation:TradeValuation={}):TradeLevelEstimate {
  const entry=positive(entryPrice),exit=positive(exitPrice),units=positive(quantity),conversion=valuation.valuationError?null:positive(valuation.profitPerPriceUnit),currency=valuation.accountCurrency?.trim()||null;

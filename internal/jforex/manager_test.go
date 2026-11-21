@@ -794,6 +794,17 @@ func TestBridgeHelperProcess(t *testing.T) {
 			if scenario == "trade-estimate-stale" {
 				estimate.ValuationTime = time.Now().Add(-time.Minute).UnixMilli()
 			}
+			if strings.HasPrefix(scenario, "trade-estimate-reference") {
+				estimate.ReferenceOnly = true
+				estimate.ValuationTime = time.Now().Add(-72 * time.Hour).UnixMilli()
+				estimate.ValuationNotice = "Last available JForex quotes for planning only"
+			}
+			if scenario == "trade-estimate-reference-expired" {
+				estimate.ValuationTime = time.Now().Add(-15 * 24 * time.Hour).UnixMilli()
+			}
+			if scenario == "trade-estimate-reference-conversion-unavailable" {
+				estimate.ValuationError = "No valid recent EURUSD conversion quote"
+			}
 			if scenario == "trade-estimate-unavailable" {
 				estimate.ProfitPerPriceUnit = 0
 				estimate.ValuationError = "SDK conversion unavailable"

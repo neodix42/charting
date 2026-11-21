@@ -28,6 +28,7 @@ public final class BridgeValuationTest {
             if (!instrument.equals(Instrument.AAPLUSUSD)) fxQuoteCalls.incrementAndGet();
             long at=now-(entryStale.get()&&instrument.equals(Instrument.AAPLUSUSD)||conversionStale.get()&&instrument.equals(Instrument.EURUSD)?60000:instrument.equals(Instrument.EURUSD)?conversionAge.get():0);
             if(instrument.equals(Instrument.AAPLUSUSD))return entryOverride.get()!=null?entryOverride.get():tick(100,100.2,at);
+            if(instrument.equals(Instrument.BMWDEEUR))return tick(14.8,14.82,now-72*3_600_000L);
             if(instrument.equals(Instrument.USDJPY))return tick(149.98,150,at);
             if(instrument.equals(Instrument.EURJPY))return tick(166.65,166.68,at);
             return tick(1.11,1.112,at);
@@ -54,7 +55,7 @@ public final class BridgeValuationTest {
         });
         IClient client=fake(IClient.class,(method,args)->switch(method){
             case "isConnected"->connected.get();case "connect"->{connected.set(true);yield null;}
-            case "getAvailableInstruments"->Set.of(Instrument.EURUSD,Instrument.USDJPY,Instrument.EURJPY,Instrument.AAPLUSUSD);
+            case "getAvailableInstruments"->Set.of(Instrument.EURUSD,Instrument.USDJPY,Instrument.EURJPY,Instrument.AAPLUSUSD,Instrument.BMWDEEUR);
             case "getSubscribedInstruments"->new HashSet<>(subscribed);case "unsubscribeInstruments"->{subscribed.removeAll((Set<Instrument>)args[0]);yield null;}
             case "startStrategy"->{((IStrategy)args[0]).onStart(context);yield 1L;}default->null;
         });
@@ -67,7 +68,7 @@ public final class BridgeValuationTest {
             near((100-95)*2*sell.get("profitPerPriceUnit").getAsDouble(),9,"sell target account profit");check(buy.get("valuationTime").getAsLong()==now,"verified quote valuation timestamp");
             JsonObject jpy=estimate(bridge,Instrument.USDJPY,"buy");near(jpy.get("profitPerPriceUnit").getAsDouble(),0.006,"JPY quote conversion factor uses pip ratio");
             currency.set(JFCurrency.getInstance("USD"));near(estimate(bridge,Instrument.AAPLUSUSD,"buy").get("profitPerPriceUnit").getAsDouble(),1,"same account/quote currency is still SDK-derived");
-            currency.set(JFCurrency.getInstance("EUR"));conversionStale.set(true);JsonObject stale=estimate(bridge,Instrument.AAPLUSUSD,"buy");check(stale.has("valuationError")&&stale.get("profitPerPriceUnit").getAsDouble()==0&&stale.get("entryPrice").getAsDouble()==100.2,"stale conversion keeps entry, never invents rate");
+            currency.set(JFCurrency.getInstance("EUR"));conversionStale.set(true);JsonObject stale=estimate(bridge,Instrument.AAPLUSUSD,"buy");check(stale.get("referenceOnly").getAsBoolean()&&!stale.has("valuationError")&&stale.get("profitPerPriceUnit").getAsDouble()>0&&stale.get("entryPrice").getAsDouble()==100.2&&stale.get("valuationTime").getAsLong()==now-60000,"real last FX quote supports a clearly marked reference estimate");
             conversionStale.set(false);conversionBlocked.set(true);JsonObject blocked=estimate(bridge,Instrument.AAPLUSUSD,"buy");check(!blocked.has("valuationError")&&blocked.get("profitPerPriceUnit").getAsDouble()>0&&blocked.has("valuationNotice"),"CFD SDK pip failure falls back to actual fresh FX quotes");
             check(blocked.get("valuationSource").getAsString().contains("FX quote"),"fallback provenance visible");
             currency.set(JFCurrency.getInstance("USD"));JsonObject identity=estimate(bridge,Instrument.AAPLUSUSD,"buy");near(identity.get("profitPerPriceUnit").getAsDouble(),1,"actual same currency identity independent of broken SDK pip helper");
@@ -126,7 +127,20 @@ public final class BridgeValuationTest {
             check(TradeSizing.maximum(9,10,0,1,1,1000,10000).equals("0"),"subminimum funded size is zero");
             check(TradeSizing.maximum(-1,10,0,1,1,1000,10000).equals("0"),"negative free margin cannot open new exposure");
             check(TradeSizing.maximum(1,.1,0,.01,.01,1000,10000).equals("10"),"decimal boundary does not round one lot beyond affordability");
-            conversionBlocked.set(false);entryStale.set(true);JsonObject r=request("tradeEstimate");r.addProperty("instrument",Instrument.AAPLUSUSD.name());r.addProperty("side","buy");check(!bridge.handle(r).get("ok").getAsBoolean(),"stale entry not an executable quote");
+            conversionBlocked.set(false);entryStale.set(true);JsonObject last=estimate(bridge,Instrument.AAPLUSUSD,"buy");
+            check(last.get("referenceOnly").getAsBoolean()&&last.get("valuationTime").getAsLong()==now-60000&&last.get("entryPrice").getAsDouble()==100.2,"stale real entry supports planning without pretending to be executable");
+            entryStale.set(false);currency.set(JFCurrency.getInstance("USD"));conversionAge.set(48*3_600_000L);
+            BridgeTradingTest.metadata(Instrument.BMWDEEUR,"amountPerContract",1);BridgeTradingTest.metadata(Instrument.BMWDEEUR,"minTradeAmount",1);BridgeTradingTest.metadata(Instrument.BMWDEEUR,"tradeAmountIncrement",1);BridgeTradingTest.metadata(Instrument.BMWDEEUR,"maxTradeAmount",10000);
+            JsonObject closed=estimate(bridge,Instrument.BMWDEEUR,"buy");
+            check(closed.get("referenceOnly").getAsBoolean()&&closed.get("valuationTime").getAsLong()==now-72*3_600_000L&&closed.get("valuationNotice").getAsString().contains("planning only"),"closed EUR-quoted CFD retains actual oldest entry/FX date and planning notice");
+            near(closed.get("entryPrice").getAsDouble(),14.82,"closed CFD buy uses genuine last ask");near(closed.get("profitPerPriceUnit").getAsDouble(),1.111,"closed EUR CFD in USD account uses actual last EURUSD quotes");
+            near((14-14.82)*1000*closed.get("profitPerPriceUnit").getAsDouble(),-911.02,"closed CFD stop estimate uses base units and real account conversion");
+            near(estimate(bridge,Instrument.BMWDEEUR,"sell").get("entryPrice").getAsDouble(),14.8,"closed CFD sell uses genuine last bid");
+            JsonObject preview=bridge.handle(BridgeTradingTest.trade("tradePreview",Instrument.BMWDEEUR,"buy",1000,14,16));
+            check(!preview.get("ok").getAsBoolean()&&preview.toString().contains("fresh JForex Bid/Ask"),"reference quote never makes a closed CFD executable");
+            conversionAge.set(15*86_400_000L);JsonObject missingFx=estimate(bridge,Instrument.BMWDEEUR,"buy");
+            check(missingFx.has("valuationError")&&missingFx.get("profitPerPriceUnit").getAsDouble()==0&&missingFx.get("entryPrice").getAsDouble()==14.82&&missingFx.get("valuationTime").getAsLong()==now-72*3_600_000L,"unavailable recent FX keeps entry/bps while account amount stays unknown");
+            conversionAge.set(0);entryOverride.set(tick(100,100.2,now-15*86_400_000L));JsonObject tooOld=request("tradeEstimate");tooOld.addProperty("instrument",Instrument.AAPLUSUSD.name());tooOld.addProperty("side","buy");check(!bridge.handle(tooOld).get("ok").getAsBoolean(),"reference quotes older than 14 days stay unavailable");
             check(engineCalls.get()==0&&conversionCalls.get()>0,"estimate is read-only SDK valuation");check(subscribed.isEmpty(),"temporary quote/conversion subscriptions released");
         }
         System.out.println("JForex SDK account-currency trade valuation tests passed");

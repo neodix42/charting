@@ -34,7 +34,8 @@ func TestDukascopyAccountMetricsPreserveZeroAndIndependentBalance(t *testing.T) 
 }
 
 func TestAccountMetricsTransportIsFlatAndCurrenciesIndependent(t *testing.T) {
-	value := hyperliquid.Metrics{AvailableBalance: "0", AvailableBalanceCurrency: "BTC", MaximumQuantity: "0.00000123", MaximumQuantityBasis: "Current owned balance and order book", MarginRequired: "2", MarginRequiredCurrency: "USDT", LiquidationPrice: "73.25", LiquidationKind: "estimate", LiquidationBasis: "isolated", MetricsTime: 456}
+	value := hyperliquid.Metrics{AvailableBalance: "0", AvailableBalanceCurrency: "BTC", MaximumQuantity: "0.00000123", MaximumQuantityBasis: "Current owned balance and order book", MarginRequired: "2", MarginRequiredCurrency: "USDT", LiquidationPrice: "73.25", LiquidationKind: "estimate", LiquidationBasis: "isolated", MetricsTime: 456,
+		RiskSizingQuantity: "0.00000123", RiskSizingSafeQuantity: "0.00000120", RiskSizingLoss: "0.015", RiskSizingLiquidationPrice: "73.25", RiskSizingCanTarget: true, RiskSizingBasis: "Verified selected DEX equity and isolated maintenance tiers"}
 	got := trading.Metrics{AccountMetrics: hyperliquidAccountMetrics(value), Quantity: "1", Leverage: 2}
 	encoded, err := json.Marshal(got)
 	if err != nil {
@@ -49,6 +50,9 @@ func TestAccountMetricsTransportIsFlatAndCurrenciesIndependent(t *testing.T) {
 	}
 	if decoded["maximumQuantity"] != "0.00000123" || decoded["maximumQuantityBasis"] != value.MaximumQuantityBasis {
 		t.Fatalf("maximum base quantity lost or rounded in transport: %s", encoded)
+	}
+	if decoded["riskSizingQuantity"] != value.RiskSizingQuantity || decoded["riskSizingSafeQuantity"] != value.RiskSizingSafeQuantity || decoded["riskSizingLoss"] != value.RiskSizingLoss || decoded["riskSizingLiquidationPrice"] != value.RiskSizingLiquidationPrice || decoded["riskSizingCanTarget"] != true || decoded["riskSizingBasis"] != value.RiskSizingBasis {
+		t.Fatalf("reviewed risk sizing lost precision or its calculation basis: %s", encoded)
 	}
 	duka := dukascopyAccountMetrics(&jforex.TradeMetrics{MaximumQuantity: "0", MaximumQuantityBasis: "No free margin"})
 	if duka.MaximumQuantity != "0" || duka.MaximumQuantityBasis != "No free margin" {

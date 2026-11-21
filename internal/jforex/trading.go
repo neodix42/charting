@@ -36,6 +36,7 @@ type TradeEstimate struct {
 	ValuationError     string  `json:"valuationError,omitempty"`
 	ValuationSource    string  `json:"valuationSource,omitempty"`
 	ValuationNotice    string  `json:"valuationNotice,omitempty"`
+	ReferenceOnly      bool    `json:"referenceOnly,omitempty"`
 }
 
 type TradePreview struct {
@@ -107,8 +108,8 @@ func verifyTradingBridge(ctx context.Context, process *bridgeProcess) error {
 	return nil
 }
 
-// EstimateTrade reads a current executable quote and SDK account-currency
-// valuation without creating a confirmation token, claim or order.
+// EstimateTrade reads SDK quote/account-currency metadata without creating a
+// confirmation token, claim or order. Older real quotes are planning-only.
 func (m *Manager) EstimateTrade(ctx context.Context, instrument, side string) (TradeEstimate, error) {
 	if err := validateTradeRequest(TradeRequest{Instrument: instrument, Side: side, Quantity: 1}); err != nil {
 		return TradeEstimate{}, err
@@ -137,13 +138,34 @@ func (m *Manager) EstimateTrade(ctx context.Context, instrument, side string) (T
 	if estimate.Instrument != instrument || estimate.Side != side || estimate.EntryPrice <= 0 || math.IsNaN(estimate.EntryPrice) || math.IsInf(estimate.EntryPrice, 0) {
 		return TradeEstimate{}, errors.New("The JForex bridge returned an invalid trade estimate")
 	}
-	normalizeValuation(&estimate.AccountCurrency, &estimate.ProfitPerPriceUnit, &estimate.ValuationTime, &estimate.ValuationError)
+	normalizeTradeEstimate(&estimate)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed || m.config != config {
 		return TradeEstimate{}, errors.New("Dukascopy account changed during valuation; refresh the estimate")
 	}
 	return estimate, nil
+}
+func normalizeTradeEstimate(estimate *TradeEstimate) {
+	now := time.Now().UnixMilli()
+	maxAge := int64(30000)
+	if estimate.ReferenceOnly {
+		maxAge = int64((14 * 24 * time.Hour) / time.Millisecond)
+	}
+	if estimate.ValuationTime <= 0 || estimate.ValuationTime < now-maxAge || estimate.ValuationTime > now+5000 {
+		estimate.ProfitPerPriceUnit, estimate.ValuationTime = 0, 0
+		estimate.ReferenceOnly = false
+		estimate.ValuationError = "Account-currency valuation is unavailable or stale; no conversion estimate was assumed"
+		return
+	}
+	if estimate.ValuationError != "" {
+		estimate.ProfitPerPriceUnit = 0
+		return
+	}
+	if len(estimate.AccountCurrency) < 3 || len(estimate.AccountCurrency) > 8 || strings.Trim(estimate.AccountCurrency, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") != "" || estimate.ProfitPerPriceUnit <= 0 || math.IsNaN(estimate.ProfitPerPriceUnit) || math.IsInf(estimate.ProfitPerPriceUnit, 0) {
+		estimate.ProfitPerPriceUnit = 0
+		estimate.ValuationError = "Account-currency valuation is unavailable; no conversion estimate was assumed"
+	}
 }
 func normalizeValuation(currency *string, factor *float64, at *int64, problem *string) {
 	if *problem != "" {

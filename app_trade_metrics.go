@@ -35,7 +35,7 @@ func (a *App) GetTradeMetrics(request trading.Request) (trading.Metrics, error) 
 		if a.hyperliquid == nil {
 			return result, errors.New("configure Hyperliquid trading in Settings")
 		}
-		value, err := a.hyperliquid.OrderMetrics(ctx, hyperliquid.OrderRequest{Market: request.FeedKey.Market, Instrument: request.FeedKey.Instrument, Side: request.Side, Quantity: result.Quantity, Leverage: request.Leverage})
+		value, err := a.hyperliquid.OrderMetrics(ctx, hyperliquid.OrderRequest{Market: request.FeedKey.Market, Instrument: request.FeedKey.Instrument, Side: request.Side, Quantity: result.Quantity, Leverage: request.Leverage, StopLoss: strings.TrimSpace(request.StopLoss)})
 		if err != nil {
 			return result, err
 		}
@@ -68,6 +68,9 @@ func hyperliquidAccountMetrics(value hyperliquid.Metrics) trading.AccountMetrics
 		AvailableBalanceError: value.AvailableBalanceError, AvailableBalanceBasis: value.AvailableBalanceBasis,
 		AccountBalance: value.AccountBalance, Equity: value.Equity, UsedMargin: value.UsedMargin,
 		MaximumQuantity: value.MaximumQuantity, MaximumQuantityError: value.MaximumQuantityError, MaximumQuantityBasis: value.MaximumQuantityBasis,
+		RiskSizingQuantity: value.RiskSizingQuantity, RiskSizingSafeQuantity: value.RiskSizingSafeQuantity,
+		RiskSizingLoss: value.RiskSizingLoss, RiskSizingLiquidationPrice: value.RiskSizingLiquidationPrice,
+		RiskSizingCanTarget: value.RiskSizingCanTarget, RiskSizingError: value.RiskSizingError, RiskSizingBasis: value.RiskSizingBasis,
 		MarginRequired: value.MarginRequired, MarginRequiredCurrency: value.MarginRequiredCurrency,
 		MarginError: value.MarginError, MarginBasis: value.MarginBasis,
 		LiquidationPrice: value.LiquidationPrice, LiquidationError: value.LiquidationError,

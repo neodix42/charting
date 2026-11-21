@@ -12,7 +12,7 @@ import (
 // budgets the entire fill at the IOC's worst allowed price, leaves the taker
 // fee in collateral, and never assumes more depth than the public book reports.
 // This is a snapshot calculation; an IOC cannot guarantee a future full fill.
-func (s *Store) maximumOrderQuantity(ctx context.Context, v Settings, r OrderRequest, m instrument, metrics Metrics, entry decimal.Decimal, existingPosition bool) (string, string, string) {
+func (s *Store) maximumOrderQuantity(ctx context.Context, v Settings, r OrderRequest, m instrument, metrics *Metrics, entry decimal.Decimal, existingPosition bool) (string, string, string) {
 	unavailable := func(reason string) (string, string, string) { return "", "", reason }
 	balance, ok := metricNumber(metrics.AvailableBalance, false)
 	if metrics.AvailableBalanceError != "" || !ok {
@@ -98,6 +98,10 @@ func (s *Store) maximumOrderQuantity(ctx context.Context, v Settings, r OrderReq
 			return unavailable("The instrument's mark price is invalid; maximum quantity is unavailable")
 		}
 		marginPrice = mark
+		// Reuse this exact mark read for stop-risk projections. Taking the
+		// smaller price avoids overstating isolated collateral when entry and
+		// mark differ in either direction.
+		metrics.riskMarginPrice = decimal.Min(entry, mark)
 		// A fill away from mark immediately consumes collateral as unrealized
 		// loss, in addition to mark-based initial margin. Reserving only
 		// notional/leverage can therefore run out of margin mid-fill.

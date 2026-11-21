@@ -292,6 +292,7 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 		return result, err
 	}
 	result.EntryPrice = strconv.FormatFloat(value.EntryPrice, 'f', -1, 64)
+	result.ReferenceOnly = value.ReferenceOnly
 	result.AccountCurrency, result.ValuationTime, result.ValuationError = value.AccountCurrency, value.ValuationTime, value.ValuationError
 	result.ValuationSource, result.ValuationNotice = value.ValuationSource, value.ValuationNotice
 	if value.ProfitPerPriceUnit > 0 && !math.IsNaN(value.ProfitPerPriceUnit) && !math.IsInf(value.ProfitPerPriceUnit, 0) {

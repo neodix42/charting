@@ -163,6 +163,27 @@ func TestTradeValuationUnavailableKeepsEntryAndDoesNotInventRates(t *testing.T) 
 	}
 }
 
+func TestTradeEstimateReferenceQuotesPreserveActualTimeAndRemainReadOnly(t *testing.T) {
+	m, _ := testManager(t, "trade-estimate-reference")
+	estimate, err := m.EstimateTrade(context.Background(), "EURUSD", "buy")
+	if err != nil || !estimate.ReferenceOnly || estimate.ProfitPerPriceUnit != 0.9 || estimate.EntryPrice != 1.1002 || estimate.ValuationError != "" || time.Since(time.UnixMilli(estimate.ValuationTime)) < 71*time.Hour {
+		t.Fatal("real old quote was lost or timestamp replaced with current time", estimate, err)
+	}
+	if len(m.tradePreviews) != 0 {
+		t.Fatal("planning estimate created a confirmation")
+	}
+	for _, scenario := range []string{"trade-estimate-reference-expired", "trade-estimate-reference-conversion-unavailable"} {
+		m, _ := testManager(t, scenario)
+		value, err := m.EstimateTrade(context.Background(), "EURUSD", "buy")
+		if err != nil || value.EntryPrice <= 0 || value.ProfitPerPriceUnit != 0 || value.ValuationError == "" {
+			t.Fatal("invalid reference conversion was invented or hid known entry", value, err)
+		}
+		if scenario == "trade-estimate-reference-conversion-unavailable" && (!value.ReferenceOnly || value.ValuationTime <= 0) {
+			t.Fatal("FX error hid independently verified entry timestamp", value)
+		}
+	}
+}
+
 func TestOrderMetricsKeepAccountMoneyIndependentOfQuoteAndConversion(t *testing.T) {
 	for _, scenario := range []string{"trade-estimate-metrics", "trade-estimate-metrics-unavailable"} {
 		t.Run(scenario, func(t *testing.T) {

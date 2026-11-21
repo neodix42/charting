@@ -31,7 +31,8 @@ async function selectInstrument(page:Page,name:string){
  await expect(picker(page)).toHaveCount(0);
 }
 
-test('Dukascopy regular hours follow the instrument and coexist with last-trade prices at the top right',async({page})=>{
+test('Dukascopy regular hours and session status paint at the bottom left while last-trade prices stay at the top right',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-23T01:29:59Z')});
  await dukascopyFixtures(page);
  const position:TradeRecord={id:'dukascopy:'+'a'.repeat(32),provider:'dukascopy',environment:'demo',account:'hours-offline-demo',instrument:hk.nativeId,market:'jforex',orderId:'hours-fixture',submittedAt:Date.now()-2000,openDate:Date.now()-1000,closeDate:0,size:'10',remainingSize:'10',direction:'long',entryPrice:'65',stopLoss:'60',takeProfit:'70',slAmount:'-50',tpAmount:'50',currency:'HKD',balanceAtOpen:'1000',balanceCurrency:'HKD',balanceTime:Date.now()-2000,marginUsed:'65',marginCurrency:'HKD',status:'open',canClose:true,closeReason:'Explicit offline fixture',checkedAt:Date.now()};
  await page.evaluate(position=>(window as any).__testSetTradeHistory([position]),position);
@@ -39,14 +40,23 @@ test('Dukascopy regular hours follow the instrument and coexist with last-trade 
  await expect(hours(page)).toContainText('Regular hours');
  for(const text of ['Mon','Fri','09:30','16:00','Asia/Hong_Kong'])await expect(hours(page)).toContainText(text);
  await expect(hours(page)).toHaveAttribute('title',/breaks.*holidays|holidays.*breaks/i);
+ const status=hours(page).getByLabel('Asset regular-session status',{exact:true});
+ await expect(status).toHaveText('Closed');await expect(hours(page)).toContainText('regular schedule');
+ await page.clock.fastForward(2000);await expect(status).toHaveText('Opened');
  const levels=page.getByRole('complementary',{name:'Last trade levels',exact:true});
  await expect(levels).toContainText('hours-fixture');
  const badge=await hours(page).boundingBox(),chart=await page.getByTestId('chart-canvas').boundingBox(),trade=await levels.boundingBox();
  expect(badge).not.toBeNull();expect(chart).not.toBeNull();expect(trade).not.toBeNull();
- expect(badge!.x).toBeGreaterThan(chart!.x+chart!.width/2);
- expect(badge!.y).toBeGreaterThanOrEqual(chart!.y);
- expect(badge!.y).toBeLessThan(chart!.y+35);
- expect(trade!.y).toBeGreaterThanOrEqual(badge!.y+badge!.height);
+ expect(badge!.x).toBeGreaterThanOrEqual(chart!.x);
+ expect(badge!.x).toBeLessThan(chart!.x+80);
+ const attribution=await page.getByTestId('chart-canvas').locator('a[href*="tradingview.com"]').boundingBox();
+ expect(attribution).not.toBeNull();expect(badge!.x).toBeGreaterThan(attribution!.x+attribution!.width);
+ expect(badge!.y).toBeGreaterThan(chart!.y+chart!.height/2);
+ expect(badge!.y+badge!.height).toBeLessThanOrEqual(chart!.y+chart!.height-25);
+ expect(trade!.y).toBeLessThan(chart!.y+100);
+ expect(await hours(page).evaluate(element=>getComputedStyle(element).pointerEvents)).toBe('none');
+ await page.getByTestId('chart-cell').screenshot({path:'test-results/chart-bottom-corners.png'});
+ await page.clock.setSystemTime(new Date('2026-11-23T08:00:01Z'));await page.clock.fastForward(1000);await expect(status).toHaveText('Closed');
  await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
  await expect(hours(page)).toHaveCount(0);
  await exchange(page).selectOption('binance');

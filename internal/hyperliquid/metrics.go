@@ -11,26 +11,35 @@ import (
 )
 
 type Metrics struct {
-	EntryPrice               string `json:"entryPrice,omitempty"`
-	AvailableBalance         string `json:"availableBalance,omitempty"`
-	AvailableBalanceCurrency string `json:"availableBalanceCurrency,omitempty"`
-	AvailableBalanceError    string `json:"availableBalanceError,omitempty"`
-	AvailableBalanceBasis    string `json:"availableBalanceBasis,omitempty"`
-	AccountBalance           string `json:"accountBalance,omitempty"`
-	Equity                   string `json:"equity,omitempty"`
-	UsedMargin               string `json:"usedMargin,omitempty"`
-	MarginRequired           string `json:"marginRequired,omitempty"`
-	MarginRequiredCurrency   string `json:"marginRequiredCurrency,omitempty"`
-	MarginError              string `json:"marginError,omitempty"`
-	MarginBasis              string `json:"marginBasis,omitempty"`
-	MaximumQuantity          string `json:"maximumQuantity,omitempty"`
-	MaximumQuantityError     string `json:"maximumQuantityError,omitempty"`
-	MaximumQuantityBasis     string `json:"maximumQuantityBasis,omitempty"`
-	LiquidationPrice         string `json:"liquidationPrice,omitempty"`
-	LiquidationError         string `json:"liquidationError,omitempty"`
-	LiquidationBasis         string `json:"liquidationBasis,omitempty"`
-	LiquidationKind          string `json:"liquidationKind"`
-	MetricsTime              int64  `json:"metricsTime"`
+	EntryPrice                 string `json:"entryPrice,omitempty"`
+	AvailableBalance           string `json:"availableBalance,omitempty"`
+	AvailableBalanceCurrency   string `json:"availableBalanceCurrency,omitempty"`
+	AvailableBalanceError      string `json:"availableBalanceError,omitempty"`
+	AvailableBalanceBasis      string `json:"availableBalanceBasis,omitempty"`
+	AccountBalance             string `json:"accountBalance,omitempty"`
+	Equity                     string `json:"equity,omitempty"`
+	UsedMargin                 string `json:"usedMargin,omitempty"`
+	MarginRequired             string `json:"marginRequired,omitempty"`
+	MarginRequiredCurrency     string `json:"marginRequiredCurrency,omitempty"`
+	MarginError                string `json:"marginError,omitempty"`
+	MarginBasis                string `json:"marginBasis,omitempty"`
+	MaximumQuantity            string `json:"maximumQuantity,omitempty"`
+	MaximumQuantityError       string `json:"maximumQuantityError,omitempty"`
+	MaximumQuantityBasis       string `json:"maximumQuantityBasis,omitempty"`
+	RiskSizingQuantity         string `json:"riskSizingQuantity,omitempty"`
+	RiskSizingSafeQuantity     string `json:"riskSizingSafeQuantity,omitempty"`
+	RiskSizingLoss             string `json:"riskSizingLoss,omitempty"`
+	RiskSizingLiquidationPrice string `json:"riskSizingLiquidationPrice,omitempty"`
+	RiskSizingCanTarget        bool   `json:"riskSizingCanTarget"`
+	RiskSizingError            string `json:"riskSizingError,omitempty"`
+	RiskSizingBasis            string `json:"riskSizingBasis,omitempty"`
+	LiquidationPrice           string `json:"liquidationPrice,omitempty"`
+	LiquidationError           string `json:"liquidationError,omitempty"`
+	LiquidationBasis           string `json:"liquidationBasis,omitempty"`
+	LiquidationKind            string `json:"liquidationKind"`
+	MetricsTime                int64  `json:"metricsTime"`
+	// Read-only mark snapshot reused by risk sizing, never serialized or persisted.
+	riskMarginPrice decimal.Decimal
 }
 
 type marginTier struct {
@@ -142,7 +151,7 @@ func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m 
 	hasExistingPosition := false
 	defer func() {
 		if maximumReady {
-			out.MaximumQuantity, out.MaximumQuantityBasis, out.MaximumQuantityError = s.maximumOrderQuantity(ctx, v, r, m, out, entry, hasExistingPosition)
+			out.MaximumQuantity, out.MaximumQuantityBasis, out.MaximumQuantityError = s.maximumOrderQuantity(ctx, v, r, m, &out, entry, hasExistingPosition)
 		} else {
 			out.MaximumQuantityError = out.AvailableBalanceError
 			if out.MaximumQuantityError == "" {
@@ -160,6 +169,9 @@ func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m 
 				out.LiquidationKind = "unavailable"
 				out.LiquidationError = "The entry quote aged while account state was read; refresh to estimate liquidation"
 			}
+		}
+		if r.Market == "perpetual" {
+			out.sizeRisk(r, m, entry, hasExistingPosition)
 		}
 	}()
 	if entry.IsPositive() {
@@ -339,7 +351,12 @@ func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m 
 
 const marginTierLeverageError = "The proposed position size requires lower leverage in its margin tier"
 
-func isolatedLiquidation(quantity, entry, margin decimal.Decimal, side string, leverage int, raw []marginTier) (decimal.Decimal, string) {
+type normalizedMarginTier struct {
+	lower, rate, deduction decimal.Decimal
+	maximum                int
+}
+
+func normalizedMarginTiers(raw []marginTier) ([]normalizedMarginTier, string) {
 	// Official formulas: liquidation equity equals tier maintenance, and
 	// maintenance = notional * (1 / (2 * tier max leverage)) - deduction.
 	// Deduction carries lower tiers forward continuously. Solve each tier then
@@ -347,28 +364,32 @@ func isolatedLiquidation(quantity, entry, margin decimal.Decimal, side string, l
 	// https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations
 	// https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margin-tiers
 	if len(raw) == 0 || len(raw) > 100 {
-		return decimal.Zero, "The maintenance-margin tiers are unavailable"
+		return nil, "The maintenance-margin tiers are unavailable"
 	}
-	type tier struct {
-		lower, rate, deduction decimal.Decimal
-		maximum                int
-	}
-	tiers := make([]tier, 0, len(raw))
+	tiers := make([]normalizedMarginTier, 0, len(raw))
 	deduction, previousLower, previousRate := decimal.Zero, decimal.Zero, decimal.Zero
 	for i, item := range raw {
 		lower, ok := metricNumber(item.LowerBound, false)
 		if !ok || item.MaxLeverage < 1 || item.MaxLeverage > 1000 || i == 0 && !lower.IsZero() || i > 0 && !lower.GreaterThan(previousLower) {
-			return decimal.Zero, "The maintenance-margin tiers are invalid"
+			return nil, "The maintenance-margin tiers are invalid"
 		}
 		rate := decimal.NewFromInt(1).DivRound(decimal.NewFromInt(int64(2*item.MaxLeverage)), 32)
 		if i > 0 {
 			if rate.LessThan(previousRate) {
-				return decimal.Zero, "The maintenance-margin tiers are not monotonic"
+				return nil, "The maintenance-margin tiers are not monotonic"
 			}
 			deduction = deduction.Add(lower.Mul(rate.Sub(previousRate)))
 		}
-		tiers = append(tiers, tier{lower, rate, deduction, item.MaxLeverage})
+		tiers = append(tiers, normalizedMarginTier{lower, rate, deduction, item.MaxLeverage})
 		previousLower, previousRate = lower, rate
+	}
+	return tiers, ""
+}
+
+func isolatedLiquidation(quantity, entry, margin decimal.Decimal, side string, leverage int, raw []marginTier) (decimal.Decimal, string) {
+	tiers, problem := normalizedMarginTiers(raw)
+	if problem != "" {
+		return decimal.Zero, problem
 	}
 	entryNotional := quantity.Mul(entry)
 	for i, item := range tiers {

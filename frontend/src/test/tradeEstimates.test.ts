@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {formatTradeLevelEstimate,tradeLevelEstimate} from '../workspace/tradeEstimates';
+import {formatTradeLevelEstimate,tradeLevelEstimate,tradeValuationIsStale} from '../workspace/tradeEstimates';
 
 describe('account-currency level estimates',()=>{
  it('uses signed entry basis points and real conversion for buy losses/profits',()=>{
@@ -33,5 +33,16 @@ describe('account-currency level estimates',()=>{
   const result=tradeLevelEstimate('buy','100','4','95',{accountCurrency:'USDC',profitPerPriceUnit:'1',valuationError:'Collateral metadata unavailable'});
   expect(result).toEqual({basisPoints:-500,amount:null,currency:'USDC'});
   expect(formatTradeLevelEstimate(result,'Collateral amount unavailable')).toBe('-500.00 bps · Collateral amount unavailable');
+ });
+ it('accepts dated planning references only when explicitly permitted and expires them after fourteen days',()=>{
+  const now=Date.UTC(2026,10,21,12),valuationTime=now-86400000;
+  expect(tradeValuationIsStale({valuationTime},now)).toBe(true);
+  expect(tradeValuationIsStale({valuationTime,referenceOnly:true},now)).toBe(true);
+  expect(tradeValuationIsStale({valuationTime,referenceOnly:true},now,true)).toBe(false);
+  expect(tradeValuationIsStale({valuationTime:now-14*86400000,referenceOnly:true},now,true)).toBe(false);
+  expect(tradeValuationIsStale({valuationTime:now-14*86400000-1,referenceOnly:true},now,true)).toBe(true);
+  for(const time of [undefined,0,-1,NaN,Infinity,now+5001])expect(tradeValuationIsStale({valuationTime:time,referenceOnly:true},now,true)).toBe(true);
+  expect(tradeValuationIsStale({valuationTime:now-30000},now)).toBe(false);
+  expect(tradeValuationIsStale({valuationTime:now-30001},now)).toBe(true);
  });
 });

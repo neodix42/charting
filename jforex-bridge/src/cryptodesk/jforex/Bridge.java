@@ -24,6 +24,9 @@ public final class Bridge implements AutoCloseable {
     static final List<String> INTERVALS = List.of("1m", "5m", "15m", "1h", "4h", "1d", "1w");
     static final int MAX_LINE = 65536;
     static final int SEED_RANGE_BARS = 1000;
+    // Read-only planning may use an actual last quote over a market closure.
+    // Execution and maximum-size calculations retain their 30-second limit.
+    static final long REFERENCE_QUOTE_MAX_AGE = 14L * 86_400_000;
     private static final DateTimeFormatter MARKET_HOURS_TIME = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
     // SDK predefined instruments have no group until account metadata loads.
     // Explicit provider crypto codes are a fallback, never an ISO-currency test:
@@ -758,11 +761,15 @@ public final class Bridge implements AutoCloseable {
         return remainder.compareTo(BigDecimal.valueOf(step).multiply(new BigDecimal("0.00000001"))) <= 0;
     }
     private ITick freshTradeQuote(Instrument instrument) throws Exception {
+        return tradeQuote(instrument, false);
+    }
+    private ITick tradeQuote(Instrument instrument, boolean referenceAllowed) throws Exception {
         ensureInstrument(instrument);
         ITick tick = context.getHistory().getLastTick(instrument);
-        if (tick == null || nowMillis.getAsLong() - tick.getTime() > 30_000 || tick.getTime() > nowMillis.getAsLong() + 5_000
+        long now = nowMillis.getAsLong();
+        if (tick == null || tick.getTime() <= 0 || now - tick.getTime() > (referenceAllowed ? REFERENCE_QUOTE_MAX_AGE : 30_000) || tick.getTime() > now + 5_000
                 || !Double.isFinite(tick.getBid()) || !Double.isFinite(tick.getAsk()) || tick.getBid() <= 0 || tick.getAsk() < tick.getBid())
-            throw new Failure("restricted", "A fresh JForex Bid/Ask quote is required; wait for the market to open");
+            throw new Failure("restricted", referenceAllowed ? "No valid JForex Bid/Ask quote from the last 14 days is available for a planning estimate" : "A fresh JForex Bid/Ask quote is required; wait for the market to open");
         return tick;
     }
     private static record CurrencyRoute(String currency, List<Instrument> instruments) { }
@@ -803,8 +810,11 @@ public final class Bridge implements AutoCloseable {
         return Double.isFinite(rate) && rate > 0 && rate >= lower * (1 - 1e-8) && rate <= upper * (1 + 1e-8);
     }
     private Map<String, Object> tradeValuation(Instrument instrument, long entryTime) {
+        return tradeValuation(instrument, entryTime, false);
+    }
+    private Map<String, Object> tradeValuation(Instrument instrument, long entryTime, boolean referenceAllowed) {
         Map<String, Object> result = new HashMap<>();
-        result.put("accountCurrency", ""); result.put("profitPerPriceUnit", 0); result.put("valuationTime", 0);
+        result.put("accountCurrency", ""); result.put("profitPerPriceUnit", 0); result.put("valuationTime", referenceAllowed ? entryTime : 0);
         Set<Instrument> conversions = new HashSet<>();
         synchronized (instrumentLock) { historyUsers.merge(instrument, 1, Integer::sum); }
         String stage = "Account currency";
@@ -820,9 +830,10 @@ public final class Bridge implements AutoCloseable {
             for (Instrument conversion : conversionRoute(sourceCurrency, currency.getCurrencyCode())) {
                 if (!conversion.equals(instrument) && conversions.add(conversion)) synchronized (instrumentLock) { historyUsers.merge(conversion, 1, Integer::sum); }
                 ITick current;
-                try { current = freshTradeQuote(conversion); }
-                catch (Exception error) { throw new Failure("restricted", "No fresh conversion quote for " + conversion.name() + "; wait for the FX market or its subscription to update"); }
+                try { current = tradeQuote(conversion, referenceAllowed); }
+                catch (Exception error) { throw new Failure("restricted", referenceAllowed ? "No valid recent conversion quote for " + conversion.name() + "; account-currency amount is unavailable" : "No fresh conversion quote for " + conversion.name() + "; wait for the FX market or its subscription to update"); }
                 valuedAt = Math.min(valuedAt, current.getTime());
+                if (referenceAllowed) result.put("valuationTime", valuedAt);
                 double mid = current.getBid() + (current.getAsk() - current.getBid()) / 2;
                 if (sourceCurrency.equals(conversion.getPrimaryJFCurrency().getCurrencyCode())) {
                     lowerRate *= current.getBid(); upperRate *= current.getAsk(); midpointRate *= mid; sourceCurrency = conversion.getSecondaryJFCurrency().getCurrencyCode();
@@ -845,12 +856,12 @@ public final class Bridge implements AutoCloseable {
                     if (boundedConversion(factor, lowerRate, upperRate)) source = "SDK pip conversion, verified against fresh FX quotes";
                     else {
                         factor = midpointRate; source = "Fresh SDK FX quote midpoint";
-                        result.put("valuationNotice", "The SDK rate/pip helper could not value this instrument; conversion uses the verified live FX route.");
+                        result.put("valuationNotice", "The SDK rate/pip helper could not value this instrument; conversion uses the verified SDK FX quote route.");
                     }
                 }
             }
             if (!boundedConversion(factor, lowerRate, upperRate) || !Double.isFinite(upperRate) || upperRate <= 0) throw new Failure("restricted", "The fresh currency conversion rate is invalid");
-            if (nowMillis.getAsLong() - valuedAt > 30_000) throw new Failure("restricted", "The quote or currency conversion is stale");
+            if (nowMillis.getAsLong() - valuedAt > (referenceAllowed ? REFERENCE_QUOTE_MAX_AGE : 30_000)) throw new Failure("restricted", "The quote or currency conversion is stale");
             result.put("profitPerPriceUnit", factor); result.put("valuationTime", valuedAt); result.put("valuationSource", source);
             // Costs must cover the expensive side of the verified FX route.
             // Keep existing SDK/midpoint conversion for advisory gross P/L.
@@ -859,6 +870,15 @@ public final class Bridge implements AutoCloseable {
             String detail = error instanceof Failure ? error.getMessage() : "JForex could not read the required SDK data";
             result.put("valuationError", stage + " unavailable: " + detail);
         } finally {
+            if (referenceAllowed) {
+                boolean referenceOnly = nowMillis.getAsLong() - ((Number)result.get("valuationTime")).longValue() > 30_000;
+                result.put("referenceOnly", referenceOnly);
+                if (referenceOnly) {
+                    String notice = "Last available JForex quotes for planning only; a fresh executable quote is required before reviewing or submitting an order.";
+                    result.put("valuationNotice", notice + (result.containsKey("valuationNotice") ? " " + result.get("valuationNotice") : ""));
+                    if (result.containsKey("valuationSource")) result.put("valuationSource", ((String)result.get("valuationSource")).replace("fresh", "last available").replace("Fresh", "Last available"));
+                }
+            }
             synchronized (instrumentLock) {
                 for (Instrument conversion : conversions) historyUsers.computeIfPresent(conversion, (key, count) -> count == 1 ? null : count - 1);
                 try { releaseInstruments(); } catch (Exception ignored) { }
@@ -998,8 +1018,8 @@ public final class Bridge implements AutoCloseable {
         String side = text(request, "side", 4);
         if (!side.equals("buy") && !side.equals("sell")) throw new Failure("restricted", "Select Buy or Sell");
         try {
-            ITick quote = freshTradeQuote(instrument);
-            Map<String, Object> result = tradeValuation(instrument, quote.getTime());
+            ITick quote = tradeQuote(instrument, true);
+            Map<String, Object> result = tradeValuation(instrument, quote.getTime(), true);
             result.put("instrument", instrument.name()); result.put("side", side);
             result.put("entryPrice", side.equals("buy") ? quote.getAsk() : quote.getBid());
             return result;

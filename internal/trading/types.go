@@ -52,6 +52,7 @@ type Preview struct {
 // ProfitPerPriceUnit converts a unit price move for one base unit into the
 // account currency. Quantity and direction are applied by the ticket calculator.
 type Estimate struct {
+	ReferenceOnly      bool           `json:"referenceOnly,omitempty"`
 	FeedKey            domain.FeedKey `json:"feedKey"`
 	Side               string         `json:"side"`
 	EntryPrice         string         `json:"entryPrice"`
@@ -68,33 +69,40 @@ type Estimate struct {
 // or hypothetical order projection is unavailable. Empty values are unknown;
 // the string "0" is a valid confirmed zero.
 type AccountMetrics struct {
-	AccountLeverage float64 `json:"accountLeverage,omitempty"`
-	WeekendLeverage float64 `json:"weekendLeverage,omitempty"`
-	InstrumentMaxLeverage float64 `json:"instrumentMaxLeverage,omitempty"`
-	EffectiveLeverage float64 `json:"effectiveLeverage,omitempty"`
-	MarginCutUsePercent float64 `json:"marginCutUsePercent,omitempty"`
-	AccountEquityStopLoss string `json:"accountEquityStopLoss,omitempty"`
-	MarginPerUnit string `json:"marginPerUnit,omitempty"`
-	QuantityStep float64 `json:"quantityStep,omitempty"`
-	AvailableBalance         string `json:"availableBalance,omitempty"`
-	AvailableBalanceCurrency string `json:"availableBalanceCurrency,omitempty"`
-	AvailableBalanceError    string `json:"availableBalanceError,omitempty"`
-	AvailableBalanceBasis    string `json:"availableBalanceBasis,omitempty"`
-	AccountBalance           string `json:"accountBalance,omitempty"`
-	Equity                   string `json:"equity,omitempty"`
-	UsedMargin               string `json:"usedMargin,omitempty"`
-	MaximumQuantity          string `json:"maximumQuantity,omitempty"`
-	MaximumQuantityError     string `json:"maximumQuantityError,omitempty"`
-	MaximumQuantityBasis     string `json:"maximumQuantityBasis,omitempty"`
-	MarginRequired           string `json:"marginRequired,omitempty"`
-	MarginRequiredCurrency   string `json:"marginRequiredCurrency,omitempty"`
-	MarginError              string `json:"marginError,omitempty"`
-	MarginBasis              string `json:"marginBasis,omitempty"`
-	LiquidationPrice         string `json:"liquidationPrice,omitempty"`
-	LiquidationError         string `json:"liquidationError,omitempty"`
-	LiquidationBasis         string `json:"liquidationBasis,omitempty"`
-	LiquidationKind          string `json:"liquidationKind,omitempty"`
-	MetricsTime              int64  `json:"metricsTime,omitempty"`
+	AccountLeverage            float64 `json:"accountLeverage,omitempty"`
+	WeekendLeverage            float64 `json:"weekendLeverage,omitempty"`
+	InstrumentMaxLeverage      float64 `json:"instrumentMaxLeverage,omitempty"`
+	EffectiveLeverage          float64 `json:"effectiveLeverage,omitempty"`
+	MarginCutUsePercent        float64 `json:"marginCutUsePercent,omitempty"`
+	AccountEquityStopLoss      string  `json:"accountEquityStopLoss,omitempty"`
+	MarginPerUnit              string  `json:"marginPerUnit,omitempty"`
+	QuantityStep               float64 `json:"quantityStep,omitempty"`
+	AvailableBalance           string  `json:"availableBalance,omitempty"`
+	AvailableBalanceCurrency   string  `json:"availableBalanceCurrency,omitempty"`
+	AvailableBalanceError      string  `json:"availableBalanceError,omitempty"`
+	AvailableBalanceBasis      string  `json:"availableBalanceBasis,omitempty"`
+	AccountBalance             string  `json:"accountBalance,omitempty"`
+	Equity                     string  `json:"equity,omitempty"`
+	UsedMargin                 string  `json:"usedMargin,omitempty"`
+	MaximumQuantity            string  `json:"maximumQuantity,omitempty"`
+	MaximumQuantityError       string  `json:"maximumQuantityError,omitempty"`
+	MaximumQuantityBasis       string  `json:"maximumQuantityBasis,omitempty"`
+	RiskSizingQuantity         string  `json:"riskSizingQuantity,omitempty"`
+	RiskSizingSafeQuantity     string  `json:"riskSizingSafeQuantity,omitempty"`
+	RiskSizingLoss             string  `json:"riskSizingLoss,omitempty"`
+	RiskSizingLiquidationPrice string  `json:"riskSizingLiquidationPrice,omitempty"`
+	RiskSizingCanTarget        bool    `json:"riskSizingCanTarget,omitempty"`
+	RiskSizingError            string  `json:"riskSizingError,omitempty"`
+	RiskSizingBasis            string  `json:"riskSizingBasis,omitempty"`
+	MarginRequired             string  `json:"marginRequired,omitempty"`
+	MarginRequiredCurrency     string  `json:"marginRequiredCurrency,omitempty"`
+	MarginError                string  `json:"marginError,omitempty"`
+	MarginBasis                string  `json:"marginBasis,omitempty"`
+	LiquidationPrice           string  `json:"liquidationPrice,omitempty"`
+	LiquidationError           string  `json:"liquidationError,omitempty"`
+	LiquidationBasis           string  `json:"liquidationBasis,omitempty"`
+	LiquidationKind            string  `json:"liquidationKind,omitempty"`
+	MetricsTime                int64   `json:"metricsTime,omitempty"`
 }
 
 type Metrics struct {
