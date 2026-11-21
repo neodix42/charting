@@ -73,6 +73,7 @@ type AccountMetrics struct {
 	InstrumentMaxLeverage float64 `json:"instrumentMaxLeverage,omitempty"`
 	EffectiveLeverage float64 `json:"effectiveLeverage,omitempty"`
 	MarginCutUsePercent float64 `json:"marginCutUsePercent,omitempty"`
+	AccountEquityStopLoss string `json:"accountEquityStopLoss,omitempty"`
 	MarginPerUnit string `json:"marginPerUnit,omitempty"`
 	QuantityStep float64 `json:"quantityStep,omitempty"`
 	AvailableBalance         string `json:"availableBalance,omitempty"`
