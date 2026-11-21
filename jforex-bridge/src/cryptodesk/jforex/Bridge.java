@@ -883,12 +883,13 @@ public final class Bridge implements AutoCloseable {
         IAccount account = null;
         try { account = context == null ? null : context.getAccount(); } catch (Exception ignored) { }
         if (account != null) {
+            final IAccount snapshot = account;
             accountNumber(result, "balance", account::getBalance, failures, false);
             accountNumber(result, "equity", account::getEquity, failures, false);
             accountNumber(result, "usedMargin", account::getUsedMargin, failures, true);
             accountNumber(result, "accountLeverage", account::getLeverage, failures, true);
-            accountNumber(result, "weekendLeverage", () -> (double)account.getOverWeekEndLeverage(), failures, true);
-            accountNumber(result, "marginCutUsePercent", () -> (double)account.getMarginCutLevel(), failures, true);
+            accountNumber(result, "weekendLeverage", () -> (double)snapshot.getOverWeekEndLeverage(), failures, true);
+            accountNumber(result, "marginCutUsePercent", () -> (double)snapshot.getMarginCutLevel(), failures, true);
             accountNumber(result, "accountEquityStopLoss", account::getStopLossLevel, failures, true);
             if (result.containsKey("equity") && result.containsKey("usedMargin")) {
                 double free = (Double)result.get("equity") - (Double)result.get("usedMargin");
