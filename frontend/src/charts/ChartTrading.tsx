@@ -82,7 +82,7 @@ export function ChartTrading({api,feedKey:currentKey,target}:{api:Backend;feedKe
   ?forexRiskSizing({equity:Number(sourceMetrics.equity),usedMargin:Number(sourceMetrics.usedMargin),
    entry:entryNumber,stop:slPrice,side:ticket!.side,profitPerPriceUnit:Number(valuation?.profitPerPriceUnit),
    marginPerUnit:Number(sourceMetrics.marginPerUnit),step:Number(sourceMetrics.quantityStep),
-   maxQuantity:Number(maximum.text),marginCutUsePercent:sourceMetrics.marginCutUsePercent,targetLevel:150}):null;
+   maxQuantity:Number(maximum.text),marginCutUsePercent:sourceMetrics.marginCutUsePercent,accountEquityStopLoss:Number(sourceMetrics.accountEquityStopLoss??0),targetLevel:150}):null;
  const entered=Number(preview?.quantity??quantity),unitLoss=Math.abs(entryNumber-slPrice)*Number(valuation?.profitPerPriceUnit);
  const proposedLoss=unitLoss*entered,proposedMargin=Number(sourceMetrics?.usedMargin)+entered*Number(sourceMetrics?.marginPerUnit);
  const proposedLevel=proposedMargin>0?(Number(sourceMetrics?.equity)-proposedLoss)/proposedMargin*100:NaN;
@@ -108,7 +108,7 @@ export function ChartTrading({api,feedKey:currentKey,target}:{api:Backend;feedKe
       Safe quantity (150% margin level at stop, liquidity capped): <b>{forexSizing.safeQuantity.toLocaleString('en-US')}</b>.</p>
      <p>Safe quantity loss at stop: <b>{printable(forexSizing.riskAmount)} {valuation?.accountCurrency}</b> ({printable(100*forexSizing.riskAmount/Number(sourceMetrics?.equity))}% equity).</p>
      <p>Projected equity: <b>{printable(forexSizing.projectedEquity)}</b> · margin used: <b>{printable(forexSizing.projectedUsedMargin)}</b> · margin level at stop: <b>{printable(forexSizing.projectedMarginLevel)}%</b>.</p>
-     <p>Broker margin cut: <b>{printable(forexSizing.cutLevel??NaN)}%</b> margin level · target buffer: <b>150%</b>.</p>
+     <p>Broker margin cut: <b>{printable(forexSizing.cutLevel??NaN)}%</b> margin level · account equity stop: <b>{sourceMetrics?.accountEquityStopLoss??'—'} {valuation?.accountCurrency}</b> · target buffer: <b>150%</b>.</p>
      <button type="button" disabled={busy||!!preview||forexSizing.safeQuantity<=0} onClick={()=>{setQuantity(String(forexSizing.safeQuantity));edit();}}>Use safe risk-sized quantity</button>
      {!forexSizing.canTargetRisk&&<p role="status">A 50% loss target is not achievable with the requested 150% margin buffer and the current executable-size limit. The suggested size risks less.</p>}
      {quantity.trim()&&Number.isFinite(proposedLevel)&&<p role={proposedLevel<150?'alert':'status'}>Entered position: estimated loss {printable(proposedLoss)} {valuation?.accountCurrency}; margin level at stop {printable(proposedLevel)}%. {proposedLevel<150?'Below buffer — reduce quantity.':'Above buffer under current assumptions.'}</p>}
