@@ -14,5 +14,5 @@ fi
 require_node
 mkdir -p "$repo_root/build/bin"
 npm --prefix "$repo_root/frontend" run build
-go build -tags 'production desktop_smoke webkit2_41' -o "$repo_root/build/bin/cryptodesk-signal-smoke" .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o "$repo_root/build/bin/cryptodesk-signal-smoke" .
 python3 "$repo_root/scripts/smoke_signals.py" --binary "$repo_root/build/bin/cryptodesk-signal-smoke" "$@"

@@ -41,7 +41,7 @@ func newBootstrapApp(path string) *App {
 }
 
 func newBootstrapAppWithInitializer(initialize func(context.Context, *App) error) *App {
-	return &App{window: domain.Window{Width: 1600, Height: 1000}, bootstrap: &appBootstrap{
+	return &App{window: domain.Window{Width: 1600, Height: 1000}, presentation: newStartupPresentation(), bootstrap: &appBootstrap{
 		attempt: &bootstrapAttempt{done: make(chan struct{})}, initialize: initialize,
 		phase: "Opening saved workspace…", started: time.Now(),
 	}}
@@ -75,6 +75,9 @@ func (b *appBootstrap) startLocked(parent context.Context, a *App) {
 	b.cancel = cancel
 	attempt.started = true
 	go func() {
+		// Opening/reading storage can fail before any geometry is available.
+		// Its error/recovery UI still needs to become visible.
+		defer a.finishStartupWindowMetadata()
 		err := ctx.Err()
 		if err == nil {
 			err = b.initialize(ctx, a)
@@ -189,21 +192,17 @@ func (a *App) initializeWorkspace(ctx context.Context, path string) (err error) 
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+	// Prepare the saved normal restore rectangle before optional services are
+	// constructed. The first visible window always opens maximized.
+	a.prepareStartupWindowMetadata(loaded.Workspace.Window)
 	servicesStarted = true
 	if err = a.initializeServices(ctx); err != nil {
 		return err
-	}
-	window := loaded.Workspace.Window
-	if window.Width < 400 {
-		window = domain.Window{Width: 1600, Height: 1000}
 	}
 	a.mu.Lock()
 	if err = ctx.Err(); err == nil {
 		a.revision = loaded.Revision
 		a.initialWorkspace = &loaded
-		// The close path shares this mutex and cancels ctx before the native
-		// loop ends, fencing all saved-window queries during background startup.
-		a.applyWindowLocked(window)
 	}
 	a.mu.Unlock()
 	if err != nil {

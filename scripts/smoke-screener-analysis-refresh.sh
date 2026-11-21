@@ -10,7 +10,7 @@ evidence="$(cd "$evidence" && pwd)"
 profile="$(mktemp -d "${TMPDIR:-/tmp}/cryptodesk-analysis-refresh.XXXXXX")"
 trap 'rm -rf -- "$profile"' EXIT
 npm --prefix frontend run build
-go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-analysis-refresh-smoke .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-analysis-refresh-smoke .
 for phase in analysis-refresh analysis-refresh-restore; do
  CRYPTODESK_SMOKE_PHASE="$phase" CRYPTODESK_SMOKE_REPORT="$evidence/$phase.json" \
   timeout 240s build/bin/cryptodesk-analysis-refresh-smoke --data-dir "$profile" > "$evidence/$phase.log" 2>&1

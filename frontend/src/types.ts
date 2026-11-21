@@ -96,7 +96,7 @@ export interface Backend extends TradeHistoryBackend,TradingBackend,ScreenerAnal
  GetScreenerRefresh(fileIDs:string[]):Promise<ScreenerRefreshInfo>;StartScreenerRefresh():Promise<ScreenerRefreshInfo>;CancelScreenerRefresh():Promise<ScreenerRefreshInfo>;
  GetDiagnostics():Promise<Record<string,unknown>>; ImportWorkspace():Promise<LoadResult>;ExportWorkspace():Promise<string>;ResetWorkspace():Promise<LoadResult>;
  GetBackups():Promise<Array<{id:number;reason:string;createdAt:string}>>;RecoverWorkspace(id:number):Promise<LoadResult>;
- FrontendReady():Promise<void>; ConfirmClose(token:string,discard:boolean):Promise<void>;OpenTradingView():Promise<void>;
+ StartupPainted():Promise<void>; FrontendReady():Promise<void>; ConfirmClose(token:string,discard:boolean):Promise<void>;OpenTradingView():Promise<void>;
 }
 export interface Runtime {EventsOn(name:string,callback:(...args:any[])=>void):()=>void;OnFileDrop?(callback:(x:number,y:number,paths:string[])=>void,useDropTarget:boolean):void;OnFileDropOff?():void}
 declare global {interface Window {go?:{main?:{App?:Backend}};runtime?:Runtime;__CRYPTO_TEST__?:boolean;__cryptodeskDiagnostics?:()=>Record<string,unknown>}}

@@ -19,7 +19,7 @@ workspace_dir="$(mktemp -d "${TMPDIR:-/tmp}/cryptodesk-markets-smoke.XXXXXX")"
 trap 'rm -rf -- "$workspace_dir"' EXIT
 npm --prefix "$repo_root/frontend" run build
 python3 "$repo_root/scripts/app_version.py" --verify-frontend > /dev/null
-go build -tags 'production desktop_smoke webkit2_41' -o "$repo_root/build/bin/cryptodesk-markets-smoke" .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o "$repo_root/build/bin/cryptodesk-markets-smoke" .
 result=0
 for phase in markets markets-restore; do
   expected_workspace=''

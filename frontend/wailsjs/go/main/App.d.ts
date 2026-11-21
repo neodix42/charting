@@ -78,6 +78,8 @@ export function ExportWorkspace():Promise<string>;
 
 export function FrontendReady():Promise<void>;
 
+export function StartupPainted():Promise<void>;
+
 export function GetBackups():Promise<Array<storage.Backup>>;
 
 export function GetCandleStorage():Promise<candlestorage.Info>;

@@ -12,7 +12,7 @@ require_node
 require_wails
 python3 "$APP_ROOT/scripts/app_icons.py" --check
 python3 "$APP_ROOT/scripts/jforex_bundle.py" --output "$APP_ROOT/.tools/jforex-runtime"
-"$APP_ROOT/.tools/wails" build -tags webkit2_41 -trimpath "$@"
+python3 "$APP_ROOT/scripts/linux_wails_startup.py" --manifest "$APP_ROOT/.tools/wails-startup-overlay.json" -- "$APP_ROOT/.tools/wails" build -tags webkit2_41 -trimpath "$@"
 python3 "$APP_ROOT/scripts/app_version.py" --verify-frontend > /dev/null
 # The direct build/bin executable must resolve the same bridge as root/releases.
 python3 "$APP_ROOT/scripts/jforex_bundle.py" --copy-from "$APP_ROOT/.tools/jforex-runtime" --output "$APP_ROOT/build/bin/jforex-runtime"

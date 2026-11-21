@@ -8,4 +8,4 @@ if [[ -z "${CRYPTODESK_JFOREX_RUNTIME:-}" ]]; then
   python3 "$APP_ROOT/scripts/jforex_bundle.py" --output "$APP_ROOT/.tools/jforex-runtime"
   export CRYPTODESK_JFOREX_RUNTIME="$APP_ROOT/.tools/jforex-runtime"
 fi
-exec "$APP_ROOT/.tools/wails" dev -tags webkit2_41 "$@"
+exec python3 "$APP_ROOT/scripts/linux_wails_startup.py" -- "$APP_ROOT/.tools/wails" dev -tags webkit2_41 "$@"

@@ -16,7 +16,7 @@ artifact_dir="$(cd "$artifact_dir" && pwd)"
 workspace_dir="$(mktemp -d "${TMPDIR:-/tmp}/cryptodesk-desktop-smoke.XXXXXX")"
 trap 'rm -rf -- "$workspace_dir"' EXIT
 npm --prefix frontend run build
-go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-smoke .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-smoke .
 for phase in fresh restore capacity; do
  if [[ "$phase" == capacity ]]; then
   rm -rf -- "$workspace_dir"

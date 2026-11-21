@@ -50,6 +50,7 @@ type App struct {
 	bootstrap        *appBootstrap
 	services         *serviceStartup
 	initialWorkspace *storage.Loaded
+	presentation     *startupPresentation
 	shutdownOnce     sync.Once
 	mu               sync.Mutex
 	revision         int64
@@ -180,8 +181,6 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) domready(ctx context.Context) {
 	a.mu.Lock()
 	a.domReady = true
-	w := a.window
-	a.applyWindowLocked(w)
 	pending := a.closeRequested
 	a.mu.Unlock()
 	if pending {
@@ -221,7 +220,17 @@ func (a *App) domready(ctx context.Context) {
 // FrontendReady is called after the workspace's save/close listeners are
 // installed. A signal received during startup must not emit a lost save request.
 func (a *App) FrontendReady() {
+	// Until the window is presented, the mounted workspace remains inert. An
+	// early signal can close without flushing an unedited hidden draft; later
+	// save failures must always have a visible window for Retry/Keep open.
+	if err := a.StartupPainted(); err != nil {
+		return
+	}
 	a.mu.Lock()
+	if a.closeAllowed || (a.ctx != nil && a.ctx.Err() != nil) {
+		a.mu.Unlock()
+		return
+	}
 	a.frontendReady = true
 	pending := a.closeRequested
 	token := a.closeToken
@@ -275,6 +284,11 @@ func (a *App) applyWindowLocked(w domain.Window) {
 }
 func (a *App) captureWindowLocked() {
 	if a.ctx == nil {
+		return
+	}
+	// Hidden startup geometry is a restore rectangle, not an observed normal
+	// window. Sampling it would overwrite the maximized launch before mapping.
+	if a.presentation != nil && !a.presentation.shown {
 		return
 	}
 	max := runtime.WindowIsMaximised(a.ctx)

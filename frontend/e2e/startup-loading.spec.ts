@@ -1,5 +1,6 @@
 import {test,expect,type Page,type Route} from '@playwright/test';
 import {waitForTestBridge} from './helpers/testApp';
+import {firstWorkspace} from '../src/workspace/model';
 
 async function holdResource(page:Page,pattern:string){
  let release!:()=>void,requested=false;
@@ -102,4 +103,58 @@ test('a failed application import shows an actionable retry and reload mounts on
  await page.getByRole('button',{name:'Retry loading',exact:true}).click();await reloaded;
  await expectOneWorkspace(page);
  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('splash hides the mounted restored layout until native maximization and close listeners are ready',async({page})=>{
+ const workspace=firstWorkspace();workspace.theme='dark';workspace.tabs[0].name='Restored ready workspace';
+ await page.addInitScript(workspace=>{
+  sessionStorage.setItem('cryptodesk-explicit-test-workspace',JSON.stringify(workspace));
+  let nativeReady!:()=>void,listenersReady!:()=>void,bridge:any;
+  const native=new Promise<void>(resolve=>{nativeReady=resolve;}),listeners=new Promise<void>(resolve=>{listenersReady=resolve;});
+  (window as any).__releaseNativePresentation=nativeReady;(window as any).__releaseCloseListeners=listenersReady;(window as any).__startupPresentations=0;
+  Object.defineProperty(window,'go',{configurable:true,get:()=>bridge,set:value=>{
+   bridge=value;bridge.main.App.StartupPainted=async()=>{(window as any).__startupPresentations++;await native;};
+   bridge.main.App.FrontendReady=async()=>{await listeners;};
+  }});
+ },workspace);
+ await page.goto('/');await waitForTestBridge(page);
+ await expect(page.getByTestId('chart-cell')).toHaveCount(1);
+ await expect(page.getByTestId('startup-splash')).toContainText('Preparing saved layout…');
+ await expect(page.locator('.app-shell')).toHaveAttribute('inert','');
+ await expect(page.locator('.app-shell')).toHaveAttribute('aria-hidden','true');
+ await expect(page.getByTestId('chart-cell')).toBeHidden();
+ await expect(page.getByTestId('startup-splash')).toHaveCSS('background-color','rgb(238, 242, 245)');
+ await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+ await page.keyboard.press('Control+t');
+ await page.keyboard.press('Control+Shift+n');
+ expect(await page.evaluate(()=>window.__cryptodeskDiagnostics?.())).toMatchObject({savedTabs:1,savedCharts:1});
+ await expect(page.getByTestId('chart-cell')).toHaveCount(1);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__startupPresentations)).toBeGreaterThan(0);
+ await page.evaluate(()=>(window as any).__releaseNativePresentation());
+ await expect(page.getByTestId('startup-splash')).toBeVisible();await expect(page.getByTestId('chart-cell')).toBeHidden();
+ await page.evaluate(()=>(window as any).__releaseCloseListeners());
+ await expect(page.getByTestId('startup-splash')).toHaveCount(0);
+ await expect(page.locator('.app-shell')).toHaveAttribute('data-startup-ready','true');
+ await expect(page.getByTestId('chart-cell')).toBeVisible();
+ await expect(page.getByRole('tab',{name:/Restored ready workspace/})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testLeases())).toBe(1);
+ await page.keyboard.press('Control+t');
+ await expect.poll(()=>page.evaluate(()=>window.__cryptodeskDiagnostics?.())).toMatchObject({savedTabs:2,savedCharts:2});
+ await expect(page.getByTestId('chart-cell')).toHaveCount(1);
+});
+
+test('workspace failure remains visible and receives the initial native splash handshake',async({page})=>{
+ await page.addInitScript(()=>{
+  let bridge:any;(window as any).__startupPresentations=0;
+  Object.defineProperty(window,'go',{configurable:true,get:()=>bridge,set:value=>{
+   bridge=value;bridge.main.App.StartupPainted=async()=>{(window as any).__startupPresentations++;};
+   bridge.main.App.LoadWorkspace=async()=>{throw Error('Explicit startup storage failure');};
+  }});
+ });
+ await page.goto('/');await waitForTestBridge(page);
+ await expect(page.getByText('Unable to open workspace',{exact:true})).toBeVisible();
+ await expect(page.getByText('Explicit startup storage failure',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Retry loading',exact:true})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__startupPresentations)).toBeGreaterThan(0);
+ await expect(page.getByTestId('chart-cell')).toHaveCount(0);
 });

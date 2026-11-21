@@ -10,7 +10,7 @@ evidence="$(cd "$evidence" && pwd)"
 profile="$(mktemp -d "${TMPDIR:-/tmp}/cryptodesk-enrichment-native.XXXXXX")"
 trap 'rm -rf -- "$profile"' EXIT
 npm --prefix frontend run build
-go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-enrichment-smoke .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-enrichment-smoke .
 for phase in enrichment enrichment-restore; do
  CRYPTODESK_SMOKE_PHASE="$phase" CRYPTODESK_SMOKE_REPORT="$evidence/$phase.json" \
   timeout 120s build/bin/cryptodesk-enrichment-smoke --data-dir "$profile" > "$evidence/$phase.log" 2>&1

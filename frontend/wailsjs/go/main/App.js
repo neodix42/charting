@@ -134,6 +134,10 @@ export function FrontendReady() {
   return window['go']['main']['App']['FrontendReady']();
 }
 
+export function StartupPainted() {
+  return window['go']['main']['App']['StartupPainted']();
+}
+
 export function GetBackups() {
   return window['go']['main']['App']['GetBackups']();
 }

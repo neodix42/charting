@@ -28,3 +28,9 @@ require_wails() {
     GOBIN="$APP_ROOT/.tools" go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
   fi
 }
+
+# Native app builds/tests need the pinned Linux hidden-window startup fix.
+# The helper preserves module files, the module cache and existing GOFLAGS.
+run_native_go() {
+  python3 "$APP_ROOT/scripts/linux_wails_startup.py" -- go "$@"
+}

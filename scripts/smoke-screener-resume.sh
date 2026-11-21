@@ -10,7 +10,7 @@ evidence="$(cd "$evidence" && pwd)"
 profile="$(mktemp -d "${TMPDIR:-/tmp}/cryptodesk-screener-resume.XXXXXX")"
 trap 'rm -rf -- "$profile"' EXIT
 npm --prefix frontend run build
-go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-screener-smoke .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-screener-smoke .
 for phase in screener-resume screener-resume-restore; do
  CRYPTODESK_SMOKE_PHASE="$phase" CRYPTODESK_SMOKE_REPORT="$evidence/$phase.json" \
   timeout 110s build/bin/cryptodesk-screener-smoke --data-dir "$profile" > "$evidence/$phase.log" 2>&1

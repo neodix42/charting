@@ -7,7 +7,7 @@
  <meta name="theme-color" content="#eef2f5"/>
  <style>
   html{color-scheme:light;background:#eef2f5;color:#263544}body{margin:0}
-  .boot-screen{box-sizing:border-box;min-height:100dvh;display:grid;place-items:center;padding:32px;font-family:Inter,Ubuntu,system-ui,-apple-system,sans-serif;background:radial-gradient(ellipse at 50% 30%,#f1f4f6 0,transparent 65%);color:#263544}
+  .boot-screen{box-sizing:border-box;min-height:100dvh;display:grid;place-items:center;padding:32px;font-family:Inter,Ubuntu,system-ui,-apple-system,sans-serif;background:#eef2f5 radial-gradient(ellipse at 50% 30%,#f1f4f6 0,transparent 65%);color:#263544}.boot-overlay{position:fixed;inset:0;z-index:100}
   .boot-card{max-width:520px;text-align:center}.boot-logo{width:72px;height:72px}.boot-card h1{margin:18px 0 10px;font-size:34px;letter-spacing:-1px}.boot-copy{margin:0;color:#5f7081;font-size:15px;line-height:1.5}
   .boot-status{display:flex;align-items:center;justify-content:center;gap:10px;margin:26px 0 0;font-size:15px}.boot-spinner{width:15px;height:15px;border:2px solid #c4d1dd;border-top-color:#2563b8;border-radius:50%;animation:boot-spin .8s linear infinite}
   .boot-error{margin-top:24px;font-size:16px;line-height:1.5}.boot-error p{margin:10px 0;color:#5f7081}.boot-retry{margin-top:20px;padding:9px 16px;border:1px solid #2563b8;border-radius:5px;background:#2563b8;color:#fff;font:inherit;cursor:pointer}.boot-retry:focus-visible{outline:2px solid #2563b8;outline-offset:3px}
@@ -18,6 +18,16 @@
 </head>
 <body>
  <div id="root"><main class="boot-screen" aria-busy="true"><section class="boot-card" aria-labelledby="boot-title"><img class="boot-logo" src="/src/assets/cryptodesk.svg" alt=""/><h1 id="boot-title">CryptoDesk</h1><p class="boot-copy">Your saved workspace is loading.</p><p class="boot-status" role="status" aria-live="polite"><span class="boot-spinner" aria-hidden="true"></span>Starting CryptoDesk…</p></section></main></div>
+ <script>
+  // This small shell remains actionable even if the application module fails.
+  // Hidden/minimized webviews can suspend animation frames, so retain a bounded
+  // fallback to the native presentation handshake without waiting on downloads.
+  (()=>{let first=0,second=0,retry=0,paintTimer=0,done=false;const deadline=Date.now()+10000;
+   const show=()=>{if(done)return;cancelAnimationFrame(first);cancelAnimationFrame(second);clearTimeout(paintTimer);const ready=window.go?.main?.App?.StartupPainted;if(ready){done=true;Promise.resolve(ready()).catch(()=>{});}else if(Date.now()<deadline)retry=setTimeout(show,25);};
+   first=requestAnimationFrame(()=>{second=requestAnimationFrame(show);});paintTimer=setTimeout(show,100);
+   window.addEventListener('pagehide',()=>{done=true;cancelAnimationFrame(first);cancelAnimationFrame(second);clearTimeout(paintTimer);clearTimeout(retry);},{once:true});
+  })();
+ </script>
  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

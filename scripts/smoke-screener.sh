@@ -14,7 +14,7 @@ evidence="$(cd "$evidence" && pwd)"
 profile="$(mktemp -d "${TMPDIR:-/tmp}/cryptodesk-screener-native.XXXXXX")"
 trap 'rm -rf -- "$profile"' EXIT
 npm --prefix frontend run build
-go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-screener-smoke .
+run_native_go build -tags 'production desktop_smoke webkit2_41' -o build/bin/cryptodesk-screener-smoke .
 CRYPTODESK_SMOKE_PHASE=screener CRYPTODESK_SMOKE_REPORT="$evidence/screener.json" \
   timeout 110s build/bin/cryptodesk-screener-smoke --data-dir "$profile" > "$evidence/screener.log" 2>&1
 python3 - "$evidence/screener.json" <<'PY'

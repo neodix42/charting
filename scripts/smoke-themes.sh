@@ -23,7 +23,7 @@ trap 'rm -rf -- "$profile"' EXIT
 binary="${CRYPTODESK_THEMES_SMOKE_BINARY:-$APP_ROOT/build/bin/cryptodesk-themes-smoke}"
 if [[ -z "${CRYPTODESK_THEMES_SMOKE_BINARY:-}" ]]; then
   npm --prefix frontend run build
-  go build -tags 'production desktop_smoke webkit2_41' -o "$binary" .
+  run_native_go build -tags 'production desktop_smoke webkit2_41' -o "$binary" .
 fi
 for phase in themes themes-restore; do
   # Per-process X11 selects the capturable backend without changing the user's
