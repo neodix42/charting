@@ -36,7 +36,7 @@ export function DukascopyMarginOverlay({api,feedKey,trades}:{api:Backend;feedKey
   {metrics?<><span>Account <b>{ratio(metrics.accountLeverage)}</b> · Weekend <b>{ratio(metrics.weekendLeverage)}</b></span>
    <span>Instrument cap <b>{ratio(metrics.instrumentMaxLeverage)}</b> · Current effective <b>{ratio(metrics.effectiveLeverage)}</b></span>
    <span>Margin cut <b>{percentage(metrics.marginCutUsePercent??null)} leverage use</b> / <b>{percentage(cutoff)} margin level</b></span>
-   <span>Margin level <b>{percentage(level)}</b> · Free <b>{metrics.availableBalance??'—'} {metrics.availableBalanceCurrency??''}</b></span>
+   <span>Margin level <b>{percentage(level)}</b> · Equity stop <b>{metrics.accountEquityStopLoss??'—'} {metrics.availableBalanceCurrency??''}</b> · Free <b>{metrics.availableBalance??'—'} {metrics.availableBalanceCurrency??''}</b></span>
    <small>Account-wide margin; broker rules can change.</small>
   </>:<small>{error?'Margin data unavailable: '+error:'Loading account margin…'}</small>}
   {activeTrades.length>0&&<div className="dukascopy-open-positions"><strong>Open positions ({activeTrades.length})</strong>
