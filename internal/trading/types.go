@@ -75,6 +75,9 @@ type AccountMetrics struct {
 	AccountBalance           string `json:"accountBalance,omitempty"`
 	Equity                   string `json:"equity,omitempty"`
 	UsedMargin               string `json:"usedMargin,omitempty"`
+	MaximumQuantity          string `json:"maximumQuantity,omitempty"`
+	MaximumQuantityError     string `json:"maximumQuantityError,omitempty"`
+	MaximumQuantityBasis     string `json:"maximumQuantityBasis,omitempty"`
 	MarginRequired           string `json:"marginRequired,omitempty"`
 	MarginRequiredCurrency   string `json:"marginRequiredCurrency,omitempty"`
 	MarginError              string `json:"marginError,omitempty"`

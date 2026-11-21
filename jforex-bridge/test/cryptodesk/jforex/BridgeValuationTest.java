@@ -12,19 +12,22 @@ import static cryptodesk.jforex.BridgeTest.*;
 public final class BridgeValuationTest {
     static void near(double actual,double expected,String message){check(Math.abs(actual-expected)<1e-10,message+": "+actual+" != "+expected);}
     static JsonObject estimate(Bridge bridge,Instrument instrument,String side){JsonObject r=request("tradeEstimate");r.addProperty("instrument",instrument.name());r.addProperty("side",side);return good(bridge,r).getAsJsonObject("result");}
-    static ITick tick(double bid,double ask,long at){return fake(ITick.class,(method,args)->switch(method){case "getTime"->at;case "getBid"->bid;case "getAsk"->ask;default->null;});}
+    static ITick tick(double bid,double ask,long at){return fake(ITick.class,(method,args)->switch(method){case "getTime"->at;case "getBid"->bid;case "getAsk"->ask;case "getAskVolume"->0.01;case "getBidVolume"->0.02;default->null;});}
     static void run() throws Exception {
         long now=System.currentTimeMillis();
+        AtomicLong clock=new AtomicLong(now),conversionAge=new AtomicLong();
         AtomicBoolean connected=new AtomicBoolean(),conversionBlocked=new AtomicBoolean(),conversionStale=new AtomicBoolean(),entryStale=new AtomicBoolean(),accountReadFails=new AtomicBoolean(),modernCurrencyMissing=new AtomicBoolean();
         AtomicReference<ICurrency> currency=new AtomicReference<>(JFCurrency.getInstance("EUR"));
+        AtomicReference<Double> equity=new AtomicReference<>(1100.0);
+        AtomicReference<ITick> entryOverride=new AtomicReference<>();
         AtomicInteger conversionCalls=new AtomicInteger(),engineCalls=new AtomicInteger(),fxQuoteCalls=new AtomicInteger();
         Set<Instrument> subscribed=new HashSet<>();
         IHistory history=fake(IHistory.class,(method,args)->{
             if(!method.equals("getLastTick"))return null;
             Instrument instrument=(Instrument)args[0];
             if (!instrument.equals(Instrument.AAPLUSUSD)) fxQuoteCalls.incrementAndGet();
-            long at=now-(entryStale.get()&&instrument.equals(Instrument.AAPLUSUSD)||conversionStale.get()&&instrument.equals(Instrument.EURUSD)?60000:0);
-            if(instrument.equals(Instrument.AAPLUSUSD))return tick(100,100.2,at);
+            long at=now-(entryStale.get()&&instrument.equals(Instrument.AAPLUSUSD)||conversionStale.get()&&instrument.equals(Instrument.EURUSD)?60000:instrument.equals(Instrument.EURUSD)?conversionAge.get():0);
+            if(instrument.equals(Instrument.AAPLUSUSD))return entryOverride.get()!=null?entryOverride.get():tick(100,100.2,at);
             if(instrument.equals(Instrument.USDJPY))return tick(149.98,150,at);
             if(instrument.equals(Instrument.EURJPY))return tick(166.65,166.68,at);
             return tick(1.11,1.112,at);
@@ -41,7 +44,7 @@ public final class BridgeValuationTest {
         });
         IAccount account=fake(IAccount.class,(method,args)->switch(method){
             case "getLeverage"->100.0;case "getAccountCurrency"->modernCurrencyMissing.get()?null:currency.get();case "getCurrency"->currency.get().getJavaCurrency();
-            case "getBalance"->1000.0;case "getEquity"->1100.0;case "getUsedMargin"->{if(accountReadFails.get())throw new RuntimeException("explicit SDK failure");yield 100.0;}default->null;});
+            case "getBalance"->1000.0;case "getEquity"->equity.get();case "getUsedMargin"->{if(accountReadFails.get())throw new RuntimeException("explicit SDK failure");yield 100.0;}default->null;});
         IContext context=fake(IContext.class,(method,args)->switch(method){
             case "getHistory"->history;case "getUtils"->utils;case "getAccount"->account;
             case "getEngine"->{engineCalls.incrementAndGet();throw new AssertionError("estimate must not access order engine");}
@@ -55,11 +58,12 @@ public final class BridgeValuationTest {
             case "getSubscribedInstruments"->new HashSet<>(subscribed);case "unsubscribeInstruments"->{subscribed.removeAll((Set<Instrument>)args[0]);yield null;}
             case "startStrategy"->{((IStrategy)args[0]).onStart(context);yield 1L;}default->null;
         });
-        try(Bridge bridge=new Bridge(()->client,event->{},100,()->now)){
+        try(Bridge bridge=new Bridge(()->client,event->{},100,clock::get)){
             JsonObject login=request("connect");login.addProperty("username","offline");login.addProperty("password","offline");login.addProperty("environment","demo");login.addProperty("cacheDirectory",Files.createTempDirectory("jforex-valuation-").toString());good(bridge,login);
             JsonObject buy=estimate(bridge,Instrument.AAPLUSUSD,"buy"),sell=estimate(bridge,Instrument.AAPLUSUSD,"sell");
             check(buy.get("accountCurrency").getAsString().equals("EUR"),"account currency comes from SDK");near(buy.get("entryPrice").getAsDouble(),100.2,"buy ask");near(sell.get("entryPrice").getAsDouble(),100,"sell bid");
             near(buy.get("profitPerPriceUnit").getAsDouble(),0.9,"USD-quoted CFD in EUR account");near((95-100.2)*2*buy.get("profitPerPriceUnit").getAsDouble(),-9.36,"CFD units quantity and price movement, no lot or leverage multiplier");
+            near(buy.get("expensePerPriceUnit").getAsDouble(),1/1.11,"expenses use costly inverse FX bid while P/L keeps SDK conversion");
             near((100-95)*2*sell.get("profitPerPriceUnit").getAsDouble(),9,"sell target account profit");check(buy.get("valuationTime").getAsLong()==now,"verified quote valuation timestamp");
             JsonObject jpy=estimate(bridge,Instrument.USDJPY,"buy");near(jpy.get("profitPerPriceUnit").getAsDouble(),0.006,"JPY quote conversion factor uses pip ratio");
             currency.set(JFCurrency.getInstance("USD"));near(estimate(bridge,Instrument.AAPLUSUSD,"buy").get("profitPerPriceUnit").getAsDouble(),1,"same account/quote currency is still SDK-derived");
@@ -75,7 +79,53 @@ public final class BridgeValuationTest {
             conversionStale.set(true);money=good(bridge,metricsRequest).getAsJsonObject("result");check(money.has("balance")&&money.has("availableBalance")&&!money.has("valuationError"),"independent balance does not request stale FX conversion");
             conversionStale.set(false);entryStale.set(true);money=good(bridge,metricsRequest).getAsJsonObject("result");check(money.has("balance")&&money.has("entryError"),"account balance readable while entry market is stale");
             entryStale.set(false);accountReadFails.set(true);money=good(bridge,metricsRequest).getAsJsonObject("result");check(money.has("balance")&&money.has("equity")&&!money.has("usedMargin")&&!money.has("availableBalance")&&money.has("accountError"),"independent SDK field failure does not invent free margin");accountReadFails.set(false);
-            check(conversionCalls.get()==conversionsBeforeMetrics&&fxQuoteCalls.get()==fxQuotesBeforeMetrics,"account metrics performs no FX-helper or FX-quote reads");
+            check(conversionCalls.get()>conversionsBeforeMetrics&&fxQuoteCalls.get()>fxQuotesBeforeMetrics,"maximum sizing reads fresh FX while independent balances survive conversion failures");
+            conversionBlocked.set(false);BridgeTradingTest.metadata(Instrument.AAPLUSUSD,"marginUse",10);
+            metricsRequest.addProperty("quantity",2);metricsRequest.addProperty("leverage",100);
+            money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.get("maximumQuantity").getAsString().equals("108"),"maximum respects instrument 10x rather than account 100x, opening spread, slippage and integer step");
+            near(money.get("marginRequired").getAsDouble(),2*(100.2+0.05)/1.11/10,"CFD margin covers expensive executable account-currency conversion");
+            check(money.has("maximumQuantityBasis")&&money.has("marginBasis")&&!money.has("marginError"),"margin and maximum estimates identify their inputs");
+            equity.set(1098.9);money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.get("maximumQuantity").getAsString().equals("107"),"expense-side FX rate lowers maximum when midpoint-funded last unit would exceed margin");equity.set(1100.0);
+            metricsRequest.addProperty("quantity",1e308);money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.get("maximumQuantity").getAsString().equals("108")&&money.has("marginError")&&!money.has("marginRequired"),"overflowing entered quantity retains independently calculated maximum and valid JSON");metricsRequest.addProperty("quantity",2);
+            entryOverride.set(fake(ITick.class,(method,args)->switch(method){
+                case "getTime"->now;case "getBid"->100.0;case "getAsk"->100.2;
+                case "getAsks"->new double[]{100.2,100.22,100.26};case "getAskVolumes"->new double[]{.000002,.000003,.001};
+                case "getBids"->new double[]{100,99.97,99.94};case "getBidVolumes"->new double[]{.000007,.000004,.001};default->null;
+            }));
+            money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.get("maximumQuantity").getAsString().equals("5"),"buy depth converts million base units and excludes asks beyond five-pip bound");
+            metricsRequest.addProperty("side","sell");money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.get("maximumQuantity").getAsString().equals("11"),"sell depth uses bids and excludes bids beyond five-pip bound");
+            entryOverride.set(null);metricsRequest.addProperty("side","buy");
+            for(long elapsed:List.of(30001L,2000L)){
+                conversionAge.set(elapsed==2000?29000:0);
+                entryOverride.set(fake(ITick.class,(method,args)->switch(method){
+                    case "getTime"->now;case "getBid"->100.0;case "getAsk"->100.2;
+                    case "getAskVolume"->{clock.addAndGet(elapsed);yield .01;}default->null;
+                }));
+                money=good(bridge,metricsRequest).getAsJsonObject("result");
+                check(money.has("balance")&&money.has("maximumQuantityError")&&!money.has("maximumQuantity")&&!money.has("marginRequired"),"post-depth freshness rejects expired quote/account or previously fresh FX valuation");
+                check(money.get("maximumQuantityError").getAsString().contains("became stale"),"expired sizing snapshot explains failure");
+                clock.set(now);conversionAge.set(0);entryOverride.set(null);
+            }
+            currency.set(JFCurrency.getInstance("USD"));JsonObject fxMetrics=request("tradeMetrics");fxMetrics.addProperty("instrument",Instrument.EURUSD.name());fxMetrics.addProperty("side","buy");fxMetrics.addProperty("quantity",1000);fxMetrics.addProperty("leverage",100);
+            JsonObject fxMoney=good(bridge,fxMetrics).getAsJsonObject("result");
+            check(fxMoney.get("maximumQuantity").getAsString().equals("10000"),"FX zero instrument override uses account leverage and base-unit liquidity/contract rules");
+            near(fxMoney.get("marginRequired").getAsDouble(),1000*(1.112+0.0005)/100,"FX margin uses actual base units at account leverage");currency.set(JFCurrency.getInstance("EUR"));
+            conversionStale.set(true);money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.has("balance")&&money.has("availableBalance")&&money.has("maximumQuantityError")&&!money.has("maximumQuantity"),"stale sizing FX preserves independently read balances");conversionStale.set(false);
+            metricsRequest.addProperty("leverage",5);money=good(bridge,metricsRequest).getAsJsonObject("result");
+            check(money.has("maximumQuantityError")&&!money.has("maximumQuantity"),"cannot size with leverage unavailable to fixed account");
+            BridgeTradingTest.metadata(Instrument.AAPLUSUSD,"marginUse",0);
+            check(TradeSizing.maximum(1000,10,.25,1,1,1000,10000).equals("97"),"free-margin capacity includes opening costs");
+            check(TradeSizing.maximum(1000,1,0,.01,.01,10000,3.147).equals("3.14"),"visible liquidity cap rounds down to fractional instrument step");
+            check(TradeSizing.maximum(1000,1,0,1,1,12,10000).equals("12"),"instrument maximum caps funded liquidity");
+            check(TradeSizing.maximum(9,10,0,1,1,1000,10000).equals("0"),"subminimum funded size is zero");
+            check(TradeSizing.maximum(-1,10,0,1,1,1000,10000).equals("0"),"negative free margin cannot open new exposure");
+            check(TradeSizing.maximum(1,.1,0,.01,.01,1000,10000).equals("10"),"decimal boundary does not round one lot beyond affordability");
             conversionBlocked.set(false);entryStale.set(true);JsonObject r=request("tradeEstimate");r.addProperty("instrument",Instrument.AAPLUSUSD.name());r.addProperty("side","buy");check(!bridge.handle(r).get("ok").getAsBoolean(),"stale entry not an executable quote");
             check(engineCalls.get()==0&&conversionCalls.get()>0,"estimate is read-only SDK valuation");check(subscribed.isEmpty(),"temporary quote/conversion subscriptions released");
         }

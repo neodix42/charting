@@ -634,6 +634,7 @@ export namespace predictions {
 
 	export class Dataset {
 	    dataSource?: string;
+	    market?: string;
 	    id: string;
 	    symbol: string;
 	    name: string;
@@ -647,6 +648,7 @@ export namespace predictions {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.dataSource = source["dataSource"];
+	        this.market = source["market"];
 	        this.id = source["id"];
 	        this.symbol = source["symbol"];
 	        this.name = source["name"];
@@ -3106,6 +3108,9 @@ export namespace trading {
 	    accountBalance?: string;
 	    equity?: string;
 	    usedMargin?: string;
+	    maximumQuantity?: string;
+	    maximumQuantityError?: string;
+	    maximumQuantityBasis?: string;
 	    marginRequired?: string;
 	    marginRequiredCurrency?: string;
 	    marginError?: string;
@@ -3147,6 +3152,9 @@ export namespace trading {
 	        this.accountBalance = source["accountBalance"];
 	        this.equity = source["equity"];
 	        this.usedMargin = source["usedMargin"];
+	        this.maximumQuantity = source["maximumQuantity"];
+	        this.maximumQuantityError = source["maximumQuantityError"];
+	        this.maximumQuantityBasis = source["maximumQuantityBasis"];
 	        this.marginRequired = source["marginRequired"];
 	        this.marginRequiredCurrency = source["marginRequiredCurrency"];
 	        this.marginError = source["marginError"];
@@ -3341,6 +3349,9 @@ export namespace trading {
 	    accountBalance?: string;
 	    equity?: string;
 	    usedMargin?: string;
+	    maximumQuantity?: string;
+	    maximumQuantityError?: string;
+	    maximumQuantityBasis?: string;
 	    marginRequired?: string;
 	    marginRequiredCurrency?: string;
 	    marginError?: string;
@@ -3369,6 +3380,9 @@ export namespace trading {
 	        this.accountBalance = source["accountBalance"];
 	        this.equity = source["equity"];
 	        this.usedMargin = source["usedMargin"];
+	        this.maximumQuantity = source["maximumQuantity"];
+	        this.maximumQuantityError = source["maximumQuantityError"];
+	        this.maximumQuantityBasis = source["maximumQuantityBasis"];
 	        this.marginRequired = source["marginRequired"];
 	        this.marginRequiredCurrency = source["marginRequiredCurrency"];
 	        this.marginError = source["marginError"];

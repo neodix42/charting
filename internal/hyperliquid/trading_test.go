@@ -42,6 +42,9 @@ type tradingMock struct {
 	spotBalances                json.RawMessage
 	beforeAccount               func()
 	requests                    []map[string]json.RawMessage
+	bookLevels                  json.RawMessage
+	feeResponse                 json.RawMessage
+	activeResponse              json.RawMessage
 }
 
 func mockStore(t *testing.T) (*Store, *tradingMock) {
@@ -163,7 +166,25 @@ func mockStore(t *testing.T) (*Store, *tradingMock) {
 			if mock.quoteTime != nil {
 				observedAt = *mock.quoteTime
 			}
-			fmt.Fprintf(w, `{"coin":%q,"time":%d,"levels":[[{"px":%q}],[{"px":%q}]]}`, coin, observedAt, mock.price, mock.price)
+			if mock.bookLevels != nil {
+				fmt.Fprintf(w, `{"coin":%q,"time":%d,"levels":%s}`, coin, observedAt, mock.bookLevels)
+			} else {
+				fmt.Fprintf(w, `{"coin":%q,"time":%d,"levels":[[{"px":%q,"sz":"10000"}],[{"px":%q,"sz":"10000"}]]}`, coin, observedAt, mock.price, mock.price)
+			}
+		case "userFees":
+			if mock.feeResponse != nil {
+				fmt.Fprint(w, string(mock.feeResponse))
+			} else {
+				fmt.Fprint(w, `{"userCrossRate":"0.00045","userSpotCrossRate":"0.0007"}`)
+			}
+		case "activeAssetData":
+			if mock.activeResponse != nil {
+				fmt.Fprint(w, string(mock.activeResponse))
+				return
+			}
+			var coin string
+			_ = json.Unmarshal(input["coin"], &coin)
+			fmt.Fprintf(w, `{"user":%q,"coin":%q,"markPx":%q,"leverage":{"type":"isolated","value":3},"maxTradeSzs":["30","40"]}`, testAccount, coin, mock.price)
 		default:
 			t.Errorf("unexpected public request: %s", kind)
 			w.WriteHeader(400)

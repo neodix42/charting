@@ -11,6 +11,8 @@ const chart=(page:Page)=>panel(page).getByTestId('statistics-chart');
 const scenarios=(page:Page)=>panel(page).getByRole('table',{name:'Remaining-week scenarios',exact:true});
 const source=(page:Page)=>panel(page).getByLabel('Statistics data source',{exact:true});
 const asset=(page:Page)=>panel(page).getByLabel('Statistics asset',{exact:true});
+const picker=(page:Page)=>panel(page).getByLabel('Statistics assets',{exact:true});
+async function chooseAsset(page:Page,symbol:string){await asset(page).click();await picker(page).getByRole('button',{name:'All',exact:true}).click();await picker(page).locator(`[data-asset-id="${symbol}"]`).click();}
 const period=(page:Page)=>panel(page).getByLabel('Statistics time period',{exact:true});
 const calculate=(page:Page)=>panel(page).getByRole('button',{name:/^(Calculate scenarios|Calculating…)$/});
 const downloadButton=(page:Page)=>panel(page).getByRole('button',{name:'Download missing data',exact:true});
@@ -27,8 +29,7 @@ async function enter(page:Page){
  await expect(section(page,'LLM')).toHaveAttribute('aria-selected','true');
  await section(page,'Statistics').click();
  await expect(source(page)).toBeEnabled();
- await expect(asset(page).locator('option[value="eurusd"]')).toHaveCount(1);
- await asset(page).selectOption('eurusd');
+ await chooseAsset(page,'eurusd');
 }
 async function forecast(page:Page){
  return page.evaluate(()=>window.go!.main!.App!.GetPredictionStatistics({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260}));
@@ -41,18 +42,21 @@ async function completed(page:Page){await calculate(page).click();await expect(c
 test('Predictions defaults to LLM and Statistics uses source-specific daily data without model work',async({page})=>{
  await enter(page);
  const before=await llmCalls(page);
- await panel(page).getByLabel('Filter statistics assets',{exact:true}).fill('Euro');
- await expect(asset(page).locator('option[value="eurusd"]')).toHaveCount(1);
- await expect(asset(page).locator('option[value="btcusd"]')).toHaveCount(0);
+ await expect(panel(page).getByLabel('Filter statistics assets',{exact:true})).toHaveCount(0);
+ await asset(page).click();await picker(page).getByRole('textbox',{name:'Search instruments',exact:true}).fill('Euro');
+ await expect(picker(page).locator('[data-asset-id="eurusd"]')).toBeVisible();
+ await expect(picker(page).locator('[data-asset-id="btcusd"]')).toHaveCount(0);
+ await picker(page).getByRole('button',{name:'Close instrument selector',exact:true}).click();
  await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('260');
  await completed(page);
  expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260});
- await panel(page).getByLabel('Filter statistics assets',{exact:true}).fill('');
  await source(page).selectOption('hyperliquid');
  await expect(chart(page)).toHaveCount(0);
- await expect(asset(page).locator('option[value="eurusd"]')).toHaveCount(0);
- await expect(asset(page).locator('option[value="perp-BTC"]')).toHaveCount(1);
- await asset(page).selectOption('perp-BTC');await completed(page);
+ await asset(page).click();
+ await expect(picker(page).locator('[data-asset-id="eurusd"]')).toHaveCount(0);
+ await expect(picker(page).locator('[data-asset-id="perp-BTC"]')).toBeVisible();
+ await picker(page).getByRole('button',{name:'Close instrument selector',exact:true}).click();
+ await chooseAsset(page,'perp-BTC');await completed(page);
  expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'hyperliquid',asset:'perp-BTC',period:'d1',lookbackWeeks:260});
  await expect(panel(page)).toContainText('hyperliquid-perp-BTC-d1.csv');
  const after=await llmCalls(page);expect(after.prepare).toBe(before.prepare);expect(after.start).toBe(before.start);
@@ -115,10 +119,10 @@ test('time period uses downloaded H1 D1 and W1 bars independently from historica
  await expect(panel(page).getByRole('heading',{level:2}).filter({hasText:'Euro vs US Dollar'})).toContainText('W1');
  await expect(panel(page)).toContainText('eurusd-w1.csv');
  await expect(scenarios(page).getByRole('columnheader',{name:/Monday close.*observed/i})).toBeVisible();
- await asset(page).selectOption('btcusd');await expect(chart(page)).toHaveCount(0);await expect(period(page)).toHaveValue('d1');
+ await chooseAsset(page,'btcusd');await expect(chart(page)).toHaveCount(0);await expect(period(page)).toHaveValue('d1');
  expect(await period(page).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['d1']);
  await expect(panel(page).getByLabel('Statistics history period',{exact:true})).toHaveValue('156');
- await source(page).selectOption('hyperliquid');await asset(page).selectOption('perp-BTC');
+ await source(page).selectOption('hyperliquid');await chooseAsset(page,'perp-BTC');
  expect(await period(page).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['h1','d1','w1']);
  await period(page).selectOption('h1');await completed(page);
  expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'hyperliquid',asset:'perp-BTC',period:'h1',lookbackWeeks:156});
@@ -161,7 +165,7 @@ test('a failed daily-data catalog stays explicit and retries only on request',as
  expect(await page.evaluate(()=>(window as any).__statisticsCatalogFailures)).toBe(1);
  await page.evaluate(()=>(window as any).__restoreStatisticsDatasets());
  await panel(page).getByRole('button',{name:'Retry assets',exact:true}).click();
- await asset(page).selectOption('eurusd');await completed(page);
+ await chooseAsset(page,'eurusd');await completed(page);
  await expect(panel(page).getByRole('alert')).toHaveCount(0);
 });
 
@@ -173,7 +177,7 @@ test('changing source rejects a stalled old result and allows only one calculati
   (window as any).__restoreStatistics=()=>{api.GetPredictionStatistics=run;};
  });
  await calculate(page).click();await expect(calculate(page)).toBeDisabled();
- await source(page).selectOption('hyperliquid');await asset(page).selectOption('perp-BTC');
+ await source(page).selectOption('hyperliquid');await chooseAsset(page,'perp-BTC');
  await expect(chart(page)).toHaveCount(0);await expect(calculate(page)).toBeDisabled();
  await page.evaluate(()=>(window as any).__releaseStatistics());await expect(calculate(page)).toBeEnabled();
  await expect(chart(page)).toHaveCount(0);expect((await statisticsCalls(page)).calculate).toBe(1);
@@ -214,7 +218,7 @@ test('statistics releases charts on navigation and leaves saved LLM results unto
  await page.evaluate(()=>(window as any).__testFinishPrediction());
  await expect(panel(page).getByTestId('prediction-chart')).toBeVisible();
  const before=await page.evaluate(()=>(window as any).__testPredictionInfo());
- await section(page,'Statistics').click();await asset(page).selectOption('eurusd');await completed(page);
+ await section(page,'Statistics').click();await chooseAsset(page,'eurusd');await completed(page);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testPredictionResources())).toEqual({charts:0,observers:0,listeners:0});
  await expect.poll(()=>page.evaluate(()=>(window as any).__testStatisticsResources().charts)).toBe(1);
  await section(page,'LLM').click();
@@ -296,7 +300,7 @@ test('a failed companion remains visible while another job is running and never 
 });
 
 test('Cancel data download cancels only the owned source asset and period jobs',async({page})=>{
- await enter(page);await source(page).selectOption('hyperliquid');await asset(page).selectOption('perp-BTC');await period(page).selectOption('h1');
+ await enter(page);await source(page).selectOption('hyperliquid');await chooseAsset(page,'perp-BTC');await period(page).selectOption('h1');
  await startDownload(page);const owned=(await downloadInfo(page)).jobs.map(job=>job.id),before=await statisticsCalls(page);
  await page.evaluate(()=>{
   const info=(window as any).__testStatisticsDownloadInfo();
@@ -312,7 +316,7 @@ test('Cancel data download cancels only the owned source asset and period jobs',
 test('hidden Statistics pauses download status polling and an old selection completion cannot paint the new source',async({page})=>{
  await enter(page);await page.clock.install();await startDownload(page);
  await expect.poll(async()=>(await downloadCalls(page)).status).toBeGreaterThan(0);
- await source(page).selectOption('hyperliquid');await asset(page).selectOption('perp-BTC');await period(page).selectOption('h1');
+ await source(page).selectOption('hyperliquid');await chooseAsset(page,'perp-BTC');await period(page).selectOption('h1');
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect(downloadRegion(page)).not.toBeVisible();
  const hidden=await downloadCalls(page),before=await statisticsCalls(page);await page.clock.fastForward(2500);
  expect((await downloadCalls(page)).status).toBe(hidden.status);
@@ -340,4 +344,34 @@ test('a missing or replaced download job stops monitoring without recalculating 
  await expect(downloadButton(page)).toBeEnabled();await expect(calculate(page)).toBeEnabled();
  expect((await downloadCalls(page)).cancel).toBe(0);expect((await downloadCalls(page)).start).toBe(1);
  expect((await downloadInfo(page)).jobs[0].status).toBe('running');
+});
+
+test('Statistics uses the chart asset window with source market filters and keeps the current selection when filtering',async({page})=>{
+ await enter(page);await asset(page).click();
+ await picker(page).getByRole('button',{name:'Forex',exact:true}).click();
+ await expect(picker(page).locator('[data-asset-id="eurusd"]')).toBeVisible();
+ await expect(picker(page).locator('[data-asset-id="btcusd"]')).toHaveCount(0);
+ await picker(page).getByRole('button',{name:'CFD',exact:true}).click();
+ await expect(picker(page).locator('[data-asset-id="eurusd"]')).toHaveCount(0);
+ await picker(page).locator('[data-asset-id="btcusd"]').click();
+ await expect(asset(page)).toContainText('Bitcoin vs US Dollar');
+ await asset(page).click();await picker(page).getByRole('button',{name:'Forex',exact:true}).click();
+ await picker(page).getByRole('textbox',{name:'Search instruments',exact:true}).fill('Bitcoin');
+ await expect(picker(page)).toContainText('No matching instruments');
+ await picker(page).getByRole('textbox',{name:'Search instruments',exact:true}).press('Escape');
+ await expect(picker(page)).toHaveCount(0);await expect(asset(page)).toBeFocused();
+ await expect(asset(page)).toContainText('Bitcoin vs US Dollar');
+ await source(page).selectOption('hyperliquid');await asset(page).click();
+ await expect(picker(page).getByRole('button',{name:'Forex',exact:true})).toHaveCount(0);
+ await picker(page).getByRole('button',{name:'Spot',exact:true}).click();
+ await expect(picker(page).locator('[data-asset-id="perp-BTC"]')).toHaveCount(0);
+ await picker(page).locator('[data-asset-id="spot-UBTC-USDC"]').click();
+ await expect(asset(page)).toContainText('UBTC / USDC');await completed(page);
+ expect((await statisticsCalls(page)).requests.at(-1)).toMatchObject({dataSource:'hyperliquid',asset:'spot-UBTC-USDC',period:'d1'});
+ await asset(page).click();await picker(page).getByRole('button',{name:'Perpetual',exact:true}).click();
+ await expect(picker(page).locator('[data-asset-id="spot-UBTC-USDC"]')).toHaveCount(0);
+ await picker(page).locator('[data-asset-id="perp-BTC"]').click();
+ await expect(asset(page)).toContainText('Bitcoin perpetual');
+ await expect(chart(page)).toHaveCount(0);
+ await asset(page).click();await period(page).click();await expect(picker(page)).toHaveCount(0);
 });

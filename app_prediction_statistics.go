@@ -41,11 +41,36 @@ func (a *App) GetPredictionStatisticsDatasets() ([]predictions.Dataset, error) {
 			if name == "" {
 				name = strings.ToUpper(file.Symbol)
 			}
-			items = append(items, predictions.Dataset{DataSource: source, ID: file.ID, Symbol: file.Symbol,
+			items = append(items, predictions.Dataset{DataSource: source, Market: statisticsAssetMarket(source, file.Category), ID: file.ID, Symbol: file.Symbol,
 				Name: name, Period: file.Timeframe, Filename: file.Name, Directory: catalog.Directory})
 		}
 	}
 	return items, nil
+}
+
+// Use the retained catalog category, without connecting chart feeds or guessing
+// unknown downloaded assets from their names. Unknown assets remain in All.
+func statisticsAssetMarket(source, category string) string {
+	category = strings.ToLower(strings.TrimSpace(category))
+	if source == "hyperliquid" {
+		switch category {
+		case "hyperliquid spot":
+			return "spot"
+		case "hyperliquid perpetual":
+			return "perpetual"
+		}
+		return ""
+	}
+	if source != "dukascopy" || category == "" || category == "other" {
+		return ""
+	}
+	if strings.HasPrefix(category, "forex metals") {
+		return "metal"
+	}
+	if strings.HasPrefix(category, "forex ") {
+		return "forex"
+	}
+	return "cfd"
 }
 
 func (a *App) GetPredictionStatistics(request predictions.StatisticsRequest) (predictions.StatisticsForecast, error) {

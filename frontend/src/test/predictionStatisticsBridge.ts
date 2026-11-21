@@ -5,14 +5,15 @@ import type {PredictionStatisticsBackend,PredictionStatisticsForecast,Prediction
 /** Explicit offline fixtures; no estimator or generated result is used in production. */
 export function predictionStatisticsBridge():PredictionStatisticsBackend {
  const datasets:PredictionDataset[]=[
-  {id:'statistics-dukas-eur',dataSource:'dukascopy',symbol:'eurusd',name:'Euro vs US Dollar',period:'d1',filename:'eurusd-d1.csv'},
-  {id:'statistics-dukas-eur-h1',dataSource:'dukascopy',symbol:'eurusd',name:'Euro vs US Dollar',period:'h1',filename:'eurusd-h1.csv'},
-  {id:'statistics-dukas-eur-w1',dataSource:'dukascopy',symbol:'eurusd',name:'Euro vs US Dollar',period:'w1',filename:'eurusd-w1.csv'},
-  {id:'statistics-dukas-bitcoin',dataSource:'dukascopy',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'d1',filename:'btcusd-d1.csv'},
-  {id:'statistics-hyper-bitcoin',dataSource:'hyperliquid',symbol:'perp-BTC',name:'Bitcoin perpetual',period:'d1',filename:'hyperliquid-perp-BTC-d1.csv'},
-  {id:'statistics-hyper-bitcoin-h1',dataSource:'hyperliquid',symbol:'perp-BTC',name:'Bitcoin perpetual',period:'h1',filename:'hyperliquid-perp-BTC-h1.csv'},
-  {id:'statistics-hyper-bitcoin-w1',dataSource:'hyperliquid',symbol:'perp-BTC',name:'Bitcoin perpetual',period:'w1',filename:'hyperliquid-perp-BTC-w1.csv'},
-  {id:'statistics-hyper-ether',dataSource:'hyperliquid',symbol:'perp-ETH',name:'Ether perpetual',period:'d1',filename:'hyperliquid-perp-ETH-d1.csv'},
+  {id:'statistics-dukas-eur',dataSource:'dukascopy',market:'forex',symbol:'eurusd',name:'Euro vs US Dollar',period:'d1',filename:'eurusd-d1.csv'},
+  {id:'statistics-dukas-eur-h1',dataSource:'dukascopy',market:'forex',symbol:'eurusd',name:'Euro vs US Dollar',period:'h1',filename:'eurusd-h1.csv'},
+  {id:'statistics-dukas-eur-w1',dataSource:'dukascopy',market:'forex',symbol:'eurusd',name:'Euro vs US Dollar',period:'w1',filename:'eurusd-w1.csv'},
+  {id:'statistics-dukas-bitcoin',dataSource:'dukascopy',market:'cfd',symbol:'btcusd',name:'Bitcoin vs US Dollar',period:'d1',filename:'btcusd-d1.csv'},
+  {id:'statistics-hyper-bitcoin',dataSource:'hyperliquid',market:'perpetual',symbol:'perp-BTC',name:'Bitcoin perpetual',period:'d1',filename:'hyperliquid-perp-BTC-d1.csv'},
+  {id:'statistics-hyper-bitcoin-h1',dataSource:'hyperliquid',market:'perpetual',symbol:'perp-BTC',name:'Bitcoin perpetual',period:'h1',filename:'hyperliquid-perp-BTC-h1.csv'},
+  {id:'statistics-hyper-bitcoin-w1',dataSource:'hyperliquid',market:'perpetual',symbol:'perp-BTC',name:'Bitcoin perpetual',period:'w1',filename:'hyperliquid-perp-BTC-w1.csv'},
+  {id:'statistics-hyper-ether',dataSource:'hyperliquid',market:'perpetual',symbol:'perp-ETH',name:'Ether perpetual',period:'d1',filename:'hyperliquid-perp-ETH-d1.csv'},
+  {id:'statistics-hyper-spot-bitcoin',dataSource:'hyperliquid',market:'spot',symbol:'spot-UBTC-USDC',name:'UBTC / USDC',period:'d1',filename:'hyperliquid-spot-UBTC-USDC-d1.csv'},
  ];
  const day=86400000,weekStart=Date.UTC(2026,10,16),anchor={time:weekStart,open:99,high:101,low:98,close:100};
  const dates:number[]=[];

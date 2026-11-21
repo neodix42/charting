@@ -26,6 +26,7 @@ type Selection struct {
 
 type Dataset struct {
 	DataSource string `json:"dataSource,omitempty"`
+	Market     string `json:"market,omitempty"`
 	ID         string `json:"id"`
 	Symbol     string `json:"symbol"`
 	Name       string `json:"name"`

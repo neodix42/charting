@@ -68,6 +68,12 @@ func TestStatisticsFacadeUsesBothSourcesCandlePeriodsAndNeedsNoPredictionRuntime
 	seen := map[string]bool{}
 	for _, dataset := range datasets {
 		seen[dataset.DataSource+"|"+dataset.Period] = true
+		if dataset.DataSource == "dukascopy" && dataset.Market != "forex" {
+			t.Fatalf("downloaded forex classification lost: %+v", dataset)
+		}
+		if dataset.DataSource == "hyperliquid" && dataset.Market != "" {
+			t.Fatalf("unknown retained market was guessed: %+v", dataset)
+		}
 	}
 	for _, identity := range []string{"dukascopy|h1", "dukascopy|d1", "dukascopy|w1", "hyperliquid|d1"} {
 		if !seen[identity] {
@@ -109,6 +115,24 @@ func TestStatisticsFacadeUsesBothSourcesCandlePeriodsAndNeedsNoPredictionRuntime
 	for filename, original := range files {
 		if after, err := os.ReadFile(filepath.Join(directory, filename)); err != nil || string(after) != original {
 			t.Fatal("native statistics changed selected, companion or unrelated candle bytes", filename, err)
+		}
+	}
+}
+
+func TestStatisticsAssetMarketsUseCatalogCategories(t *testing.T) {
+	for _, test := range []struct{ source, category, want string }{
+		{"dukascopy", "Forex currencies 💱", "forex"},
+		{"dukascopy", "Forex major currencies 💶", "forex"},
+		{"dukascopy", "Forex metals 🥇", "metal"},
+		{"dukascopy", "Metals commodities ⚙️", "cfd"},
+		{"dukascopy", "Crypto assets ₿", "cfd"},
+		{"dukascopy", "Other", ""},
+		{"hyperliquid", "Hyperliquid spot", "spot"},
+		{"hyperliquid", "Hyperliquid perpetual", "perpetual"},
+		{"hyperliquid", "Hyperliquid", ""},
+	} {
+		if got := statisticsAssetMarket(test.source, test.category); got != test.want {
+			t.Errorf("%s %s: %q, want %q", test.source, test.category, got, test.want)
 		}
 	}
 }

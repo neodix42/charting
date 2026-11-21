@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"math"
+	"math/big"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -12,29 +14,35 @@ import (
 // are unavailable, while a nonnil zero is an actual SDK zero balance. Free margin
 // is equity minus used margin; it is not a withdrawable-cash promise.
 type TradeMetrics struct {
-	Instrument         string   `json:"instrument"`
-	Side               string   `json:"side"`
-	EntryPrice         float64  `json:"entryPrice"`
-	AccountCurrency    string   `json:"accountCurrency"`
-	ProfitPerPriceUnit float64  `json:"profitPerPriceUnit"`
-	ValuationTime      int64    `json:"valuationTime"`
-	ValuationError     string   `json:"valuationError,omitempty"`
-	ValuationSource    string   `json:"valuationSource,omitempty"`
-	ValuationNotice    string   `json:"valuationNotice,omitempty"`
-	Balance            *float64 `json:"balance,omitempty"`
-	Equity             *float64 `json:"equity,omitempty"`
-	UsedMargin         *float64 `json:"usedMargin,omitempty"`
-	AvailableBalance   *float64 `json:"availableBalance,omitempty"`
-	AccountLeverage    float64  `json:"accountLeverage"`
-	AccountTime        int64    `json:"accountTime"`
-	AccountNote        string   `json:"accountNote,omitempty"`
-	AccountError       string   `json:"accountError,omitempty"`
-	EntryError         string   `json:"entryError,omitempty"`
-	MarginRequired     *float64 `json:"marginRequired,omitempty"`
-	MarginError        string   `json:"marginError,omitempty"`
-	LiquidationPrice   *float64 `json:"liquidationPrice,omitempty"`
-	LiquidationError   string   `json:"liquidationError,omitempty"`
+	Instrument           string   `json:"instrument"`
+	Side                 string   `json:"side"`
+	EntryPrice           float64  `json:"entryPrice"`
+	AccountCurrency      string   `json:"accountCurrency"`
+	ProfitPerPriceUnit   float64  `json:"profitPerPriceUnit"`
+	ValuationTime        int64    `json:"valuationTime"`
+	ValuationError       string   `json:"valuationError,omitempty"`
+	ValuationSource      string   `json:"valuationSource,omitempty"`
+	ValuationNotice      string   `json:"valuationNotice,omitempty"`
+	Balance              *float64 `json:"balance,omitempty"`
+	Equity               *float64 `json:"equity,omitempty"`
+	UsedMargin           *float64 `json:"usedMargin,omitempty"`
+	AvailableBalance     *float64 `json:"availableBalance,omitempty"`
+	AccountLeverage      float64  `json:"accountLeverage"`
+	AccountTime          int64    `json:"accountTime"`
+	AccountNote          string   `json:"accountNote,omitempty"`
+	AccountError         string   `json:"accountError,omitempty"`
+	EntryError           string   `json:"entryError,omitempty"`
+	MarginRequired       *float64 `json:"marginRequired,omitempty"`
+	MarginError          string   `json:"marginError,omitempty"`
+	MarginBasis          string   `json:"marginBasis,omitempty"`
+	MaximumQuantity      string   `json:"maximumQuantity,omitempty"`
+	MaximumQuantityError string   `json:"maximumQuantityError,omitempty"`
+	MaximumQuantityBasis string   `json:"maximumQuantityBasis,omitempty"`
+	LiquidationPrice     *float64 `json:"liquidationPrice,omitempty"`
+	LiquidationError     string   `json:"liquidationError,omitempty"`
 }
+
+var maximumQuantityDecimal = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
 func (m *Manager) OrderMetrics(ctx context.Context, request TradeRequest) (TradeMetrics, error) {
 	if err := validateTradeRequest(TradeRequest{Instrument: request.Instrument, Side: request.Side, Quantity: 1}); err != nil {
@@ -58,9 +66,12 @@ func (m *Manager) OrderMetrics(ctx context.Context, request TradeRequest) (Trade
 	config := m.config
 	m.mu.Unlock()
 	var metrics TradeMetrics
-	// Amount/levels are intentionally absent: account balances and per-unit
-	// valuation remain readable while the user edits an empty or invalid amount.
-	if err = process.call(ctx, map[string]any{"op": "tradeMetrics", "instrument": request.Instrument, "side": request.Side}, &metrics); err != nil {
+	// Empty quantity still reads balances and the independent maximum size.
+	quantity := request.Quantity
+	if quantity < 0 || math.IsNaN(quantity) || math.IsInf(quantity, 0) {
+		quantity = 0
+	}
+	if err = process.call(ctx, map[string]any{"op": "tradeMetrics", "instrument": request.Instrument, "side": request.Side, "quantity": quantity, "leverage": request.Leverage}, &metrics); err != nil {
 		return TradeMetrics{}, err
 	}
 	if metrics.Instrument != request.Instrument || metrics.Side != request.Side {
@@ -95,11 +106,28 @@ func normalizeTradeMetrics(metrics *TradeMetrics) {
 			metrics.EntryError = "No current executable JForex entry quote"
 		}
 	}
-	// No supported SDK pre-trade-margin or standalone liquidation-price API is
-	// available. Do not invent either value from account leverage or one position.
-	metrics.MarginRequired = nil
+	if metrics.MarginRequired != nil && (math.IsNaN(*metrics.MarginRequired) || math.IsInf(*metrics.MarginRequired, 0) || *metrics.MarginRequired < 0) {
+		metrics.MarginRequired = nil
+		metrics.MarginError = "JForex margin estimate is invalid"
+	}
+	// Legacy bridge snapshots cannot supply a size calculated with instrument rules.
+	if metrics.MaximumQuantity != "" {
+		if len(metrics.MaximumQuantity) > 100 || !maximumQuantityDecimal.MatchString(metrics.MaximumQuantity) {
+			metrics.MaximumQuantity = ""
+			metrics.MaximumQuantityError = "JForex maximum quantity is invalid"
+		}
+		value, ok := new(big.Rat).SetString(metrics.MaximumQuantity)
+		if !ok || value.Sign() < 0 {
+			metrics.MaximumQuantity = ""
+			metrics.MaximumQuantityError = "JForex maximum quantity is invalid"
+		}
+	}
+	if metrics.MaximumQuantity == "" && metrics.MaximumQuantityError == "" {
+		metrics.MaximumQuantityError = "The selected JForex bridge does not supply maximum order quantity. Install this build's matching jforex-runtime and restart CryptoDesk"
+	}
+	// Liquidation remains account-wide, rather than one standalone order price.
 	metrics.LiquidationPrice = nil
-	if metrics.MarginError == "" {
+	if metrics.MarginRequired == nil && metrics.MarginError == "" {
 		metrics.MarginError = "JForex does not expose a pre-trade required-margin quote"
 	}
 	if metrics.LiquidationError == "" {

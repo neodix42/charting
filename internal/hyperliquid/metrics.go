@@ -23,6 +23,9 @@ type Metrics struct {
 	MarginRequiredCurrency   string `json:"marginRequiredCurrency,omitempty"`
 	MarginError              string `json:"marginError,omitempty"`
 	MarginBasis              string `json:"marginBasis,omitempty"`
+	MaximumQuantity          string `json:"maximumQuantity,omitempty"`
+	MaximumQuantityError     string `json:"maximumQuantityError,omitempty"`
+	MaximumQuantityBasis     string `json:"maximumQuantityBasis,omitempty"`
 	LiquidationPrice         string `json:"liquidationPrice,omitempty"`
 	LiquidationError         string `json:"liquidationError,omitempty"`
 	LiquidationBasis         string `json:"liquidationBasis,omitempty"`
@@ -135,9 +138,21 @@ type clearinghouseState struct {
 
 func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m instrument, entry decimal.Decimal, observedAt int64) (out Metrics) {
 	out = Metrics{LiquidationKind: "unavailable", MetricsTime: s.now().UnixMilli()}
+	maximumReady := false
+	hasExistingPosition := false
 	defer func() {
+		if maximumReady {
+			out.MaximumQuantity, out.MaximumQuantityBasis, out.MaximumQuantityError = s.maximumOrderQuantity(ctx, v, r, m, out, entry, hasExistingPosition)
+		} else {
+			out.MaximumQuantityError = out.AvailableBalanceError
+			if out.MaximumQuantityError == "" {
+				out.MaximumQuantityError = out.MarginError
+			}
+		}
 		if entry.IsPositive() && !s.freshObservation(observedAt) {
 			out.EntryPrice = ""
+			out.MaximumQuantity = ""
+			out.MaximumQuantityError = "The entry quote aged while account state was read; refresh to calculate maximum quantity"
 			if r.Market != "spot" {
 				out.MarginRequired = ""
 				out.MarginError = "The entry quote aged while account state was read; refresh to estimate margin"
@@ -235,6 +250,7 @@ func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m 
 		} else {
 			out.AvailableBalance = total.Sub(hold).String()
 			out.AvailableBalanceBasis = "Available spot tokens: total minus held orders"
+			maximumReady = true
 		}
 		return out
 	}
@@ -276,6 +292,7 @@ func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m 
 			return out
 		}
 		if existing.Position.Coin == r.Instrument && !size.IsZero() {
+			maximumReady, hasExistingPosition = true, true
 			out.MarginError = "An existing position will be netted; additional order margin is unavailable"
 			out.LiquidationError = "An existing position will be netted; its liquidation price is not the proposed order's liquidation estimate"
 			return out
@@ -286,6 +303,7 @@ func (s *Store) orderMetrics(ctx context.Context, v Settings, r OrderRequest, m 
 		out.LiquidationError = "A fresh executable entry quote is required to estimate liquidation"
 		return out
 	}
+	maximumReady = true
 	quantity, quantityErr := positive(r.Quantity)
 	if quantityErr != nil || !quantity.Equal(quantity.Truncate(int32(m.szDecimals))) {
 		out.MarginError = "Enter a positive quantity at the instrument's supported precision"

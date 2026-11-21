@@ -34,7 +34,7 @@ func TestDukascopyAccountMetricsPreserveZeroAndIndependentBalance(t *testing.T) 
 }
 
 func TestAccountMetricsTransportIsFlatAndCurrenciesIndependent(t *testing.T) {
-	value := hyperliquid.Metrics{AvailableBalance: "0", AvailableBalanceCurrency: "BTC", MarginRequired: "2", MarginRequiredCurrency: "USDT", LiquidationPrice: "73.25", LiquidationKind: "estimate", LiquidationBasis: "isolated", MetricsTime: 456}
+	value := hyperliquid.Metrics{AvailableBalance: "0", AvailableBalanceCurrency: "BTC", MaximumQuantity: "0.00000123", MaximumQuantityBasis: "Current owned balance and order book", MarginRequired: "2", MarginRequiredCurrency: "USDT", LiquidationPrice: "73.25", LiquidationKind: "estimate", LiquidationBasis: "isolated", MetricsTime: 456}
 	got := trading.Metrics{AccountMetrics: hyperliquidAccountMetrics(value), Quantity: "1", Leverage: 2}
 	encoded, err := json.Marshal(got)
 	if err != nil {
@@ -46,6 +46,13 @@ func TestAccountMetricsTransportIsFlatAndCurrenciesIndependent(t *testing.T) {
 	}
 	if decoded["availableBalance"] != "0" || decoded["availableBalanceCurrency"] != "BTC" || decoded["marginRequiredCurrency"] != "USDT" || decoded["liquidationKind"] != "estimate" || decoded["AccountMetrics"] != nil {
 		t.Fatalf("metrics not flattened or token identities lost: %s", encoded)
+	}
+	if decoded["maximumQuantity"] != "0.00000123" || decoded["maximumQuantityBasis"] != value.MaximumQuantityBasis {
+		t.Fatalf("maximum base quantity lost or rounded in transport: %s", encoded)
+	}
+	duka := dukascopyAccountMetrics(&jforex.TradeMetrics{MaximumQuantity: "0", MaximumQuantityBasis: "No free margin"})
+	if duka.MaximumQuantity != "0" || duka.MaximumQuantityBasis != "No free margin" {
+		t.Fatalf("confirmed zero maximum discarded: %+v", duka)
 	}
 }
 

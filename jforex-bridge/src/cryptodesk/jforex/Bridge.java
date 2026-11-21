@@ -849,9 +849,12 @@ public final class Bridge implements AutoCloseable {
                     }
                 }
             }
-            if (!boundedConversion(factor, lowerRate, upperRate)) throw new Failure("restricted", "The fresh currency conversion rate is invalid");
+            if (!boundedConversion(factor, lowerRate, upperRate) || !Double.isFinite(upperRate) || upperRate <= 0) throw new Failure("restricted", "The fresh currency conversion rate is invalid");
             if (nowMillis.getAsLong() - valuedAt > 30_000) throw new Failure("restricted", "The quote or currency conversion is stale");
             result.put("profitPerPriceUnit", factor); result.put("valuationTime", valuedAt); result.put("valuationSource", source);
+            // Costs must cover the expensive side of the verified FX route.
+            // Keep existing SDK/midpoint conversion for advisory gross P/L.
+            result.put("expensePerPriceUnit", upperRate);
         } catch (Exception error) {
             String detail = error instanceof Failure ? error.getMessage() : "JForex could not read the required SDK data";
             result.put("valuationError", stage + " unavailable: " + detail);
@@ -903,14 +906,83 @@ public final class Bridge implements AutoCloseable {
         result.put("instrument", instrument.name()); result.put("side", side);
         try {
             ITick quote = freshTradeQuote(instrument);
-            // Account metrics intentionally do not run P/L conversion. The
-            // separate estimate RPC owns FX subscriptions and valuation; a
-            // missing FX quote cannot delay this independent balance snapshot.
             result.put("entryPrice", side.equals("buy") ? quote.getAsk() : quote.getBid());
+            sizeTrade(result, instrument, side, quote, request, null);
         } catch (Exception error) {
             result.put("entryError", error instanceof Failure ? error.getMessage() : "JForex could not read a current entry quote");
+            result.put("maximumQuantityError", "A fresh executable entry quote is required to calculate maximum quantity");
         } finally { releaseInstruments(); }
         return result;
+    }
+    private void sizeTrade(Map<String, Object> result, Instrument instrument, String side, ITick quote, JsonObject request, Map<String, Object> knownValuation) {
+        try {
+            double accountLeverage = context.getAccount().getLeverage(), instrumentLeverage = instrument.getLeverageUse();
+            if (!Double.isFinite(accountLeverage) || accountLeverage <= 0 || !Double.isFinite(instrumentLeverage) || instrumentLeverage < 0)
+                throw new IllegalArgumentException("JForex did not supply the account and instrument leverage requirements");
+            double requested = request.has("leverage") ? tradeNumber(request, "leverage", true) : 0;
+            if (requested != 0 && requested != accountLeverage) throw new IllegalArgumentException("Dukascopy leverage is fixed by the account");
+            // The SDK uses zero when no instrument-specific leverage overrides
+            // the account setting (the usual FX case).
+            double effectiveLeverage = instrumentLeverage > 0 ? Math.min(accountLeverage, instrumentLeverage) : accountLeverage;
+            // Apply the published Friday 18:00 UTC to Sunday FX reopening reduction.
+            java.time.ZonedDateTime utc = java.time.Instant.ofEpochMilli(nowMillis.getAsLong()).atZone(java.time.ZoneOffset.UTC);
+            int day = utc.getDayOfWeek().getValue();
+            int sundayOpen = java.time.ZoneId.of("America/New_York").getRules().isDaylightSavings(utc.toInstant()) ? 21 : 22;
+            boolean weekend = day == 5 && utc.getHour() >= 18 || day == 6 || day == 7 && utc.getHour() < sundayOpen;
+            int weekendLeverage = context.getAccount().getOverWeekEndLeverage();
+            if (weekend && weekendLeverage > 0) effectiveLeverage = Math.min(effectiveLeverage, weekendLeverage);
+            if (!result.containsKey("availableBalance") || !(result.get("accountCurrency") instanceof String currency) || currency.isEmpty())
+                throw new IllegalArgumentException("JForex free margin and account currency are required");
+            Map<String, Object> valuation = knownValuation == null ? tradeValuation(instrument, quote.getTime()) : knownValuation;
+            if (valuation.containsKey("valuationError")) throw new IllegalArgumentException((String)valuation.get("valuationError"));
+            double rate = ((Number)valuation.get("expensePerPriceUnit")).doubleValue();
+            double contract = instrument.getAmountPerContract();
+            double minimum = instrument.getMinTradeAmount() * contract, step = instrument.getTradeAmountIncrement() * contract, maximum = instrument.getMaxTradeAmount() * contract;
+            // submitOrder allows five pips of slippage. Budget its upper price and
+            // opening spread, so all units fit the margin budget at that bound.
+            double slippage = 5 * instrument.getPipValue(), worstPrice = quote.getAsk() + slippage;
+            if (!Double.isFinite(quote.getBid()) || quote.getBid() <= 0 || !Double.isFinite(quote.getAsk()) || quote.getAsk() < quote.getBid()
+                || !Double.isFinite(slippage) || slippage <= 0 || !Double.isFinite(rate) || rate <= 0)
+                throw new IllegalArgumentException("The executable prices, slippage bound or account conversion are invalid");
+            double marginPerUnit = worstPrice * rate / effectiveLeverage;
+            double openingCostPerUnit = (quote.getAsk() - quote.getBid() + slippage) * rate;
+            double liquidity = executableLiquidity(quote, side, slippage);
+            String quantity = TradeSizing.maximum(((Number)result.get("availableBalance")).doubleValue(), marginPerUnit, openingCostPerUnit, minimum, step, maximum, liquidity);
+            double units = request.has("quantity") ? tradeNumber(request, "quantity", true) : 0;
+            long quoteTime = quote.getTime(), accountTime = ((Number)result.get("accountTime")).longValue(), valuationTime = ((Number)valuation.get("valuationTime")).longValue();
+            long now = nowMillis.getAsLong();
+            if (quoteTime <= 0 || accountTime <= 0 || valuationTime <= 0 || now - quoteTime > 30_000 || quoteTime > now + 5_000
+                || now - accountTime > 30_000 || accountTime > now + 5_000 || now - valuationTime > 30_000 || valuationTime > now + 5_000)
+                throw new IllegalArgumentException("The entry quote, account snapshot or currency conversion became stale while sizing the order");
+            result.put("maximumQuantity", quantity);
+            result.put("maximumQuantityBasis", "Estimated new-exposure capacity from SDK free margin, instrument/account leverage (effective " + effectiveLeverage + "x), the expense-side upper bound of fresh account-currency FX quotes, five-pip execution bound and opening spread. Floored to the instrument increment and capped by instrument maximum and current visible executable liquidity. Commissions, dynamic exposure tiers and later market/account changes can reduce the final fill; this snapshot cannot guarantee execution.");
+            if (units > 0) {
+                double requiredMargin = units * marginPerUnit;
+                if (Double.isFinite(requiredMargin)) {
+                    result.put("marginRequired", requiredMargin);
+                    result.remove("marginError");
+                    result.put("marginBasis", "Estimated new-exposure margin at the five-pip upper execution bound, converted at the expense-side upper bound of fresh SDK FX quotes; effective leverage " + effectiveLeverage + "x. Existing exposure offsets, broker tiers and commissions are not a pre-trade broker quote.");
+                } else result.put("marginError", "The entered quantity is too large to calculate a finite required-margin estimate");
+            }
+        } catch (Exception error) {
+            result.put("maximumQuantityError", error.getMessage() == null ? "JForex maximum quantity inputs are unavailable" : error.getMessage());
+        }
+    }
+    private static double executableLiquidity(ITick quote, String side, double slippage) {
+        boolean buy = side.equals("buy");
+        double best = buy ? quote.getAsk() : quote.getBid(), limit = best + (buy ? slippage : -slippage), total = 0;
+        double[] prices = buy ? quote.getAsks() : quote.getBids(), volumes = buy ? quote.getAskVolumes() : quote.getBidVolumes();
+        if (prices != null && volumes != null && prices.length > 0 && prices.length == volumes.length) {
+            for (int i = 0; i < prices.length; i++) {
+                if (!Double.isFinite(prices[i]) || prices[i] <= 0 || !Double.isFinite(volumes[i]) || volumes[i] < 0)
+                    throw new IllegalArgumentException("JForex executable market depth is invalid");
+                if (buy ? prices[i] <= limit : prices[i] >= limit) total += volumes[i];
+            }
+        } else total = buy ? quote.getAskVolume() : quote.getBidVolume();
+        // Like the Instrument submitOrder overload, tick quantities are in millions
+        // of underlying units, including CFD ticks (not millions of contracts).
+        if (!Double.isFinite(total) || total < 0) throw new IllegalArgumentException("JForex executable market depth is unavailable");
+        return total * 1_000_000;
     }
     private Map<String, Object> tradeEstimate(JsonObject request) throws Exception {
         requireConnected();
@@ -959,6 +1031,7 @@ public final class Bridge implements AutoCloseable {
             result.putAll(valuation);
             if (Objects.equals(valuation.get("accountCurrency"), "")) valuation.remove("accountCurrency");
             metrics.putAll(valuation); metrics.put("entryPrice", entry); metrics.put("instrument", instrument.name()); metrics.put("side", side);
+            sizeTrade(metrics, instrument, side, quote, request, valuation);
             result.put("metrics", metrics);
         }
         result.put("accountLeverage", leverage); result.put("minQuantity", minimum); result.put("quantityStep", increment); result.put("priceStep", priceStep);

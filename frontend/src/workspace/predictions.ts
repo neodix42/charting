@@ -1,10 +1,10 @@
 import {utcDate} from './time';
-import type {ScreenerDataSource} from '../types';
+import type {Market,ScreenerDataSource} from '../types';
 import type {PredictionStatisticsBackend} from './predictionStatistics';
 
 export interface PredictionSettings {model:string;modelDirectory:string}
 export interface PredictionSelection {asset:string;period:string;contextLength:number;horizon:number;forecastId?:string}
-export interface PredictionDataset {id:string;symbol:string;name:string;period:string;filename:string;dataSource?:ScreenerDataSource}
+export interface PredictionDataset {id:string;symbol:string;name:string;period:string;filename:string;dataSource?:ScreenerDataSource;market?:Market}
 export interface PredictionObservation {time:number;close:number}
 export interface PredictionPoint {step:number;lower:number;median:number;upper:number}
 export interface PredictionSummary {id:string;createdAt:number;asOf:number;model:string;symbol:string;assetName:string;period:string;contextLength:number;horizon:number}

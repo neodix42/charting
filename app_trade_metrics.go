@@ -44,7 +44,11 @@ func (a *App) GetTradeMetrics(request trading.Request) (trading.Metrics, error) 
 		if a.jforex == nil {
 			return result, errors.New("configure Dukascopy in Settings")
 		}
-		value, err := a.jforex.OrderMetrics(ctx, jforex.TradeRequest{Instrument: request.FeedKey.Instrument, Side: request.Side})
+		quantity, _ := strconv.ParseFloat(result.Quantity, 64)
+		if quantity < 0 || math.IsNaN(quantity) || math.IsInf(quantity, 0) {
+			quantity = 0
+		}
+		value, err := a.jforex.OrderMetrics(ctx, jforex.TradeRequest{Instrument: request.FeedKey.Instrument, Side: request.Side, Quantity: quantity, Leverage: float64(request.Leverage)})
 		if err != nil {
 			return result, err
 		}
@@ -63,6 +67,7 @@ func hyperliquidAccountMetrics(value hyperliquid.Metrics) trading.AccountMetrics
 		AvailableBalance: value.AvailableBalance, AvailableBalanceCurrency: value.AvailableBalanceCurrency,
 		AvailableBalanceError: value.AvailableBalanceError, AvailableBalanceBasis: value.AvailableBalanceBasis,
 		AccountBalance: value.AccountBalance, Equity: value.Equity, UsedMargin: value.UsedMargin,
+		MaximumQuantity: value.MaximumQuantity, MaximumQuantityError: value.MaximumQuantityError, MaximumQuantityBasis: value.MaximumQuantityBasis,
 		MarginRequired: value.MarginRequired, MarginRequiredCurrency: value.MarginRequiredCurrency,
 		MarginError: value.MarginError, MarginBasis: value.MarginBasis,
 		LiquidationPrice: value.LiquidationPrice, LiquidationError: value.LiquidationError,
@@ -79,14 +84,15 @@ func metricMoney(value *float64) string {
 
 func dukascopyAccountMetrics(value *jforex.TradeMetrics) trading.AccountMetrics {
 	if value == nil {
-		return trading.AccountMetrics{AvailableBalanceError: "The installed JForex bridge did not return account metrics; install this build's matching runtime and restart", MarginError: "JForex does not expose a pre-trade required-margin quote", LiquidationKind: "not-applicable", LiquidationError: "Dukascopy liquidation is governed by account-wide margin rules"}
+		return trading.AccountMetrics{AvailableBalanceError: "The installed JForex bridge did not return account metrics; install this build's matching runtime and restart", MaximumQuantityError: "The installed JForex bridge did not return a maximum quantity; install this build's matching runtime and restart", MarginError: "JForex does not expose a pre-trade required-margin quote", LiquidationKind: "not-applicable", LiquidationError: "Dukascopy liquidation is governed by account-wide margin rules"}
 	}
 	result := trading.AccountMetrics{
 		AvailableBalance: metricMoney(value.AvailableBalance), AvailableBalanceCurrency: value.AccountCurrency,
 		AvailableBalanceBasis: value.AccountNote,
 		AccountBalance:        metricMoney(value.Balance), Equity: metricMoney(value.Equity), UsedMargin: metricMoney(value.UsedMargin),
+		MaximumQuantity: value.MaximumQuantity, MaximumQuantityError: value.MaximumQuantityError, MaximumQuantityBasis: value.MaximumQuantityBasis,
 		MarginRequired: metricMoney(value.MarginRequired), MarginRequiredCurrency: value.AccountCurrency,
-		MarginError:     value.MarginError,
+		MarginError: value.MarginError, MarginBasis: value.MarginBasis,
 		LiquidationKind: "not-applicable", LiquidationError: value.LiquidationError,
 		MetricsTime: value.AccountTime,
 	}
