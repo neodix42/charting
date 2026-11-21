@@ -68,6 +68,13 @@ type Estimate struct {
 // or hypothetical order projection is unavailable. Empty values are unknown;
 // the string "0" is a valid confirmed zero.
 type AccountMetrics struct {
+	AccountLeverage float64 `json:"accountLeverage,omitempty"`
+	WeekendLeverage float64 `json:"weekendLeverage,omitempty"`
+	InstrumentMaxLeverage float64 `json:"instrumentMaxLeverage,omitempty"`
+	EffectiveLeverage float64 `json:"effectiveLeverage,omitempty"`
+	MarginCutUsePercent float64 `json:"marginCutUsePercent,omitempty"`
+	MarginPerUnit string `json:"marginPerUnit,omitempty"`
+	QuantityStep float64 `json:"quantityStep,omitempty"`
 	AvailableBalance         string `json:"availableBalance,omitempty"`
 	AvailableBalanceCurrency string `json:"availableBalanceCurrency,omitempty"`
 	AvailableBalanceError    string `json:"availableBalanceError,omitempty"`
