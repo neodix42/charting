@@ -12,6 +12,12 @@ const session={marketHoursStatus:'available',marketHoursFirstDay:'1',marketHours
 const item=(nativeId:string,sdkSymbol:string,providerMetadata:Record<string,string>):Instrument=>({nativeId,market:'cfd',baseAsset:sdkSymbol.split('/')[0],quoteAsset:'HKD',priceIncrement:'0.01',sizeIncrement:'1',availability:'available',supportedIntervals:['1h'],providerMetadata:{sdkSymbol,...providerMetadata}});
 const hk=item('0941HKHKD','0941.HK/HKD',session);
 const unavailable=item('UNKNOWNHKHKD','UNKNOWN.HK/HKD',{marketHoursStatus:'unavailable'});
+const calendar={marketHoursStatus:'available',marketHoursSource:'JForex instrument calendar',marketHoursTimeZone:'UTC',marketHoursFrom:String(Date.parse('2026-11-13T00:00:00Z')),marketHoursTo:String(Date.parse('2026-11-29T00:00:00Z')),marketHoursClosedIntervals:JSON.stringify([
+ [Date.parse('2026-11-13T22:00:00Z'),Date.parse('2026-11-15T22:00:00Z')],
+ [Date.parse('2026-11-20T22:00:00Z'),Date.parse('2026-11-22T22:00:00Z')],
+ [Date.parse('2026-11-27T22:00:00Z'),Date.parse('2026-11-29T22:00:00Z')],
+])};
+const forex:Instrument={...item('EURUSD','EUR/USD',calendar),market:'forex',baseAsset:'EUR',quoteAsset:'USD',priceIncrement:'0.00001'};
 
 async function dukascopyFixtures(page:Page,extra:Instrument[]=[]){
  await openTestApp(page);
@@ -72,6 +78,42 @@ test('missing or malformed Dukascopy session metadata hides the hours badge',asy
  await expect(hours(page)).toHaveCount(0);
  await selectInstrument(page,'INVALID.HK/HKD CFD');
  await expect(hours(page)).toHaveCount(0);
+});
+
+test('Dukascopy forex calendar paints actual next opening and updates across the weekend boundary',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-21T12:00:00Z')});
+ await dukascopyFixtures(page,[forex]);
+ await expect(hours(page)).toContainText('broker calendar');
+ await expect(hours(page)).toContainText('Next opens Sun 2026-11-22 22:00 UTC');
+ await expect(hours(page)).toContainText('closes Fri 2026-11-27 22:00 UTC');
+ const status=hours(page).getByLabel('Asset regular-session status',{exact:true});
+ await expect(status).toHaveText('Closed');
+ await expect(hours(page)).toHaveAttribute('title',/dated coverage.*trading halts/);
+ const badge=await hours(page).boundingBox(),chart=await page.getByTestId('chart-canvas').boundingBox();
+ expect(badge!.x).toBeLessThan(chart!.x+80);expect(badge!.y).toBeGreaterThan(chart!.y+chart!.height/2);
+ await page.getByTestId('chart-cell').screenshot({path:'test-results/chart-forex-calendar.png'});
+ await page.clock.setSystemTime(new Date('2026-11-22T21:59:59Z'));await page.clock.fastForward(1000);
+ await expect(status).toHaveText('Opened');await expect(hours(page)).toContainText('Opened Sun 2026-11-22 22:00 UTC');
+ await page.clock.setSystemTime(new Date('2026-11-29T00:00:00Z'));await page.clock.fastForward(1000);
+ await expect(hours(page)).toHaveCount(0);
+});
+
+test('an active Dukascopy chart picks up delayed calendar discovery and stops checks when its source changes',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-21T12:00:00Z')});
+ await dukascopyFixtures(page);
+ await expect(hours(page)).toHaveCount(0);
+ await page.evaluate(items=>{
+  (window as any).__hoursRefreshes=0;
+  window.go!.main!.App!.RefreshDucascopyInstruments=async()=>{(window as any).__hoursRefreshes++;return structuredClone(items);};
+ },[hk,unavailable,forex]);
+ await page.clock.fastForward(5*60000+1000);
+ await expect(hours(page)).toContainText('Next opens Sun 2026-11-22 22:00 UTC');
+ expect(await page.evaluate(()=>(window as any).__hoursRefreshes)).toBeGreaterThan(0);
+ await exchange(page).selectOption('binance');
+ await expect(hours(page)).toHaveCount(0);
+ const count=await page.evaluate(()=>(window as any).__hoursRefreshes);
+ await page.clock.fastForward(10*60000);
+ expect(await page.evaluate(()=>(window as any).__hoursRefreshes)).toBe(count);
 });
 
 test('instrument search preserves inside interaction and closes on Escape, chart or toolbar clicks',async({page})=>{

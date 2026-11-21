@@ -64,7 +64,7 @@ test('perpetual risk sizing uses the provider stop and selected-leverage constra
  await openOrder(page);await expect(leverage(page)).toHaveValue('5');const risk=ticket(page).getByRole('region',{name:'Hyperliquid risk and margin',exact:true});
  await expect(risk).toContainText('Enter a stop loss');await expect(risk).not.toContainText('150%');await expect(risk).not.toContainText('Forex');
  await ticket(page).getByLabel('Order stop loss',{exact:true}).fill('95');await page.clock.fastForward(350);
- await expect(risk).toContainText('50% risk quantity: 100');await expect(risk).toContainText('Risk-sized quantity (margin and liquidity capped): 10');await expect(risk).toContainText('50 USDC');await expect(risk).toContainText('5% equity');await expect(risk).toContainText('liquidation price: 80');
+ await expect(risk).toContainText('50% risk quantity: 100');await expect(risk).toContainText('Risk-sized quantity (margin and liquidity capped): 10');await expect(risk).toContainText('50.00 USDC');await expect(risk).toContainText('5% equity');await expect(risk).toContainText('liquidation price: 80.00');
  await risk.getByRole('button',{name:'Use risk-sized quantity',exact:true}).click();await expect(ticket(page).getByLabel('Order quantity',{exact:true})).toHaveValue('10');
  expect(await page.evaluate(()=>(window as any).__testTradeRequests())).toEqual([]);expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
  await leverage(page).selectOption('1');await page.clock.fastForward(350);await expect(risk).toContainText('Risk-sized quantity (margin and liquidity capped): 20');await expect(risk).toContainText('No positive price threshold');
@@ -72,7 +72,7 @@ test('perpetual risk sizing uses the provider stop and selected-leverage constra
  await leverage(page).selectOption('5');await ticket(page).getByLabel('Order stop loss',{exact:true}).fill('75');await page.clock.fastForward(350);await expect(risk).toContainText('Stop loss must precede isolated liquidation');await expect(risk.getByRole('button',{name:'Use risk-sized quantity',exact:true})).toHaveCount(0);
 });
 
-test('perpetual risk suggestions expire when account reads stall and independent balances survive an unavailable risk calculation',async({page})=>{
+test('loaded perpetual sizing stays usable when live account reads stall and independent balances report staleness',async({page})=>{
  await setup(page);await page.clock.install();await valuation(page,{entryPrice:'100',maxLeverage:1});
  await page.evaluate(()=>(window as any).__testSetTradeMetrics({availableBalance:'500',equity:'1000',riskSizingError:'Existing netted position risk cannot be sized as a standalone order'},'hyperliquid','BTC'));
  await openOrder(page);await ticket(page).getByLabel('Order stop loss',{exact:true}).fill('95');await page.clock.fastForward(350);const risk=ticket(page).getByRole('region',{name:'Hyperliquid risk and margin',exact:true});
@@ -80,5 +80,23 @@ test('perpetual risk suggestions expire when account reads stall and independent
  await page.evaluate(()=>(window as any).__testSetTradeMetrics({riskSizingQuantity:'100',riskSizingSafeQuantity:'5',riskSizingLoss:'25',riskSizingLiquidationPrice:'0',riskSizingCanTarget:false,riskSizingError:'',riskSizingBasis:'Verified isolated result fixture'},'hyperliquid','BTC'));
  await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();await page.clock.fastForward(350);await expect(risk.getByRole('button',{name:'Use risk-sized quantity',exact:true})).toBeEnabled();
  await page.evaluate(()=>{window.go!.main!.App!.GetTradeMetrics=()=>new Promise(()=>{});});await page.clock.fastForward(10000);await page.clock.fastForward(21000);
- await expect(risk.getByRole('button',{name:'Use risk-sized quantity',exact:true})).toHaveCount(0);await expect(risk).toContainText('Risk sizing requires a fresh account snapshot');
+ await expect(risk.getByRole('button',{name:'Use risk-sized quantity',exact:true})).toBeEnabled();await expect(risk).toContainText('Risk-sized quantity (margin and liquidity capped): 5');await expect(ticket(page).getByLabel('Available balance',{exact:true})).toHaveText('Unavailable');
+});
+
+test('perpetual sizing ignores quote and size refreshes, and waits for the matching stop-loss response before replacing its snapshot',async({page})=>{
+ await setup(page);await page.clock.install();await valuation(page,{entryPrice:'100',maxLeverage:1});
+ await page.evaluate(()=>{const api=window.go!.main!.App!,read=api.GetTradeMetrics;(window as any).__sizingVersion=1;api.GetTradeMetrics=async request=>{
+  const next=await read(request),version=(window as any).__sizingVersion;
+  const result={...next,entryPrice:version===1?'100':'110',availableBalance:version===1?'1000':'500',availableBalanceCurrency:'USDC',equity:'1000',riskSizingQuantity:version===1?'100':'200',riskSizingSafeQuantity:request.stopLoss==='90'?'7':version===1?'10':'20',riskSizingLoss:'50',riskSizingLiquidationPrice:'0',riskSizingCanTarget:false,riskSizingError:'',riskSizingBasis:`At entry ${version===1?'100':'110'}, stop ${request.stopLoss} and isolated leverage ${request.leverage}×: explicit verified isolated-risk snapshot fixture.`};
+  if(request.stopLoss==='90')return new Promise(resolve=>{(window as any).__releaseStopSizing=()=>resolve(result);});return result;
+ };});
+ await openOrder(page);await ticket(page).getByLabel('Order stop loss',{exact:true}).fill('95');await page.clock.fastForward(350);const risk=ticket(page).getByRole('region',{name:'Hyperliquid risk and margin',exact:true});
+ await expect(risk).toContainText('Risk-sized quantity (margin and liquidity capped): 10');const original=await risk.innerText();
+ await page.evaluate(()=>{(window as any).__sizingVersion=2;(window as any).__testSetHyperliquidTradeValuation({entryPrice:'110',maxLeverage:1});});await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();
+ expect(await risk.innerText()).toBe(original);await page.clock.fastForward(350);await expect(ticket(page).getByLabel('Available balance',{exact:true})).toHaveText('500.00 USDC');expect(await risk.innerText()).toBe(original);
+ await ticket(page).getByLabel('Order quantity',{exact:true}).fill('.25');await page.clock.fastForward(350);expect(await risk.innerText()).toBe(original);await page.clock.fastForward(10000);expect(await risk.innerText()).toBe(original);
+ await ticket(page).getByLabel('Order stop loss',{exact:true}).fill('90');await expect(risk.getByRole('button',{name:'Use risk-sized quantity',exact:true})).toHaveCount(0);await expect(risk).not.toContainText('capped): 10');await page.clock.fastForward(350);
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseStopSizing)).toBe('function');await expect(risk.getByRole('button',{name:'Use risk-sized quantity',exact:true})).toHaveCount(0);await page.evaluate(()=>(window as any).__releaseStopSizing());
+ await expect(risk).toContainText('Risk-sized quantity (margin and liquidity capped): 7');await expect(risk).toContainText('entry 110.00 · stop 90.00 · leverage 1×');await expect(risk).toContainText('At entry 110.00, stop 90.00 and isolated leverage 1×:');await risk.getByRole('button',{name:'Use risk-sized quantity',exact:true}).click();await expect(ticket(page).getByLabel('Order quantity',{exact:true})).toHaveValue('7');
+ const beforeReview=await risk.innerText();await ticket(page).getByRole('button',{name:'Review order',exact:true}).click();await expect(ticket(page).getByLabel('Order review',{exact:true})).toBeVisible();expect(await risk.innerText()).toBe(beforeReview);expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
 });

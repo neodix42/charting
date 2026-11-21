@@ -4,7 +4,8 @@
 .trade-context-error{position:fixed;z-index:1000;bottom:20px;left:20px;max-width:460px;padding:12px;background:var(--panel);border:1px solid var(--danger);color:var(--text);border-radius:6px}.trade-context-error button{margin-left:12px}
 
 .trade-ticket:has(.trade-valuation){max-width:700px}.trade-level-control{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.trade-level-control input{width:170px}.trade-level-control small{min-width:200px;color:var(--muted);font-variant-numeric:tabular-nums}.trade-valuation{margin:12px 0}.trade-valuation p{margin-bottom:6px}.trade-valuation .muted{font-size:.85em}
-.trade-ticket:has(.trade-risk-sizing){height:90vh}
+.modal-backdrop.trade-ticket-backdrop{align-items:flex-start;padding-block:5vh}
+.trade-ticket:has(.trade-risk-sizing){max-width:1160px;width:min(1160px,95vw)}.trade-ticket-body:has(.trade-risk-sizing){display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:20px;align-items:start}.trade-ticket-main,.trade-ticket-sizing{min-width:0}.trade-ticket-sizing:empty{display:none}.trade-ticket-sizing .trade-risk-sizing{margin:12px 0 0}@media(max-width:1000px){.trade-ticket:has(.trade-risk-sizing){max-width:700px}.trade-ticket-body:has(.trade-risk-sizing){grid-template-columns:minmax(0,1fr);gap:0}}
 
 .trade-review-estimate{display:inline-block;margin-left:8px;color:var(--muted);font-variant-numeric:tabular-nums}
 

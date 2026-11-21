@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {regularMarketHours,regularMarketStatus} from '../charts/DukascopyTradingHours';
+import {calendarMarketSession,regularMarketHours,regularMarketStatus} from '../charts/DukascopyTradingHours';
 
 const session={marketHoursStatus:'available',marketHoursFirstDay:'1',marketHoursLastDay:'5',marketHoursOpen:'09:30:00',marketHoursClose:'16:00:00',marketHoursTimeZone:'Asia/Hong_Kong'};
 
@@ -41,5 +41,41 @@ describe('provider regular market hours',()=>{
   }
   expect(regularMarketStatus(session,NaN)).toBeNull();
   expect(regularMarketStatus({...session,marketHoursTimeZone:'Unknown/Market'},Date.now())).toBeNull();
+ });
+});
+
+const instant=(value:string)=>Date.parse(value);
+const calendar={marketHoursStatus:'available',marketHoursSource:'JForex instrument calendar',marketHoursTimeZone:'UTC',marketHoursFrom:String(instant('2026-11-13T00:00:00Z')),marketHoursTo:String(instant('2026-11-29T00:00:00Z')),marketHoursClosedIntervals:JSON.stringify([
+ [instant('2026-11-13T22:00:00Z'),instant('2026-11-15T22:00:00Z')],
+ [instant('2026-11-20T22:00:00Z'),instant('2026-11-22T22:00:00Z')],
+ [instant('2026-11-27T22:00:00Z'),instant('2026-11-29T22:00:00Z')],
+])};
+
+describe('dated provider instrument calendar',()=>{
+ it('shows the next weekly forex session during a supplied weekend closure',()=>{
+  expect(calendarMarketSession(calendar,instant('2026-11-21T12:00:00Z'))).toEqual({status:'Closed',hours:'Next opens Sun 2026-11-22 22:00 UTC · closes Fri 2026-11-27 22:00 UTC'});
+ });
+ it('uses exact calendar boundaries and actual current session, without daily assumptions',()=>{
+  expect(calendarMarketSession(calendar,instant('2026-11-20T21:59:59Z'))).toEqual({status:'Opened',hours:'Opened Sun 2026-11-15 22:00 UTC · Closes Fri 2026-11-20 22:00 UTC'});
+  expect(calendarMarketSession(calendar,instant('2026-11-20T22:00:00Z'))?.status).toBe('Closed');
+  expect(calendarMarketSession(calendar,instant('2026-11-22T21:59:59Z'))?.status).toBe('Closed');
+  expect(calendarMarketSession(calendar,instant('2026-11-22T22:00:00Z'))?.status).toBe('Opened');
+ });
+ it('never presents a coverage boundary as a known session opening or closing',()=>{
+  expect(calendarMarketSession(calendar,instant('2026-11-13T12:00:00Z'))?.hours).toBe('Closes Fri 2026-11-13 22:00 UTC');
+  expect(calendarMarketSession(calendar,instant('2026-11-28T12:00:00Z'))?.hours).toBe('Closed through Sun 2026-11-29 00:00 UTC');
+ });
+ it('rejects expired/missing coverage and empty calendars instead of inventing 24/7',()=>{
+  for(const now of [NaN,instant('2026-11-12T23:59:59Z'),instant('2026-11-29T00:00:00Z')])expect(calendarMarketSession(calendar,now)).toBeNull();
+  for(const value of [undefined,{}, {...calendar,marketHoursClosedIntervals:'[]'}, {...calendar,marketHoursClosedIntervals:'oops'}, {...calendar,marketHoursClosedIntervals:'[[1,2]]'}, {...calendar,marketHoursClosedIntervals:'[[0,2]]'}, {...calendar,marketHoursClosedIntervals:JSON.stringify([[instant('2026-11-20T22:00:00Z'),instant('2026-11-19T22:00:00Z')]])}, {...calendar,marketHoursTo:'NaN'}, {...calendar,marketHoursStatus:'unavailable'}])expect(calendarMarketSession(value,instant('2026-11-21T12:00:00Z'))).toBeNull();
+ });
+ it('merges touching and overlapping broker closures before finding the next opening',()=>{
+  const value={...calendar,marketHoursClosedIntervals:JSON.stringify([
+   [instant('2026-11-21T00:00:00Z'),instant('2026-11-22T22:00:00Z')],
+   [instant('2026-11-20T22:00:00Z'),instant('2026-11-21T00:00:00Z')],
+   [instant('2026-11-21T01:00:00Z'),instant('2026-11-22T21:00:00Z')],
+  ])};
+  expect(calendarMarketSession(value,instant('2026-11-21T12:00:00Z'))).toEqual({status:'Closed',hours:'Next opens Sun 2026-11-22 22:00 UTC'});
+  expect(calendarMarketSession(value,instant('2026-11-22T22:00:00Z'))).toEqual({status:'Opened',hours:'Opened Sun 2026-11-22 22:00 UTC'});
  });
 });

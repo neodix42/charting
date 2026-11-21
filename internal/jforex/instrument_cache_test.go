@@ -2,6 +2,7 @@ package jforex
 
 import (
 	"context"
+	"cryptodesk/internal/domain"
 	"encoding/json"
 	"errors"
 	"os"
@@ -165,7 +166,7 @@ func TestLegacyCatalogRefreshesMarketHoursOnceAcrossSelectionsAndRestarts(t *tes
 		t.Fatal(err)
 	}
 	// A catalog fetched moments ago by an older build must still upgrade once.
-	snapshot.MarketHoursVersion = 0
+	snapshot.MarketHoursVersion = 1
 	snapshot.FetchedAt = time.Now().UnixMilli()
 	data, err = json.Marshal(snapshot)
 	if err != nil {
@@ -226,6 +227,40 @@ func TestLegacyCatalogRefreshesMarketHoursOnceAcrossSelectionsAndRestarts(t *tes
 	items, err := reopened.RefreshInstruments(context.Background(), false)
 	if err != nil || !reflect.DeepEqual(items, upgraded) || reopenedCount.Load() != 0 {
 		t.Fatal("metadata upgrade or unavailable hours were not persisted", items, err, reopenedCount.Load())
+	}
+}
+
+func TestInstrumentCatalogHoursFreshnessRetriesColdAndExpiredSchedules(t *testing.T) {
+	now := time.Date(2026, time.November, 21, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		version   int
+		age       time.Duration
+		metadata  []map[string]string
+		wantFresh bool
+	}{
+		{"version one upgrades", 1, 0, nil, false},
+		{"normal metadata stays fresh", instrumentMarketHoursVersion, 2 * time.Minute, nil, true},
+		{"cold unavailable has short grace", instrumentMarketHoursVersion, 30 * time.Second, []map[string]string{{"marketHoursStatus": "unavailable"}}, true},
+		{"all cold hours retry early", instrumentMarketHoursVersion, 2 * time.Minute, []map[string]string{{"marketHoursStatus": "unavailable"}}, false},
+		{"one unknown does not expire usable hours", instrumentMarketHoursVersion, 2 * time.Minute, []map[string]string{{"marketHoursStatus": "unavailable"}, {"marketHoursStatus": "available"}}, true},
+		{"mixed pending metadata retries in five minutes", instrumentMarketHoursVersion, 6 * time.Minute, []map[string]string{{"marketHoursStatus": "unavailable"}, {"marketHoursStatus": "available"}}, false},
+		{"complete schedules retain normal hourly freshness", instrumentMarketHoursVersion, 30 * time.Minute, []map[string]string{{"marketHoursStatus": "available", "marketHoursSource": "JForex regular market session", "marketHoursFirstDay": "1", "marketHoursLastDay": "5", "marketHoursOpen": "09:00:00", "marketHoursClose": "17:00:00"}}, true},
+		{"equal-clock regular envelope retries calendar soon", instrumentMarketHoursVersion, 6 * time.Minute, []map[string]string{{"marketHoursStatus": "available", "marketHoursSource": "JForex regular market session", "marketHoursFirstDay": "1", "marketHoursLastDay": "5", "marketHoursOpen": "00:00:00", "marketHoursClose": "00:00:00"}}, false},
+		{"wrapped regular envelope retries calendar soon", instrumentMarketHoursVersion, 6 * time.Minute, []map[string]string{{"marketHoursStatus": "available", "marketHoursSource": "JForex regular market session", "marketHoursFirstDay": "7", "marketHoursLastDay": "5", "marketHoursOpen": "09:00:00", "marketHoursClose": "17:00:00"}}, false},
+		{"expired calendar retries even when recently fetched", instrumentMarketHoursVersion, 0, []map[string]string{{"marketHoursStatus": "available", "marketHoursSource": "JForex instrument calendar", "marketHoursTo": "1795262400000"}}, false},
+		{"calendar without valid horizon retries", instrumentMarketHoursVersion, 0, []map[string]string{{"marketHoursStatus": "available", "marketHoursSource": "JForex instrument calendar", "marketHoursTo": "invalid"}}, false},
+		{"upcoming calendar stays fresh", instrumentMarketHoursVersion, 2 * time.Minute, []map[string]string{{"marketHoursStatus": "available", "marketHoursSource": "JForex instrument calendar", "marketHoursTo": "1795953600000"}}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := &savedInstrumentCatalog{MarketHoursVersion: tc.version, FetchedAt: now.Add(-tc.age).UnixMilli()}
+			for _, metadata := range tc.metadata {
+				snapshot.Items = append(snapshot.Items, domain.Instrument{ProviderMetadata: metadata})
+			}
+			if got := instrumentCatalogFresh(snapshot, now); got != tc.wantFresh {
+				t.Fatalf("fresh=%v, want %v", got, tc.wantFresh)
+			}
+		})
 	}
 }
 

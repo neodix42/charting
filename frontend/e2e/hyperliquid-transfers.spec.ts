@@ -41,7 +41,7 @@ test('a reviewed internal transfer clears the order review, retains inputs and r
  await reviewTransfer(page);
  await expect(ticket(page).getByRole('button',{name:'Confirm Buy at market',exact:true})).toHaveCount(0);
  const review=panel(page).getByRole('region',{name:'Transfer review',exact:true});
- await expect(review).toContainText('testnet');await expect(review).toContainText('25.5 USDC');await expect(review).toContainText('974.5 USDC');await expect(review).toContainText('0x'+'1'.repeat(40));
+ await expect(review).toContainText('testnet');await expect(review).toContainText('25.50 USDC');await expect(review).toContainText('974.50 USDC');await expect(review).toContainText('0x'+'1'.repeat(40));
  expect(await page.evaluate(()=>(window as any).__testHyperliquidTransferSubmissions())).toEqual([]);
  await review.getByRole('button',{name:'Confirm transfer',exact:true}).click();await expect(panel(page).getByRole('heading',{name:'Transfer confirmed',exact:true})).toBeVisible();
  await expect(panel(page).getByLabel('Main perps available',{exact:true})).toHaveText(/974\.50 USDC/);await expect(panel(page).getByLabel('xyz available',{exact:true})).toHaveText(/25\.50 USDC/);
@@ -59,7 +59,7 @@ test('transfer routes require matching collateral and enforce exact source amoun
  await transfer(page).getByLabel('Transfer amount',{exact:true}).fill('25.000000001');await expect(transfer(page)).toContainText('at most 8 decimal places');await expect(transfer(page).getByRole('button',{name:'Review transfer',exact:true})).toBeDisabled();
  await transfer(page).getByLabel('Transfer amount',{exact:true}).fill('26');await expect(transfer(page)).toContainText('exceeds');
  await transfer(page).getByRole('button',{name:'Max',exact:true}).click();await expect(transfer(page).getByLabel('Transfer amount',{exact:true})).toHaveValue('25');await expect(transfer(page).getByRole('button',{name:'Review transfer',exact:true})).toBeEnabled();
- await transfer(page).getByRole('button',{name:'Review transfer',exact:true}).click();await expect(panel(page).getByRole('region',{name:'Transfer review',exact:true})).toContainText('25 USDT');
+ await transfer(page).getByRole('button',{name:'Review transfer',exact:true}).click();await expect(panel(page).getByRole('region',{name:'Transfer review',exact:true})).toContainText('25.00 USDT');
  expect(await page.evaluate(()=>(window as any).__testHyperliquidTransferSubmissions())).toEqual([]);
 });
 

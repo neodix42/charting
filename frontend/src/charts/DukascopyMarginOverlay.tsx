@@ -3,6 +3,7 @@ import type {Backend,FeedKey,TradeMetrics} from '../types';
 import type {TradeRecord} from '../workspace/tradeHistory';
 import {tradeProfitLoss} from '../workspace/tradeHistory';
 import {TRADES_CHANGED,matchesChartTrade} from '../workspace/chartTrades';
+import {formatCurrencyAmount} from '../workspace/currencyFormat';
 
 const ratio=(value:number|undefined)=>value&&Number.isFinite(value)&&value>0?`1:${Number(value.toFixed(2))}`:'—';
 const percentage=(value:number|null)=>value!==null&&Number.isFinite(value)?`${value.toFixed(1)}%`:'—';
@@ -36,7 +37,7 @@ export function DukascopyMarginOverlay({api,feedKey,trades}:{api:Backend;feedKey
   {metrics?<><span>Account <b>{ratio(metrics.accountLeverage)}</b> · Weekend <b>{ratio(metrics.weekendLeverage)}</b></span>
    <span>Instrument cap <b>{ratio(metrics.instrumentMaxLeverage)}</b> · Current effective <b>{ratio(metrics.effectiveLeverage)}</b></span>
    <span>Margin cut <b>{percentage(metrics.marginCutUsePercent??null)} leverage use</b> / <b>{percentage(cutoff)} margin level</b></span>
-   <span>Margin level <b>{percentage(level)}</b> · Equity stop <b>{metrics.accountEquityStopLoss??'—'} {metrics.availableBalanceCurrency??''}</b> · Free <b>{metrics.availableBalance??'—'} {metrics.availableBalanceCurrency??''}</b></span>
+   <span>Margin level <b>{percentage(level)}</b> · Equity stop <b>{formatCurrencyAmount(metrics.accountEquityStopLoss,metrics.availableBalanceCurrency)??'—'}</b> · Free <b>{formatCurrencyAmount(metrics.availableBalance,metrics.availableBalanceCurrency)??'—'}</b></span>
    <small>Account-wide margin; broker rules can change.</small>
   </>:<small>{error?'Margin data unavailable: '+error:'Loading account margin…'}</small>}
   {activeTrades.length>0&&<div className="dukascopy-open-positions"><strong>Open positions ({activeTrades.length})</strong>

@@ -1,5 +1,6 @@
 import type {FeedKey} from '../types';
 import type {TradeScreenGalleryPage,TradeScreenGalleryQuery} from './tradeScreenGallery';
+import {formatCurrencyAmount} from './currencyFormat';
 export interface TradeScreen {id:string;tradeId:string;provider:string;environment:string;account:string;orderId:string;instrument:string;market:string;direction:string;tradeOpenDate:number;createdAt:number;fileName:string;mimeType:string;bytes:number;width:number;height:number;sha256:string}
 export interface TradeScreenQuery {tradeId?:string;provider?:string;instrument?:string;orderId?:string;environment?:string;entryCondition?:string;from?:number;to?:number;offset?:number;limit?:number}
 export interface TradeScreenPage {screens:TradeScreen[];total:number;offset:number;limit:number}
@@ -30,7 +31,7 @@ export interface TradeHistoryBackend {
  ConfirmTradeClose(id:string):Promise<TradeRecord>;
 }
 export function tradeNumber(raw:string|undefined,money=false):string {if(raw===undefined||raw==='')return '—';const n=Number(raw);if(!Number.isFinite(n))return '—';if(n!==0&&Math.abs(n)<.0001)return n.toPrecision(5);return n.toLocaleString('en-US',{minimumFractionDigits:money?2:0,maximumFractionDigits:money?2:12});}
-export function tradeMoney(raw:string|undefined,currency:string){const value=tradeNumber(raw,true);return value==='—'||!currency.trim()?'—':`${value} ${currency||''}`.trim();}
+export function tradeMoney(raw:string|undefined,currency:string){return formatCurrencyAmount(raw,currency)??'—';}
 export function tradeDate(value:number,timezone:string){if(!Number.isFinite(value)||value<=0)return '—';return new Intl.DateTimeFormat('en-GB',{timeZone:timezone==='system'?undefined:timezone,year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(value));}
 
 export function tradeProfitLoss(row:TradeRecord,now=Date.now()){

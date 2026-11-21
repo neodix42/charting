@@ -10,12 +10,48 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
 const instrumentCatalogMaxBytes = 16 * 1024 * 1024
 const instrumentCatalogFreshFor = time.Hour
-const instrumentMarketHoursVersion = 1
+const instrumentMarketHoursVersion = 2
+
+func instrumentCatalogFresh(snapshot *savedInstrumentCatalog, now time.Time) bool {
+	if snapshot == nil || snapshot.MarketHoursVersion != instrumentMarketHoursVersion {
+		return false
+	}
+	freshFor := instrumentCatalogFreshFor
+	available, unavailable := false, false
+	needsCalendar := false
+	for _, item := range snapshot.Items {
+		metadata := item.ProviderMetadata
+		available = available || metadata["marketHoursStatus"] == "available"
+		unavailable = unavailable || metadata["marketHoursStatus"] == "unavailable"
+		if metadata["marketHoursSource"] == "JForex regular market session" {
+			open, close := metadata["marketHoursOpen"], metadata["marketHoursClose"]
+			first, last := metadata["marketHoursFirstDay"], metadata["marketHoursLastDay"]
+			needsCalendar = needsCalendar || open != "" && close != "" && open >= close || first != "" && last != "" && first > last
+		}
+		if metadata["marketHoursSource"] == "JForex instrument calendar" {
+			until, err := strconv.ParseInt(metadata["marketHoursTo"], 10, 64)
+			if err != nil || until <= now.UnixMilli() {
+				return false
+			}
+		}
+	}
+	// A cold SDK may still be filling some market records/calendars after the
+	// bounded readiness wait. Keep the saved list usable, but retry partial
+	// schedules sooner; a fully cold catalog gets an even shorter grace period.
+	if unavailable || needsCalendar {
+		freshFor = 5 * time.Minute
+	}
+	if unavailable && !available {
+		freshFor = time.Minute
+	}
+	return now.Sub(time.UnixMilli(snapshot.FetchedAt)) < freshFor
+}
 
 type savedInstrumentCatalog struct {
 	Version            int                 `json:"version"`
@@ -102,10 +138,9 @@ func (m *Manager) RefreshInstruments(ctx context.Context, force bool) ([]domain.
 		m.mu.Unlock()
 		return nil, loadErr
 	}
-	// Older snapshots stay available to Instruments while their first normal
-	// selection refresh upgrades the additive market-hours metadata. Remember
-	// the successful attempt even when a bridge cannot supply those fields.
-	if !force && m.catalog != nil && m.catalog.MarketHoursVersion == instrumentMarketHoursVersion && time.Since(time.UnixMilli(m.catalog.FetchedAt)) < instrumentCatalogFreshFor {
+	// Older snapshots stay available to Instruments while normal selection
+	// upgrades the metadata. Incomplete/expired hours retry sooner.
+	if !force && instrumentCatalogFresh(m.catalog, time.Now()) {
 		items := cloneInstruments(m.catalog.Items)
 		m.mu.Unlock()
 		return items, nil

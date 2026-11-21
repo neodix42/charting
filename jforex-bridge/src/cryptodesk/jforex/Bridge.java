@@ -336,7 +336,9 @@ public final class Bridge implements AutoCloseable {
         return market(instrument);
     }
 
-    private Object instruments() {
+    private Object instruments() throws InterruptedException {
+        requireConnected();
+        awaitMarketHours();
         requireConnected();
         List<Object> result = new ArrayList<>();
         for (Instrument instrument : available) {
@@ -349,7 +351,19 @@ public final class Bridge implements AutoCloseable {
             if (instrument.getDescription() != null) metadata.put("description", instrument.getDescription());
             if (instrument.getGroup() != null && instrument.getGroup().getName() != null)
                 metadata.put("group", instrument.getGroup().getName());
-            metadata.putAll(marketHoursMetadata(instrument));
+            Map<String, String> hours = marketHoursMetadata(instrument);
+            boolean unavailable = !"available".equals(hours.get("marketHoursStatus"));
+            // A daily MarketInfo window cannot establish continuous Forex,
+            // overnight or wrapped-week sessions. Prefer dated SDK closures
+            // for those envelopes, retaining supplied regular hours if the
+            // calendar has not loaded yet.
+            boolean ambiguous = !unavailable && (Integer.parseInt(hours.get("marketHoursFirstDay")) > Integer.parseInt(hours.get("marketHoursLastDay"))
+                || hours.get("marketHoursOpen").compareTo(hours.get("marketHoursClose")) >= 0);
+            if (unavailable || ambiguous) {
+                Map<String, String> calendar = calendarHoursMetadata(instrument);
+                if (unavailable || "available".equals(calendar.get("marketHoursStatus"))) hours = calendar;
+            }
+            metadata.putAll(hours);
             result.add(Map.of("nativeId", instrument.name(), "market", market(instrument),
                 "baseAsset", instrument.getPrimaryJFCurrency().getCurrencyCode(), "quoteAsset", instrument.getSecondaryJFCurrency().getCurrencyCode(),
                 "priceIncrement", BigDecimal.ONE.movePointLeft(instrument.getTickScale()).toPlainString(),
@@ -357,6 +371,63 @@ public final class Bridge implements AutoCloseable {
                 "providerMetadata", metadata));
         }
         return result;
+    }
+
+    private void awaitMarketHours() throws InterruptedException {
+        // Authentication supplies instrument identities before the asynchronous
+        // MarketResponseMessage fills their shared MarketInfo placeholders.
+        // One bounded wait for that response avoids caching an empty catalog
+        // for an hour. Null/throwing records are genuinely unavailable; they
+        // must not hold up otherwise ready instruments.
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.min(2_000, historyTimeoutMillis));
+        while (!closing && System.nanoTime() < deadline) {
+            boolean pending = false;
+            for (Instrument instrument : available) {
+                try {
+                    IMarketInfo info = instrument.getMarketInfo();
+                    if (info == null) continue;
+                    if (info.getZoneId() != null && info.getFirstWorkingDay() != null && info.getLastWorkingDay() != null
+                            && info.getOpenTime() != null && info.getCloseTime() != null) return;
+                    pending = true;
+                } catch (RuntimeException ignored) { }
+            }
+            if (!pending) return;
+            Thread.sleep(20);
+        }
+    }
+
+    private Map<String, String> calendarHoursMetadata(Instrument instrument) {
+        try {
+            IContext current = context;
+            IDataService service = current == null ? null : current.getDataService();
+            if (service == null) return Map.of("marketHoursStatus", "unavailable");
+            long day = 86_400_000L, midnight = Math.floorDiv(nowMillis.getAsLong(), day) * day;
+            long from = midnight - 8 * day, to = midnight + 8 * day;
+            Set<ITimeDomain> domains = service.getOfflineTimeDomains(from, to, instrument);
+            // The public API returns an empty set for both an unloaded calendar
+            // and no closures. Do not turn either case into invented 24/7 hours.
+            if (domains == null || domains.isEmpty() || domains.size() > 256) return Map.of("marketHoursStatus", "unavailable");
+            List<long[]> intervals = new ArrayList<>();
+            for (ITimeDomain domain : domains) {
+                if (domain == null || domain.getStart() <= 0 || domain.getEnd() <= domain.getStart()) return Map.of("marketHoursStatus", "unavailable");
+                long start = Math.max(from, domain.getStart()), end = Math.min(to, domain.getEnd());
+                if (start < end) intervals.add(new long[]{start, end});
+            }
+            if (intervals.isEmpty()) return Map.of("marketHoursStatus", "unavailable");
+            intervals.sort(Comparator.comparingLong(value -> value[0]));
+            List<long[]> merged = new ArrayList<>();
+            for (long[] interval : intervals) {
+                if (merged.isEmpty() || merged.get(merged.size() - 1)[1] < interval[0]) merged.add(interval);
+                else merged.get(merged.size() - 1)[1] = Math.max(merged.get(merged.size() - 1)[1], interval[1]);
+            }
+            // Pinned JForexDataService converts inclusive holiday endpoints to
+            // exclusive ITimeDomain ends (+1ms). Preserve those exact bounds.
+            return Map.of("marketHoursStatus", "available", "marketHoursSource", "JForex instrument calendar",
+                "marketHoursTimeZone", "UTC", "marketHoursFrom", Long.toString(from), "marketHoursTo", Long.toString(to),
+                "marketHoursClosedIntervals", JSON.toJson(merged));
+        } catch (RuntimeException ignored) {
+            return Map.of("marketHoursStatus", "unavailable");
+        }
     }
 
     private static Map<String, String> marketHoursMetadata(Instrument instrument) {
