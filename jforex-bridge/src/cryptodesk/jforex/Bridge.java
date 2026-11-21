@@ -887,6 +887,9 @@ public final class Bridge implements AutoCloseable {
             accountNumber(result, "equity", account::getEquity, failures, false);
             accountNumber(result, "usedMargin", account::getUsedMargin, failures, true);
             accountNumber(result, "accountLeverage", account::getLeverage, failures, true);
+            accountNumber(result, "weekendLeverage", () -> (double)account.getOverWeekEndLeverage(), failures, true);
+            accountNumber(result, "marginCutUsePercent", () -> (double)account.getMarginCutLevel(), failures, true);
+            accountNumber(result, "accountEquityStopLoss", account::getStopLossLevel, failures, true);
             if (result.containsKey("equity") && result.containsKey("usedMargin")) {
                 double free = (Double)result.get("equity") - (Double)result.get("usedMargin");
                 if (Double.isFinite(free)) result.put("availableBalance", free);
@@ -924,6 +927,7 @@ public final class Bridge implements AutoCloseable {
             // The SDK uses zero when no instrument-specific leverage overrides
             // the account setting (the usual FX case).
             double effectiveLeverage = instrumentLeverage > 0 ? Math.min(accountLeverage, instrumentLeverage) : accountLeverage;
+            result.put("instrumentMaxLeverage", effectiveLeverage);
             // Apply the published Friday 18:00 UTC to Sunday FX reopening reduction.
             java.time.ZonedDateTime utc = java.time.Instant.ofEpochMilli(nowMillis.getAsLong()).atZone(java.time.ZoneOffset.UTC);
             int day = utc.getDayOfWeek().getValue();
@@ -945,6 +949,9 @@ public final class Bridge implements AutoCloseable {
                 || !Double.isFinite(slippage) || slippage <= 0 || !Double.isFinite(rate) || rate <= 0)
                 throw new IllegalArgumentException("The executable prices, slippage bound or account conversion are invalid");
             double marginPerUnit = worstPrice * rate / effectiveLeverage;
+            result.put("marginPerUnit", marginPerUnit);
+            result.put("quantityStep", step);
+            result.put("effectiveLeverage", effectiveLeverage);
             double openingCostPerUnit = (quote.getAsk() - quote.getBid() + slippage) * rate;
             double liquidity = executableLiquidity(quote, side, slippage);
             String quantity = TradeSizing.maximum(((Number)result.get("availableBalance")).doubleValue(), marginPerUnit, openingCostPerUnit, minimum, step, maximum, liquidity);
