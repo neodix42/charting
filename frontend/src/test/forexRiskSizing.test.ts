@@ -21,6 +21,11 @@ describe('Forex risk sizing',()=>{
   expect(result.safeQuantity).toBe(2000);
   expect(result.canTargetRisk).toBe(false);
  });
+ it('respects the broker account equity stop-out threshold',()=>{
+  const result=forexRiskSizing({...base,accountEquityStopLoss:800});
+  expect(result.safeQuantity).toBeLessThan(result.riskQuantity);
+  expect(result.projectedEquity).toBeGreaterThan(800);
+ });
  it('rejects invalid stop direction and unknown margin-cut limits',()=>{
   expect(forexRiskSizing({...base,stop:1.2}).error).toMatch(/Stop/);
   expect(forexRiskSizing({...base,marginCutUsePercent:0}).error).toMatch(/margin-cut/);
