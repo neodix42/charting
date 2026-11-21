@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import type {Backend,FeedKey,TradeMetrics} from '../types';
 import type {TradeRecord} from '../workspace/tradeHistory';
 import {tradeProfitLoss} from '../workspace/tradeHistory';
-import {TRADES_CHANGED} from '../workspace/chartTrades';
+import {TRADES_CHANGED,matchesChartTrade} from '../workspace/chartTrades';
 
 const ratio=(value:number|undefined)=>value&&Number.isFinite(value)&&value>0?`1:${Number(value.toFixed(2))}`:'—';
 const percentage=(value:number|null)=>value!==null&&Number.isFinite(value)?`${value.toFixed(1)}%`:'—';
@@ -27,7 +27,7 @@ export function DukascopyMarginOverlay({api,feedKey,trades}:{api:Backend;feedKey
   window.addEventListener(TRADES_CHANGED,onTrade);
   return()=>{active=false;clearInterval(timer);window.removeEventListener(TRADES_CHANGED,onTrade);};
  },[api,feedKey.exchange,feedKey.market,feedKey.instrument,feedKey.timeframe]);
- const activeTrades=trades.filter(row=>row.provider==='dukascopy'&&row.instrument===feedKey.instrument&&['open','closing'].includes(row.status)&&Number(row.remainingSize)>0);
+ const activeTrades=trades.filter(row=>row.provider==='dukascopy'&&matchesChartTrade(row,feedKey)&&['open','closing'].includes(row.status)&&Number(row.remainingSize)>0);
  const cutoff=metrics?.marginCutUsePercent&&metrics.marginCutUsePercent>0?10000/metrics.marginCutUsePercent:null;
  const level=metrics?.equity!==undefined&&metrics?.usedMargin!==undefined&&Number(metrics.usedMargin)>0?100*Number(metrics.equity)/Number(metrics.usedMargin):null;
  const stale=!!metrics&&(!metrics.metricsTime||Date.now()-metrics.metricsTime>30000);
