@@ -1,7 +1,7 @@
 export interface ForexRiskInput {
  equity:number; usedMargin:number; entry:number; stop:number; side:'buy'|'sell';
  profitPerPriceUnit:number; marginPerUnit:number; step:number; maxQuantity:number;
- marginCutUsePercent?:number; targetLevel?:number;
+ marginCutUsePercent?:number; accountEquityStopLoss?:number; targetLevel?:number;
 }
 export interface ForexRiskResult {
  riskQuantity:number; safeQuantity:number; riskAmount:number;
@@ -19,10 +19,12 @@ export function forexRiskSizing(v:ForexRiskInput):ForexRiskResult {
  const cut=v.marginCutUsePercent&&v.marginCutUsePercent>0?10000/v.marginCutUsePercent:null;
  if(!Number.isFinite(target)||target<=0||cut===null)return empty('Verified broker margin-cut level is required');
  if(target<=cut)return empty('Target margin level must exceed broker margin-cut level');
+ const equityFloor=v.accountEquityStopLoss??0;
+ if(!Number.isFinite(equityFloor)||equityFloor<0||equityFloor>=v.equity)return empty('Account equity stop-out threshold is invalid or already reached');
  const floor=(n:number)=>Math.max(0,Number((Math.floor(Math.max(0,n)/v.step+1e-9)*v.step).toPrecision(12)));
  const targetUnits=floor(v.equity*.5/lossUnit);
  const marginBound=(v.equity-target/100*v.usedMargin)/(lossUnit+target/100*v.marginPerUnit);
- const safeUnits=floor(Math.min(targetUnits,v.maxQuantity,Math.max(0,marginBound)));
+ const safeUnits=floor(Math.min(targetUnits,v.maxQuantity,Math.max(0,marginBound),Math.max(0,(v.equity-equityFloor)/lossUnit-v.step*1e-9)));
  const candidate=targetUnits;
  const canTargetRisk=candidate>0&&candidate<=v.maxQuantity+v.step*1e-9&&candidate<=safeUnits+v.step*1e-9;
  const riskAmount=safeUnits*lossUnit,projectedEquity=v.equity-riskAmount,projectedUsedMargin=v.usedMargin+safeUnits*v.marginPerUnit;
