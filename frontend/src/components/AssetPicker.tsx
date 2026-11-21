@@ -14,7 +14,7 @@ export function AssetPicker({exchange,choices,selected,label,buttonLabel='Select
  useEffect(()=>{setOpen(false);setQuery('');setMarket(null);},[exchange]);
  useEffect(()=>{
   if(!open)return;
-  const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!root.current?.contains(event.target)&&!panel.current?.contains(event.target))setOpen(false);};
+  const outside=(event:PointerEvent)=>{if(event.button===1&&event.target instanceof Element&&event.target.closest('[role="tab"][data-tab-id]'))return;if(event.target instanceof Node&&!root.current?.contains(event.target)&&!panel.current?.contains(event.target))setOpen(false);};
   const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setOpen(false);button.current?.focus();}};
   document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',escape,true);
   return()=>{document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',escape,true);};
