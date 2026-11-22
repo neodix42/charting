@@ -86,7 +86,7 @@ func TestAnalysisCategorySelectionsRetainNilVersusEmptyAcrossDraftAndNamedSnapsh
 		t.Run(fmt.Sprintf("categories-%d-nil-%t", len(selection), selection == nil), func(t *testing.T) {
 			profile := t.TempDir()
 			m := savedConditionManager(t, profile)
-			request := defaultAnalysisRequest()
+			request := positiveAnalysisRequest()
 			request.Categories = selection
 			want := copyAnalysisRequest(request)
 			if _, err := m.SaveAnalysisView(request); err != nil {
@@ -199,7 +199,7 @@ func TestAnalysisResultCategoryAndEmptyFiltersApplyBeforePagination(t *testing.T
 		if _, err := m.AnalysisFiltered(0, 10, AnalysisFilter{Categories: categories}); err == nil {
 			t.Fatal("invalid result categories accepted")
 		}
-		request := defaultAnalysisRequest()
+		request := positiveAnalysisRequest()
 		request.Categories = categories
 		if _, err := m.SaveAnalysisView(request); err == nil {
 			t.Fatal("invalid category draft persisted")

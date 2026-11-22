@@ -212,7 +212,7 @@ func TestLiveAlertsDukascopySelectionRestrictsRefreshAndCompanionFields(t *testi
 	writeDataFile(t, m, "btcusd-h1-2024-01-01-2024-01-03.csv", string(data))
 	writeDataFile(t, m, "eurusd-d1-2024-01-01-2024-01-03.csv", string(data))
 	writeDataFile(t, m, "btcusd-d1-2024-01-01-2024-01-03.csv", string(data))
-	saved, err := saveLiveCondition(t, m, "Companion rule", defaultAnalysisRequest())
+	saved, err := saveLiveCondition(t, m, "Companion rule", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}

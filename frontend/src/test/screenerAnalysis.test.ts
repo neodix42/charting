@@ -5,6 +5,12 @@ import {analysisDate,AnalysisViewWriter,analysisFieldGroup,analysisFieldGroups,a
 import type {AnalysisCatalog} from '../workspace/screenerAnalysis';
 
 describe('Analysis draft persistence',()=>{
+ it('starts new rows with an independent Close field operand on the right',()=>{
+  const first=newAnalysisCondition('first'),second=newAnalysisCondition('second');
+  expect(initialAnalysisView().conditions[0].right).toEqual(fieldOperand());
+  expect(first.right).toEqual(fieldOperand());first.right.field='open';
+  expect(second.right).toEqual(fieldOperand());
+ });
  it('treats the daily signal limit as part of the saved rule and backtest identity, with legacy drafts defaulting off',()=>{
   const draft=initialAnalysisView();
   expect(analysisRequestIdentity(draft)).toBe(analysisRequestIdentity({...draft,onlyOneSignalPerDay:false}));
@@ -26,6 +32,7 @@ describe('Analysis draft persistence',()=>{
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
   const saved=vi.fn(async value=>{if(saved.mock.calls.length===1)await gate;return value;});
   const writer=new AnalysisViewWriter(saved,()=>{}),first={...initialAnalysisView(),period:'d1' as const,tradeSimulation:{stopLoss:'low',takeProfit:'high',duration:3}};
+  first.conditions[0].right=numberOperand();
   writer.edit(first);const firstFlush=writer.flush();first.conditions[0].right=numberOperand(99);first.tradeSimulation.duration=10;
   const second=initialAnalysisView();second.conditions[0].left=fieldOperand('ema_200');writer.edit(second);
   const last={period:'h1' as const,conditions:[{...newAnalysisCondition('last'),operator:'withinDistance' as const,right:fieldOperand('ema_200'),distance:fieldOperand('atr_14'),multiplier:0.2}],tradeSimulation:{stopLoss:'low',takeProfit:'ema_200',duration:5}};

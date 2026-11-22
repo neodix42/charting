@@ -170,7 +170,7 @@ func TestLiveAlertsLegacyPartialRecoveryRollsBackOnSaveFailure(t *testing.T) {
 // alert identity instead of updating whichever outcome is newest at that time.
 func TestLiveAlertsConcurrentDeliveryKeepsEachClaimOutcomeAndCounts(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	second, err := saveLiveCondition(t, m, "Second condition", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "Second condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}

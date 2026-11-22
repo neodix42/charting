@@ -109,7 +109,7 @@ func TestLiveAlertRowProgressIsTransientAndLegacyCompletedDoesNotInventZeroPerce
 
 func TestLiveAlertRowProgressDukascopyFailureStillAttemptsLaterRow(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	second, err := saveLiveCondition(t, m, "Later Dukascopy row", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "Later Dukascopy row", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}

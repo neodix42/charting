@@ -53,7 +53,7 @@ func TestAnalysisCatalogSourcesLimitFieldsFilesAndCategories(t *testing.T) {
 		if _, err := m.AnalysisCatalogForSource(source); err == nil {
 			t.Fatal("unsupported catalog source accepted", source)
 		}
-		request := defaultAnalysisRequest()
+		request := positiveAnalysisRequest()
 		request.DataSource = source
 		if _, err := m.StartAnalysis(request); err == nil {
 			t.Fatal("unsupported scan source accepted", source)
@@ -119,7 +119,7 @@ func TestAnalysisMissingSourceCompanionCannotUseOtherVenue(t *testing.T) {
 func TestAnalysisSourcePersistsAndChangingSourceDiscardsIncompatibleEvidence(t *testing.T) {
 	profile := t.TempDir()
 	m := savedConditionManager(t, profile)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.DataSource = "hyperliquid"
 	request.Categories = []string{"Hyperliquid perpetual"}
 	if _, err := m.SaveAnalysisView(request); err != nil {
@@ -144,7 +144,7 @@ func TestAnalysisSourcePersistsAndChangingSourceDiscardsIncompatibleEvidence(t *
 	if err != nil || !strings.Contains(string(encoded), `"dataSource":"hyperliquid"`) {
 		t.Fatal("source absent from durable draft", string(encoded), err)
 	}
-	legacy := defaultAnalysisRequest()
+	legacy := positiveAnalysisRequest()
 	explicit := copyAnalysisRequest(legacy)
 	explicit.DataSource = "dukascopy"
 	if !sameAnalysisProfitabilityRequest(legacy, explicit) || sameAnalysisProfitabilityRequest(legacy, want) {

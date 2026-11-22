@@ -23,6 +23,15 @@ func analysisTestManager(t *testing.T) *Manager {
 	}
 	return m
 }
+
+// positiveAnalysisRequest is the explicit close > 0 scan fixture, independent
+// of the editor's operand defaults.
+func positiveAnalysisRequest() AnalysisRequest {
+	request := defaultAnalysisRequest()
+	request.Conditions[0].Right = analysisNumber(0)
+	return request
+}
+
 func analysisNumber(value float64) AnalysisOperand {
 	return AnalysisOperand{Kind: "number", Value: value}
 }
@@ -361,7 +370,7 @@ func TestAnalysisMissingFieldsMalformedFilesAndTickPriceAlias(t *testing.T) {
 }
 func TestAnalysisDraftPersistenceProtectsInvalidStateAndValidatesBounds(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Conditions[0].Operator = "equal"
 	request.Conditions[0].Left.Offset = 3
 	request.Conditions[0].Right = analysisNumber(-1.2)
@@ -386,7 +395,7 @@ func TestAnalysisDraftPersistenceProtectsInvalidStateAndValidatesBounds(t *testi
 	if err = os.WriteFile(path, bad, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = m.SaveAnalysisView(defaultAnalysisRequest()); err == nil {
+	if _, err = m.SaveAnalysisView(positiveAnalysisRequest()); err == nil {
 		t.Fatal("future state overwritten")
 	}
 	data, _ := os.ReadFile(path)
@@ -401,7 +410,7 @@ func TestAnalysisCancellationAndCloseCleanDiskIndexes(t *testing.T) {
 		values[i] = float64(i + 1)
 	}
 	writeDataFile(t, m, "btcusd-m1-2024-01-01-2025-01-01.csv", analysisCSV(values))
-	if _, err := m.StartAnalysis(defaultAnalysisRequest()); err != nil {
+	if _, err := m.StartAnalysis(positiveAnalysisRequest()); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(time.Second)
@@ -465,7 +474,7 @@ func TestAnalysisChartAndSummaryAreJSONFinite(t *testing.T) {
 	m := analysisTestManager(t)
 	text := strings.Replace(analysisCSV([]float64{1, 2}), ",10,3,2", ",10,,2", 1)
 	writeDataFile(t, m, "btcusd-m1-2024-01-01-2024-01-02.csv", text)
-	info := startTestAnalysis(t, m, defaultAnalysisRequest().Conditions...)
+	info := startTestAnalysis(t, m, positiveAnalysisRequest().Conditions...)
 	chart, err := m.AnalysisChart(info.Results[0].ID, 0, 0, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -505,7 +514,7 @@ func TestAnalysisAllAssetMatchCountsSurviveFilePagination(t *testing.T) {
 	writeDataFile(t, m, "btcusd-m1-2024-01-01-2024-01-02.csv", analysisCSV([]float64{1, 2, 3}))
 	writeDataFile(t, m, "btcusd-m5-2024-01-01-2024-01-02.csv", analysisCSV([]float64{1, 2}))
 	writeDataFile(t, m, "ethusd-m1-2024-01-01-2024-01-02.csv", analysisCSV([]float64{1}))
-	startTestAnalysis(t, m, defaultAnalysisRequest().Conditions...)
+	startTestAnalysis(t, m, positiveAnalysisRequest().Conditions...)
 	page, err := m.Analysis(1, 1)
 	if err != nil || len(page.Results) != 1 {
 		t.Fatalf("page %+v %v", page, err)
@@ -520,7 +529,7 @@ func TestAnalysisSupportedEarlyDailyHistoryKeepsMillisecondTimestampUnits(t *tes
 	// Dukascopy's EURUSD daily history includes March 1973, spanning 1e11 ms.
 	start := time.Date(1973, 3, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
 	writeDataFile(t, m, "eurusd-d1-1973-03-01-1973-03-10.csv", fmt.Sprintf("timestamp,close\n%d,1\n%d,2\n%d,3\n%d,4\n", start, start+86400000, start+2*86400000, start+3*86400000))
-	info := startTestAnalysis(t, m, defaultAnalysisRequest().Conditions...)
+	info := startTestAnalysis(t, m, positiveAnalysisRequest().Conditions...)
 	if info.Failed != 0 || info.TotalMatches != 4 {
 		t.Fatalf("early history units %+v", info)
 	}

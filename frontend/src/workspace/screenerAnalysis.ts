@@ -41,7 +41,7 @@ export interface ScreenerAnalysisBackend {
 
 export const numberOperand=(value=0):AnalysisOperand=>({kind:'number',value});
 export const fieldOperand=(field='close'):AnalysisOperand=>({kind:'field',field,timeframe:'same',offset:0,aggregate:'value',window:1});
-export const newAnalysisCondition=(id:string=crypto.randomUUID()):AnalysisCondition=>({id,operator:'above',left:fieldOperand(),right:numberOperand(),upper:numberOperand(100),distance:fieldOperand('atr_14'),multiplier:0.2,bars:3,comparison:'above'});
+export const newAnalysisCondition=(id:string=crypto.randomUUID()):AnalysisCondition=>({id,operator:'above',left:fieldOperand(),right:fieldOperand(),upper:numberOperand(100),distance:fieldOperand('atr_14'),multiplier:0.2,bars:3,comparison:'above'});
 export const initialAnalysisView=():AnalysisRequest=>({dataSource:'dukascopy',conditions:[newAnalysisCondition('condition-1')],profitabilityFilter:85});
 /** Keep custom levels; adapt the conventional OHLC choices when changing sides. */
 export function changeSimulationDirection(value:AnalysisTradeSimulation,direction:AnalysisTradeDirection,fields:readonly string[]):AnalysisTradeSimulation{

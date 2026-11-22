@@ -27,7 +27,7 @@ func (a *App) DownloadPredictionStatisticsData(request predictions.StatisticsReq
 	if err != nil {
 		return screener.Info{}, err
 	}
-	if request.Pattern != nil {
+	if predictions.UsesPatternStatistics(request) {
 		return a.screener.Start(download)
 	}
 	return a.screener.StartWithDailyCompanion(download)
@@ -35,10 +35,11 @@ func (a *App) DownloadPredictionStatisticsData(request predictions.StatisticsReq
 
 func predictionStatisticsDownloadRequest(request predictions.StatisticsRequest, files []screener.DataFile, now time.Time) (screener.Request, error) {
 	period := predictions.StatisticsPeriod(request.Period)
+	needsDailyCompanion := !predictions.UsesPatternStatistics(request) && period != "d1"
 	var from time.Time
 	selected := false
 	for _, file := range files {
-		if file.Symbol != request.Asset || (file.Timeframe != period && !(request.Pattern == nil && period != "d1" && file.Timeframe == "d1")) || file.DataSource != request.DataSource {
+		if file.Symbol != request.Asset || (file.Timeframe != period && !(needsDailyCompanion && file.Timeframe == "d1")) || file.DataSource != request.DataSource {
 			continue
 		}
 		if file.Error != "" {

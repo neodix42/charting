@@ -230,6 +230,12 @@ func TestStatisticsPatternFacadeUsesOnlyItsNativePeriodWithoutDailyCompanions(t 
 			if err != nil || got.Period != period || got.MatchedPatterns != 6 || got.EligiblePatterns != 6 || got.CompanionSourceFile != "" || len(got.Scenarios) != 1 || got.Scenarios[0].ID != "D" {
 				t.Fatal("native pattern required a daily source or returned weekday scenarios", got, err)
 			}
+			currentRequest := request
+			currentRequest.PatternMode, currentRequest.PatternLength, currentRequest.Pattern = "current", 3, nil
+			current, err := a.GetPredictionStatistics(currentRequest)
+			if err != nil || current.PatternMode != "current" || current.PatternLength != 3 || current.MatchedPatterns != got.MatchedPatterns || len(current.Pattern) != 3 || current.Pattern[0] != "down" || current.CompanionSourceFile != "" {
+				t.Fatal("current mode required manual directions or a daily companion", current, err)
+			}
 			// Even ambiguous companion ranges must be irrelevant to native H1/W1.
 			if period != "d1" {
 				for _, companion := range []string{"eurusd-d1-2024-01-01-2024-01-16.csv", "eurusd-d1-2023-01-01-2024-01-16.csv"} {
@@ -239,6 +245,9 @@ func TestStatisticsPatternFacadeUsesOnlyItsNativePeriodWithoutDailyCompanions(t 
 				}
 				if _, err := a.GetPredictionStatistics(request); err != nil {
 					t.Fatal("an unrelated daily companion prevented native matching", err)
+				}
+				if _, err := a.GetPredictionStatistics(currentRequest); err != nil {
+					t.Fatal("an unrelated daily companion prevented current native matching", err)
 				}
 			}
 		})

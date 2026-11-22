@@ -71,7 +71,7 @@ export function usePredictionStatisticsDownload({api,visible,onComplete}:{api:Pr
    if(!alive.current||current.current?.operation!==record.operation)return;
    const ids=info.jobs.map(job=>job.id);
    if(!ids.length||ids.some(id=>!id)||new Set(ids).size!==ids.length){replace({...record,phase:'failed',error:'The downloader returned no identifiable jobs. No scenarios were recalculated.'});return;}
-   const wrongJob=info.jobs.some(job=>(job.dataSource??'dukascopy')!==record.request.dataSource||job.symbol!==record.request.asset||![record.request.period,...(record.request.pattern?.length||record.request.period==='d1'?[]:['d1'])].includes(job.timeframe));
+   const wrongJob=info.jobs.some(job=>(job.dataSource??'dukascopy')!==record.request.dataSource||job.symbol!==record.request.asset||![record.request.period,...(record.request.patternMode==='current'||record.request.pattern?.length||record.request.period==='d1'?[]:['d1'])].includes(job.timeframe));
    if(wrongJob){replace({...record,phase:'failed',error:'The downloader returned jobs for another selection. No scenarios were recalculated.'});return;}
    accept({...record,ids},info);
   }catch(reason){if(alive.current&&current.current?.operation===record.operation)replace({...record,phase:'failed',error:errorText(reason)});}

@@ -126,6 +126,7 @@ func TestScreenerAnalysisFacadeFiltersCategoriesBeforePaging(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.ProfitabilityFilter = 0 // This regression inspects the full unfiltered scan.
+	request.Conditions[0].Right = screener.AnalysisOperand{Kind: "number", Value: 0}
 	if _, err = app.StartScreenerAnalysis(request); err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +182,7 @@ func TestScreenerTradeSimulationFacadePersistsAndReportsTargetHitRate(t *testing
 				t.Fatal(err)
 			}
 			request.ProfitabilityFilter = 0 // Include non-profitable outcomes in the simulation regression.
+			request.Conditions[0].Right = screener.AnalysisOperand{Kind: "number", Value: 0}
 			request.TradeSimulation = &screener.AnalysisTradeSimulation{Direction: direction, StopLoss: "stop", StopLossBarsAgo: 1, TakeProfitMultiple: 3, Duration: 10}
 			if _, err = app.SaveScreenerAnalysisView(request); err != nil {
 				t.Fatal(err)

@@ -176,7 +176,7 @@ type analysisState struct {
 }
 
 func defaultAnalysisRequest() AnalysisRequest {
-	return AnalysisRequest{Conditions: []AnalysisCondition{{ID: "condition-1", Operator: "above", Comparison: "above", Left: AnalysisOperand{Kind: "field", Field: "close", Timeframe: "same", Aggregate: "value", Window: 1}, Right: AnalysisOperand{Kind: "number"}, Upper: AnalysisOperand{Kind: "number", Value: 100}, Distance: AnalysisOperand{Kind: "field", Field: "atr_14", Timeframe: "same", Aggregate: "value", Window: 1}, Multiplier: 0.2, Bars: 3}}}
+	return AnalysisRequest{Conditions: []AnalysisCondition{{ID: "condition-1", Operator: "above", Comparison: "above", Left: AnalysisOperand{Kind: "field", Field: "close", Timeframe: "same", Aggregate: "value", Window: 1}, Right: AnalysisOperand{Kind: "field", Field: "close", Timeframe: "same", Aggregate: "value", Window: 1}, Upper: AnalysisOperand{Kind: "number", Value: 100}, Distance: AnalysisOperand{Kind: "field", Field: "atr_14", Timeframe: "same", Aggregate: "value", Window: 1}, Multiplier: 0.2, Bars: 3}}}
 }
 
 func validAnalysisTimeframe(tf string) bool {

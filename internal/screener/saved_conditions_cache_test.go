@@ -11,7 +11,7 @@ import (
 
 func TestSavedConditionCacheDetectsSameMetadataExternalChanges(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	saved, err := m.SaveAnalysisCondition("Alpha", defaultAnalysisRequest())
+	saved, err := m.SaveAnalysisCondition("Alpha", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestSavedConditionCacheDetectsSameMetadataExternalChanges(t *testing.T) {
 	if _, err := m.SavedAnalysisConditions(); err == nil {
 		t.Fatal("future state fell back to a valid cached snapshot")
 	}
-	if _, err := m.UpdateAnalysisCondition(saved.ID, defaultAnalysisRequest()); err == nil {
+	if _, err := m.UpdateAnalysisCondition(saved.ID, positiveAnalysisRequest()); err == nil {
 		t.Fatal("cached update overwrote a future state")
 	}
 	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(after, future) {
@@ -68,7 +68,7 @@ func TestSavedConditionCacheDetectsSameMetadataExternalChanges(t *testing.T) {
 	if list, err := m.SavedAnalysisConditions(); err != nil || len(list) != 0 {
 		t.Fatal("deleted state returned cached conditions", list, err)
 	}
-	if _, err := m.SaveAnalysisCondition("Fresh", defaultAnalysisRequest()); err != nil {
+	if _, err := m.SaveAnalysisCondition("Fresh", positiveAnalysisRequest()); err != nil {
 		t.Fatal(err)
 	}
 	if list, err := m.SavedAnalysisConditions(); err != nil || len(list) != 1 || list[0].Name != "Fresh" {
@@ -78,7 +78,7 @@ func TestSavedConditionCacheDetectsSameMetadataExternalChanges(t *testing.T) {
 
 func TestSavedConditionCacheRejectsNonRegularReplacement(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	if _, err := m.SaveAnalysisCondition("Alpha", defaultAnalysisRequest()); err != nil {
+	if _, err := m.SaveAnalysisCondition("Alpha", positiveAnalysisRequest()); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(m.profile, "screener-saved-conditions.json")
@@ -95,7 +95,7 @@ func TestSavedConditionCacheRejectsNonRegularReplacement(t *testing.T) {
 
 func TestSavedConditionSummariesPreserveEvidenceAndIndependentRequests(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	row := profitabilityTestResult("daily", 9, 10)
 	row.Timeframe = "d1"
 	m.analysis = &analysisState{phase: "completed", asOf: time.Now().UnixMilli(), request: request, results: []AnalysisResult{row}}

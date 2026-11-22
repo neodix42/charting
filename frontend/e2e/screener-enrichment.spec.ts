@@ -1,3 +1,4 @@
+import {setAnalysisRightConstant} from './helpers/analysis';
 import {test,expect,type Page} from '@playwright/test';
 import {openTestApp} from './helpers/testApp';
 import type {ScreenerDataFile,ScreenerEnrichmentInfo} from '../src/types';
@@ -111,9 +112,9 @@ test('UTC Weekday and Hour use timestamps without price parameters and become An
  await page.getByRole('tab',{name:'Analysis',exact:true}).click();
  await expect(page.getByLabel('Condition 1 left field',{exact:true}).locator('optgroup[label="Time"] option')).toHaveText(['Weekday','Hour']);
  await page.getByLabel('Condition 1 left field',{exact:true}).selectOption('weekday');await page.getByLabel('Condition 1 operator',{exact:true}).selectOption('between');
- await page.getByLabel('Condition 1 right constant',{exact:true}).fill('1');await page.getByLabel('Condition 1 upper constant',{exact:true}).fill('5');
+ await setAnalysisRightConstant(page,1,'1');await page.getByLabel('Condition 1 upper constant',{exact:true}).fill('5');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();await page.getByLabel('Condition 2 left field',{exact:true}).selectOption('hour');await page.getByLabel('Condition 2 operator',{exact:true}).selectOption('between');
- await page.getByLabel('Condition 2 right constant',{exact:true}).fill('8');await page.getByLabel('Condition 2 upper constant',{exact:true}).fill('17');
+ await setAnalysisRightConstant(page,2,'8');await page.getByLabel('Condition 2 upper constant',{exact:true}).fill('17');
  await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
  const request=await page.evaluate(()=>(window as any).__testAnalysisRequest()) as AnalysisRequest;
  expect(request.conditions).toEqual([expect.objectContaining({operator:'between',left:expect.objectContaining({field:'weekday'}),right:expect.objectContaining({value:1}),upper:expect.objectContaining({value:5})}),expect.objectContaining({operator:'between',left:expect.objectContaining({field:'hour'}),right:expect.objectContaining({value:8}),upper:expect.objectContaining({value:17})})]);

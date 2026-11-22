@@ -143,7 +143,7 @@ func TestLiveRequiredIndicatorFailureCannotScanClaimOrSend(t *testing.T) {
 func TestLiveStaleScheduledCalendarScopeDoesNotRefreshOrRecordAnAttempt(t *testing.T) {
 	m := analysisTestManager(t)
 	writeDataFile(t, m, "eurusd-d1-2024-01-01-2024-01-11.csv", "timestamp,open,high,low,close,weekday\n1704067200000,10,12,9,11,1\n")
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "d1"
 	request.Conditions[0] = analysisCondition("equal", analysisField("weekday"), analysisNumber(2))
 	saved, err := saveLiveCondition(t, m, "Tuesday only", request)

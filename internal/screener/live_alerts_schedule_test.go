@@ -23,13 +23,13 @@ func scheduledAlertsFixture(t *testing.T, now time.Time) (*Manager, *LiveAlerts,
 	day := now.UTC().Truncate(24 * time.Hour).UnixMilli()
 	writeDataFile(t, m, "eurusd-h1-2024-01-01-2024-01-04.csv", reviewHourlyCSV(hour-3*time.Hour.Milliseconds(), []float64{10, 11, 12, 13}))
 	writeDataFile(t, m, "eurusd-d1-2024-01-01-2024-01-04.csv", fmt.Sprintf("timestamp,open,high,low,close\n%d,10,12,9,11\n%d,11,13,10,12\n", day-2*(24*time.Hour).Milliseconds(), day-(24*time.Hour).Milliseconds()))
-	hourlyRequest := defaultAnalysisRequest()
+	hourlyRequest := positiveAnalysisRequest()
 	hourlyRequest.Period = "h1"
 	hourly, err := saveLiveCondition(t, m, "Hourly condition", hourlyRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dailyRequest := defaultAnalysisRequest()
+	dailyRequest := positiveAnalysisRequest()
 	dailyRequest.Period = "d1"
 	daily, err := saveLiveCondition(t, m, "Daily condition", dailyRequest)
 	if err != nil {

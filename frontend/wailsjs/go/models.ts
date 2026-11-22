@@ -960,6 +960,8 @@ export namespace predictions {
 	    companionSourceFile?: string;
 	    companionSourceHash?: string;
 	    pattern?: string[];
+	    patternMode?: string;
+	    patternLength?: number;
 	    matchedPatterns: number;
 	    eligiblePatterns: number;
 	    excludedDojiPatterns: number;
@@ -999,6 +1001,8 @@ export namespace predictions {
 	        this.companionSourceFile = source["companionSourceFile"];
 	        this.companionSourceHash = source["companionSourceHash"];
 	        this.pattern = source["pattern"];
+	        this.patternMode = source["patternMode"];
+	        this.patternLength = source["patternLength"];
 	        this.matchedPatterns = source["matchedPatterns"];
 	        this.eligiblePatterns = source["eligiblePatterns"];
 	        this.excludedDojiPatterns = source["excludedDojiPatterns"];
@@ -1065,6 +1069,8 @@ export namespace predictions {
 	    period?: string;
 	    lookbackWeeks: number;
 	    pattern?: string[];
+	    patternMode?: string;
+	    patternLength?: number;
 
 	    static createFrom(source: any = {}) {
 	        return new StatisticsRequest(source);
@@ -1077,6 +1083,8 @@ export namespace predictions {
 	        this.period = source["period"];
 	        this.lookbackWeeks = source["lookbackWeeks"];
 	        this.pattern = source["pattern"];
+	        this.patternMode = source["patternMode"];
+	        this.patternLength = source["patternLength"];
 	    }
 	}
 	export class StatisticsScenario {

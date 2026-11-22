@@ -20,6 +20,8 @@ type StatisticsRequest struct {
 	Period        string   `json:"period,omitempty"`
 	LookbackWeeks int      `json:"lookbackWeeks"`
 	Pattern       []string `json:"pattern,omitempty"`
+	PatternMode   string   `json:"patternMode,omitempty"`
+	PatternLength int      `json:"patternLength,omitempty"`
 }
 
 type StatisticsCandle struct {
@@ -78,6 +80,8 @@ type StatisticsForecast struct {
 	CompanionSourceFile     string               `json:"companionSourceFile,omitempty"`
 	CompanionSourceHash     string               `json:"companionSourceHash,omitempty"`
 	Pattern                 []string             `json:"pattern,omitempty"`
+	PatternMode             string               `json:"patternMode,omitempty"`
+	PatternLength           int                  `json:"patternLength,omitempty"`
 	MatchedPatterns         int                  `json:"matchedPatterns"`
 	EligiblePatterns        int                  `json:"eligiblePatterns"`
 	ExcludedDojiPatterns    int                  `json:"excludedDojiPatterns"`
@@ -101,17 +105,39 @@ func ValidateStatisticsRequest(request StatisticsRequest) error {
 	if request.LookbackWeeks < 0 || request.LookbackWeeks > 2600 {
 		return errors.New("statistics history must be all available weeks (0), or between 1 and 2600 weeks")
 	}
-	if request.Pattern != nil {
+	if request.PatternMode != "" && request.PatternMode != "custom" && request.PatternMode != "current" {
+		return errors.New("statistics pattern mode must be custom or current")
+	}
+	if request.PatternMode == "current" {
+		if request.PatternLength < 3 || request.PatternLength > 10 {
+			return errors.New("current statistics pattern must contain between 3 and 10 bars")
+		}
+		// Current directions come from the same immutable native source scan,
+		// never an old custom draft retained by the caller.
+		return nil
+	}
+	if request.Pattern != nil || request.PatternMode == "custom" {
 		if len(request.Pattern) < 3 || len(request.Pattern) > 10 {
 			return errors.New("statistics pattern must contain between 3 and 10 bars")
+		}
+		if request.PatternLength != 0 && request.PatternLength != len(request.Pattern) {
+			return errors.New("statistics pattern length does not match its custom directions")
 		}
 		for _, direction := range request.Pattern {
 			if direction != "up" && direction != "down" {
 				return errors.New("each statistics pattern bar must be bullish (up) or bearish (down)")
 			}
 		}
+	} else if request.PatternLength != 0 {
+		return errors.New("choose a current or custom statistics pattern before specifying its length")
 	}
 	return nil
+}
+
+// UsesPatternStatistics distinguishes explicit native patterns (including a
+// current pattern with no client-supplied directions) from legacy weekly calls.
+func UsesPatternStatistics(request StatisticsRequest) bool {
+	return request.Pattern != nil || request.PatternMode != ""
 }
 
 // StatisticsPeriod preserves daily requests saved before the timeframe selector
@@ -156,7 +182,7 @@ func statisticsDirection(candle StatisticsCandle) string {
 // on the already closed daily bodies in the anchor week. It uses no model or
 // provider calls, and never writes to the source data or forecast storage.
 func CalculateStatistics(ctx context.Context, dataset Dataset, request StatisticsRequest, asOf int64) (StatisticsForecast, error) {
-	if request.Pattern != nil {
+	if UsesPatternStatistics(request) {
 		return CalculatePatternStatistics(ctx, dataset, request, asOf)
 	}
 	result := StatisticsForecast{}

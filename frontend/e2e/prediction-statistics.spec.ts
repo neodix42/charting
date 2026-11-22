@@ -18,6 +18,7 @@ const calculate=(page:Page)=>panel(page).getByRole('button',{name:/^(Calculate n
 const downloadButton=(page:Page)=>panel(page).getByRole('button',{name:'Download missing data',exact:true});
 const downloadRegion=(page:Page)=>panel(page).getByRole('region',{name:'Statistics data download',exact:true});
 const cancelDownload=(page:Page)=>downloadRegion(page).getByRole('button',{name:'Cancel data download',exact:true});
+const patternSource=(page:Page,mode:'Custom bars'|'Current bars')=>panel(page).getByRole('radiogroup',{name:'Pattern source',exact:true}).getByRole('radio',{name:mode,exact:true});
 const downloadCalls=(page:Page)=>page.evaluate(()=>(window as any).__testStatisticsDownloadCalls());
 const downloadInfo=(page:Page):Promise<ScreenerInfo>=>page.evaluate(()=>(window as any).__testStatisticsDownloadInfo());
 async function startDownload(page:Page){await downloadButton(page).click();await expect(downloadRegion(page)).toBeVisible();await expect(cancelDownload(page)).toBeEnabled();}
@@ -121,21 +122,69 @@ test('Observed sequence edits 3 to 10 ordered bars and includes next-bar doji ou
  await enter(page);const count=panel(page).getByLabel('Pattern bar count',{exact:true});
  expect(await count.locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['3','4','5','6','7','8','9','10']);
  await expect(count).toHaveValue('5');await count.selectOption('3');
- await panel(page).getByLabel('Bar 1 direction',{exact:true}).selectOption('down');await panel(page).getByLabel('Bar 3 direction',{exact:true}).selectOption('down');
+ await panel(page).getByLabel('Bar 1 direction',{exact:true}).getByRole('radio',{name:'Down',exact:true}).check();await panel(page).getByLabel('Bar 3 direction',{exact:true}).getByRole('radio',{name:'Down',exact:true}).check();
  await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern).toEqual(['down','up','down']);
  await count.selectOption('10');await expect(chart(page)).toHaveCount(0);
- for(let index=1;index<=10;index++)await panel(page).getByLabel(`Bar ${index} direction`,{exact:true}).selectOption('down');
+ for(let index=1;index<=10;index++)await panel(page).getByLabel(`Bar ${index} direction`,{exact:true}).getByRole('radio',{name:'Down',exact:true}).check();
  const base=await page.evaluate(()=>window.go!.main!.App!.GetPredictionStatistics({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260,pattern:Array.from({length:10},()=> 'down' as const)}));
  await setForecast(page,{...base,matchedPatterns:5,nextBarDojiCount:1,warnings:['Only 5 matching patterns in this explicit fixture.'],scenarios:[{...base.scenarios[0],count:2,probability:.4},{...base.scenarios[1],count:2,probability:.4},{id:'0',label:'Next bar doji',count:1,probability:.2,points:[{time:base.nextBarTime!,close:100,direction:'doji'}]}]});
  await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern).toEqual(Array.from({length:10},()=> 'down'));
  const rows=scenarios(page).getByRole('row');await expect(rows).toHaveCount(4);await expect(rows.nth(1)).toContainText('40.0%');await expect(rows.nth(3)).toContainText('20.0%');await expect(rows.nth(3)).toContainText('1 / 5');
  await expect(panel(page)).toContainText(/Next-bar doji outcomes\s*1/);
  await panel(page).locator('.prediction-statistics').screenshot({path:'test-results/statistics-ten-bar-pattern.png'});
+ for(const width of [1600,900]){
+  await page.setViewportSize({width,height:1100});
+  for(let index=1;index<=10;index++){
+   const radios=panel(page).getByRole('radiogroup',{name:`Bar ${index} direction`,exact:true});
+   const up=await radios.getByRole('radio',{name:'Up',exact:true}).boundingBox(),down=await radios.getByRole('radio',{name:'Down',exact:true}).boundingBox();
+   expect(up).not.toBeNull();expect(down).not.toBeNull();expect(up!.y).toBeCloseTo(down!.y,1);expect(down!.x).toBeGreaterThan(up!.x);
+  }
+ }
  await page.setViewportSize({width:900,height:1100});
  await expect(panel(page).getByLabel('Bar 10 direction',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await panel(page).locator('.prediction-statistics').screenshot({path:'test-results/statistics-pattern-narrow.png'});
  await count.selectOption('3');await expect(panel(page).getByLabel('Bar 4 direction',{exact:true})).toHaveCount(0);await expect(chart(page)).toHaveCount(0);
+});
+
+test('Current bars resolves the last selected count from each native timeframe and preserves the custom radio draft',async({page})=>{
+ await enter(page);
+ const first=panel(page).getByRole('radiogroup',{name:'Bar 1 direction',exact:true});
+ await first.getByRole('radio',{name:'Up',exact:true}).focus();await page.keyboard.press('ArrowRight');
+ await expect(first.getByRole('radio',{name:'Down',exact:true})).toBeChecked();
+ const count=panel(page).getByLabel('Pattern bar count',{exact:true});await count.selectOption('3');
+ await patternSource(page,'Current bars').check();
+ await expect(panel(page).getByRole('radiogroup',{name:'Bar 1 direction',exact:true})).toHaveCount(0);
+ await expect(panel(page)).toContainText('Calculate to load the latest 3 closed D1 bars');
+ for(const selectedPeriod of ['d1','h1','w1']){
+  await period(page).selectOption(selectedPeriod);await completed(page);
+  const request=(await statisticsCalls(page)).requests.at(-1);
+  expect(request).toMatchObject({period:selectedPeriod,patternMode:'current',patternLength:3});expect(request.pattern).toBeUndefined();
+  const resolved=panel(page).getByLabel('Current closed-bar sequence',{exact:true});
+  await expect(resolved.locator('.statistics-pattern-bar')).toHaveCount(3);await expect(resolved.locator('strong')).toHaveText(['Down','Up','Down']);
+  const response=await page.evaluate(request=>window.go!.main!.App!.GetPredictionStatistics(request),request);
+  await expect(resolved.locator('time').last()).toHaveAttribute('datetime',new Date(response.anchor.time).toISOString());
+ }
+ await panel(page).locator('.statistics-pattern').screenshot({path:'test-results/statistics-current-bars.png'});
+ await patternSource(page,'Custom bars').check();await expect(count).toHaveValue('3');
+ await expect(first.getByRole('radio',{name:'Down',exact:true})).toBeChecked();
+ await expect(panel(page).getByRole('radiogroup',{name:'Bar 2 direction',exact:true}).getByRole('radio',{name:'Up',exact:true})).toBeChecked();
+ await expect(chart(page)).toHaveCount(0);await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern).toEqual(['down','up','up']);
+});
+
+test('changing Current bars mode or count rejects stale calculations and old download completion',async({page})=>{
+ await enter(page);await patternSource(page,'Current bars').check();
+ await page.evaluate(()=>{const api=window.go!.main!.App!,run=api.GetPredictionStatistics;api.GetPredictionStatistics=async request=>{const result=await run(request);await new Promise<void>(resolve=>(window as any).__releaseCurrentStatistics=resolve);return result;};(window as any).__restoreCurrentStatistics=()=>{api.GetPredictionStatistics=run;};});
+ await calculate(page).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseCurrentStatistics)).toBe('function');
+ await patternSource(page,'Custom bars').check();await page.evaluate(()=>(window as any).__releaseCurrentStatistics());
+ await expect(calculate(page)).toBeEnabled();await expect(chart(page)).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__restoreCurrentStatistics());await patternSource(page,'Current bars').check();await completed(page);
+ await period(page).selectOption('h1');await startDownload(page);
+ expect((await downloadInfo(page)).jobs.map(job=>job.timeframe)).toEqual(['h1']);
+ await panel(page).getByLabel('Pattern bar count',{exact:true}).selectOption('6');const before=await statisticsCalls(page);
+ await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));await expect(downloadButton(page)).toBeEnabled();
+ expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+ await completed(page);expect((await statisticsCalls(page)).requests.at(-1)).toMatchObject({patternMode:'current',patternLength:6,period:'h1'});
 });
 
 test('statistics calculation errors remain visible until an explicit retry',async({page})=>{
@@ -185,10 +234,10 @@ test('changing source rejects a stalled old result and allows only one calculati
 
 test('editing a pattern rejects its stalled calculation and prevents old download completion from repainting it',async({page})=>{
  await enter(page);await page.evaluate(()=>{const api=window.go!.main!.App!,run=api.GetPredictionStatistics;api.GetPredictionStatistics=async request=>{const result=await run(request);await new Promise<void>(resolve=>(window as any).__releasePatternStatistics=resolve);return result;};(window as any).__restorePatternStatistics=()=>{api.GetPredictionStatistics=run;};});
- await calculate(page).click();await panel(page).getByLabel('Bar 1 direction',{exact:true}).selectOption('down');
+ await calculate(page).click();await panel(page).getByLabel('Bar 1 direction',{exact:true}).getByRole('radio',{name:'Down',exact:true}).check();
  await page.evaluate(()=>(window as any).__releasePatternStatistics());await expect(calculate(page)).toBeEnabled();await expect(chart(page)).toHaveCount(0);
  await page.evaluate(()=>(window as any).__restorePatternStatistics());await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern[0]).toBe('down');
- await startDownload(page);await panel(page).getByLabel('Bar 2 direction',{exact:true}).selectOption('down');const before=await statisticsCalls(page);await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));await expect(downloadButton(page)).toBeEnabled();expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+ await startDownload(page);await panel(page).getByLabel('Bar 2 direction',{exact:true}).getByRole('radio',{name:'Down',exact:true}).check();const before=await statisticsCalls(page);await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));await expect(downloadButton(page)).toBeEnabled();expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
 });
 
 test('a changed time period rejects stale native-bar results without overlapping calculations',async({page})=>{

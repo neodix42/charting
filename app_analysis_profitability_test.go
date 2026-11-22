@@ -26,11 +26,12 @@ func TestAnalysisProfitabilitySurvivesFacadeSaveScanRestartAndAlertFormatting(t 
 		t.Fatal(err)
 	}
 	request, err := app.GetScreenerAnalysisView()
-	if err != nil || request.ProfitabilityFilter != 85 {
+	if err != nil || request.ProfitabilityFilter != 85 || len(request.Conditions) != 1 || request.Conditions[0].Right.Kind != "field" || request.Conditions[0].Right.Field != "close" {
 		t.Fatalf("fresh profitability default: %+v %v", request, err)
 	}
 	request.Period = "h1"
 	request.Conditions[0].Left.Field = "signal"
+	request.Conditions[0].Right = screener.AnalysisOperand{Kind: "number", Value: 0}
 	request.TradeSimulation = &screener.AnalysisTradeSimulation{StopLoss: "stop", TakeProfit: "profit", Duration: 1}
 	if _, err = app.SaveScreenerAnalysisView(request); err != nil {
 		t.Fatal(err)

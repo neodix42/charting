@@ -26,7 +26,7 @@ func liveAlertsFixture(t *testing.T) (*Manager, *LiveAlerts, LiveAlertsConfig, s
 	if err := os.WriteFile(path, []byte("timestamp,open,high,low,close,volume,sma_2\n1704067200000,10,12,9,11,1,\n1704070800000,11,14,10,13,1,12\n1704074400000,13,16,12,15,1,14\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "h1"
 	request.TradeSimulation = &AnalysisTradeSimulation{StopLoss: "low", StopLossBarsAgo: 1, TakeProfitMultiple: 2, Duration: 3}
 	condition, err := saveLiveCondition(t, m, "Latest close positive", request)
@@ -94,7 +94,7 @@ func TestLiveAlertsLatestClosedAndDurableDedup(t *testing.T) {
 
 func TestLiveAlertsOnlyNewestMatchNoHistoricalReplay(t *testing.T) {
 	m, l, config, path := liveAlertsFixture(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Conditions[0].Right.Value = 14
 	saved, err := saveLiveCondition(t, m, "Above fourteen", request)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestLiveAlertsDeliveryFailureContinuesAndNeverResendsClaims(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeDataFile(t, m, "btcusd-h1-2024-01-01-2024-01-03.csv", string(data))
-			second, err := saveLiveCondition(t, m, "Second matching condition", defaultAnalysisRequest())
+			second, err := saveLiveCondition(t, m, "Second matching condition", positiveAnalysisRequest())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -232,7 +232,7 @@ func TestLiveAlertsClaimWriteFailurePreventsSend(t *testing.T) {
 
 func TestLiveAlertsFailedNonMatchFlushRetriesWithoutChangingBar(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Conditions[0].Right.Value = 1000
 	saved, err := saveLiveCondition(t, m, "No match", request)
 	if err != nil {
@@ -310,7 +310,7 @@ func TestLiveAlertsClosedLifecycleAndSerializedMutations(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("enabled schedule did not start")
 	}
-	if _, err := m.StartAnalysis(defaultAnalysisRequest()); err == nil {
+	if _, err := m.StartAnalysis(positiveAnalysisRequest()); err == nil {
 		t.Fatal("historical Analysis overlapped Live Alerts")
 	}
 	if _, err := m.ConfigureDirectory(t.TempDir()); err == nil {
@@ -402,7 +402,7 @@ func TestLiveAlertsProductionRefreshConsolidatesAndEnrichesBeforeLatestCheck(t *
 	m, trace, _ := refreshManager(t, false)
 	seedDuplicateHistories(t, m)
 	unselectedName := "audusd-d1-2024-01-01-2024-01-04.csv"
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "d1"
 	request.Conditions[0].Left.Field = "sma_2"
 	condition, err := saveLiveCondition(t, m, "Moving average positive", request)

@@ -75,7 +75,7 @@ export function predictionStatisticsBridge():PredictionStatisticsBackend {
   async DownloadPredictionStatisticsData(request){
    if(downloadInfo.jobs.some(job=>ownership.has(job.id)&&(job.status==='queued'||job.status==='running')))throw Error('A Statistics data download is already running');
    downloadRequests.push(structuredClone(request));batch++;
-   const periods=request.pattern?.length?[request.period]:request.period==='d1'?['d1']:[request.period,'d1'];
+   const periods=request.patternMode==='current'||request.pattern?.length?[request.period]:request.period==='d1'?['d1']:[request.period,'d1'];
    const jobs:ScreenerJob[]=periods.map(timeframe=>({id:`explicit-statistics-download-${batch}-${timeframe}`,dataSource:request.dataSource,symbol:request.asset,timeframe,from:'2018-01-01',to:'2026-11-20',status:'queued',progress:0,message:'Queued explicit fixture download'}));
    latestJobIDs=jobs.map(job=>job.id);
    for(const job of jobs)ownership.set(job.id,identity(job));
@@ -98,14 +98,16 @@ export function predictionStatisticsBridge():PredictionStatisticsBackend {
    const dataset=datasets.find(item=>item.dataSource===request.dataSource&&item.symbol===request.asset&&item.period===request.period);
    if(!dataset)throw Error('Choose a downloaded asset and time period from the selected data source');
    const result:PredictionStatisticsForecast={...template,dataSource:request.dataSource,symbol:dataset.symbol,assetName:dataset.name,period:request.period,lookbackWeeks:request.lookbackWeeks,sourceFile:dataset.filename};
-   if(request.pattern?.length){
+   if(request.patternMode==='current'||request.pattern?.length){
     // Fixed synthetic outcomes exercise presentation/lifecycle, not the estimator.
     const step=request.period==='h1'?3600000:request.period==='w1'?7*day:day;
     const time=request.period==='h1'?weekStart+day+11*3600000:request.period==='w1'?weekStart-7*day:weekStart;
     result.firstClosedBar=request.period==='h1'?Date.UTC(2019,0,1):request.period==='w1'?Date.UTC(2017,0,2):template.firstClosedBar;
     result.anchor={time,open:99,high:101,low:98,close:100};result.asOf=time+step;
     result.history=Array.from({length:160},(_,index)=>({...result.anchor,time:time-(159-index)*step}));
-    result.pattern=[...request.pattern];result.prefix=request.pattern.map((direction,index)=>({time:time-(request.pattern!.length-index-1)*step,day:'',direction}));
+    const resolved=request.patternMode==='current'?Array.from({length:request.patternLength!},(_,index)=>index%2===0?'down' as const:'up' as const):[...request.pattern!];
+    result.patternMode=request.patternMode==='current'?'current':'custom';result.patternLength=resolved.length;
+    result.pattern=resolved;result.prefix=resolved.map((direction,index)=>({time:time-(resolved.length-index-1)*step,day:'',direction}));
     result.matchedPatterns=4;result.eligiblePatterns=12;result.excludedDojiPatterns=1;result.excludedInvalidPatterns=0;result.nextBarDojiCount=0;result.nextBarTime=time+step;
     result.scenarios=[{id:'U',label:'Next bar bullish',probability:.75,count:3,points:[{time:time+step,close:102,direction:'up'}]},{id:'D',label:'Next bar bearish',probability:.25,count:1,points:[{time:time+step,close:98,direction:'down'}]}];
     result.warnings=['Only 4 matching patterns. These historical frequencies have a small sample size.'];

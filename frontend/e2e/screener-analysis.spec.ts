@@ -1,3 +1,4 @@
+import {setAnalysisRightConstant} from './helpers/analysis';
 import {test,expect,type Page} from '@playwright/test';
 import {openTestApp} from './helpers/testApp';
 import {THEME_OPTIONS} from '../src/workspace/themes';
@@ -77,10 +78,10 @@ test('Analysis loads only when visible and exposes grouped enriched fields plus 
 test('Is equal saves, reloads and submits calendar and temporal comparisons',async({page})=>{
  await open(page,[{...file(0),fields:[...fields,'weekday','hour']}]);
  await control(page,'Condition 1 left field').selectOption('weekday');await control(page,'Condition 1 operator').selectOption('equal');
- await control(page,'Condition 1 right constant').fill('1');
+ await setAnalysisRightConstant(page,1,'1');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();
  await control(page,'Condition 2 operator').selectOption('occurredWithin');await control(page,'Condition 2 comparison').selectOption('equal');
- await control(page,'Condition 2 left field').selectOption('hour');await control(page,'Condition 2 right constant').fill('0');
+ await control(page,'Condition 2 left field').selectOption('hour');await setAnalysisRightConstant(page,2,'0');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();
  await control(page,'Condition 3 operator').selectOption('remainedFor');await control(page,'Condition 3 comparison').selectOption('equal');
  await control(page,'Condition 3 right type').selectOption('field');await control(page,'Condition 3 right field').selectOption('close');
@@ -106,7 +107,7 @@ test('Is equal saves, reloads and submits calendar and temporal comparisons',asy
 
 test('visual AND rows submit MACD, cross-timeframe candle and ATR distance operands',async({page})=>{
  await open(page);
- await control(page,'Condition 1 left field').selectOption('macd_histogram_12_26_9');
+ await control(page,'Condition 1 left field').selectOption('macd_histogram_12_26_9');await setAnalysisRightConstant(page,1,'0');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();
  await control(page,'Condition 2 operator').selectOption('crossesAbove');
  await control(page,'Condition 2 right type').selectOption('field');await control(page,'Condition 2 right field').selectOption('ema_200');
@@ -130,7 +131,7 @@ test('temporal/window operators retain both operand sides, allow between bounds 
  await expect(control(page,'Condition 1 right type')).toBeVisible();await control(page,'Condition 1 right type').selectOption('field');await control(page,'Condition 1 right field').selectOption('high');
  await control(page,'Condition 1 bar window').fill('20');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();await control(page,'Condition 2 operator').selectOption('remainedFor');await control(page,'Condition 2 comparison').selectOption('between');
- await control(page,'Condition 2 upper constant').fill('70');await control(page,'Condition 2 right constant').fill('30');await control(page,'Condition 2 bar window').fill('5');
+ await control(page,'Condition 2 upper constant').fill('70');await setAnalysisRightConstant(page,2,'30');await control(page,'Condition 2 bar window').fill('5');
  await expect(page.getByText(/Highest \/ lowest compares the left value/)).toBeVisible();
  await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
  const request=await page.evaluate(()=>(window as any).__testAnalysisRequest()) as AnalysisRequest;
@@ -162,7 +163,7 @@ test('advanced operators initialize unused Go zero-value operands and comparison
 
 test('draft edits coalesce durably and restore after reload without being applied',async({page})=>{
  await open(page);await page.evaluate(()=>(window as any).__testHoldAnalysisSaves());
- await control(page,'Condition 1 right constant').fill('10');await control(page,'Condition 1 left field').selectOption('ema_200');
+ await setAnalysisRightConstant(page,1,'10');await control(page,'Condition 1 left field').selectOption('ema_200');
  await control(page,'Condition 1 left timeframe').selectOption('h4');await control(page,'Condition 1 left bars ago').fill('2');
  await control(page,'Condition 1 left aggregation').selectOption('highest');await control(page,'Condition 1 left aggregation window').fill('20');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisSaves().length)).toBe(1);
@@ -177,7 +178,7 @@ test('saved condition summaries load once per visible visit across rule readines
  await open(page);
  await expect(page.getByRole('button',{name:'Save as new',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>(window as any).__testSavedAnalysisConditionsReads())).toBe(1);
- await saveCondition(page,'One summary');await control(page,'Condition 1 right constant').fill('12');
+ await saveCondition(page,'One summary');await setAnalysisRightConstant(page,1,'12');
  await page.getByRole('complementary',{name:'Saved conditions',exact:true}).getByRole('button',{name:'Save condition',exact:true}).click();
  await expect(page.getByText('Saved “One summary”.',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Apply conditions',exact:true}).click();
@@ -192,14 +193,14 @@ test('saved condition summaries load once per visible visit across rule readines
 
 test('leaving Analysis flushes a debounced draft and a failed flush keeps the rules visible for retry',async({page})=>{
  await open(page);await page.evaluate(()=>(window as any).__testHoldAnalysisSaves());
- await control(page,'Condition 1 right constant').fill('42');await page.getByRole('tab',{name:'Downloader',exact:true}).click();
+ await setAnalysisRightConstant(page,1,'42');await page.getByRole('tab',{name:'Downloader',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisSaves().length)).toBe(1);
  await expect(page.getByRole('tab',{name:'Analysis',exact:true})).toHaveAttribute('aria-selected','true');
  await page.evaluate(()=>(window as any).__testReleaseAnalysisSaves());
  await expect(page.getByRole('tab',{name:'Downloader',exact:true})).toHaveAttribute('aria-selected','true');
  expect((await page.evaluate(()=>(window as any).__testAnalysisView())).conditions[0].right.value).toBe(42);
  await page.getByRole('tab',{name:'Analysis',exact:true}).click();await page.evaluate(()=>(window as any).__testAnalysisErrors({save:'disk full'}));
- await control(page,'Condition 1 right constant').fill('43');await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
+ await setAnalysisRightConstant(page,1,'43');await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Could not save before leaving Analysis');
  await expect(page.getByRole('tab',{name:'Analysis',exact:true})).toHaveAttribute('aria-selected','true');await expect(control(page,'Condition 1 right constant')).toHaveValue('43');
  await page.evaluate(()=>(window as any).__testAnalysisErrors({}));await page.getByRole('tab',{name:'Enrichment',exact:true}).click();
@@ -236,7 +237,7 @@ test('match navigation crosses paginated zero-match files rather than truncating
 
 test('save errors block Apply, retries preserve the draft and hidden Analysis stops polling and chart listeners',async({page})=>{
  await open(page);await page.evaluate(()=>(window as any).__testAnalysisErrors({save:'Cannot save analysis: disk full'}));
- await control(page,'Condition 1 right constant').fill('42');await expect(page.getByRole('alert')).toContainText('disk full');
+ await setAnalysisRightConstant(page,1,'42');await expect(page.getByRole('alert')).toContainText('disk full');
  await page.getByRole('button',{name:'Apply conditions',exact:true}).click();expect(await page.evaluate(()=>(window as any).__testAnalysisRequest())).toBeNull();
  await page.evaluate(()=>(window as any).__testAnalysisErrors({}));await page.getByRole('button',{name:'Retry saving rules',exact:true}).click();
  await expect(page.getByRole('alert')).toHaveCount(0);await complete(page,[result(0)]);
@@ -264,7 +265,7 @@ test('Save as new stores every row, loads from the right sidebar without applyin
  await control(page,'Condition 1 left timeframe').selectOption('h4');await control(page,'Condition 1 left bars ago').fill('2');
  await control(page,'Condition 1 left aggregation').selectOption('highest');await control(page,'Condition 1 left aggregation window').fill('20');
  await control(page,'Condition 1 operator').selectOption('remainedFor');await control(page,'Condition 1 comparison').selectOption('between');
- await control(page,'Condition 1 right constant').fill('30');await control(page,'Condition 1 upper constant').fill('70');await control(page,'Condition 1 bar window').fill('5');
+ await setAnalysisRightConstant(page,1,'30');await control(page,'Condition 1 upper constant').fill('70');await control(page,'Condition 1 bar window').fill('5');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();await control(page,'Condition 2 left field').selectOption('macd_histogram_12_26_9');await control(page,'Condition 2 operator').selectOption('crossesAbove');
  await page.getByRole('button',{name:'Save as new',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Save condition',exact:true});await expect(dialog).toBeVisible();
@@ -369,7 +370,7 @@ test('right-click Rename persists only the name, retaining identity, order, ever
  await control(page,'Condition 2 right timeframe').selectOption('d1');await control(page,'Condition 2 right bars ago').fill('1');
  await saveCondition(page,'Original');await saveCondition(page,'Keep second');
  const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions());
- await control(page,'Condition 1 right constant').fill('99');await scope.getByRole('button',{name:'Select all scan categories',exact:true}).click();
+ await setAnalysisRightConstant(page,1,'99');await scope.getByRole('button',{name:'Select all scan categories',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(99);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().categories)).toBeNull();
  const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
@@ -414,7 +415,7 @@ test('saved-condition Rename supports menu navigation, selected text, a trapped 
 });
 
 test('Rename duplicate, invalid-name and storage errors stay inline, preserve entries and draft, and allow retry',async({page})=>{
- await open(page);await saveCondition(page,'Original');await saveCondition(page,'Other');await control(page,'Condition 1 right constant').fill('42');
+ await open(page);await saveCondition(page,'Original');await saveCondition(page,'Other');await setAnalysisRightConstant(page,1,'42');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(42);
  const before=await page.evaluate(()=>(window as any).__testSavedAnalysisConditions()),draft=await page.evaluate(()=>(window as any).__testAnalysisView());
  const dialog=await openRename(page,'Original'),submit=dialog.getByRole('button',{name:'Rename',exact:true});
@@ -487,8 +488,8 @@ test('a failed pending rename pauses normal close and leaves the original condit
 
 test('right-click Delete removes only the selected saved condition durably and preserves the draft',async({page})=>{
  await open(page);await saveCondition(page,'First');
- await control(page,'Condition 1 right constant').fill('42');await saveCondition(page,'Second');
- await control(page,'Condition 1 right constant').fill('99');
+ await setAnalysisRightConstant(page,1,'42');await saveCondition(page,'Second');
+ await setAnalysisRightConstant(page,1,'99');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(99);
  const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
  const first=page.getByRole('button',{name:'Load condition First',exact:true}),second=page.getByRole('button',{name:'Load condition Second',exact:true});
@@ -511,7 +512,7 @@ test('right-click Delete removes only the selected saved condition durably and p
 });
 
 test('saved-condition Delete menu supports keyboard and dismissal, and a failed delete preserves the condition',async({page})=>{
- await open(page);await saveCondition(page,'Protected');await control(page,'Condition 1 right constant').fill('42');
+ await open(page);await saveCondition(page,'Protected');await setAnalysisRightConstant(page,1,'42');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().conditions[0].right.value)).toBe(42);
  const draft=await page.evaluate(()=>(window as any).__testAnalysisView());
  const saved=page.getByRole('button',{name:'Load condition Protected',exact:true}),menu=page.getByRole('menu',{name:'Saved condition Protected',exact:true});
@@ -572,7 +573,7 @@ test('scan categories default to all, survive row edits and reload, and are incl
  await expect(page.getByRole('button',{name:'Apply conditions',exact:true})).toBeDisabled();
  await expect(page.getByText('Select at least one asset category before scanning.',{exact:true})).toBeVisible();
  await scope.getByRole('checkbox',{name:'Scan Forex',exact:true}).check();
- await control(page,'Condition 1 right constant').fill('12');
+ await setAnalysisRightConstant(page,1,'12');
  await page.getByRole('button',{name:'Add condition',exact:false}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().categories)).toEqual(['Forex']);
  await page.getByRole('button',{name:'Save as new',exact:true}).click();
@@ -599,7 +600,7 @@ test('Analysis data period persists with categories and saved conditions, and li
  await period.selectOption('h1');await expect(page.locator('.analysis-apply-row')).toContainText('1 of 4 files');
  await period.selectOption('d1');await control(page,'Scan Forex').uncheck();
  await expect(page.locator('.analysis-apply-row')).toContainText('1 of 4 files');
- await control(page,'Condition 1 right constant').fill('12');
+ await setAnalysisRightConstant(page,1,'12');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testAnalysisView().period)).toBe('d1');
  await saveCondition(page,'Daily crypto');
  await expect.poll(()=>page.evaluate(()=>(window as any).__testSavedAnalysisConditions()[0]?.request.period)).toBe('d1');

@@ -134,7 +134,7 @@ func TestAnalysisDailySignalSelectsEarliestAcrossOverlappingHistories(t *testing
 
 func TestDailySignalRulePersistsAndInvalidatesIncompatibleProfitabilityEvidence(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "h1"
 	m.analysis = &analysisState{phase: "completed", asOf: time.Now().UnixMilli(), request: request, results: []AnalysisResult{profitabilityTestResult("before", 9, 10)}}
 	saved, err := m.SaveAnalysisCondition("Once daily", request)

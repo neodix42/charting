@@ -98,7 +98,7 @@ func (a *App) GetPredictionStatistics(request predictions.StatisticsRequest) (pr
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if request.Pattern != nil {
+	if predictions.UsesPatternStatistics(request) {
 		return predictions.CalculatePatternStatistics(ctx, *selected, request, time.Now().UTC().UnixMilli())
 	}
 	if predictions.StatisticsPeriod(request.Period) != "d1" {

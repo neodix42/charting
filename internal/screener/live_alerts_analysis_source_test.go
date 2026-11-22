@@ -7,7 +7,7 @@ import (
 
 func TestLiveAlertInheritsAnalysisSourceOnceAndPersistsExplicitOverrides(t *testing.T) {
 	m := sourceEnrichmentManager(t, false)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.DataSource, request.Period = "hyperliquid", "d1"
 	saved, err := m.SaveAnalysisCondition("Hyperliquid saved condition", request)
 	if err != nil {

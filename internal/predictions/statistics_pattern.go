@@ -11,13 +11,18 @@ import (
 
 // CalculatePatternStatistics searches native consecutive candle bodies without
 // weekday matching. Only closed outcomes strictly before the latest N-bar
-// anchor window contribute; the selected pattern itself is a user hypothesis.
+// anchor window contribute. Patterns are either custom directions or the latest
+// closed native bodies, resolved from the same source snapshot as the sample.
 // Two immutable streaming passes keep memory independent of source length.
 func CalculatePatternStatistics(ctx context.Context, dataset Dataset, request StatisticsRequest, asOf int64) (StatisticsForecast, error) {
-	if request.Pattern == nil {
+	if !UsesPatternStatistics(request) {
 		return StatisticsForecast{}, errors.New("choose a statistics pattern of 3 to 10 bars")
 	}
-	request.Pattern = append([]string{}, request.Pattern...)
+	if request.PatternMode == "current" {
+		request.Pattern = nil
+	} else {
+		request.Pattern = append([]string{}, request.Pattern...)
+	}
 	if err := ValidateStatisticsRequest(request); err != nil {
 		return StatisticsForecast{}, err
 	}
@@ -29,6 +34,10 @@ func CalculatePatternStatistics(ctx context.Context, dataset Dataset, request St
 		return StatisticsForecast{}, errors.New("statistics cutoff is outside the supported timestamp range")
 	}
 	length := len(request.Pattern)
+	mode := "custom"
+	if request.PatternMode == "current" {
+		mode, length = "current", request.PatternLength
+	}
 	recent := make([]StatisticsCandle, 0, length)
 	retain := func(candle StatisticsCandle) error {
 		if len(recent) == length {
@@ -48,11 +57,25 @@ func CalculatePatternStatistics(ctx context.Context, dataset Dataset, request St
 	if !validStatisticsCandle(source.anchor) {
 		return StatisticsForecast{}, fmt.Errorf("the last closed %s candle has invalid OHLC prices", strings.ToUpper(period))
 	}
+	if mode == "current" {
+		request.Pattern = make([]string, length)
+		for index, candle := range recent {
+			date := time.UnixMilli(candle.Time).UTC().Format("2006-01-02 15:04:05")
+			if !validStatisticsCandle(candle) {
+				return StatisticsForecast{}, fmt.Errorf("current bars cannot form an up/down pattern: bar %d (%s UTC) has invalid OHLC prices", index+1, date)
+			}
+			request.Pattern[index] = statisticsDirection(candle)
+			if request.Pattern[index] == "" {
+				return StatisticsForecast{}, fmt.Errorf("current bars cannot form an up/down pattern: bar %d (%s UTC) is a doji (open equals close)", index+1, date)
+			}
+		}
+	}
 	result := StatisticsForecast{
 		DataSource: request.DataSource, Symbol: dataset.Symbol, AssetName: dataset.Name, Period: period,
 		LookbackWeeks: request.LookbackWeeks, AsOf: asOf, FirstClosedBar: source.firstClosedBar,
 		WeekStart: statisticsWeekStart(source.anchor.Time), SourceFile: dataset.Filename, SourceHash: source.snapshot.checksum,
 		History: source.history, Anchor: source.anchor, Pattern: append([]string{}, request.Pattern...),
+		PatternMode: mode, PatternLength: length,
 		Prefix: []StatisticsPrefix{}, Scenarios: []StatisticsScenario{}, Warnings: []string{},
 		NextBarTime: closedAt(source.anchor.Time, period), TheoreticalScenarios: 3,
 		Conditioning: fmt.Sprintf("The specified %d-bar pattern is matched against consecutive closed %s candles, independently of weekdays or hours. The next available native candle is the outcome.", length, strings.ToUpper(period)),

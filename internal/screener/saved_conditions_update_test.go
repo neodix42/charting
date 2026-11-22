@@ -12,7 +12,7 @@ import (
 
 func TestUpdateSavedConditionPreservesIdentityOrderAndCompatibleEvidence(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "d1"
 	request.ProfitabilityFilter = 80
 	row := profitabilityTestResult("daily", 9, 10)
@@ -66,7 +66,7 @@ func TestUpdateSavedConditionPreservesIdentityOrderAndCompatibleEvidence(t *test
 
 func TestSaveAsNewAfterRestartReusesMatchingScopeWithoutChangingOriginal(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "h1"
 	request.ProfitabilityFilter = 0
 	row := profitabilityTestResult("unsimulated", 0, 4)
@@ -104,7 +104,7 @@ func TestSaveAsNewAfterRestartReusesMatchingScopeWithoutChangingOriginal(t *test
 
 func TestSavedConditionSelectsNewestCompatibleEvidenceAndRetainsItDuringIncompleteScan(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	oldRow := profitabilityTestResult("older", 8, 10)
 	oldTime := time.Now().UnixMilli() - 1000
 	m.analysis = &analysisState{phase: "completed", asOf: oldTime, request: request, results: []AnalysisResult{oldRow}}
@@ -140,7 +140,7 @@ func TestSavedConditionSelectsNewestCompatibleEvidenceAndRetainsItDuringIncomple
 
 func TestUpdateSavedConditionRejectsInvalidRequestsAndIDsWithoutChangingState(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	saved, err := m.SaveAnalysisCondition("Saved", request)
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestUpdateSavedConditionWriteFailurePreservesOriginal(t *testing.T) {
 		t.Skip("directory permissions do not prevent writes on Windows")
 	}
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	saved, err := m.SaveAnalysisCondition("Saved", request)
 	if err != nil {
 		t.Fatal(err)

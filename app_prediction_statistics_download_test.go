@@ -77,6 +77,8 @@ func TestStatisticsDownloadFacadeRejectsInvalidAndMissingRequestsWithoutChanging
 		{DataSource: "dukascopy", Asset: "eurusd", Period: "m1"},
 		{DataSource: "dukascopy", Asset: "eurusd", Period: "h1"},
 		{DataSource: "hyperliquid", Asset: "eurusd", Period: "d1"},
+		{DataSource: "dukascopy", Asset: "eurusd", Period: "d1", PatternMode: "current", PatternLength: 2},
+		{DataSource: "dukascopy", Asset: "eurusd", Period: "d1", PatternMode: "custom"},
 	} {
 		if _, err := a.DownloadPredictionStatisticsData(request); err == nil {
 			t.Fatal("invalid or another-source request started a repair", request)
@@ -111,6 +113,11 @@ func TestStatisticsPatternDownloadPlanningIgnoresUnusableDailyCompanion(t *testi
 		got, err := predictionStatisticsDownloadRequest(request, files, now)
 		if err != nil || got.Timeframe != period || got.From != "2024-01-01" || !reflect.DeepEqual(got.Symbols, []string{"eurusd"}) {
 			t.Fatal("native repair inspected an unnecessary daily companion", got, err)
+		}
+		request.PatternMode, request.PatternLength, request.Pattern = "current", 3, nil
+		current, err := predictionStatisticsDownloadRequest(request, files, now)
+		if err != nil || !reflect.DeepEqual(current, got) {
+			t.Fatal("current repair inspected an unnecessary daily companion or changed its native scope", current, got, err)
 		}
 	}
 }

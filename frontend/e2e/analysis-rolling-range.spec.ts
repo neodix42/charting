@@ -1,3 +1,4 @@
+import {setAnalysisRightConstant} from './helpers/analysis';
 import {test,expect,type Page} from '@playwright/test';
 import {openTestApp,reloadTestApp} from './helpers/testApp';
 import type {AnalysisFile,AnalysisRequest} from '../src/workspace/screenerAnalysis';
@@ -61,7 +62,7 @@ test('Low / High lookbacks use Enrichment limits and prevent invalid scan or nam
 });
 
 test('Condition and operand dropdowns align with constants, rolling controls, warnings and temporal comparisons',async({page})=>{
- await open(page);await control(page,'Condition 1 left field').selectOption('weekday');await control(page,'Condition 1 operator').selectOption('equal');await control(page,'Condition 1 right constant').fill('2');
+ await open(page);await control(page,'Condition 1 left field').selectOption('weekday');await control(page,'Condition 1 operator').selectOption('equal');await setAnalysisRightConstant(page,1,'2');
  const aligned=async()=>{
   const left=await control(page,'Condition 1 left field').boundingBox(),condition=await control(page,'Condition 1 operator').boundingBox();
   expect(left&&condition).toBeTruthy();expect(Math.abs(left!.y-condition!.y)).toBeLessThanOrEqual(1);expect(Math.abs(left!.height-condition!.height)).toBeLessThanOrEqual(1);

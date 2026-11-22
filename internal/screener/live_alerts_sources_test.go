@@ -15,7 +15,7 @@ import (
 
 func sourceTestSaved(t *testing.T, m *Manager, name string, profit int, period ...string) SavedAnalysisCondition {
 	t.Helper()
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "h1"
 	if len(period) > 0 {
 		request.Period = period[0]
@@ -116,7 +116,7 @@ func TestLiveAlertsPublicClaimsIsolateSourcesAndSpotPerpetualAndRestart(t *testi
 func TestLiveAlertsMixedDukascopyAndPublicSelectionsEvaluateTheirOwnData(t *testing.T) {
 	m := sourceEnrichmentManager(t, false)
 	writeDataFile(t, m, "eurusd-h1-2026-11-05-2026-11-06.csv", reviewHourlyCSV(time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC).UnixMilli(), []float64{10, 11, 12, 13}))
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "h1"
 	dukascopy, err := saveLiveCondition(t, m, "Existing Dukascopy", request)
 	if err != nil {

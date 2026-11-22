@@ -1,3 +1,4 @@
+import {setAnalysisRightConstant} from './helpers/analysis';
 import {test,expect,type Page} from '@playwright/test';
 import type {AnalysisFile,AnalysisResult} from '../src/workspace/screenerAnalysis';
 import {openTestApp,reloadTestApp} from './helpers/testApp';
@@ -63,7 +64,7 @@ test('saved selection survives normalized Go fields and rename, while ambiguous 
  await saveCondition(page,'Normalized shape');
  const saved=page.getByRole('button',{name:'Load condition Normalized shape',exact:true});
  await expect(saved).toHaveAttribute('aria-pressed','true');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).not.toContainText('Modified draft');
- await page.getByLabel('Condition 1 right constant',{exact:true}).fill('1');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).toContainText('Modified draft');
+ await setAnalysisRightConstant(page,1,'1');await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).toContainText('Modified draft');
  await saved.click();await expect(page.locator('.analysis-saved-list button[aria-pressed="true"]')).not.toContainText('Modified draft');
  await saved.click({button:'right'});await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
  await page.getByLabel('Condition name',{exact:true}).fill('Renamed selection');await page.getByRole('dialog',{name:'Rename condition',exact:true}).getByRole('button',{name:'Rename',exact:true}).click();

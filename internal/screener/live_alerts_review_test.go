@@ -221,11 +221,11 @@ func TestLiveAlertsPartialRefreshNeverUsesFailedCompanionAsStaleFallback(t *test
 
 func TestLiveAlertsPrunesOnlyDeletedConditionHistoryAndPersistsBeforeNewChecks(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	retained, err := saveLiveCondition(t, m, "Inactive condition", defaultAnalysisRequest())
+	retained, err := saveLiveCondition(t, m, "Inactive condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
-	deleted, err := saveLiveCondition(t, m, "Deleted condition", defaultAnalysisRequest())
+	deleted, err := saveLiveCondition(t, m, "Deleted condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestLiveAlertsPrunesOnlyDeletedConditionHistoryAndPersistsBeforeNewChecks(t
 
 func TestLiveAlertsDeletedConditionPruneWriteFailureRollsBack(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	deleted, err := saveLiveCondition(t, m, "Removed", defaultAnalysisRequest())
+	deleted, err := saveLiveCondition(t, m, "Removed", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}

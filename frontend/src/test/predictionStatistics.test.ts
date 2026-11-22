@@ -20,4 +20,12 @@ describe('Statistics pattern selection identity',()=>{
   const legacy={dataSource:request.dataSource,symbol:request.asset,period:request.period,lookbackWeeks:request.lookbackWeeks} as PredictionStatisticsForecast;
   expect(statisticsResultKey(legacy)).not.toBe(statisticsKey(request));
  });
+ it('identifies current-bar requests by source mode and count rather than resolved directions',()=>{
+  const request={...initialStatisticsRequest(),asset:'eurusd',pattern:undefined,patternMode:'current' as const,patternLength:3};
+  const result={dataSource:request.dataSource,symbol:request.asset,period:request.period,lookbackWeeks:request.lookbackWeeks,patternMode:'current',patternLength:3,pattern:['down','up','down']} as PredictionStatisticsForecast;
+  expect(statisticsResultKey(result)).toBe(statisticsKey(request));
+  expect(statisticsResultKey({...result,pattern:['up','up','down']})).toBe(statisticsKey(request));
+  expect(statisticsResultKey({...result,patternLength:4})).not.toBe(statisticsKey(request));
+  expect(statisticsResultKey({...result,patternMode:'custom'})).not.toBe(statisticsKey(request));
+ });
 });

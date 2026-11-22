@@ -65,7 +65,7 @@ func TestAnalysisPeriodPersistsDraftAndSavedConditionAndRejectsUnknownPeriods(t 
 		t.Run("period-"+period, func(t *testing.T) {
 			profile := t.TempDir()
 			m := savedConditionManager(t, profile)
-			request := defaultAnalysisRequest()
+			request := positiveAnalysisRequest()
 			request.Period = period
 			if _, err := m.SaveAnalysisView(request); err != nil {
 				t.Fatal(err)
@@ -101,7 +101,7 @@ func TestAnalysisUnavailableOrInvalidPeriodKeepsPreviousResults(t *testing.T) {
 	m := analysisTestManager(t)
 	writeDataFile(t, m, "btcusd-d1-2024-01-01-2024-01-03.csv", analysisCSV([]float64{2, 3}))
 	before := startTestAnalysis(t, m, analysisCondition("above", analysisField("close"), analysisNumber(1)))
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	for _, period := range []string{"h1", "h4", "D1", "same"} {
 		request.Period = period
 		if _, err := m.StartAnalysis(request); err == nil {

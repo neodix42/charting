@@ -33,7 +33,7 @@ it('keeps matching evidence without simulation eligible only for an unrestricted
  expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(false);value.request.profitabilityFilter=0;expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(true);expect(savedConditionProfitability(value,'btcusd','h1')).toBeUndefined();delete value.analysis;expect(savedConditionAllowsAsset(value,'btcusd','h1')).toBe(false);
 });
 it('compares working drafts with normalized Go JSON without false modified markers',()=>{
- const draft=initialAnalysisView();draft.profitabilityFilter=0;
+ const draft=initialAnalysisView();draft.profitabilityFilter=0;draft.conditions[0].right={kind:'number',value:0};
  const normalized=structuredClone(draft);delete normalized.profitabilityFilter;normalized.period='';normalized.categories=null;
  normalized.conditions[0].right={kind:'number',value:0,field:'',timeframe:'',offset:0,aggregate:'',window:0};
  expect(analysisRequestIdentity(normalized)).toBe(analysisRequestIdentity(draft));

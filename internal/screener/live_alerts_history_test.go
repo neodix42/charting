@@ -68,7 +68,7 @@ func TestLiveAlertsCheckHistoryCountsActualUniqueAssetsAndSurvivesRestart(t *tes
 
 func TestLiveAlertsCheckHistoryAttributesFailuresCancellationAndInterruptedRestart(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	second, err := saveLiveCondition(t, m, "Other active condition", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "Other active condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestLiveAlertsCheckHistoryAttributesFailuresCancellationAndInterruptedResta
 
 func TestLiveAlertsHistoryDoesNotMarkPartiallyVisitedConditionCompleted(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	second, err := saveLiveCondition(t, m, "Second condition", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "Second condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestLiveAlertsHistoryDoesNotMarkPartiallyVisitedConditionCompleted(t *testi
 
 func TestLiveAlertsHistoryDeduplicatedConditionCompletesDespiteOtherRefreshFailure(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	second, err := saveLiveCondition(t, m, "Failed refresh condition", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "Failed refresh condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestLiveAlertsSequentialDeliveryFailurePreservesPeersAndCompletesRemainingA
 	}
 	btcName := "btcusd-h1-2024-01-01-2024-01-03.csv"
 	writeDataFile(t, m, btcName, string(data))
-	second, err := saveLiveCondition(t, m, "Second shared asset condition", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "Second shared asset condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestLiveAlertsActualDedupVisitCompletesDespiteOtherAssetRefreshFailure(t *t
 	}
 	gbpName := "gbpusd-h1-2024-01-01-2024-01-03.csv"
 	writeDataFile(t, m, gbpName, string(data))
-	second, err := saveLiveCondition(t, m, "GBP refresh condition", defaultAnalysisRequest())
+	second, err := saveLiveCondition(t, m, "GBP refresh condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestLiveAlertsActualDedupVisitCompletesDespiteOtherAssetRefreshFailure(t *t
 
 func TestLiveAlertsDeletePrunesOnlyCurrentConditionRowsAndUpdatesNames(t *testing.T) {
 	m, l, config, _ := liveAlertsFixture(t)
-	retained, err := saveLiveCondition(t, m, "Retained condition", defaultAnalysisRequest())
+	retained, err := saveLiveCondition(t, m, "Retained condition", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +435,7 @@ func TestLiveAlertsTuesdayDailyConditionSchedulesWednesdayCloseAndManualCheckByp
 	name := "eurusd-d1-2024-01-01-2024-01-11.csv"
 	data := "timestamp,open,high,low,close,weekday\n1704067200000,10,12,9,11,1\n1704153600000,11,13,10,12,2\n1704240000000,12,14,11,13,3\n"
 	writeDataFile(t, m, name, data)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "d1"
 	request.Conditions[0].Operator = "equal"
 	request.Conditions[0].Left.Field = "weekday"

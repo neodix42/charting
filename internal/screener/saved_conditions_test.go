@@ -22,14 +22,14 @@ func savedConditionManager(t *testing.T, profile string) *Manager {
 func TestSavedConditionsRoundTripSnapshotsAllRowsWithoutChangingDraftOrApplying(t *testing.T) {
 	profile := t.TempDir()
 	m := savedConditionManager(t, profile)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Conditions[0].Operator = "occurredWithin"
 	request.Conditions[0].Comparison = "crossesAbove"
 	request.Conditions[0].Left.Field = "macd_histogram_12_26_9"
 	request.Conditions[0].Left.Timeframe = "d1"
 	request.Conditions[0].Left.Offset = 2
 	request.Conditions[0].Bars = 5
-	second := defaultAnalysisRequest().Conditions[0]
+	second := positiveAnalysisRequest().Conditions[0]
 	second.ID, second.Operator = "condition-2", "withinDistance"
 	second.Right = AnalysisOperand{Kind: "field", Field: "sma_200", Timeframe: "h4", Aggregate: "highest", Window: 20, Offset: 1}
 	request.Conditions = append(request.Conditions, second)
@@ -72,7 +72,7 @@ func TestSavedConditionsRoundTripSnapshotsAllRowsWithoutChangingDraftOrApplying(
 
 func TestSavedConditionValidationPreservesExistingSets(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	if _, err := m.SaveAnalysisCondition("First", request); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestSavedConditionsCorruptFutureAndOversizedStateIsNeverOverwritten(t *test
 			if _, err := m.SavedAnalysisConditions(); err == nil {
 				t.Fatal("invalid saved state was accepted")
 			}
-			if _, err := m.SaveAnalysisCondition("New", defaultAnalysisRequest()); err == nil {
+			if _, err := m.SaveAnalysisCondition("New", positiveAnalysisRequest()); err == nil {
 				t.Fatal("invalid saved state was overwritten")
 			}
 			if err := m.DeleteAnalysisCondition(strings.Repeat("a", 32)); err == nil {
@@ -135,7 +135,7 @@ func TestSavedConditionsCorruptFutureAndOversizedStateIsNeverOverwritten(t *test
 func TestDeleteSavedConditionPersistsWithoutChangingDraftOrData(t *testing.T) {
 	profile := t.TempDir()
 	m := savedConditionManager(t, profile)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Conditions[0].Operator = "equal"
 	request.Conditions[0].Left.Field = "weekday"
 	request.Conditions[0].Right = analysisNumber(1)
@@ -193,7 +193,7 @@ func TestDeleteSavedConditionPersistsWithoutChangingDraftOrData(t *testing.T) {
 
 func TestDeleteSavedConditionFailuresPreserveState(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	saved, err := m.SaveAnalysisCondition("Keep", defaultAnalysisRequest())
+	saved, err := m.SaveAnalysisCondition("Keep", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,12 +226,12 @@ func TestSavedConditionsConcurrentSaveDeleteAndRenameDoNotLoseChanges(t *testing
 	var saved []SavedAnalysisCondition
 	var renamed []SavedAnalysisCondition
 	for i := 0; i < count; i++ {
-		condition, err := m.SaveAnalysisCondition(fmt.Sprintf("Old %d", i), defaultAnalysisRequest())
+		condition, err := m.SaveAnalysisCondition(fmt.Sprintf("Old %d", i), positiveAnalysisRequest())
 		if err != nil {
 			t.Fatal(err)
 		}
 		saved = append(saved, condition)
-		condition, err = m.SaveAnalysisCondition(fmt.Sprintf("Rename %d", i), defaultAnalysisRequest())
+		condition, err = m.SaveAnalysisCondition(fmt.Sprintf("Rename %d", i), positiveAnalysisRequest())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +250,7 @@ func TestSavedConditionsConcurrentSaveDeleteAndRenameDoNotLoseChanges(t *testing
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := m.SaveAnalysisCondition(fmt.Sprintf("New %d", i), defaultAnalysisRequest())
+			_, err := m.SaveAnalysisCondition(fmt.Sprintf("New %d", i), positiveAnalysisRequest())
 			errors <- err
 		}()
 		go func() {
@@ -293,7 +293,7 @@ func TestRenameSavedConditionPreservesSnapshotOrderDraftAndDataAcrossRestart(t *
 		t.Run(fmt.Sprintf("categories=%v", categories), func(t *testing.T) {
 			profile := t.TempDir()
 			m := savedConditionManager(t, profile)
-			request := defaultAnalysisRequest()
+			request := positiveAnalysisRequest()
 			request.Categories = categories
 			request.Conditions[0].Operator = "occurredWithin"
 			request.Conditions[0].Comparison = "between"
@@ -301,11 +301,11 @@ func TestRenameSavedConditionPreservesSnapshotOrderDraftAndDataAcrossRestart(t *
 			request.Conditions[0].Right.Value = -1.25
 			request.Conditions[0].Upper.Value = 50.5
 			request.Conditions[0].Bars = 7
-			second := defaultAnalysisRequest().Conditions[0]
+			second := positiveAnalysisRequest().Conditions[0]
 			second.ID, second.Operator, second.Multiplier = "distance-row", "withinDistance", 0.75
 			second.Right = AnalysisOperand{Kind: "field", Field: "sma_200", Timeframe: "h4", Aggregate: "highest", Window: 20, Offset: 1}
 			request.Conditions = append(request.Conditions, second)
-			draft := defaultAnalysisRequest()
+			draft := positiveAnalysisRequest()
 			draft.Conditions[0].Right.Value = 987.65
 			if _, err := m.SaveAnalysisView(draft); err != nil {
 				t.Fatal(err)
@@ -363,11 +363,11 @@ func TestRenameSavedConditionPreservesSnapshotOrderDraftAndDataAcrossRestart(t *
 
 func TestRenameSavedConditionValidationPreservesState(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	saved, err := m.SaveAnalysisCondition("Keep", defaultAnalysisRequest())
+	saved, err := m.SaveAnalysisCondition("Keep", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.SaveAnalysisCondition("Other K", defaultAnalysisRequest()); err != nil {
+	if _, err := m.SaveAnalysisCondition("Other K", positiveAnalysisRequest()); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(m.profile, "screener-saved-conditions.json")
@@ -398,7 +398,7 @@ func TestRenameSavedConditionValidationPreservesState(t *testing.T) {
 
 func TestRenameSavedConditionUnchangedCaseOnlyAndMaximumName(t *testing.T) {
 	m := savedConditionManager(t, t.TempDir())
-	saved, err := m.SaveAnalysisCondition("First", defaultAnalysisRequest())
+	saved, err := m.SaveAnalysisCondition("First", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +429,7 @@ func TestRenameSavedConditionWriteFailurePreservesState(t *testing.T) {
 		t.Skip("directory permissions do not prevent writes on Windows")
 	}
 	m := savedConditionManager(t, t.TempDir())
-	saved, err := m.SaveAnalysisCondition("Keep", defaultAnalysisRequest())
+	saved, err := m.SaveAnalysisCondition("Keep", positiveAnalysisRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestSavedConditionsConcurrentRenamesAndSaveEnforceUniqueNames(t *testing.T)
 	m := savedConditionManager(t, t.TempDir())
 	var saved []SavedAnalysisCondition
 	for _, name := range []string{"First", "Second"} {
-		condition, err := m.SaveAnalysisCondition(name, defaultAnalysisRequest())
+		condition, err := m.SaveAnalysisCondition(name, positiveAnalysisRequest())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -486,7 +486,7 @@ func TestSavedConditionsConcurrentRenamesAndSaveEnforceUniqueNames(t *testing.T)
 	}
 	go func() {
 		<-start
-		_, err := m.SaveAnalysisCondition("SHARED", defaultAnalysisRequest())
+		_, err := m.SaveAnalysisCondition("SHARED", positiveAnalysisRequest())
 		results <- err
 	}()
 	close(start)

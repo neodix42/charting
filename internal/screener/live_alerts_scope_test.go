@@ -63,7 +63,7 @@ func TestLiveAlertsInheritRealAnalysisMatchesWithoutSimulationAndAllRecordedPeri
 	writeDataFile(t, m, "eurusd-h1-2024-01-01-2024-01-04.csv", reviewHourlyCSV(base.UnixMilli(), []float64{100, 101, 102}))
 	writeDataFile(t, m, "eurusd-d1-2024-01-01-2024-01-04.csv", "timestamp,open,high,low,close\n1704067200000,100,110,90,100\n1704153600000,101,111,91,101\n")
 	writeDataFile(t, m, "gbpusd-h1-2024-01-01-2024-01-04.csv", reviewHourlyCSV(base.UnixMilli(), []float64{10, 11, 12}))
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "all"
 	request.Conditions[0].Right.Value = 50
 	if _, err := m.StartAnalysis(request); err != nil {

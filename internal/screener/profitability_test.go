@@ -59,7 +59,7 @@ func TestProfitabilityFilterDraftNamedRuleValidationAndLegacyDefaults(t *testing
 		t.Fatal("fresh draft mustdefault85", fresh, err)
 	}
 	for _, value := range []int{0, 5, 85, 95, 100} {
-		request := defaultAnalysisRequest()
+		request := positiveAnalysisRequest()
 		request.ProfitabilityFilter = value
 		if _, err = m.SaveAnalysisView(request); err != nil {
 			t.Fatal(err)
@@ -71,7 +71,7 @@ func TestProfitabilityFilterDraftNamedRuleValidationAndLegacyDefaults(t *testing
 	}
 	before, _ := os.ReadFile(filepath.Join(m.profile, "screener-analysis.json"))
 	for _, value := range []int{-5, 1, 84, 101} {
-		request := defaultAnalysisRequest()
+		request := positiveAnalysisRequest()
 		request.ProfitabilityFilter = value
 		if _, err = m.SaveAnalysisView(request); err == nil {
 			t.Fatal("invalid filter accepted", value)
@@ -327,7 +327,7 @@ func TestCompletedMatchingEvidenceDistinguishesMissingSimulationFromMeasuredZero
 
 func TestSavedConditionsRecoverOnlyMissingCompatibleFinishedEvidence(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	request.Period = "d1"
 	saved, err := m.SaveAnalysisCondition("missing", request)
 	if err != nil {
@@ -375,7 +375,7 @@ func TestSavedConditionsRecoverOnlyMissingCompatibleFinishedEvidence(t *testing.
 
 func TestRecordedProfitabilityWriteFailurePreservesOriginalFileAndSurfacesError(t *testing.T) {
 	m := analysisTestManager(t)
-	request := defaultAnalysisRequest()
+	request := positiveAnalysisRequest()
 	if _, err := m.SaveAnalysisCondition("saved", request); err != nil {
 		t.Fatal(err)
 	}
