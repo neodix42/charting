@@ -1832,6 +1832,7 @@ export namespace screener {
 	    id: string;
 	    fileId: string;
 	    name: string;
+	    dataSource: string;
 	    status: string;
 	    progress: number;
 	    rows: number;
@@ -1848,6 +1849,7 @@ export namespace screener {
 	        this.id = source["id"];
 	        this.fileId = source["fileId"];
 	        this.name = source["name"];
+	        this.dataSource = source["dataSource"];
 	        this.status = source["status"];
 	        this.progress = source["progress"];
 	        this.rows = source["rows"];
@@ -1859,6 +1861,8 @@ export namespace screener {
 	export class EnrichmentInfo {
 	    directory: string;
 	    active: boolean;
+	    sourceOrder: string[];
+	    activeDataSource: string;
 	    runtimeAvailable: boolean;
 	    runtimeError?: string;
 	    indicator: string;
@@ -1879,6 +1883,8 @@ export namespace screener {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.directory = source["directory"];
 	        this.active = source["active"];
+	        this.sourceOrder = source["sourceOrder"];
+	        this.activeDataSource = source["activeDataSource"];
 	        this.runtimeAvailable = source["runtimeAvailable"];
 	        this.runtimeError = source["runtimeError"];
 	        this.indicator = source["indicator"];

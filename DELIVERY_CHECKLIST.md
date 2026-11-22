@@ -1,5 +1,14 @@
 # Release checklist — observed 2026-10-19
 
+## Sequential all-source Enrichment — 2026-11-22
+
+- [x] One All data sources request, source-labelled combined file list, full enrichment periods and Dukascopy-only manual Refresh.
+- [x] Per-source worker pools drain in Dukascopy-then-Hyperliquid order under one cancellation lifecycle; backups, recipes and atomic publication remain in place.
+- [x] Targeted Wails models, binding/native root race tests and vet pass; read-only lifecycle review finds no unresolved defect.
+- [x] Frontend typecheck/lint, 326 unit tests, 57 related browser cases and the complete Screener race/vet suite pass; final evidence is recorded in STATUS.md.
+- [x] Production Linux executable, matching JForex runtime and archive rebuilt; checksums pass and final STATUS.md is included.
+- [ ] Native desktop, live provider enrichment, Windows GUI and hosted CI checks for this revision remain unrun.
+
 ## Repeated public check history reuse — 2026-11-13
 
 - [x] Read-only profile/code audit confirms shared retained bars/derived caches and identifies repeated empty/missing spot reads, without provider calls or profile changes.

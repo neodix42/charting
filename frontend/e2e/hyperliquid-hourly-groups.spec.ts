@@ -17,7 +17,7 @@ test('Hyperliquid H1 downloads retain From/timeframe, default To to today and qu
  await reloadTestApp(page);await screen(page,'Downloader');await expect(control(page,'Download data source')).toHaveValue('hyperliquid');await expect(control(page,'Download timeframe')).toHaveValue('h1');
  await page.getByRole('button',{name:'Download 3 symbols',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toMatchObject({dataSource:'hyperliquid',timeframe:'h1',from:'2000-01-01',to:new Date().toISOString().slice(0,10)});
- await expect(page.locator('.screener-job')).toHaveCount(3);await expect(page.locator('.screener-job-title>span:first-of-type')).toHaveText(['h1','h1','h1']);
+ await expect(page.locator('.screener-job')).toHaveCount(3);await expect(page.locator('.screener-job-title>span').filter({hasText:/^h1$/})).toHaveText(['h1','h1','h1']);
  await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
 });
 

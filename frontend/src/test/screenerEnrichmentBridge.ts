@@ -1,12 +1,13 @@
 import {isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 import catalog from '../../../internal/screener/indicators.json' with {type:'json'};
-import type {Backend,ScreenerDataFile,ScreenerEnrichmentInfo,ScreenerEnrichmentRequest,ScreenerIndicators,ScreenerRefreshInfo} from '../types';
+import type {Backend,ScreenerDataFile,ScreenerDataSource,ScreenerEnrichmentInfo,ScreenerEnrichmentRequest,ScreenerIndicators,ScreenerRefreshInfo} from '../types';
 
 /** Deterministic browser fixtures, installed only by the explicit test bridge. */
 export function screenerEnrichmentBridge(directory:()=>string){
  const fileKey='cryptodesk-explicit-test-enrichment-files';
  let files:ScreenerDataFile[]=JSON.parse(sessionStorage.getItem(fileKey)||'[]');
  let request:ScreenerEnrichmentRequest|null=null,reads=0,fileError='',startError='';
+ const requests:ScreenerEnrichmentRequest[]=[];
  let info:ScreenerEnrichmentInfo={directory:directory(),active:false,runtimeAvailable:true,indicator:'',total:0,completed:0,failed:0,cancelled:0,currentFile:'',currentProgress:0,jobs:[]};
  let refresh:ScreenerRefreshInfo={directory:directory(),active:false,runtimeAvailable:true,total:0,completed:0,failed:0,cancelled:0,currentFile:'',currentProgress:0,jobs:[]},refreshStarts=0,refreshStartError='';
  const saveFiles=()=>sessionStorage.setItem(fileKey,JSON.stringify(files));
@@ -16,7 +17,7 @@ export function screenerEnrichmentBridge(directory:()=>string){
   async GetScreenerFilesForPeriod(offset,limit,period){return api.GetScreenerFilesForSource(offset,limit,period,'dukascopy');},
   async GetScreenerFilesForSource(offset,limit,period,source){
    reads++;if(fileError)throw Error(fileError);
-   const sourceFiles=files.filter(file=>(file.dataSource??'dukascopy')===source);
+   const sourceFiles=files.filter(file=>source==='all'||(file.dataSource??'dukascopy')===source);
    const selected=sourceFiles.filter(file=>!period||period==='all'||file.timeframe===period);
    return{directory:directory(),total:selected.length,allTotal:sourceFiles.length,offset,limit,periodCounts:sourceFiles.reduce<Record<string,number>>((counts,file)=>{if(file.timeframe)counts[file.timeframe]=(counts[file.timeframe]??0)+1;return counts;},{}),files:structuredClone(selected.slice(offset,offset+limit))};
   },
@@ -24,12 +25,15 @@ export function screenerEnrichmentBridge(directory:()=>string){
   async StartScreenerEnrichment(value){
    if(startError)throw Error(startError);
    request=structuredClone(value);
-   const selected=files.filter(file=>(file.dataSource??'dukascopy')===(value.dataSource??'dukascopy')&&(!value.period||value.period==='all'||file.timeframe===value.period)&&(!catalog.indicators.some(item=>(value.group?item.category===value.group:item.id===value.indicator)&&item.intradayOnly)||isIntradayPeriod(file.timeframe??'')));
-   info={...info,active:true,indicator:value.group||value.indicator,total:selected.length,completed:0,failed:0,cancelled:0,jobs:selected.map(file=>({id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,message:'Queued in explicit test mode',columns:[]}))};
+   requests.push(structuredClone(value));
+   const selected=files.filter(file=>(value.dataSource==='all'||(file.dataSource??'dukascopy')===(value.dataSource??'dukascopy'))&&(!value.period||value.period==='all'||file.timeframe===value.period)&&(!catalog.indicators.some(item=>(value.group?item.category===value.group:item.id===value.indicator)&&item.intradayOnly)||isIntradayPeriod(file.timeframe??'')));
+   const sourceOrder=(['dukascopy','hyperliquid'] as ScreenerDataSource[]).filter(source=>selected.some(file=>(file.dataSource??'dukascopy')===source));
+   const ordered=sourceOrder.flatMap(source=>selected.filter(file=>(file.dataSource??'dukascopy')===source));
+   info={...info,active:true,indicator:value.group||value.indicator,total:selected.length,completed:0,failed:0,cancelled:0,sourceOrder,activeDataSource:sourceOrder[0],jobs:ordered.map(file=>({dataSource:file.dataSource??'dukascopy',id:crypto.randomUUID(),fileId:file.id,name:file.name,status:'queued',progress:0,rows:0,message:'Queued in explicit test mode',columns:[]}))};
    return structuredClone({...info,jobs:[]});
   },
   async CancelScreenerEnrichment(){
-   info={...info,active:false,currentFile:'',currentProgress:0,jobs:info.jobs.map(job=>job.status==='queued'||job.status==='running'?{...job,status:'cancelled',message:'Enrichment cancelled; original file kept'}:job)};
+   info={...info,active:false,activeDataSource:undefined,currentFile:'',currentProgress:0,jobs:info.jobs.map(job=>job.status==='queued'||job.status==='running'?{...job,status:'cancelled',message:'Enrichment cancelled; original file kept'}:job)};
    info.cancelled=info.jobs.filter(job=>job.status==='cancelled').length;
    return structuredClone({...info,jobs:[]});
   },
@@ -48,7 +52,7 @@ export function screenerEnrichmentBridge(directory:()=>string){
  };
  Object.assign(window,{
   __testSetEnrichmentFiles:(value:ScreenerDataFile[])=>{files=structuredClone(value);saveFiles();},
-  __testEnrichmentFiles:()=>structuredClone(files),__testEnrichmentRequest:()=>structuredClone(request),__testEnrichmentReads:()=>reads,
+  __testEnrichmentFiles:()=>structuredClone(files),__testEnrichmentRequest:()=>structuredClone(request),__testEnrichmentRequests:()=>structuredClone(requests),__testEnrichmentReads:()=>reads,
   __testEnrichment:()=>structuredClone(info),
   __testSetEnrichment:(value:Partial<ScreenerEnrichmentInfo>)=>{info={...info,...structuredClone(value)};},
   __testEnrichmentErrors:(file:string,start:string)=>{fileError=file;startError=start;},

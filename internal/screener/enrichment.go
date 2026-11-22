@@ -20,6 +20,7 @@ type EnrichmentJob struct {
 	ID            string   `json:"id"`
 	FileID        string   `json:"fileId"`
 	Name          string   `json:"name"`
+	DataSource    string   `json:"dataSource"`
 	Status        string   `json:"status"`
 	Progress      float64  `json:"progress"`
 	Rows          int64    `json:"rows"`
@@ -31,6 +32,8 @@ type EnrichmentJob struct {
 type EnrichmentInfo struct {
 	Directory        string          `json:"directory"`
 	Active           bool            `json:"active"`
+	SourceOrder      []string        `json:"sourceOrder"`
+	ActiveDataSource string          `json:"activeDataSource"`
 	RuntimeAvailable bool            `json:"runtimeAvailable"`
 	RuntimeError     string          `json:"runtimeError,omitempty"`
 	Indicator        string          `json:"indicator"`
@@ -70,7 +73,16 @@ func (m *Manager) enrichmentRuntimeError() string {
 func (m *Manager) enrichmentInfoLocked(fileIDs []string) EnrichmentInfo {
 	errorText := m.enrichmentRuntimeError()
 	info := EnrichmentInfo{Directory: m.directory, Active: m.enrichmentActive, RuntimeAvailable: errorText == "", RuntimeError: errorText,
-		Indicator: m.enrichmentRequest.Indicator, Total: len(m.enrichmentJobs), Jobs: []EnrichmentJob{}}
+		Indicator: m.enrichmentRequest.Indicator, Total: len(m.enrichmentJobs), Jobs: []EnrichmentJob{}, SourceOrder: []string{}, ActiveDataSource: m.enrichmentActiveDataSource}
+	seenSources := map[string]bool{}
+	for _, job := range m.enrichmentJobs {
+		seenSources[normalizeDataSource(job.DataSource)] = true
+	}
+	for _, source := range []string{"dukascopy", "hyperliquid"} {
+		if seenSources[source] {
+			info.SourceOrder = append(info.SourceOrder, source)
+		}
+	}
 	if m.enrichmentRequest.Group != "" {
 		info.Indicator = m.enrichmentRequest.Group
 	}
@@ -180,16 +192,28 @@ func (m *Manager) StartEnrichment(request EnrichmentRequest) (EnrichmentInfo, er
 			return m.enrichmentInfoLocked(nil), fmt.Errorf("there are no downloaded %s CSV files to enrich", request.Period)
 		}
 	}
-	groups := groupHistories(m.directory, names)
+	// Plan each source independently after filtering. This keeps both the job
+	// list and the worker phases in provider order without merging identities.
+	groups := []historyGroup{}
+	for _, source := range []string{"dukascopy", "hyperliquid"} {
+		sourceNames := []string{}
+		for _, name := range names {
+			if fileDataSource(name) == source {
+				sourceNames = append(sourceNames, name)
+			}
+		}
+		groups = append(groups, groupHistories(m.directory, sourceNames)...)
+	}
 	jobs := make([]EnrichmentJob, len(groups))
 	for i, group := range groups {
 		var random [16]byte
 		if _, err = rand.Read(random[:]); err != nil {
 			return m.enrichmentInfoLocked(nil), err
 		}
-		jobs[i] = EnrichmentJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, group.name), Name: group.name, fileIDAliases: group.ids, Status: "queued", Message: "Waiting for enrichment", Columns: []string{}}
+		jobs[i] = EnrichmentJob{ID: hex.EncodeToString(random[:]), FileID: dataFileID(m.directory, group.name), Name: group.name, DataSource: fileDataSource(group.name), fileIDAliases: group.ids, Status: "queued", Message: "Waiting for enrichment", Columns: []string{}}
 	}
 	m.enrichmentJobs, m.enrichmentRequest, m.enrichmentActive = jobs, request, true
+	m.enrichmentActiveDataSource = jobs[0].DataSource
 	ctx, cancel := context.WithCancel(context.Background())
 	m.enrichmentCancel = cancel
 	m.enrichmentDone = make(chan struct{})
@@ -219,13 +243,18 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		m.enrichmentActive, m.enrichmentCancel = false, nil
+		m.enrichmentActiveDataSource = ""
 		close(m.enrichmentDone)
 	}()
 	legacy := legacyRecipes(ctx, directory)
 	m.mu.Lock()
-	count := len(m.enrichmentJobs)
+	sourceIndexes := map[string][]int{}
+	for index, job := range m.enrichmentJobs {
+		source := normalizeDataSource(job.DataSource)
+		sourceIndexes[source] = append(sourceIndexes[source], index)
+	}
 	m.mu.Unlock()
-	runFilePoolWithConcurrency(count, concurrency, func(index int) {
+	run := func(index int) {
 		m.mu.Lock()
 		if ctx.Err() != nil {
 			m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "cancelled", "Enrichment cancelled; original file kept"
@@ -263,7 +292,28 @@ func (m *Manager) runEnrichment(ctx context.Context, directory string, request E
 			}
 		}
 		m.mu.Unlock()
-	})
+	}
+	// A pool fully drains (including consolidation and publication) before the
+	// next source can start, while retaining configured parallelism per source.
+	for _, source := range []string{"dukascopy", "hyperliquid"} {
+		indexes := sourceIndexes[source]
+		if len(indexes) == 0 {
+			continue
+		}
+		m.mu.Lock()
+		if ctx.Err() != nil {
+			for index := range m.enrichmentJobs {
+				if m.enrichmentJobs[index].Status == "queued" {
+					m.enrichmentJobs[index].Status, m.enrichmentJobs[index].Message = "cancelled", "Enrichment cancelled; original file kept"
+				}
+			}
+			m.mu.Unlock()
+			return
+		}
+		m.enrichmentActiveDataSource = source
+		m.mu.Unlock()
+		runFilePoolWithConcurrency(len(indexes), concurrency, func(index int) { run(indexes[index]) })
+	}
 }
 
 func (m *Manager) enrichFile(ctx context.Context, index int, directory string, job EnrichmentJob, request EnrichmentRequest) error {

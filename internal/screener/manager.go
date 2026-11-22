@@ -77,42 +77,43 @@ type Info struct {
 // The supported WAF session cache is shared by the batch and retained in the local profile.
 // Preferences belong to the local profile, never imported workspaces.
 type Manager struct {
-	mu                      sync.Mutex
-	hyperliquidMu           sync.Mutex
-	hyperliquidAdapter      exchange.Adapter
-	hyperliquidCatalog      Catalog
-	hyperliquidCatalogAt    time.Time
-	wg                      sync.WaitGroup
-	profile, directory      string
-	runtime                 workerRuntime
-	runtimeError, lastError string
-	jobs                    []Job
-	sourceOrder             []string
-	activeDataSource        string
-	active, closed          bool
-	downloadsPaused         bool
-	cancel                  context.CancelFunc
-	batchDone               chan struct{}
-	concurrency             int
-	batchDirectory          string
-	publication             map[string]string
-	stateError, viewError   string
-	settingsError           string
-	invalidDownloads        bool
-	view                    ViewState
-	enrichmentJobs          []EnrichmentJob
-	enrichmentRequest       EnrichmentRequest
-	enrichmentActive        bool
-	enrichmentCancel        context.CancelFunc
-	enrichmentDone          chan struct{}
-	refreshJobs             []RefreshJob
-	refreshActive           bool
-	refreshAsOf             int64
-	refreshCancel           context.CancelFunc
-	refreshDone             chan struct{}
-	analysis                *analysisState
-	liveActive              bool
-	liveCancel              context.CancelFunc
+	mu                         sync.Mutex
+	hyperliquidMu              sync.Mutex
+	hyperliquidAdapter         exchange.Adapter
+	hyperliquidCatalog         Catalog
+	hyperliquidCatalogAt       time.Time
+	wg                         sync.WaitGroup
+	profile, directory         string
+	runtime                    workerRuntime
+	runtimeError, lastError    string
+	jobs                       []Job
+	sourceOrder                []string
+	activeDataSource           string
+	active, closed             bool
+	downloadsPaused            bool
+	cancel                     context.CancelFunc
+	batchDone                  chan struct{}
+	concurrency                int
+	batchDirectory             string
+	publication                map[string]string
+	stateError, viewError      string
+	settingsError              string
+	invalidDownloads           bool
+	view                       ViewState
+	enrichmentJobs             []EnrichmentJob
+	enrichmentRequest          EnrichmentRequest
+	enrichmentActive           bool
+	enrichmentActiveDataSource string
+	enrichmentCancel           context.CancelFunc
+	enrichmentDone             chan struct{}
+	refreshJobs                []RefreshJob
+	refreshActive              bool
+	refreshAsOf                int64
+	refreshCancel              context.CancelFunc
+	refreshDone                chan struct{}
+	analysis                   *analysisState
+	liveActive                 bool
+	liveCancel                 context.CancelFunc
 	// Saved rule/evidence writes wake the single active Live Alerts scheduler.
 	savedConditionsChanged  chan struct{}
 	savedConditionsRevision uint64
@@ -234,6 +235,7 @@ func (m *Manager) ConfigureDirectory(directory string) (Info, error) {
 	if directory != m.directory {
 		m.cleanupAnalysisLocked()
 		m.enrichmentJobs, m.enrichmentRequest = nil, EnrichmentRequest{}
+		m.enrichmentActiveDataSource = ""
 		m.refreshJobs = nil
 	}
 	m.directory, m.lastError = directory, ""

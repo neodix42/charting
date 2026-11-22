@@ -39,6 +39,56 @@ func TestFilePeriodCountsCoverEveryPageAndOnlyPublishedRecognizedHistories(t *te
 	}
 }
 
+func TestAllSourceFilesCombineCountsBeforePaginationAndRetainConcreteIdentities(t *testing.T) {
+	m := New(t.TempDir())
+	defer m.Close()
+	if err := os.MkdirAll(m.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	asset := Instrument{ID: "hyperliquid-" + publicAlertSymbol("spot", "@268"), NativeID: "@268", Market: "spot", Name: "BTC/USDC"}
+	if err := writeHyperliquidAsset(m.directory, asset); err != nil {
+		t.Fatal(err)
+	}
+	readable, err := canonicalHistoryName(asset.ID, "h1", "2024-01-01", "2024-01-02", nil, fileMetadata{}, m.directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"eurusd-m1-2024-01-01-2024-01-02.csv",
+		"eurusd-h4-2024-01-01-2024-01-02.csv",
+		"usdcad-h1-2024-01-01-2024-01-02.csv",
+		"custom.csv", readable,
+		"hyperliquid-eth-d1-2024-01-01-2024-01-02.csv",
+	} {
+		writeDataFile(t, m, name, candleCSV)
+	}
+	want := map[string]int{"m1": 1, "h4": 1, "h1": 2, "d1": 1}
+	for _, offset := range []int{0, 1, 100} {
+		page, err := m.FilesForSource(offset, 1, "h1", "all")
+		if err != nil || page.Total != 2 || page.AllTotal != 6 || !reflect.DeepEqual(page.PeriodCounts, want) {
+			t.Fatalf("combined filtered page %d lost complete inventory: %+v %v", offset, page, err)
+		}
+		if offset < 2 && (len(page.Files) != 1 || page.Files[0].Timeframe != "h1" || page.Files[0].DataSource != fileDataSource(page.Files[0].Name)) {
+			t.Fatalf("page did not retain a concrete source: %+v", page)
+		}
+		if offset == 100 && len(page.Files) != 0 {
+			t.Fatal("out-of-range page returned files", page)
+		}
+	}
+	page, err := m.FilesForSource(0, 20, "all", "all")
+	if err != nil || len(page.Files) != 6 {
+		t.Fatalf("combined file inventory: %+v %v", page, err)
+	}
+	for _, file := range page.Files {
+		if file.Name == readable && (file.Symbol != asset.ID || file.DataSource != "hyperliquid") {
+			t.Fatalf("readable Hyperliquid filename lost its stable identity: %+v", file)
+		}
+		if file.Name == "custom.csv" && (file.Symbol != "" || file.DataSource != "dukascopy" || file.Timeframe != "") {
+			t.Fatalf("custom filename acquired a different identity: %+v", file)
+		}
+	}
+}
+
 func TestFilePeriodsReadActualCSVEndpointsWithoutRefreshMetadata(t *testing.T) {
 	for _, test := range []struct {
 		name, text  string

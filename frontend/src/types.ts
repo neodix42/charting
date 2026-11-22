@@ -60,6 +60,7 @@ export interface HyperliquidTransferResult {id:string;status:'confirmed'|'reject
 export interface TradingBackend {OpenHyperliquidHelp(kind:'api'|'testnetApi'|'docs'):Promise<void>;GetHyperliquid():Promise<HyperliquidInfo>;ConfigureHyperliquid(settings:HyperliquidSettings):Promise<HyperliquidInfo>;TestHyperliquidConnection():Promise<HyperliquidInfo>;GetHyperliquidBalances():Promise<HyperliquidBalances>;PreviewHyperliquidTransfer(request:HyperliquidTransferRequest):Promise<HyperliquidTransferPreview>;SubmitHyperliquidTransfer(previewID:string):Promise<HyperliquidTransferResult>;GetTradingStatus(key:FeedKey):Promise<TradingStatus>;EstimateTrade(key:FeedKey,side:'buy'|'sell'):Promise<TradeEstimate>;GetTradeMetrics(request:TradeRequest):Promise<TradeMetrics>;PreviewTrade(request:TradeRequest):Promise<TradePreview>;SubmitTrade(previewID:string):Promise<TradeResult>}
 export type ScreenerDataSource='dukascopy'|'hyperliquid';
 export type ScreenerDownloadDataSource=ScreenerDataSource|'all';
+export type ScreenerEnrichmentDataSource=ScreenerDataSource|'all';
 export interface ScreenerSourceSelection {dataSource:ScreenerDataSource;symbols:string[]}
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
@@ -72,9 +73,9 @@ export interface ScreenerIndicator {id:string;name:string;category:string;input:
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
 export interface ScreenerDataFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
 export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;allTotal?:number;offset:number;limit:number;periodCounts?:Record<string,number>}
-export interface ScreenerEnrichmentRequest {dataSource?:ScreenerDataSource;indicator:string;group?:string;parameters:Record<string,number>;source:string;period?:string}
-export interface ScreenerEnrichmentJob {id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}
-export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;indicator:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerEnrichmentJob[]}
+export interface ScreenerEnrichmentRequest {dataSource?:ScreenerEnrichmentDataSource;indicator:string;group?:string;parameters:Record<string,number>;source:string;period?:string}
+export interface ScreenerEnrichmentJob {dataSource?:ScreenerDataSource;id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}
+export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtimeAvailable:boolean;runtimeError?:string;indicator:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;sourceOrder?:ScreenerDataSource[];activeDataSource?:ScreenerDataSource;jobs:ScreenerEnrichmentJob[]}
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}
 export interface ScreenerRefreshInfo {directory:string;active:boolean;asOf?:number;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
@@ -93,7 +94,7 @@ export interface Backend extends TradeHistoryBackend,TradingBackend,ScreenerAnal
  ConfigureScreenerConcurrency(concurrency:number):Promise<ScreenerInfo>;
  StartScreenerDownload(request:ScreenerDownloadRequest):Promise<ScreenerInfo>;CancelScreenerDownload():Promise<ScreenerInfo>;
  ResumeScreenerDownload():Promise<ScreenerInfo>;GetScreenerView():Promise<ScreenerView>;SaveScreenerView(view:ScreenerView):Promise<ScreenerView>;
- GetScreenerIndicators():Promise<ScreenerIndicators>;GetScreenerFiles(offset:number,limit:number):Promise<ScreenerFilePage>;GetScreenerFilesForPeriod(offset:number,limit:number,period:string):Promise<ScreenerFilePage>;GetScreenerFilesForSource(offset:number,limit:number,period:string,source:ScreenerDataSource):Promise<ScreenerFilePage>;
+ GetScreenerIndicators():Promise<ScreenerIndicators>;GetScreenerFiles(offset:number,limit:number):Promise<ScreenerFilePage>;GetScreenerFilesForPeriod(offset:number,limit:number,period:string):Promise<ScreenerFilePage>;GetScreenerFilesForSource(offset:number,limit:number,period:string,source:ScreenerEnrichmentDataSource):Promise<ScreenerFilePage>;
  GetScreenerEnrichment(fileIDs:string[]):Promise<ScreenerEnrichmentInfo>;StartScreenerEnrichment(request:ScreenerEnrichmentRequest):Promise<ScreenerEnrichmentInfo>;CancelScreenerEnrichment():Promise<ScreenerEnrichmentInfo>;
  GetScreenerRefresh(fileIDs:string[]):Promise<ScreenerRefreshInfo>;StartScreenerRefresh():Promise<ScreenerRefreshInfo>;CancelScreenerRefresh():Promise<ScreenerRefreshInfo>;
  GetDiagnostics():Promise<Record<string,unknown>>; ImportWorkspace():Promise<LoadResult>;ExportWorkspace():Promise<string>;ResetWorkspace():Promise<LoadResult>;

@@ -31,13 +31,18 @@ func TestMain(m *testing.M) {
 		}
 		if request.Indicator != "" {
 			fmt.Println(`{"type":"progress","progress":40,"rows":1,"columns":["sma_3"],"message":"Calculating test rows"}`)
-			if os.Getenv("CRYPTODESK_SCREENER_TEST_MODE") == "enrich-gated" {
+			mode := os.Getenv("CRYPTODESK_SCREENER_TEST_MODE")
+			if mode == "enrich-gated" || mode == "enrich-source-gated" {
 				gates := os.Getenv("CRYPTODESK_SCREENER_TEST_GATES")
 				data, _ := json.Marshal(request)
 				_ = os.WriteFile(filepath.Join(gates, "started"), data, 0600)
 				_ = os.WriteFile(filepath.Join(gates, filepath.Base(request.Input)+".started"), data, 0600)
+				release := "release"
+				if mode == "enrich-source-gated" {
+					release = filepath.Base(request.Input) + ".release"
+				}
 				for {
-					if _, err := os.Stat(filepath.Join(gates, "release")); err == nil {
+					if _, err := os.Stat(filepath.Join(gates, release)); err == nil {
 						break
 					}
 					time.Sleep(5 * time.Millisecond)
