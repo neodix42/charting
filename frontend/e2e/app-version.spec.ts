@@ -31,7 +31,7 @@ test('production header and build metadata contain the same resolved release tag
   window.runtime={EventsOn:()=>()=>{}};
   window.go={main:{App:{
    LoadWorkspace:async()=>({workspace,revision}),SaveWorkspace:async(_expected:number,_session:string,sequence:number)=>({revision:++revision,acceptedEditSequence:sequence}),
-   ListInstruments:async()=>[],AttachChart:async()=>{throw Error('Explicit header-only bridge stub');},FrontendReady:async()=>{}
+   ListInstruments:async()=>[],AttachChart:async()=>{throw Error('Explicit header-only bridge stub');},FrontendReady:async()=>{},StartupPainted:async()=>{}
   } as unknown as Backend}};
  },firstWorkspace());
  await page.goto('http://127.0.0.1:4174');await expectVersion(page);

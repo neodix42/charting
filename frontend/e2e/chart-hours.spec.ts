@@ -19,6 +19,30 @@ const calendar={marketHoursStatus:'available',marketHoursSource:'JForex instrume
 ])};
 const forex:Instrument={...item('EURUSD','EUR/USD',calendar),market:'forex',baseAsset:'EUR',quoteAsset:'USD',priceIncrement:'0.00001'};
 
+test('Dukascopy order separates account environment from current market closure and updates while open',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-23T12:00:00Z')});
+ await dukascopyFixtures(page,[{...forex,providerMetadata:{...session,marketHoursTimeZone:'UTC'}}]);
+ await page.evaluate(async()=>{
+  await window.go!.main!.App!.ConfigureDucascopy({username:'hours-offline-live',password:'explicit-fixture',environment:'live'});
+  (window as any).__testSetHealth({state:'marketClosed',reason:'JForex reports this market is closed'});
+ });
+ await expect(page.locator('.chart-status')).toContainText('marketClosed');
+ await page.getByTestId('chart-canvas').click({button:'right',position:{x:350,y:180}});
+ await page.getByRole('menuitem',{name:'Buy at market…',exact:true}).click();
+ const ticket=page.getByRole('dialog',{name:'Market order',exact:true}),status=ticket.getByLabel('Order market status',{exact:true});
+ await expect(ticket).toContainText('Live account');await expect(status).toHaveText('Market closed');
+ await expect(status).toHaveAttribute('title','JForex reports this market is closed');
+ await page.evaluate(()=>(window as any).__testSetHealth({state:'live',reason:'Connected to JForex Bid feed'}));
+ await expect(status).toHaveText('Market opened');
+ await page.clock.setSystemTime(new Date('2026-11-23T18:00:00Z'));await page.clock.fastForward(1000);
+ await expect(status).toHaveText('Market closed');
+ await ticket.getByRole('button',{name:'Close market order',exact:true}).click();
+ await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
+ await page.getByTestId('chart-canvas').click({button:'right',position:{x:350,y:180}});
+ await page.getByRole('menuitem',{name:'Buy at market…',exact:true}).click();
+ await expect(ticket.getByLabel('Order market status',{exact:true})).toHaveText('Market status unavailable');
+});
+
 async function dukascopyFixtures(page:Page,extra:Instrument[]=[]){
  await openTestApp(page);
  await expect(page.getByTestId('chart-cell')).toHaveCount(1);

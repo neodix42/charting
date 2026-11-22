@@ -161,7 +161,7 @@ export function ChartCell(p:Props){
   </div>
   {(failed||(status==='loading'&&barCount===0))&&<div className={`chart-message ${barCount?'compact':''}`}><span className={`status-dot ${status}`}/><strong>{status==='loading'?(jforex?'Connecting to JForex Bid feed…':`Connecting to public ${c.market} feed…`):status}</strong>{health.reason&&<p>{health.reason}</p>}{status!=='loading'&&<button onClick={()=>setRetry(x=>x+1)}>Retry feed</button>}</div>}
   </div>
-  <ChartTrading api={api} feedKey={feedKey(c)} target={host} quoteCurrency={metadata?.quoteAsset}/>
+  <ChartTrading api={api} feedKey={feedKey(c)} target={host} quoteCurrency={metadata?.quoteAsset} health={health} providerMetadata={metadata?.providerMetadata}/>
   <footer className="chart-status" title={`Feed message: ${freshness(health.lastMessageAt)} · Last ${jforex?'quote':'trade'}: ${health.lastTradeAt?freshness(health.lastTradeAt):'unknown'} · ${warmupError||health.reason||''}`}><span className={`status-dot ${status}`}/><span title={health.reason}>{status}{health.reason?` · ${health.reason}`:''}</span><span className="toolbar-spacer"/><span>{warming?'Loading older history for indicators…':warmupError&&barCount<warmupBars?'More history needed for indicators':historyState||`${c.view.mode==='live'?'Following live':'Historical viewport'} · Feed ${freshness(health.lastMessageAt)}${jforex?'':` · trade ${health.lastTradeAt?freshness(health.lastTradeAt):'unknown'}`}`}</span>{jforex&&<span aria-label="Last quote">Quote {health.lastTradeAt?freshness(health.lastTradeAt):'unknown'}</span>}<span>{p.workspace.displayTimezone}</span></footer>
  </section>;
 }

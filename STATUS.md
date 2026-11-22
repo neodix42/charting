@@ -1,4 +1,19 @@
-# Implementation status — updated 2026-11-21
+# Implementation status — updated 2026-11-22
+
+## Fixed SL/TP fields and Dukascopy order-market status — 2026-11-22
+
+SL/TP inputs now share fixed form columns, with estimate text in reserved two-line rows below. Prompts, values, unavailable amounts, long bps and quote refreshes cannot change the next input’s position; overflow is scrollable and keyboard-focusable. The modal focus trap includes those helpers and the existing account-metrics panel. The wider desktop sizing column and narrow-screen stack remain intact.
+
+Dukascopy order headers distinguish Live account / Demo account from Market opened / Market closed. The same current chart health supplies broker-reported marketClosed, which overrides a potentially open regular session. Otherwise the existing dated calendar or supported regular session provides qualified status; missing/expired evidence stays unavailable rather than treating a live connection as market opening. Changes reach an already open ticket, while existing fresh provider review/submission validation is preserved.
+
+The prior main Tests run 44933622085 passed 480/481 browser cases; its production header stub omitted the newly required StartupPainted method, preventing header readiness. The stub now supplies that method without weakening assertions/timeouts. The corresponding prior Desktop release succeeded. Hosted results for this change are reported after push. Actual live broker and native desktop interaction for this presentation change remain unrun; isolated browser fixtures send no orders or transfers. The user’s existing IDE settings edit is preserved and excluded from the commit.
+
+
+Verification passed: frontend typecheck/lint, all 320 unit tests, and all 37 focused browser cases (trading estimates/metrics, chart hours and production version). New cases verify fixed x/y/width at 1600px and 900px through prompts, values, long estimates, missing quantity, pending/resolved refresh and clearing; broker marketClosed versus Live account, status changes in an open ticket, regular-session closure and unsupported schedules. Existing pressed Review, risk-snapshot and responsive layout checks remain green. Screenshots were visually inspected; evidence is `.tools/verification/fixed-order-fields-browser.log` and `fixed-protection-fields-{1600,900}.png`.
+
+
+Production rebuild passed with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`; the root executable, matching JForex runtime and Linux archive are updated, and root checksums pass. Build log: `.tools/verification/fixed-order-fields-build.log`.
+
 
 ## Compact order layout, retained sizing, currency display and actual Dukascopy calendars — 2026-11-21
 

@@ -12,6 +12,31 @@ async function openOrder(page:Page,side='Buy'){
  await page.getByTestId('chart-canvas').click({button:'right',position:{x:350,y:180}});await page.getByRole('menuitem',{name:`${side} at market…`,exact:true}).click();await expect(ticket(page)).toBeVisible();
 }
 
+for(const width of [1600,900]){
+ test(`SL and TP inputs stay fixed with estimates below them at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:1100});await setup(page);await page.clock.install();await valuation(page,{entryPrice:'100',accountCurrency:'USD',profitPerPriceUnit:'1'});await openOrder(page);
+  const quantity=ticket(page).getByLabel('Order quantity',{exact:true}),stop=ticket(page).getByLabel('Order stop loss',{exact:true}),profit=ticket(page).getByLabel('Order take profit',{exact:true});
+  await quantity.fill('2');await page.clock.fastForward(350);
+  const before=[await stop.boundingBox(),await profit.boundingBox()];expect(before.every(Boolean)).toBe(true);
+  const fixed=async()=>{
+   for(const [index,field] of [stop,profit].entries()){
+    const box=await field.boundingBox();expect(box).not.toBeNull();expect(box!.x).toBeCloseTo(before[index]!.x,3);expect(box!.y).toBeCloseTo(before[index]!.y,3);expect(box!.width).toBeCloseTo(before[index]!.width,3);
+   }
+   for(const [field,estimate] of [[stop,sl(page)],[profit,tp(page)]]){const input=await field.boundingBox(),helper=await estimate.boundingBox();expect(helper!.y).toBeGreaterThanOrEqual(input!.y+input!.height);}
+  };
+  await stop.fill('95');await expect(sl(page)).toHaveText('-500.00 bps · -10.0000 USD');await fixed();
+  await profit.fill('110');await expect(tp(page)).toHaveText('+1,000.00 bps · +20.0000 USD');await fixed();
+  await quantity.fill('1234567890123456789');await stop.fill('1');await profit.fill('9999999999');await expect(sl(page)).toContainText('-9,900.00 bps');await expect(tp(page)).toContainText('USD');await fixed();
+  await quantity.fill('');await expect(sl(page)).toHaveText('-9,900.00 bps · Account amount unavailable');await fixed();
+  await page.screenshot({path:`../.tools/verification/fixed-protection-fields-${width}.png`});
+  await page.evaluate(()=>{const api=window.go!.main!.App!,read=api.EstimateTrade;api.EstimateTrade=(key,side)=>new Promise(resolve=>{(window as any).__releaseFixedFieldQuote=async()=>resolve({...await read(key,side),entryPrice:'150'});});});
+  await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();await expect(sl(page)).toHaveText('bps unavailable · Account amount unavailable');await fixed();
+  await page.evaluate(()=>(window as any).__releaseFixedFieldQuote());await expect(sl(page)).toContainText('-9,933.33 bps');await fixed();
+  await stop.fill('');await profit.fill('');await expect(sl(page)).toHaveText('Enter a price to estimate');await expect(tp(page)).toHaveText('Enter a price to estimate');await fixed();
+  expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
+ });
+}
+
 test('Dukascopy buy loss/profit estimates recalculate immediately for quantity, levels and refreshed entry',async({page})=>{
  await setup(page);await valuation(page,{entryPrice:'100',accountCurrency:'USD',profitPerPriceUnit:'1'});await openOrder(page);await expect(ticket(page).getByLabel('Order valuation')).toContainText('Indicative entry: 100');
  await ticket(page).getByLabel('Order quantity').fill('2');await ticket(page).getByLabel('Order stop loss').fill('95');await ticket(page).getByLabel('Order take profit').fill('110');await expect(sl(page)).toHaveText('-500.00 bps · -10.0000 USD');await expect(tp(page)).toHaveText('+1,000.00 bps · +20.0000 USD');
