@@ -13,6 +13,9 @@ import (
 // estimating joint Monday–Friday daily-body sequences from genuine D1 data.
 // H1 adds a same-hour body condition; W1 adds the preceding weekly body.
 func CalculateStatisticsWithCompanion(ctx context.Context, selectedDataset, dailyDataset Dataset, request StatisticsRequest, asOf int64) (StatisticsForecast, error) {
+	if request.Pattern != nil {
+		return CalculatePatternStatistics(ctx, selectedDataset, request, asOf)
+	}
 	if err := ValidateStatisticsRequest(request); err != nil {
 		return StatisticsForecast{}, err
 	}

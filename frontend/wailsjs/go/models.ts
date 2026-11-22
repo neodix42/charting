@@ -959,6 +959,13 @@ export namespace predictions {
 	    conditioning?: string;
 	    companionSourceFile?: string;
 	    companionSourceHash?: string;
+	    pattern?: string[];
+	    matchedPatterns: number;
+	    eligiblePatterns: number;
+	    excludedDojiPatterns: number;
+	    excludedInvalidPatterns: number;
+	    nextBarTime: number;
+	    nextBarDojiCount: number;
 
 	    static createFrom(source: any = {}) {
 	        return new StatisticsForecast(source);
@@ -991,6 +998,13 @@ export namespace predictions {
 	        this.conditioning = source["conditioning"];
 	        this.companionSourceFile = source["companionSourceFile"];
 	        this.companionSourceHash = source["companionSourceHash"];
+	        this.pattern = source["pattern"];
+	        this.matchedPatterns = source["matchedPatterns"];
+	        this.eligiblePatterns = source["eligiblePatterns"];
+	        this.excludedDojiPatterns = source["excludedDojiPatterns"];
+	        this.excludedInvalidPatterns = source["excludedInvalidPatterns"];
+	        this.nextBarTime = source["nextBarTime"];
+	        this.nextBarDojiCount = source["nextBarDojiCount"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1050,6 +1064,7 @@ export namespace predictions {
 	    asset: string;
 	    period?: string;
 	    lookbackWeeks: number;
+	    pattern?: string[];
 
 	    static createFrom(source: any = {}) {
 	        return new StatisticsRequest(source);
@@ -1061,6 +1076,7 @@ export namespace predictions {
 	        this.asset = source["asset"];
 	        this.period = source["period"];
 	        this.lookbackWeeks = source["lookbackWeeks"];
+	        this.pattern = source["pattern"];
 	    }
 	}
 	export class StatisticsScenario {

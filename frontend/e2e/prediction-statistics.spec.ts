@@ -8,13 +8,13 @@ const section=(page:Page,name:'LLM'|'Statistics')=>panel(page).getByRole('tab',{
 const statisticsCalls=(page:Page)=>page.evaluate(()=>(window as any).__testStatisticsCalls());
 const llmCalls=(page:Page)=>page.evaluate(()=>(window as any).__testPredictionCalls());
 const chart=(page:Page)=>panel(page).getByTestId('statistics-chart');
-const scenarios=(page:Page)=>panel(page).getByRole('table',{name:'Remaining-week scenarios',exact:true});
+const scenarios=(page:Page)=>panel(page).getByRole('table',{name:'Next-bar outcomes',exact:true});
 const source=(page:Page)=>panel(page).getByLabel('Statistics data source',{exact:true});
 const asset=(page:Page)=>panel(page).getByLabel('Statistics asset',{exact:true});
 const picker=(page:Page)=>panel(page).getByLabel('Statistics assets',{exact:true});
 async function chooseAsset(page:Page,symbol:string){await asset(page).click();await picker(page).getByRole('button',{name:'All',exact:true}).click();await picker(page).locator(`[data-asset-id="${symbol}"]`).click();}
 const period=(page:Page)=>panel(page).getByLabel('Statistics time period',{exact:true});
-const calculate=(page:Page)=>panel(page).getByRole('button',{name:/^(Calculate scenarios|Calculating…)$/});
+const calculate=(page:Page)=>panel(page).getByRole('button',{name:/^(Calculate next bar|Calculating…)$/});
 const downloadButton=(page:Page)=>panel(page).getByRole('button',{name:'Download missing data',exact:true});
 const downloadRegion=(page:Page)=>panel(page).getByRole('region',{name:'Statistics data download',exact:true});
 const cancelDownload=(page:Page)=>downloadRegion(page).getByRole('button',{name:'Cancel data download',exact:true});
@@ -32,7 +32,7 @@ async function enter(page:Page){
  await chooseAsset(page,'eurusd');
 }
 async function forecast(page:Page){
- return page.evaluate(()=>window.go!.main!.App!.GetPredictionStatistics({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260}));
+ return page.evaluate(()=>window.go!.main!.App!.GetPredictionStatistics({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260,pattern:['up','up','up','up','up']}));
 }
 async function setForecast(page:Page,value:PredictionStatisticsForecast|{error:string}|null){
  await page.evaluate(value=>(window as any).__testSetStatisticsForecast(value),value);
@@ -49,7 +49,7 @@ test('Predictions defaults to LLM and Statistics uses source-specific daily data
  await picker(page).getByRole('button',{name:'Close instrument selector',exact:true}).click();
  await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('260');
  await completed(page);
- expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260});
+ expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260,pattern:['up','up','up','up','up']});
  await source(page).selectOption('hyperliquid');
  await expect(chart(page)).toHaveCount(0);
  await asset(page).click();
@@ -57,12 +57,12 @@ test('Predictions defaults to LLM and Statistics uses source-specific daily data
  await expect(picker(page).locator('[data-asset-id="perp-BTC"]')).toBeVisible();
  await picker(page).getByRole('button',{name:'Close instrument selector',exact:true}).click();
  await chooseAsset(page,'perp-BTC');await completed(page);
- expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'hyperliquid',asset:'perp-BTC',period:'d1',lookbackWeeks:260});
+ expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'hyperliquid',asset:'perp-BTC',period:'d1',lookbackWeeks:260,pattern:['up','up','up','up','up']});
  await expect(panel(page)).toContainText('hyperliquid-perp-BTC-d1.csv');
  const after=await llmCalls(page);expect(after.prepare).toBe(before.prepare);expect(after.start).toBe(before.start);
 });
 
-test('weekly scenarios paint Monday anchor, Friday prices and joint probabilities with historical counts',async({page})=>{
+test('selected patterns project one next bar with historical counts and chart probabilities',async({page})=>{
  await page.addInitScript(()=>{
   const original=CanvasRenderingContext2D.prototype.fillText;
   (window as any).__statisticsPaintedText=[];
@@ -70,99 +70,72 @@ test('weekly scenarios paint Monday anchor, Friday prices and joint probabilitie
  });
  await enter(page);await completed(page);
  await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2018-01-01 00:00:00 UTC');
- await expect(panel(page)).toContainText(/Matching weeks\s*4/);
- await expect(panel(page)).toContainText(/Eligible weeks\s*12/);
- await expect(panel(page)).toContainText(/Remaining-week sequences\s*16/);
+ await expect(panel(page)).toContainText(/Matching patterns\s*4/);await expect(panel(page)).toContainText(/Eligible patterns\s*12/);
  await expect(panel(page)).toContainText(/small sample/i);
  const rows=scenarios(page).getByRole('row');await expect(rows).toHaveCount(3);
- await expect(rows.nth(1)).toContainText(/75(?:\.0+)?%/);await expect(rows.nth(1)).toContainText('98');
- await expect(rows.nth(2)).toContainText(/25(?:\.0+)?%/);await expect(rows.nth(2)).toContainText('102');
+ await expect(rows.nth(1)).toContainText(/75(?:\.0+)?%/);await expect(rows.nth(1)).toContainText('102');
+ await expect(rows.nth(2)).toContainText(/25(?:\.0+)?%/);await expect(rows.nth(2)).toContainText('98');
+ const outcomes=await scenarios(page).boundingBox(),plot=await chart(page).boundingBox();
+ expect(outcomes!.y+outcomes!.height).toBeLessThan(plot!.y);
  await expect(chart(page).locator('canvas').first()).toBeVisible();
  await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,16)));
- await expect(chart(page)).toHaveAttribute('data-friday-time',String(Date.UTC(2026,10,20)));
- await expect.poll(()=>page.evaluate(()=>(window as any).__statisticsPaintedText.some((text:string)=>text.includes('UDDD')&&/75(?:\.0+)?%/.test(text)))).toBe(true);
- await expect.poll(()=>page.evaluate(()=>(window as any).__statisticsPaintedText.some((text:string)=>/^98(?:\.0+)?$/.test(text)))).toBe(true);
- await expect.poll(()=>page.evaluate(()=>(window as any).__statisticsPaintedText.some((text:string)=>/Fri.*20.*Nov/.test(text)))).toBe(true);
+ await expect(chart(page)).toHaveAttribute('data-next-bar-time',String(Date.UTC(2026,10,17)));
+ await expect(chart(page)).toHaveAttribute('data-forecast-grid-bars','1');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__statisticsPaintedText.some((text:string)=>text.includes('U')&&/75(?:\.0+)?%/.test(text)))).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__statisticsPaintedText.some((text:string)=>text==='Next D1 bar'))).toBe(true);
  expect(await page.evaluate(()=>(window as any).__statisticsPaintedText.some((text:string)=>text.includes('1970')))).toBe(false);
- await page.screenshot({path:'test-results/prediction-statistics-weekly.png'});
+ await page.screenshot({path:'test-results/prediction-statistics-pattern.png'});
 });
 
-test('time period uses downloaded H1 D1 and W1 bars independently from historical lookback',async({page})=>{
- await page.addInitScript(()=>{
-  const original=CanvasRenderingContext2D.prototype.fillText;
-  (window as any).__statisticsHourlyText=[];
-  CanvasRenderingContext2D.prototype.fillText=function(...args:Parameters<CanvasRenderingContext2D['fillText']>){(window as any).__statisticsHourlyText.push(String(args[0]));return original.apply(this,args);};
- });
+test('time period projects the next native H1 D1 or W1 bar independently from historical lookback',async({page})=>{
  await enter(page);
  expect(await period(page).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['h1','d1','w1']);
- await expect(period(page)).toHaveValue('d1');
  await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('156');
- await period(page).selectOption('h1');await completed(page);
- expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'h1',lookbackWeeks:156});
- await expect(chart(page)).toHaveAttribute('data-period','h1');
- await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2019-01-01 00:00:00 UTC');
- await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,17,11)));
- await expect(chart(page)).toHaveAttribute('data-friday-time',String(Date.UTC(2026,10,20,23)));
- await expect(chart(page)).toHaveAttribute('data-forecast-grid-bars','84');
- await chart(page).screenshot({path:'test-results/statistics-hourly.png'});
- await expect(panel(page).getByRole('heading',{level:2}).filter({hasText:'Euro vs US Dollar'})).toContainText('H1');
- await expect(panel(page)).toContainText('eurusd-h1.csv');await expect(panel(page)).toContainText('D1 companion: eurusd-d1.csv');
- await expect(scenarios(page).getByRole('columnheader',{name:/Friday close/})).toBeVisible();
- await expect.poll(()=>page.evaluate(()=>(window as any).__statisticsHourlyText.some((text:string)=>/(?:Mon|Tue|Wed|Thu|Fri).*Nov.*\d{2}:\d{2}/.test(text)))).toBe(true);
- await period(page).selectOption('w1');await expect(chart(page)).toHaveCount(0);await completed(page);
- expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:'w1',lookbackWeeks:156});
- await expect(chart(page)).toHaveAttribute('data-period','w1');
- await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2017-01-02 00:00:00 UTC');
- await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,9)));
- await expect(chart(page)).toHaveAttribute('data-friday-time',String(Date.UTC(2026,10,20)));
- await chart(page).screenshot({path:'test-results/statistics-weekly.png'});
- await expect(panel(page).getByRole('heading',{level:2}).filter({hasText:'Euro vs US Dollar'})).toContainText('W1');
- await expect(panel(page)).toContainText('eurusd-w1.csv');
- await expect(scenarios(page).getByRole('columnheader',{name:/Monday close.*observed/i})).toBeVisible();
+ for(const [selectedPeriod,anchor,next,first] of [['h1',Date.UTC(2026,10,17,11),Date.UTC(2026,10,17,12),'2019-01-01'],['w1',Date.UTC(2026,10,9),Date.UTC(2026,10,16),'2017-01-02']] as const){
+  await period(page).selectOption(selectedPeriod);await completed(page);
+  expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'dukascopy',asset:'eurusd',period:selectedPeriod,lookbackWeeks:156,pattern:['up','up','up','up','up']});
+  await expect(chart(page)).toHaveAttribute('data-period',selectedPeriod);await expect(chart(page)).toHaveAttribute('data-anchor-time',String(anchor));await expect(chart(page)).toHaveAttribute('data-next-bar-time',String(next));await expect(chart(page)).toHaveAttribute('data-forecast-grid-bars','1');
+  await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar '+first);
+  await expect(panel(page)).not.toContainText('D1 companion:');await expect(scenarios(page).getByRole('columnheader',{name:`Next available ${selectedPeriod.toUpperCase()} bar`,exact:true})).toBeVisible();
+ }
  await chooseAsset(page,'btcusd');await expect(chart(page)).toHaveCount(0);await expect(period(page)).toHaveValue('d1');
  expect(await period(page).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['d1']);
  await expect(panel(page).getByLabel('Statistics history period',{exact:true})).toHaveValue('156');
- await source(page).selectOption('hyperliquid');await chooseAsset(page,'perp-BTC');
- expect(await period(page).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['h1','d1','w1']);
- await period(page).selectOption('h1');await completed(page);
- expect((await statisticsCalls(page)).requests.at(-1)).toEqual({dataSource:'hyperliquid',asset:'perp-BTC',period:'h1',lookbackWeeks:156});
+ await source(page).selectOption('hyperliquid');await chooseAsset(page,'perp-BTC');await period(page).selectOption('h1');await completed(page);
+ expect((await statisticsCalls(page)).requests.at(-1)).toMatchObject({dataSource:'hyperliquid',asset:'perp-BTC',period:'h1',lookbackWeeks:156});
  await expect(panel(page)).toContainText('hyperliquid-perp-BTC-h1.csv');
 });
 
-test('no matching history and a finished Friday show empty outcomes without invented scenarios',async({page})=>{
+test('no matches remain explicit and Sunday patterns still forecast one next bar',async({page})=>{
  await enter(page);const base=await forecast(page);
- await setForecast(page,{...base,matchedWeeks:0,scenarios:[],warnings:['No historical weeks match the observed daily directions.']});
- await calculate(page).click();await expect(panel(page)).toContainText('No historical weeks match');await expect(scenarios(page).getByRole('row')).toHaveCount(0);
- const friday=Date.UTC(2026,10,20),fridayBar={...base.anchor,time:friday,open:99,close:100};
- const remainingDays=['Tue','Wed','Thu','Fri'] as const;
- const completedWeek=remainingDays.map((day,index)=>({time:base.weekStart+(index+1)*86400000,day,direction:'up' as const}));
- await setForecast(page,{...base,asOf:friday+86400000,anchor:fridayBar,history:[...base.history,...completedWeek.map(value=>({...fridayBar,time:value.time}))],prefix:[...base.prefix,...completedWeek],theoreticalScenarios:0,scenarios:[],warnings:['Friday is closed. No weekdays remain in this week.']});
- await calculate(page).click();await expect(panel(page)).toContainText('No weekdays remain');await expect(scenarios(page).getByRole('row')).toHaveCount(0);
- await expect(panel(page)).not.toContainText(/75(?:\.0+)?%/);
+ await setForecast(page,{...base,matchedPatterns:0,scenarios:[],warnings:[]});
+ await calculate(page).click();await expect(panel(page)).toContainText('No historical patterns match');await expect(scenarios(page)).toHaveCount(0);
+ const sunday=Date.UTC(2026,10,22),monday=sunday+86400000;
+ const anchor={...base.anchor,time:sunday};
+ await setForecast(page,{...base,asOf:monday,anchor,history:[anchor],nextBarTime:monday,scenarios:base.scenarios.map(scenario=>({...scenario,points:scenario.points.map(point=>({...point,time:monday}))}))});
+ await completed(page);await expect(chart(page)).toHaveAttribute('data-next-bar-time',String(monday));
+ await expect(scenarios(page).getByRole('row')).toHaveCount(3);await expect(panel(page)).not.toContainText('remaining weekdays');await expect(panel(page)).not.toContainText('Friday is already complete');
 });
 
-test('completed bearish weeks retain historical match counts and distinguish lookback from file coverage',async({page})=>{
- await enter(page);const base=await forecast(page);
- const prefix=['Mon','Tue','Wed','Thu','Fri'].map((day,index)=>({time:base.weekStart+index*86400000,day,direction:'down' as const}));
- const friday={time:prefix[4].time,open:100,high:101,low:98,close:99};
- await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('520');
- await setForecast(page,{...base,lookbackWeeks:520,firstClosedBar:Date.UTC(2006,0,1),asOf:friday.time+86400000,anchor:friday,history:[friday],prefix,matchedWeeks:13,eligibleWeeks:513,theoreticalScenarios:0,scenarios:[],warnings:[]});
- await calculate(page).click();await expect(chart(page)).toBeVisible();
- await expect(panel(page)).toContainText('Mon ↓ · Tue ↓ · Wed ↓ · Thu ↓ · Fri ↓');
- await expect(panel(page).getByLabel('Statistics sample scope',{exact:true})).toContainText('last 520 weeks');
- await expect(panel(page).locator('.prediction-metadata')).toContainText('First closed bar 2006-01-01');
- await expect(panel(page).locator('.statistics-summary>div').filter({hasText:'Matching weeks'}).locator('strong')).toHaveText('13');
- await expect(panel(page).locator('.statistics-summary>div').filter({hasText:'Eligible weeks'}).locator('strong')).toHaveText('513');
- await expect(panel(page).locator('.statistics-summary>div').filter({hasText:'Remaining-week sequences'}).locator('strong')).toHaveText('0');
- await expect(panel(page)).toContainText('The observed sequence matches 13 of 513 eligible historical weeks.');
- await expect(panel(page)).toContainText('Friday is already complete');
- await expect(scenarios(page)).toHaveCount(0);await expect(chart(page)).toHaveAttribute('data-scenario-count','0');
- await panel(page).locator('.prediction-statistics').screenshot({path:'test-results/statistics-completed-bearish-week.png'});
- await panel(page).getByLabel('Statistics history period',{exact:true}).selectOption('0');
- await setForecast(page,{...base,lookbackWeeks:0,firstClosedBar:Date.UTC(2006,0,1),asOf:friday.time+86400000,anchor:friday,history:[friday],prefix,matchedWeeks:29,eligibleWeeks:1080,theoreticalScenarios:0,scenarios:[],warnings:[]});
- await calculate(page).click();await expect(panel(page).getByLabel('Statistics sample scope',{exact:true})).toContainText('all downloaded history');
- await expect(panel(page)).toContainText('The observed sequence matches 29 of 1080 eligible historical weeks.');
- await expect(scenarios(page)).toHaveCount(0);await expect(chart(page)).toHaveAttribute('data-scenario-count','0');
+test('Observed sequence edits 3 to 10 ordered bars and includes next-bar doji outcomes in probabilities',async({page})=>{
+ await enter(page);const count=panel(page).getByLabel('Pattern bar count',{exact:true});
+ expect(await count.locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value))).toEqual(['3','4','5','6','7','8','9','10']);
+ await expect(count).toHaveValue('5');await count.selectOption('3');
+ await panel(page).getByLabel('Bar 1 direction',{exact:true}).selectOption('down');await panel(page).getByLabel('Bar 3 direction',{exact:true}).selectOption('down');
+ await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern).toEqual(['down','up','down']);
+ await count.selectOption('10');await expect(chart(page)).toHaveCount(0);
+ for(let index=1;index<=10;index++)await panel(page).getByLabel(`Bar ${index} direction`,{exact:true}).selectOption('down');
+ const base=await page.evaluate(()=>window.go!.main!.App!.GetPredictionStatistics({dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260,pattern:Array.from({length:10},()=> 'down' as const)}));
+ await setForecast(page,{...base,matchedPatterns:5,nextBarDojiCount:1,warnings:['Only 5 matching patterns in this explicit fixture.'],scenarios:[{...base.scenarios[0],count:2,probability:.4},{...base.scenarios[1],count:2,probability:.4},{id:'0',label:'Next bar doji',count:1,probability:.2,points:[{time:base.nextBarTime!,close:100,direction:'doji'}]}]});
+ await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern).toEqual(Array.from({length:10},()=> 'down'));
+ const rows=scenarios(page).getByRole('row');await expect(rows).toHaveCount(4);await expect(rows.nth(1)).toContainText('40.0%');await expect(rows.nth(3)).toContainText('20.0%');await expect(rows.nth(3)).toContainText('1 / 5');
+ await expect(panel(page)).toContainText(/Next-bar doji outcomes\s*1/);
+ await panel(page).locator('.prediction-statistics').screenshot({path:'test-results/statistics-ten-bar-pattern.png'});
+ await page.setViewportSize({width:900,height:1100});
+ await expect(panel(page).getByLabel('Bar 10 direction',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await panel(page).locator('.prediction-statistics').screenshot({path:'test-results/statistics-pattern-narrow.png'});
+ await count.selectOption('3');await expect(panel(page).getByLabel('Bar 4 direction',{exact:true})).toHaveCount(0);await expect(chart(page)).toHaveCount(0);
 });
 
 test('statistics calculation errors remain visible until an explicit retry',async({page})=>{
@@ -210,6 +183,14 @@ test('changing source rejects a stalled old result and allows only one calculati
  expect((await statisticsCalls(page)).requests.at(-1).dataSource).toBe('hyperliquid');
 });
 
+test('editing a pattern rejects its stalled calculation and prevents old download completion from repainting it',async({page})=>{
+ await enter(page);await page.evaluate(()=>{const api=window.go!.main!.App!,run=api.GetPredictionStatistics;api.GetPredictionStatistics=async request=>{const result=await run(request);await new Promise<void>(resolve=>(window as any).__releasePatternStatistics=resolve);return result;};(window as any).__restorePatternStatistics=()=>{api.GetPredictionStatistics=run;};});
+ await calculate(page).click();await panel(page).getByLabel('Bar 1 direction',{exact:true}).selectOption('down');
+ await page.evaluate(()=>(window as any).__releasePatternStatistics());await expect(calculate(page)).toBeEnabled();await expect(chart(page)).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__restorePatternStatistics());await completed(page);expect((await statisticsCalls(page)).requests.at(-1).pattern[0]).toBe('down');
+ await startDownload(page);await panel(page).getByLabel('Bar 2 direction',{exact:true}).selectOption('down');const before=await statisticsCalls(page);await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));await expect(downloadButton(page)).toBeEnabled();expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+});
+
 test('a changed time period rejects stale native-bar results without overlapping calculations',async({page})=>{
  await enter(page);
  await page.evaluate(()=>{
@@ -225,13 +206,10 @@ test('a changed time period rejects stale native-bar results without overlapping
  expect((await statisticsCalls(page)).requests.at(-1).period).toBe('h1');await expect(chart(page)).toHaveAttribute('data-period','h1');
 });
 
-test('a missing daily companion is reported instead of inventing non-daily scenarios',async({page})=>{
- await enter(page);await period(page).selectOption('h1');
- await setForecast(page,{error:'Downloaded D1 companion data is required for H1 weekly scenarios.'});
- await calculate(page).click();await expect(panel(page).getByRole('alert')).toContainText('D1 companion data is required');
- await expect(chart(page)).toHaveCount(0);await expect(scenarios(page)).toHaveCount(0);
- expect((await statisticsCalls(page)).requests.at(-1).period).toBe('h1');
- await setForecast(page,null);await completed(page);await expect(chart(page)).toHaveAttribute('data-period','h1');
+test('native H1 statistics work with no downloaded D1 companion',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>{const api=window.go!.main!.App!,list=api.GetPredictionStatisticsDatasets;api.GetPredictionStatisticsDatasets=async()=> (await list()).filter(item=>item.period!=='d1');});
+ await page.locator('#predictions-tab').click();await section(page,'Statistics').click();await chooseAsset(page,'eurusd');await expect(period(page)).toHaveValue('h1');await completed(page);
+ await expect(panel(page)).not.toContainText('D1 companion:');expect((await statisticsCalls(page)).requests.at(-1).period).toBe('h1');
 });
 
 test('statistics releases charts on navigation and leaves saved LLM results untouched',async({page})=>{
@@ -262,7 +240,7 @@ test('Download missing data reports D1 progress and recalculates from the newly 
  const before=await statisticsCalls(page),models=await llmCalls(page);
  await expect(chart(page)).toHaveAttribute('data-anchor-time',String(Date.UTC(2026,10,16)));
  await startDownload(page);
- expect((await downloadCalls(page)).requests).toEqual([{dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260}]);
+ expect((await downloadCalls(page)).requests).toEqual([{dataSource:'dukascopy',asset:'eurusd',period:'d1',lookbackWeeks:260,pattern:['up','up','up','up','up']}]);
  const queued=await downloadInfo(page);expect(queued.jobs.map(job=>job.timeframe)).toEqual(['d1']);
  await expect(downloadButton(page)).toBeDisabled();await expect(calculate(page)).toBeDisabled();
  await expect(panel(page).getByRole('button',{name:'Refresh assets',exact:true})).toBeDisabled();
@@ -274,7 +252,7 @@ test('Download missing data reports D1 progress and recalculates from the newly 
  await expect(downloadRegion(page)).toContainText('Downloading missing daily candles');
  await expect(downloadRegion(page).getByRole('progressbar')).toHaveAttribute('value','42');
  const anchor={time:Date.UTC(2026,10,17),open:100,high:106,low:99,close:105};
- const refreshed:PredictionStatisticsForecast={...base,asOf:Date.UTC(2026,10,18),anchor,history:[...base.history,anchor],prefix:[...base.prefix,{time:anchor.time,day:'Tue',direction:'up'}],scenarios:base.scenarios.map(scenario=>({...scenario,id:scenario.id.slice(1),label:scenario.label.split(' · ').slice(1).join(' · '),points:scenario.points.slice(1)})),theoreticalScenarios:8};
+ const refreshed:PredictionStatisticsForecast={...base,asOf:Date.UTC(2026,10,18),anchor,history:[...base.history,anchor],prefix:[...base.prefix,{time:anchor.time,day:'Tue',direction:'up'}],nextBarTime:anchor.time+86400000,scenarios:base.scenarios.map(scenario=>({...scenario,points:scenario.points.map(point=>({...point,time:anchor.time+86400000}))}))};
  await page.evaluate(value=>(window as any).__testFinishStatisticsDownload(value),refreshed);
  await expect(chart(page)).toHaveAttribute('data-anchor-time',String(anchor.time));
  await expect(downloadButton(page)).toBeEnabled();
@@ -284,43 +262,23 @@ test('Download missing data reports D1 progress and recalculates from the newly 
  const after=await llmCalls(page);expect(after.prepare).toBe(models.prepare);expect(after.start).toBe(models.start);
 });
 
-test('non-daily download repairs missing companions and scopes each H1 or W1 batch to its D1 dependency',async({page})=>{
- await enter(page);await period(page).selectOption('h1');
- await setForecast(page,{error:'Downloaded D1 companion data is required for H1 weekly scenarios.'});
- await calculate(page).click();await expect(panel(page).getByRole('alert')).toContainText('D1 companion data is required');
+test('non-daily pattern downloads request only their selected native timeframe',async({page})=>{
+ await enter(page);
  for(const selectedPeriod of ['h1','w1']){
-  await period(page).selectOption(selectedPeriod);await startDownload(page);
-  const info=await downloadInfo(page);
-  expect(info.jobs.map(job=>job.timeframe).sort()).toEqual(['d1',selectedPeriod].sort());
-  expect(info.jobs.every(job=>job.symbol==='eurusd'&&job.dataSource==='dukascopy')).toBe(true);
-  expect(new Set(info.jobs.map(job=>job.id)).size).toBe(2);
-  await expect(downloadRegion(page).getByRole('progressbar')).toHaveCount(2);
+  await period(page).selectOption(selectedPeriod);await startDownload(page);const info=await downloadInfo(page);
+  expect(info.jobs.map(job=>job.timeframe)).toEqual([selectedPeriod]);expect(info.jobs.every(job=>job.symbol==='eurusd'&&job.dataSource==='dukascopy')).toBe(true);
+  await expect(downloadRegion(page).getByRole('progressbar')).toHaveCount(1);
   await page.evaluate(()=>(window as any).__testFinishStatisticsDownload(null));
   await expect(chart(page)).toHaveAttribute('data-period',selectedPeriod);await expect(downloadButton(page)).toBeEnabled();
-  await expect(panel(page).getByRole('alert')).toHaveCount(0);
  }
  expect((await downloadCalls(page)).requests.map((request:any)=>request.period)).toEqual(['h1','w1']);
 });
 
-test('a failed companion remains visible while another job is running and never causes an automatic retry',async({page})=>{
- await enter(page);await page.clock.install();await period(page).selectOption('h1');await startDownload(page);
- const before=await statisticsCalls(page);
- await page.evaluate(()=>{
-  const info=(window as any).__testStatisticsDownloadInfo();
-  (window as any).__testSetStatisticsDownloadInfo({active:true,downloadsPaused:true,jobs:info.jobs.map((job:any)=>job.timeframe==='d1'?{...job,status:'failed',progress:20,message:'Daily provider rejected the missing range'}:{...job,status:'running',progress:40,message:'Hourly candles still downloading'})});
- });
- await expect(downloadRegion(page)).toContainText('Daily provider rejected the missing range');
- await expect(downloadRegion(page)).toContainText(/paused/i);
- await expect(downloadButton(page)).toBeDisabled();await expect(calculate(page)).toBeDisabled();await expect(cancelDownload(page)).toBeEnabled();
- expect((await statisticsCalls(page)).calculate).toBe(before.calculate);
- await page.evaluate(()=>{
-  const info=(window as any).__testStatisticsDownloadInfo();
-  (window as any).__testSetStatisticsDownloadInfo({active:false,downloadsPaused:false,jobs:info.jobs.map((job:any)=>job.status==='running'?{...job,status:'completed',progress:100,message:'Hourly candles completed'}:job)});
- });
- await expect(downloadButton(page)).toBeEnabled();
- const terminal=await downloadCalls(page);await page.clock.fastForward(2500);
- expect((await downloadCalls(page)).start).toBe(1);expect((await downloadCalls(page)).status).toBe(terminal.status);
- expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
+test('a failed native download stays visible without automatic retry or recalculation',async({page})=>{
+ await enter(page);await page.clock.install();await period(page).selectOption('h1');await startDownload(page);const before=await statisticsCalls(page);
+ await page.evaluate(()=>{const info=(window as any).__testStatisticsDownloadInfo();(window as any).__testSetStatisticsDownloadInfo({active:false,jobs:info.jobs.map((job:any)=>({...job,status:'failed',progress:20,message:'Hourly provider rejected the missing range'}))});});
+ await expect(downloadRegion(page)).toContainText('Hourly provider rejected the missing range');await expect(downloadButton(page)).toBeEnabled();
+ const terminal=await downloadCalls(page);await page.clock.fastForward(2500);expect((await downloadCalls(page)).start).toBe(1);expect((await downloadCalls(page)).status).toBe(terminal.status);expect((await statisticsCalls(page)).calculate).toBe(before.calculate);await expect(chart(page)).toHaveCount(0);
 });
 
 test('Cancel data download cancels only the owned source asset and period jobs',async({page})=>{

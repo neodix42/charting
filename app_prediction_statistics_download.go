@@ -27,6 +27,9 @@ func (a *App) DownloadPredictionStatisticsData(request predictions.StatisticsReq
 	if err != nil {
 		return screener.Info{}, err
 	}
+	if request.Pattern != nil {
+		return a.screener.Start(download)
+	}
 	return a.screener.StartWithDailyCompanion(download)
 }
 
@@ -35,7 +38,7 @@ func predictionStatisticsDownloadRequest(request predictions.StatisticsRequest, 
 	var from time.Time
 	selected := false
 	for _, file := range files {
-		if file.Symbol != request.Asset || (file.Timeframe != period && !(period != "d1" && file.Timeframe == "d1")) || file.DataSource != request.DataSource {
+		if file.Symbol != request.Asset || (file.Timeframe != period && !(request.Pattern == nil && period != "d1" && file.Timeframe == "d1")) || file.DataSource != request.DataSource {
 			continue
 		}
 		if file.Error != "" {
@@ -46,7 +49,7 @@ func predictionStatisticsDownloadRequest(request predictions.StatisticsRequest, 
 			fields[strings.ToLower(strings.TrimSpace(field))] = true
 		}
 		if !fields["timestamp"] || !fields["open"] || !fields["high"] || !fields["low"] || !fields["close"] {
-			return screener.Request{}, fmt.Errorf("cannot extend %s: daily statistics requires timestamp and OHLC columns", file.Name)
+			return screener.Request{}, fmt.Errorf("cannot extend %s: statistics requires timestamp and OHLC columns", file.Name)
 		}
 		// An older D1 companion must not extend an H1 repair backwards before
 		// its native source. The incremental worker retains older D1 rows even

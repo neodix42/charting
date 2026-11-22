@@ -37,6 +37,13 @@ func readStatisticsSource(ctx context.Context, dataset Dataset, asOf int64) (sta
 }
 
 func readStatisticsCandleSource(ctx context.Context, dataset Dataset, asOf int64, period string) (statisticsSource, error) {
+	return readStatisticsCandleStream(ctx, dataset, asOf, period, true, nil)
+}
+
+// Pattern statistics scan native bars twice without retaining an unbounded
+// per-candle index. The visitor receives actual closed rows only; both scans
+// retain the same ordering, full-file hash and immutable-source checks.
+func readStatisticsCandleStream(ctx context.Context, dataset Dataset, asOf int64, period string, groups bool, visit func(StatisticsCandle) error) (statisticsSource, error) {
 	result := statisticsSource{weeks: map[int64]*statisticsWeek{}, history: []StatisticsCandle{}, checkpoints: map[int64]StatisticsCandle{}}
 	if !filepath.IsAbs(dataset.Directory) || filepath.Base(dataset.Filename) != dataset.Filename || dataset.Filename == "." || dataset.Filename == "" || strings.ContainsRune(dataset.Filename, 0) {
 		return result, errors.New("statistics source must identify an existing downloaded CSV")
@@ -72,7 +79,7 @@ func readStatisticsCandleSource(ctx context.Context, dataset Dataset, asOf int64
 	}
 	for _, field := range []string{"timestamp", "open", "high", "low", "close"} {
 		if _, exists := fields[field]; !exists {
-			return result, errors.New("statistics requires timestamp, open, high, low and close columns in daily candle data")
+			return result, errors.New("statistics requires timestamp, open, high, low and close columns in candle data")
 		}
 	}
 	previous := int64(-1)
@@ -116,6 +123,11 @@ func readStatisticsCandleSource(ctx context.Context, dataset Dataset, asOf int64
 			}
 		}
 		candle := StatisticsCandle{Time: timestamp, Open: values[0], High: values[1], Low: values[2], Close: values[3]}
+		if visit != nil {
+			if err := visit(candle); err != nil {
+				return result, err
+			}
+		}
 		weekStart := statisticsWeekStart(timestamp)
 		if closedCount == 0 {
 			result.firstWeek = weekStart
@@ -124,11 +136,11 @@ func readStatisticsCandleSource(ctx context.Context, dataset Dataset, asOf int64
 		ring[closedCount%160] = candle
 		closedCount++
 		result.anchor = candle
-		if period != "d1" {
+		if groups && period != "d1" {
 			result.checkpoints[timestamp] = candle
 		}
 		day := int((timestamp - weekStart) / statisticsDay)
-		if period == "d1" && day < 5 {
+		if groups && period == "d1" && day < 5 {
 			week := result.weeks[weekStart]
 			if week == nil {
 				week = &statisticsWeek{}

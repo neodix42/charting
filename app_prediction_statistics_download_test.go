@@ -98,3 +98,19 @@ func TestStatisticsDownloadFacadeRejectsInvalidAndMissingRequestsWithoutChanging
 		}
 	}
 }
+
+func TestStatisticsPatternDownloadPlanningIgnoresUnusableDailyCompanion(t *testing.T) {
+	now := time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)
+	first := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	for _, period := range []string{"h1", "w1"} {
+		files := []screener.DataFile{
+			statisticsRepairFile("dukascopy", "eurusd", period, "2024-01-01", first),
+			{DataSource: "dukascopy", Symbol: "eurusd", Timeframe: "d1", Name: "unrelated-daily.csv", Error: "invalid daily file"},
+		}
+		request := predictions.StatisticsRequest{DataSource: "dukascopy", Asset: "eurusd", Period: period, Pattern: []string{"up", "down", "up"}}
+		got, err := predictionStatisticsDownloadRequest(request, files, now)
+		if err != nil || got.Timeframe != period || got.From != "2024-01-01" || !reflect.DeepEqual(got.Symbols, []string{"eurusd"}) {
+			t.Fatal("native repair inspected an unnecessary daily companion", got, err)
+		}
+	}
+}

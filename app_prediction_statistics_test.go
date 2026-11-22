@@ -209,3 +209,38 @@ func TestStatisticsFacadeAmbiguityUsesTheRequestedCandlePeriod(t *testing.T) {
 		t.Fatal("missing selected timeframe fell back to another period", err)
 	}
 }
+
+func TestStatisticsPatternFacadeUsesOnlyItsNativePeriodWithoutDailyCompanions(t *testing.T) {
+	for _, period := range []string{"h1", "d1", "w1"} {
+		t.Run(period, func(t *testing.T) {
+			a, directory := statisticsFacade(t)
+			step := map[string]time.Duration{"h1": time.Hour, "d1": 24 * time.Hour, "w1": 7 * 24 * time.Hour}[period]
+			start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+			var data strings.Builder
+			data.WriteString("timestamp,open,high,low,close\n")
+			for index := range 12 {
+				fmt.Fprintf(&data, "%d,100,101,98,99\n", start.Add(time.Duration(index)*step).UnixMilli())
+			}
+			name := "eurusd-" + period + "-2024-01-01-2024-03-25.csv"
+			if err := os.WriteFile(filepath.Join(directory, name), []byte(data.String()), 0600); err != nil {
+				t.Fatal(err)
+			}
+			request := predictions.StatisticsRequest{DataSource: "dukascopy", Asset: "eurusd", Period: period, Pattern: []string{"down", "down", "down"}}
+			got, err := a.GetPredictionStatistics(request)
+			if err != nil || got.Period != period || got.MatchedPatterns != 6 || got.EligiblePatterns != 6 || got.CompanionSourceFile != "" || len(got.Scenarios) != 1 || got.Scenarios[0].ID != "D" {
+				t.Fatal("native pattern required a daily source or returned weekday scenarios", got, err)
+			}
+			// Even ambiguous companion ranges must be irrelevant to native H1/W1.
+			if period != "d1" {
+				for _, companion := range []string{"eurusd-d1-2024-01-01-2024-01-16.csv", "eurusd-d1-2023-01-01-2024-01-16.csv"} {
+					if err := os.WriteFile(filepath.Join(directory, companion), []byte(statisticsFacadeCSV()), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err := a.GetPredictionStatistics(request); err != nil {
+					t.Fatal("an unrelated daily companion prevented native matching", err)
+				}
+			}
+		})
+	}
+}

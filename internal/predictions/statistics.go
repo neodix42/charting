@@ -15,10 +15,11 @@ const statisticsDay = int64(86_400_000)
 var statisticsDays = [...]string{"Mon", "Tue", "Wed", "Thu", "Fri"}
 
 type StatisticsRequest struct {
-	DataSource    string `json:"dataSource"`
-	Asset         string `json:"asset"`
-	Period        string `json:"period,omitempty"`
-	LookbackWeeks int    `json:"lookbackWeeks"`
+	DataSource    string   `json:"dataSource"`
+	Asset         string   `json:"asset"`
+	Period        string   `json:"period,omitempty"`
+	LookbackWeeks int      `json:"lookbackWeeks"`
+	Pattern       []string `json:"pattern,omitempty"`
 }
 
 type StatisticsCandle struct {
@@ -76,6 +77,13 @@ type StatisticsForecast struct {
 	Conditioning            string               `json:"conditioning,omitempty"`
 	CompanionSourceFile     string               `json:"companionSourceFile,omitempty"`
 	CompanionSourceHash     string               `json:"companionSourceHash,omitempty"`
+	Pattern                 []string             `json:"pattern,omitempty"`
+	MatchedPatterns         int                  `json:"matchedPatterns"`
+	EligiblePatterns        int                  `json:"eligiblePatterns"`
+	ExcludedDojiPatterns    int                  `json:"excludedDojiPatterns"`
+	ExcludedInvalidPatterns int                  `json:"excludedInvalidPatterns"`
+	NextBarTime             int64                `json:"nextBarTime"`
+	NextBarDojiCount        int                  `json:"nextBarDojiCount"`
 }
 
 func ValidateStatisticsRequest(request StatisticsRequest) error {
@@ -92,6 +100,16 @@ func ValidateStatisticsRequest(request StatisticsRequest) error {
 	}
 	if request.LookbackWeeks < 0 || request.LookbackWeeks > 2600 {
 		return errors.New("statistics history must be all available weeks (0), or between 1 and 2600 weeks")
+	}
+	if request.Pattern != nil {
+		if len(request.Pattern) < 3 || len(request.Pattern) > 10 {
+			return errors.New("statistics pattern must contain between 3 and 10 bars")
+		}
+		for _, direction := range request.Pattern {
+			if direction != "up" && direction != "down" {
+				return errors.New("each statistics pattern bar must be bullish (up) or bearish (down)")
+			}
+		}
 	}
 	return nil
 }
@@ -138,6 +156,9 @@ func statisticsDirection(candle StatisticsCandle) string {
 // on the already closed daily bodies in the anchor week. It uses no model or
 // provider calls, and never writes to the source data or forecast storage.
 func CalculateStatistics(ctx context.Context, dataset Dataset, request StatisticsRequest, asOf int64) (StatisticsForecast, error) {
+	if request.Pattern != nil {
+		return CalculatePatternStatistics(ctx, dataset, request, asOf)
+	}
 	result := StatisticsForecast{}
 	if err := ValidateStatisticsRequest(request); err != nil {
 		return result, err
