@@ -1,5 +1,5 @@
 import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
-import type {Backend,ScreenerCatalog,ScreenerDataSource,ScreenerInfo,ScreenerView} from '../types';
+import type {Backend,ScreenerCatalog,ScreenerDataSource,ScreenerDownloadDataSource,ScreenerInstrument,ScreenerInfo,ScreenerView} from '../types';
 import {errorText} from '../types';
 import {initialScreenerView,normalizeScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
 import {ScreenerEnrichment} from './ScreenerEnrichment';
@@ -11,6 +11,20 @@ import './ScreenerDownloads.css';
 const downloadPageSize=10;
 type DownloadFilter='all'|'queued'|'running'|'completed'|'failed'|'cancelled';
 type ScreenerTab='analysis'|'downloader'|'enrichment'|'live-alerts';
+const downloadSources:ScreenerDataSource[]=['dukascopy','hyperliquid'];
+const sourceLabel=(source:ScreenerDataSource)=>source==='hyperliquid'?'Hyperliquid':'Dukascopy';
+const selectionKey=(source:ScreenerDataSource,id:string)=>`${source}|${id}`;
+interface DownloadInstrument extends ScreenerInstrument {dataSource:ScreenerDataSource;selectionID:string}
+interface DownloadCatalog {version:string;timeframes:string[];groups:Array<{name:string;collapseName:string;dataSource:ScreenerDataSource;instruments:DownloadInstrument[]}>}
+function combineCatalogs(entries:Array<{dataSource:ScreenerDataSource;catalog:ScreenerCatalog}>,all:boolean):DownloadCatalog {
+ return {version:all?entries.map(({dataSource,catalog})=>`${sourceLabel(dataSource)} ${catalog.version}`).join(' · '):entries[0].catalog.version,
+  timeframes:entries[0].catalog.timeframes.filter(timeframe=>entries.every(entry=>entry.catalog.timeframes.includes(timeframe))),
+  groups:entries.flatMap(({dataSource,catalog})=>catalog.groups.map(group=>({
+   name:all?`${sourceLabel(dataSource)} · ${group.name}`:group.name,collapseName:group.name,dataSource,
+   instruments:group.instruments.map(instrument=>({...instrument,dataSource,selectionID:selectionKey(dataSource,instrument.id)}))
+  })))};
+}
+
 
 function Selection({label,checked,partial,disabled,onChange}:{label:string;checked:boolean;partial:boolean;disabled?:boolean;onChange(value:boolean):void}){
  const input=useRef<HTMLInputElement>(null);
@@ -20,7 +34,7 @@ function Selection({label,checked,partial,disabled,onChange}:{label:string;check
 
 export interface ScreenerHandle {flush():Promise<void>}
 export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(function Screener({api,visible},ref){
- const [tab,setTab]=useState<ScreenerTab>('analysis'),[catalog,setCatalog]=useState<ScreenerCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
+ const [tab,setTab]=useState<ScreenerTab>('analysis'),[catalog,setCatalog]=useState<DownloadCatalog|null>(null),[info,setInfo]=useState<ScreenerInfo|null>(null);
  const [view,setView]=useState<ScreenerView>(initialScreenerView),[viewReady,setViewReady]=useState(false),[viewError,setViewError]=useState(''),[viewReload,setViewReload]=useState(0),[query,setQuery]=useState('');
  const draft=useRef(view),writer=useRef<ScreenerViewWriter|null>(null);
  const analysis=useRef<ScreenerAnalysisHandle>(null);
@@ -30,8 +44,8 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
   setRenamedCondition(rename);
   try{await liveAlerts.current?.conditionRenamed(rename);}catch(error){throw Error(`Condition was renamed, but Live Alerts could not be updated: ${errorText(error)}`);}
  };
- const dataSource=view.dataSource??'dukascopy',isHyperliquid=dataSource==='hyperliquid',sourceName=isHyperliquid?'Hyperliquid':'Dukascopy';
- const selected=new Set(isHyperliquid?view.hyperliquidSymbols??[]:view.symbols),collapsed=new Set(isHyperliquid?[]:view.collapsedCategories),{timeframe,from,to}=view;
+ const dataSource=view.dataSource??'dukascopy',isHyperliquid=dataSource==='hyperliquid',isAll=dataSource==='all',sourceName=isAll?'All data sources':isHyperliquid?'Hyperliquid':'Dukascopy';
+ const collapsed=new Set(view.collapsedCategories),{timeframe,from,to}=view;
  const [catalogError,setCatalogError]=useState(''),[infoError,setInfoError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
  const sectionNavigation=useRef(0),[sectionError,setSectionError]=useState('');
  const selectSection=async(next:ScreenerTab)=>{
@@ -54,7 +68,8 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
  useEffect(()=>{
   if(!visible||!viewReady)return;
   let active=true;setCatalog(null);setCatalogError('');
-  void (isHyperliquid?api.GetScreenerCatalogForSource(dataSource):api.GetScreenerCatalog()).then(value=>{if(active){setCatalog(value);setCatalogError('');}}).catch(error=>{if(active)setCatalogError(errorText(error));});
+  const sources=isAll?downloadSources:[dataSource as ScreenerDataSource];
+  void Promise.all(sources.map(async source=>{try{return {dataSource:source,catalog:await (source==='hyperliquid'?api.GetScreenerCatalogForSource(source):api.GetScreenerCatalog())};}catch(error){throw Error(`${sourceLabel(source)} discovery failed: ${errorText(error)}`);}})).then(entries=>{if(active){setCatalog(combineCatalogs(entries,isAll));setCatalogError('');}}).catch(error=>{if(active)setCatalogError(errorText(error));});
   return ()=>{active=false;};
  },[api,visible,retry,viewReady,dataSource]);
  useEffect(()=>{
@@ -68,16 +83,29 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
   };
   void read();return ()=>{active=false;if(timer)clearTimeout(timer);};
  },[api,visible,retry]);
- const instruments=catalog?.groups.flatMap(group=>group.instruments)??[],working=info?.jobs.some(job=>job.status==='queued'||job.status==='running')??false;
- const downloaded=new Set(info?.downloadedSymbols??[]),downloadedIDs=instruments.filter(instrument=>downloaded.has(instrument.id)).map(instrument=>instrument.id);
+ const instruments=catalog?.groups.flatMap(group=>group.instruments)??[],working=!!info?.active||(info?.jobs.some(job=>job.status==='queued'||job.status==='running')??false);
+ const savedSelections={dukascopy:new Set(view.symbols),hyperliquid:new Set(view.hyperliquidSymbols??[])};
+ const selected=new Set(instruments.filter(instrument=>savedSelections[instrument.dataSource].has(instrument.id)).map(instrument=>instrument.selectionID));
+ const selectedBySource=downloadSources.map(source=>({dataSource:source,symbols:instruments.filter(instrument=>instrument.dataSource===source&&selected.has(instrument.selectionID)).map(instrument=>instrument.id)}));
+ const requiresDukascopy=dataSource==='dukascopy'||isAll&&selectedBySource[0].symbols.length>0;
+ const downloaded=new Set(info?.downloadedSymbols??[]),downloadedIDs=instruments.filter(instrument=>downloaded.has(instrument.id)).map(instrument=>instrument.selectionID);
  const selectedDownloaded=downloadedIDs.filter(id=>selected.has(id)).length,onlyDownloaded=downloadedIDs.length>0&&selectedDownloaded===downloadedIDs.length&&selected.size===downloadedIDs.length;
  const downloads=info?.jobs??[],filteredDownloads=downloads.filter(job=>downloadFilter==='all'||job.status===downloadFilter);
  const lastDownloadPage=Math.max(0,Math.ceil(filteredDownloads.length/downloadPageSize)-1),currentDownloadPage=Math.min(downloadPage,lastDownloadPage);
  const visibleDownloads=filteredDownloads.slice(currentDownloadPage*downloadPageSize,(currentDownloadPage+1)*downloadPageSize);
  useEffect(()=>{setDownloadPage(page=>Math.min(page,lastDownloadPage));},[lastDownloadPage]);
- const selectSymbols=(symbols:string[])=>changeView(isHyperliquid?{hyperliquidSymbols:symbols,hyperliquidSelectionInitialized:true}:{symbols});
- const changeSelection=(ids:string[],checked:boolean)=>{const next=new Set(isHyperliquid?draft.current.hyperliquidSymbols??[]:draft.current.symbols);ids.forEach(id=>checked?next.add(id):next.delete(id));selectSymbols([...next]);};
- useEffect(()=>{if(viewReady&&isHyperliquid&&catalog&&!view.hyperliquidSelectionInitialized)changeView({hyperliquidSymbols:catalog.groups.flatMap(group=>group.instruments.map(instrument=>instrument.id)),hyperliquidSelectionInitialized:true});},[viewReady,isHyperliquid,catalog,view.hyperliquidSelectionInitialized]);
+ const selectSymbols=(keys:string[])=>{
+  const patch:Partial<ScreenerView>={},selection=new Set(keys);
+  if(!isHyperliquid)patch.symbols=instruments.filter(instrument=>instrument.dataSource==='dukascopy'&&selection.has(instrument.selectionID)).map(instrument=>instrument.id);
+  if(isHyperliquid||isAll){patch.hyperliquidSymbols=instruments.filter(instrument=>instrument.dataSource==='hyperliquid'&&selection.has(instrument.selectionID)).map(instrument=>instrument.id);patch.hyperliquidSelectionInitialized=true;}
+  changeView(patch);
+ };
+ const changeSelection=(keys:string[],checked:boolean)=>{
+  const saved={dukascopy:new Set(draft.current.symbols),hyperliquid:new Set(draft.current.hyperliquidSymbols??[])},assets=new Map(instruments.map(instrument=>[instrument.selectionID,instrument]));
+  for(const key of keys){const instrument=assets.get(key);if(instrument){const selection=saved[instrument.dataSource];if(checked)selection.add(instrument.id);else selection.delete(instrument.id);}}
+  changeView({...!isHyperliquid?{symbols:[...saved.dukascopy]}:{},...isHyperliquid||isAll?{hyperliquidSymbols:[...saved.hyperliquid],hyperliquidSelectionInitialized:true}:{}});
+ };
+ useEffect(()=>{if(viewReady&&(isHyperliquid||isAll)&&catalog&&!view.hyperliquidSelectionInitialized)changeView({hyperliquidSymbols:catalog.groups.filter(group=>group.dataSource==='hyperliquid').flatMap(group=>group.instruments.map(instrument=>instrument.id)),hyperliquidSelectionInitialized:true});},[viewReady,isHyperliquid,isAll,catalog,view.hyperliquidSelectionInitialized]);
  const run=async(operation:()=>Promise<ScreenerInfo>)=>{
   if(actionBusy.current)return;
   const session=lifetime.current;actionBusy.current=true;epoch.current++;setBusy(true);setActionError('');
@@ -94,40 +122,42 @@ export const Screener=forwardRef<ScreenerHandle,{api:Backend;visible:boolean}>(f
   <div id="screener-enrichment" role="tabpanel" aria-labelledby="screener-enrichment-tab" hidden={tab!=='enrichment'}><ScreenerEnrichment api={api} visible={visible&&tab==='enrichment'} timeframes={['tick','s1','m1','m5','m15','m30','h1','h4','d1','w1','mn1']}/></div>
   <div id="screener-live-alerts" role="tabpanel" aria-labelledby="screener-live-alerts-tab" hidden={tab!=='live-alerts'}><ScreenerLiveAlerts ref={liveAlerts} api={api} visible={visible&&tab==='live-alerts'} renamedCondition={renamedCondition}/></div>
   <div id="screener-downloader" role="tabpanel" aria-labelledby="screener-downloader-tab" hidden={tab!=='downloader'}>
-   {(catalogError||infoError||actionError||viewError||info?.error||info&&!info.runtimeAvailable&&!isHyperliquid)&&<div className="screener-error" role="alert">{actionError||catalogError||infoError||viewError||info?.error||(!isHyperliquid?info?.runtimeError:'')||'The Dukascopy downloader runtime is unavailable.'}{viewError&&<button type="button" onClick={()=>{if(viewReady)void writer.current!.flush().then(()=>setViewError('')).catch(error=>setViewError(errorText(error)));else setViewReload(value=>value+1);}}>Retry saving Screener choices</button>}{(catalogError||infoError||(!info?.runtimeAvailable&&!isHyperliquid))&&<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry downloader</button>}</div>}
-   <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(viewReady&&selected.size&&!invalidDates&&!working&&(isHyperliquid||info?.runtimeAvailable)&&!busy)void run(async()=>{await writer.current!.flush();const settings=await api.GetScreener();return api.StartScreenerDownload({...(isHyperliquid?{dataSource}:{}),symbols:instruments.filter(instrument=>selected.has(instrument.id)).map(instrument=>instrument.id),timeframe,from,to,concurrency:settings.concurrency});});}}>
-    <label>Data source<select aria-label="Download data source" value={dataSource} disabled={!viewReady||working||busy} onChange={event=>{const next=event.target.value as ScreenerDataSource;setCatalog(null);setQuery('');changeView({dataSource:next,...(next==='hyperliquid'&&!['h1','d1','w1'].includes(timeframe)?{timeframe:'d1'}:{})});}}><option value="dukascopy">Dukascopy</option><option value="hyperliquid">Hyperliquid</option></select></label>
+   {(catalogError||infoError||actionError||viewError||info?.error||info&&!info.runtimeAvailable&&requiresDukascopy)&&<div className="screener-error" role="alert">{actionError||catalogError||infoError||viewError||info?.error||(requiresDukascopy?info?.runtimeError:'')||'The Dukascopy downloader runtime is unavailable.'}{viewError&&<button type="button" onClick={()=>{if(viewReady)void writer.current!.flush().then(()=>setViewError('')).catch(error=>setViewError(errorText(error)));else setViewReload(value=>value+1);}}>Retry saving Screener choices</button>}{(catalogError||infoError||(!info?.runtimeAvailable&&requiresDukascopy))&&<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry downloader</button>}</div>}
+   <form className="screener-download-controls" aria-label="Download historical data" onSubmit={event=>{event.preventDefault();if(viewReady&&selected.size&&!invalidDates&&!working&&(!requiresDukascopy||info?.runtimeAvailable)&&!busy)void run(async()=>{await writer.current!.flush();const settings=await api.GetScreener();return api.StartScreenerDownload({...isAll?{dataSource:'all' as const,sourceSelections:selectedBySource.filter(selection=>selection.symbols.length),symbols:[]}:isHyperliquid?{dataSource:'hyperliquid' as const,symbols:selectedBySource[1].symbols}:{symbols:selectedBySource[0].symbols},timeframe,from,to,concurrency:settings.concurrency});});}}>
+    <label>Data source<select aria-label="Download data source" value={dataSource} disabled={!viewReady||working||busy} onChange={event=>{const next=event.target.value as ScreenerDownloadDataSource;setCatalog(null);setQuery('');changeView({dataSource:next,...((next==='hyperliquid'||next==='all')&&!['h1','d1','w1'].includes(timeframe)?{timeframe:'d1'}:{})});}}><option value="dukascopy">Dukascopy</option><option value="hyperliquid">Hyperliquid</option><option value="all">All data sources</option></select></label>
     <label>Timeframe<select aria-label="Download timeframe" value={timeframe} disabled={!viewReady||!catalog||working||busy} onChange={event=>changeView({timeframe:event.target.value})}>{(catalog?.timeframes??['d1']).map(value=><option key={value} value={value}>{value}</option>)}</select></label>
     <label>From (UTC)<input type="date" aria-label="Download from date" value={from} max={to||undefined} required disabled={!viewReady||working||busy} onChange={event=>changeView({from:event.target.value})}/></label>
     <label>To (UTC, exclusive)<input type="date" aria-label="Download to date" value={to} min={from||undefined} required disabled={!viewReady||working||busy} onChange={event=>changeView({to:event.target.value})}/></label>
-    <button type="submit" className="primary" disabled={!viewReady||!selected.size||invalidDates||working||busy||(!isHyperliquid&&!info?.runtimeAvailable)||!catalog}>{busy&&!working?'Starting…':`Download ${selected.size||''} ${selected.size===1?'symbol':'symbols'}`}</button>
+    <button type="submit" className="primary" disabled={!viewReady||!selected.size||invalidDates||working||busy||(requiresDukascopy&&!info?.runtimeAvailable)||!catalog}>{busy&&!working?'Starting…':`Download ${selected.size||''} ${selected.size===1?'symbol':'symbols'}`}</button>
     {working&&<button type="button" className="danger" disabled={busy} onClick={()=>void run(()=>api.CancelScreenerDownload())}>Cancel downloads</button>}
-    {!info?.active&&(isHyperliquid||info?.runtimeAvailable)&&info?.jobs.some(job=>job.status==='failed'||job.status==='queued')&&<button type="button" disabled={busy} onClick={()=>void run(()=>api.ResumeScreenerDownload())}>Resume downloads</button>}
+    {!info?.active&&(!info?.jobs.some(job=>(job.dataSource??'dukascopy')==='dukascopy'&&(job.status==='failed'||job.status==='queued'))||info?.runtimeAvailable)&&info?.jobs.some(job=>job.status==='failed'||job.status==='queued')&&<button type="button" disabled={busy} onClick={()=>void run(()=>api.ResumeScreenerDownload())}>Resume downloads</button>}
+    {isAll&&<small className="screener-download-note" aria-label="Selected data sources">{selectedBySource.map(selection=>`${sourceLabel(selection.dataSource)}: ${selection.symbols.length} selected`).join(' · ')}. Selected Dukascopy symbols download first, then Hyperliquid. Sources with no selected symbols are skipped.</small>}
     <small className="screener-download-directory">CSV destination: <span>{info?.directory||'Loading…'}</span><span>Change the folder in Settings.</span></small>
     <small className="screener-download-note">Existing histories are reused by data source, symbol and timeframe. Download fetches only missing earlier or later ranges, preserves saved data, and recalculates applied indicators. Already covered ranges need no download.</small>
     {!isHyperliquid&&<small className="screener-download-note">Dukascopy requests share a queue: one request starts every 2 seconds across all workers. Waiting for a turn is normal; progress shows completed source files, requests ahead and estimated wait. More workers share this rate.</small>}
-    {isHyperliquid&&<small className="screener-download-note">Hyperliquid retains the latest 5,000 candles per native interval: about 208 days at H1. If From precedes available history, the earliest available bar is used. Files start with hyperliquid; spot and perpetual markets stay separate.</small>}
+    {(isHyperliquid||isAll)&&<small className="screener-download-note">Hyperliquid retains the latest 5,000 candles per native interval: about 208 days at H1. If From precedes available history, the earliest available bar is used. Files start with hyperliquid; spot and perpetual markets stay separate.</small>}
     {timeframe==='w1'&&<small className="screener-download-note">Weekly bars start Monday at 00:00 UTC. Existing daily bars are reused; missing daily data is downloaded and kept alongside the weekly CSV.</small>}
     {invalidDates&&<small className="screener-date-error">Choose a start date before the end date.</small>}
    </form>
+   {!!info?.sourceOrder?.length&&<p className="screener-download-note" role="status" aria-label="Download source sequence">Download order: {info.sourceOrder.map(sourceLabel).join(' → ')}{info.activeDataSource?` · Current source: ${sourceLabel(info.activeDataSource)}`:''}</p>}
    {info?.downloadsPaused&&<p role="status" className="screener-download-note">Downloads are paused for Live Alerts and will resume automatically after the checks finish.</p>}
    <div className="screener-columns">
-    <section className="screener-catalog" aria-label={`${sourceName} instruments`}><div className="screener-catalog-toolbar"><Selection label="Select all symbols" checked={instruments.length>0&&selected.size===instruments.length} partial={selected.size>0&&selected.size<instruments.length} disabled={!viewReady||!catalog||working||busy} onChange={checked=>changeSelection(instruments.map(instrument=>instrument.id),checked)}/><Selection label="Select all downloaded assets" checked={onlyDownloaded} partial={!onlyDownloaded&&selectedDownloaded>0} disabled={!viewReady||!catalog||!info||!downloadedIDs.length||working||busy} onChange={checked=>checked?selectSymbols(downloadedIDs):changeSelection(downloadedIDs,false)}/><span className="muted" aria-label="Selected symbol count">{selected.size} / {instruments.length} selected</span><input type="search" aria-label={`Search ${sourceName} instruments`} placeholder="Search symbols or names…" value={query} onChange={event=>setQuery(event.target.value)}/></div>
+    <section className="screener-catalog" aria-label={`${sourceName} instruments`}><div className="screener-catalog-toolbar"><Selection label="Select all symbols" checked={instruments.length>0&&selected.size===instruments.length} partial={selected.size>0&&selected.size<instruments.length} disabled={!viewReady||!catalog||working||busy} onChange={checked=>changeSelection(instruments.map(instrument=>instrument.selectionID),checked)}/><Selection label="Select all downloaded assets" checked={onlyDownloaded} partial={!onlyDownloaded&&selectedDownloaded>0} disabled={!viewReady||!catalog||!info||!downloadedIDs.length||working||busy} onChange={checked=>checked?selectSymbols(downloadedIDs):changeSelection(downloadedIDs,false)}/><span className="muted" aria-label="Selected symbol count">{selected.size} / {instruments.length} selected</span><input type="search" aria-label={`Search ${sourceName} instruments`} placeholder="Search symbols or names…" value={query} onChange={event=>setQuery(event.target.value)}/></div>
      {!catalog&&!catalogError&&<p className="screener-loading" role="status">Loading supported instruments…</p>}
      {catalog?.groups.map(group=>{
       const matches=group.instruments.filter(instrument=>!search||`${group.name} ${instrument.id} ${instrument.nativeId??''} ${instrument.market??''} ${instrument.name}`.toLowerCase().includes(search));
       if(!matches.length)return null;
-      const count=group.instruments.filter(instrument=>selected.has(instrument.id)).length;
-      return <details className="screener-instrument-group" key={group.name} open={!collapsed.has(group.name)} onToggle={event=>{const closed=!event.currentTarget.open;const current=new Set(draft.current.collapsedCategories);if(!isHyperliquid&&viewReady&&current.has(group.name)!==closed){if(closed)current.add(group.name);else current.delete(group.name);changeView({collapsedCategories:[...current]});}}}><summary><span>{group.name}</span><span className="muted">{count} / {group.instruments.length}</span></summary><div className="screener-group-selection"><Selection label={`Select all ${group.name}`} checked={count===group.instruments.length} partial={count>0&&count<group.instruments.length} disabled={!viewReady||working||busy} onChange={checked=>changeSelection(group.instruments.map(instrument=>instrument.id),checked)}/></div><div className="screener-instruments">{matches.map(instrument=><label key={instrument.id} className="screener-instrument"><input type="checkbox" aria-label={`${(instrument.nativeId??instrument.id).toUpperCase()} — ${instrument.name}`} checked={selected.has(instrument.id)} disabled={!viewReady||working||busy} onChange={event=>changeSelection([instrument.id],event.target.checked)}/><span><strong>{instrument.nativeId??instrument.id.toUpperCase()}</strong><small>{instrument.name}</small>{instrument.earliestDate&&<small className="screener-earliest">History from {instrument.earliestDate}</small>}</span></label>)}</div></details>;
+      const count=group.instruments.filter(instrument=>selected.has(instrument.selectionID)).length;
+      return <details className="screener-instrument-group" key={group.name} open={group.dataSource==='hyperliquid'||!collapsed.has(group.collapseName)} onToggle={event=>{const closed=!event.currentTarget.open;const current=new Set(draft.current.collapsedCategories);if(group.dataSource==='dukascopy'&&viewReady&&current.has(group.collapseName)!==closed){if(closed)current.add(group.collapseName);else current.delete(group.collapseName);changeView({collapsedCategories:[...current]});}}}><summary><span>{group.name}</span><span className="muted">{count} / {group.instruments.length}</span></summary><div className="screener-group-selection"><Selection label={`Select all ${group.name}`} checked={count===group.instruments.length} partial={count>0&&count<group.instruments.length} disabled={!viewReady||working||busy} onChange={checked=>changeSelection(group.instruments.map(instrument=>instrument.selectionID),checked)}/></div><div className="screener-instruments">{matches.map(instrument=><label key={instrument.selectionID} className="screener-instrument"><input type="checkbox" aria-label={`${isAll?sourceLabel(instrument.dataSource)+' · ':''}${(instrument.nativeId??instrument.id).toUpperCase()} — ${instrument.name}`} checked={selected.has(instrument.selectionID)} disabled={!viewReady||working||busy} onChange={event=>changeSelection([instrument.selectionID],event.target.checked)}/><span><strong>{instrument.nativeId??instrument.id.toUpperCase()}</strong><small>{instrument.name}</small>{instrument.earliestDate&&<small className="screener-earliest">History from {instrument.earliestDate}</small>}</span></label>)}</div></details>;
      })}
      {catalog&&!catalog.groups.some(group=>group.instruments.some(instrument=>!search||`${group.name} ${instrument.id} ${instrument.nativeId??''} ${instrument.market??''} ${instrument.name}`.toLowerCase().includes(search)))&&<p className="screener-loading">No instruments match your search.</p>}
-     {catalog&&<p className="screener-catalog-version muted">{isHyperliquid?'Hyperliquid public API':'dukascopy-node'} {catalog.version} · {instruments.length} supported instruments</p>}
+     {catalog&&<p className="screener-catalog-version muted">{isAll?'':isHyperliquid?'Hyperliquid public API':'dukascopy-node'} {catalog.version} · {instruments.length} supported instruments</p>}
     </section>
     <section className="screener-jobs" aria-label="Download progress"><div className="screener-jobs-heading"><h2>Downloads</h2><span className="muted" aria-label="Download summary">{downloads.filter(job=>job.status==='completed').length} completed · {downloads.filter(job=>job.status==='failed').length} failed · {downloads.length} total · <span>{info?.concurrency??5} {(info?.concurrency??5)===1?'worker thread':'worker threads'}</span></span></div>
      <div className="screener-jobs-filter"><label>Show downloads<select aria-label="Download status filter" value={downloadFilter} onChange={event=>{setDownloadFilter(event.target.value as DownloadFilter);setDownloadPage(0);}}><option value="all">All statuses</option><option value="queued">Queued</option><option value="running">Running</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></label><span>{filteredDownloads.length} {filteredDownloads.length===1?'download':'downloads'}</span></div>
      {!info?.jobs.length&&<p className="screener-loading">Select symbols and a common timeframe, then download their CSV files.</p>}
      {!!downloads.length&&!filteredDownloads.length&&<p className="screener-loading">No {downloadFilter} downloads.</p>}
-     <div aria-live="polite" aria-relevant="additions text">{visibleDownloads.map(job=><article className={`screener-job ${job.status}`} key={job.id} data-symbol={job.symbol} aria-label={`${job.symbol.toUpperCase()} download`}><div className="screener-job-title"><strong>{job.nativeId??job.symbol.toUpperCase()}</strong><span>{job.timeframe}</span><span className="screener-job-status">{job.status}</span></div><progress aria-label={`${job.symbol.toUpperCase()} download progress`} max={100} value={Math.min(100,Math.max(0,job.progress||0))}/><div className="screener-job-details"><span>{job.from} → {job.to}</span><span>{Math.round(job.progress||0)}%</span></div>{job.message&&<p>{job.message}</p>}{job.outputPath&&<small className="screener-output">{job.outputPath}</small>}</article>)}</div>
+     <div aria-live="polite" aria-relevant="additions text">{visibleDownloads.map(job=><article className={`screener-job ${job.status}`} key={job.id} data-symbol={job.symbol} aria-label={`${job.symbol.toUpperCase()} download`}><div className="screener-job-title"><strong>{job.nativeId??job.symbol.toUpperCase()}</strong><span>{sourceLabel(job.dataSource??'dukascopy')}</span><span>{job.timeframe}</span><span className="screener-job-status">{job.status}</span></div><progress aria-label={`${job.symbol.toUpperCase()} download progress`} max={100} value={Math.min(100,Math.max(0,job.progress||0))}/><div className="screener-job-details"><span>{job.from} → {job.to}</span><span>{Math.round(job.progress||0)}%</span></div>{job.message&&<p>{job.message}</p>}{job.outputPath&&<small className="screener-output">{job.outputPath}</small>}</article>)}</div>
      {!!downloads.length&&<nav className="screener-download-pagination" aria-label="Download pages"><button type="button" disabled={currentDownloadPage===0} onClick={()=>setDownloadPage(currentDownloadPage-1)}>Previous downloads</button><span>{filteredDownloads.length?`${currentDownloadPage*downloadPageSize+1}–${Math.min((currentDownloadPage+1)*downloadPageSize,filteredDownloads.length)} of ${filteredDownloads.length}`:'0'} downloads</span><button type="button" disabled={currentDownloadPage>=lastDownloadPage} onClick={()=>setDownloadPage(currentDownloadPage+1)}>Next downloads</button></nav>}
     </section>
    </div>

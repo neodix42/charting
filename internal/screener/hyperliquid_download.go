@@ -187,14 +187,14 @@ func (m *Manager) runHyperliquidDownloads(ctx context.Context, directory string,
 					i := next
 					next++
 					job := m.jobs[i]
-					if job.Status != "queued" || (job.Timeframe == "w1") != weekly {
+					if normalizeDataSource(job.DataSource) != "hyperliquid" || job.Status != "queued" || (job.Timeframe == "w1") != weekly {
 						m.mu.Unlock()
 						continue
 					}
 					if weekly {
 						ready := false
 						for _, d := range m.jobs {
-							if d.Symbol == job.Symbol && d.Timeframe == "d1" && d.Status == "completed" {
+							if normalizeDataSource(d.DataSource) == "hyperliquid" && d.Symbol == job.Symbol && d.Timeframe == "d1" && d.Status == "completed" {
 								ready = true
 							}
 						}

@@ -41,3 +41,11 @@ it('defaults legacy views to Dukascopy and durably keeps an intentionally empty 
  writer.edit(value);await writer.flush();expect(persist).toHaveBeenCalledWith(value);
  expect(value.symbols).toEqual(['btcusd']);
 });
+
+it('keeps All data sources and both independent selections across durable saves without aliasing',async()=>{
+ const value={...initialScreenerView(),dataSource:'all' as const,symbols:['eurusd'],hyperliquidSymbols:['hyperliquid-spot'+'a'.repeat(64)],hyperliquidSelectionInitialized:true,collapsedCategories:['Forex']};
+ const persist=vi.fn(async view=>view),writer=new ScreenerViewWriter(persist,()=>{});
+ writer.edit(value);await writer.flush();expect(persist.mock.calls[0][0]).toEqual(value);
+ const normalized=normalizeScreenerView(value);normalized.symbols.push('btcusd');normalized.hyperliquidSymbols!.length=0;
+ expect(value.symbols).toEqual(['eurusd']);expect(value.hyperliquidSymbols).toHaveLength(1);expect(normalized.dataSource).toBe('all');
+});

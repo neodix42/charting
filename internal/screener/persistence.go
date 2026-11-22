@@ -40,8 +40,11 @@ func copyView(v ViewState) ViewState {
 	return v
 }
 func validateView(v ViewState) error {
-	if source := normalizeDataSource(v.DataSource); source != "dukascopy" && source != "hyperliquid" {
+	if source := normalizeDataSource(v.DataSource); source != "dukascopy" && source != "hyperliquid" && source != "all" {
 		return errors.New("unsupported saved data source")
+	}
+	if v.DataSource == "all" && v.Timeframe != "h1" && v.Timeframe != "d1" && v.Timeframe != "w1" {
+		return errors.New("All data sources supports H1, D1 or W1")
 	}
 	if len(v.HyperliquidSymbols) > 20000 {
 		return errors.New("too many saved Hyperliquid selections")
@@ -108,6 +111,7 @@ type savedDownloads struct {
 	Concurrency int               `json:"concurrency"`
 	Jobs        []Job             `json:"jobs"`
 	Publication map[string]string `json:"publication,omitempty"`
+	SourceOrder []string          `json:"sourceOrder,omitempty"`
 }
 
 func readState(path string, limit int64, value any) error {
@@ -231,7 +235,19 @@ func (m *Manager) persistDownloadsLocked() error {
 	if len(m.jobs) == 0 {
 		return nil
 	}
-	return writeState(filepath.Join(m.profile, "screener-downloads.json"), savedDownloads{1, m.batchDirectory, m.concurrency, m.jobs, m.publication})
+	version := 1
+	if len(m.sourceOrder) > 0 {
+		version = 2
+	}
+	saved := savedDownloads{Version: version, Directory: m.batchDirectory, Concurrency: m.concurrency, Jobs: m.jobs, Publication: m.publication, SourceOrder: m.sourceOrder}
+	data, err := json.Marshal(saved)
+	if err != nil {
+		return err
+	}
+	if len(data)+1 > 16*1024*1024 {
+		return errors.New("saved download queue exceeds 16 MiB")
+	}
+	return writeStateBytes(filepath.Join(m.profile, "screener-downloads.json"), append(data, '\n'))
 }
 func (m *Manager) saveDownloadsLocked() bool {
 	if m.invalidDownloads {
@@ -257,7 +273,7 @@ func (m *Manager) loadDownloads() error {
 	if err != nil {
 		return err
 	}
-	if saved.Version != 1 {
+	if saved.Version != 1 && saved.Version != 2 {
 		return errors.New("unsupported download queue version; original file preserved")
 	}
 	directory, err := normalizeDirectory(saved.Directory)
@@ -267,9 +283,21 @@ func (m *Manager) loadDownloads() error {
 	if len(saved.Jobs) == 0 || len(saved.Jobs) > 40000 || saved.Concurrency < 1 || saved.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid saved download queue limits")
 	}
-	request, err := downloadBatchRequest(saved.Jobs, saved.Concurrency)
-	if err != nil {
-		return err
+	if saved.Version == 2 {
+		if err := validateSequentialQueue(saved.Jobs, saved.SourceOrder, saved.Concurrency); err != nil {
+			return err
+		}
+	} else {
+		if len(saved.SourceOrder) != 0 {
+			return errors.New("legacy queue contains a sequential source marker")
+		}
+		request, err := downloadBatchRequest(saved.Jobs, saved.Concurrency)
+		if err != nil {
+			return err
+		}
+		if err = validateRequest(request, time.Now()); err != nil {
+			return err
+		}
 	}
 	ids := map[string]bool{}
 	for _, job := range saved.Jobs {
@@ -292,9 +320,6 @@ func (m *Manager) loadDownloads() error {
 			return errors.New("invalid saved output path")
 		}
 	}
-	if err = validateRequest(request, time.Now()); err != nil {
-		return err
-	}
 	for id, name := range saved.Publication {
 		if !ids[id] || filepath.Base(name) != name || name == "." || name == ".." || !strings.EqualFold(filepath.Ext(name), ".csv") {
 			return errors.New("invalid saved publication name")
@@ -304,6 +329,7 @@ func (m *Manager) loadDownloads() error {
 		return fmt.Errorf("recover published histories: %w", err)
 	}
 	m.jobs, m.batchDirectory, m.publication = saved.Jobs, directory, saved.Publication
+	m.sourceOrder = append([]string(nil), saved.SourceOrder...)
 	if m.publication == nil {
 		m.publication = map[string]string{}
 	}
@@ -392,6 +418,7 @@ func (m *Manager) pendingLocked() bool {
 func (m *Manager) beginLocked() {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.active, m.cancel = true, cancel
+	m.activeDataSource = m.nextDownloadSourceLocked()
 	done := make(chan struct{})
 	m.batchDone = done
 	m.wg.Add(1)
@@ -423,7 +450,7 @@ func (m *Manager) Resume() (Info, error) {
 	if m.invalidDownloads {
 		return m.infoLocked(), errors.New(m.stateError)
 	}
-	if m.runtimeError != "" && (len(m.jobs) == 0 || m.jobs[0].DataSource != "hyperliquid") {
+	if m.downloadRuntimeNeededLocked(true) {
 		return m.infoLocked(), errors.New(m.runtimeError)
 	}
 	before := append([]Job(nil), m.jobs...)

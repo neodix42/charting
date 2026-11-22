@@ -22,12 +22,18 @@ import (
 )
 
 type Request struct {
-	DataSource  string   `json:"dataSource,omitempty"`
-	Symbols     []string `json:"symbols"`
-	Timeframe   string   `json:"timeframe"`
-	From        string   `json:"from"`
-	To          string   `json:"to"`
-	Concurrency int      `json:"concurrency,omitempty"`
+	DataSource       string            `json:"dataSource,omitempty"`
+	Symbols          []string          `json:"symbols"`
+	Timeframe        string            `json:"timeframe"`
+	From             string            `json:"from"`
+	To               string            `json:"to"`
+	Concurrency      int               `json:"concurrency,omitempty"`
+	SourceSelections []SourceSelection `json:"sourceSelections,omitempty"`
+}
+
+type SourceSelection struct {
+	DataSource string   `json:"dataSource"`
+	Symbols    []string `json:"symbols"`
 }
 
 // One machine-local limit bounds Downloader, enrichment and manual refresh.
@@ -62,6 +68,8 @@ type Info struct {
 	MaxConcurrency    int      `json:"maxConcurrency"`
 	Active            bool     `json:"active"`
 	DownloadsPaused   bool     `json:"downloadsPaused,omitempty"`
+	SourceOrder       []string `json:"sourceOrder,omitempty"`
+	ActiveDataSource  string   `json:"activeDataSource,omitempty"`
 }
 
 // Manager uses bounded parallel workers and preserves selection order. Each
@@ -79,6 +87,8 @@ type Manager struct {
 	runtime                 workerRuntime
 	runtimeError, lastError string
 	jobs                    []Job
+	sourceOrder             []string
+	activeDataSource        string
 	active, closed          bool
 	downloadsPaused         bool
 	cancel                  context.CancelFunc
@@ -142,7 +152,7 @@ func newManager(profile string, discover func() (workerRuntime, error)) *Manager
 					m.cleanupJobAt(m.batchDirectory, job)
 				}
 			}
-			if (m.runtimeError == "" || m.jobs[0].DataSource == "hyperliquid") && m.pendingLocked() {
+			if !m.downloadRuntimeNeededLocked(false) && m.pendingLocked() {
 				m.beginLocked()
 			}
 		}
@@ -169,7 +179,7 @@ func (m *Manager) infoLocked() Info {
 	if err != nil {
 		fileError = err.Error()
 	}
-	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, m.settingsError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active || m.downloadsPaused, DownloadsPaused: m.downloadsPaused}
+	return Info{Directory: m.directory, RuntimeAvailable: m.runtimeError == "", RuntimeError: m.runtimeError, Error: strings.TrimSpace(strings.Join([]string{m.lastError, m.stateError, m.viewError, m.settingsError, fileError}, " ")), Jobs: jobs, DownloadedSymbols: symbols, Concurrency: m.concurrency, MaxConcurrency: MaxConcurrency, Active: m.active || m.downloadsPaused, DownloadsPaused: m.downloadsPaused, SourceOrder: append([]string(nil), m.sourceOrder...), ActiveDataSource: m.activeDataSource}
 }
 func (m *Manager) Info() Info { m.mu.Lock(); defer m.mu.Unlock(); return m.infoLocked() }
 
@@ -269,6 +279,13 @@ func checkDirectory(directory string) error {
 }
 
 func validateRequest(request Request, now time.Time) error {
+	if request.DataSource == "all" {
+		_, err := allSourceRequests(request, now)
+		return err
+	}
+	if len(request.SourceSelections) != 0 {
+		return errors.New("source selections require All data sources")
+	}
 	if request.Concurrency < 0 || request.Concurrency > legacyMaxConcurrency {
 		return errors.New("invalid legacy download concurrency; use a value between 0 and 20")
 	}
@@ -338,6 +355,13 @@ func (m *Manager) StartWithDailyCompanion(request Request) (Info, error) {
 
 func (m *Manager) start(request Request, dailyCompanion bool) (Info, error) {
 	request.DataSource = normalizeDataSource(request.DataSource)
+	if request.DataSource == "all" {
+		if dailyCompanion {
+			return m.Info(), errors.New("All data sources does not support daily-companion requests")
+		}
+		return m.startAllSources(request)
+	}
+	request.Symbols = append([]string(nil), request.Symbols...)
 	if err := validateRequest(request, time.Now()); err != nil {
 		return m.Info(), err
 	}
@@ -359,6 +383,10 @@ func (m *Manager) start(request Request, dailyCompanion bool) (Info, error) {
 			}
 		}
 	}
+	return m.commitDownloadBatch([]Request{request}, assets, nil, dailyCompanion)
+}
+
+func (m *Manager) commitDownloadBatch(requests []Request, assets map[string]Instrument, sourceOrder []string, dailyCompanion bool) (Info, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -379,8 +407,10 @@ func (m *Manager) start(request Request, dailyCompanion bool) (Info, error) {
 	if m.invalidDownloads || m.pendingLocked() {
 		return m.infoLocked(), errors.New("resume or cancel the saved download queue before starting another batch: " + m.stateError)
 	}
-	if m.runtimeError != "" && request.DataSource != "hyperliquid" {
-		return m.infoLocked(), errors.New(m.runtimeError)
+	for _, request := range requests {
+		if m.runtimeError != "" && request.DataSource != "hyperliquid" {
+			return m.infoLocked(), errors.New(m.runtimeError)
+		}
 	}
 	if err := checkDirectory(m.directory); err != nil {
 		return m.infoLocked(), err
@@ -388,30 +418,37 @@ func (m *Manager) start(request Request, dailyCompanion bool) (Info, error) {
 	if err := recoverHistoryPublications(m.directory); err != nil {
 		return m.infoLocked(), err
 	}
-	periods := []string{request.Timeframe}
-	if request.Timeframe == "w1" || (dailyCompanion && request.Timeframe == "h1") {
-		periods = []string{"d1", request.Timeframe}
-	}
-	jobs := make([]Job, 0, len(request.Symbols)*len(periods))
+	jobs := []Job{}
 	asOf := time.Now().UnixMilli()
-	for _, period := range periods {
-		for _, symbol := range request.Symbols {
-			var id [16]byte
-			if _, err := rand.Read(id[:]); err != nil {
-				return m.infoLocked(), err
-			}
-			if request.DataSource == "hyperliquid" {
-				if err := writeHyperliquidAsset(m.directory, assets[symbol]); err != nil {
+	for _, request := range requests {
+		periods := []string{request.Timeframe}
+		if request.Timeframe == "w1" || (dailyCompanion && request.Timeframe == "h1") {
+			periods = []string{"d1", request.Timeframe}
+		}
+		for _, period := range periods {
+			for _, symbol := range request.Symbols {
+				var id [16]byte
+				if _, err := rand.Read(id[:]); err != nil {
 					return m.infoLocked(), err
 				}
+				if request.DataSource == "hyperliquid" {
+					if err := writeHyperliquidAsset(m.directory, assets[symbol]); err != nil {
+						return m.infoLocked(), err
+					}
+				}
+				jobs = append(jobs, Job{DataSource: request.DataSource, NativeID: assets[symbol].NativeID, Market: assets[symbol].Market, ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
 			}
-			jobs = append(jobs, Job{DataSource: request.DataSource, NativeID: assets[symbol].NativeID, Market: assets[symbol].Market, ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
 		}
 	}
-	oldJobs, oldDirectory, oldPublication := m.jobs, m.batchDirectory, m.publication
+	if len(jobs) > 40000 {
+		return m.infoLocked(), errors.New("combined download queue exceeds 40000 jobs")
+	}
+	oldJobs, oldDirectory, oldPublication, oldOrder := m.jobs, m.batchDirectory, m.publication, m.sourceOrder
 	m.jobs, m.batchDirectory, m.publication = jobs, m.directory, map[string]string{}
+	m.sourceOrder = append([]string(nil), sourceOrder...)
 	if !m.saveDownloadsLocked() {
 		m.jobs, m.batchDirectory, m.publication = oldJobs, oldDirectory, oldPublication
+		m.sourceOrder = oldOrder
 		return m.infoLocked(), errors.New(m.stateError)
 	}
 	// A replacement batch discards only this application's old failed scratch
@@ -488,16 +525,52 @@ func (m *Manager) Close() {
 
 func (m *Manager) run(ctx context.Context, directory string, done chan struct{}, workers int) {
 	defer m.wg.Done()
-	defer func() { m.mu.Lock(); m.active, m.cancel = false, nil; close(done); m.mu.Unlock() }()
-	if len(m.jobs) > 0 && m.jobs[0].DataSource == "hyperliquid" {
-		m.runHyperliquidDownloads(ctx, directory, workers)
-		return
+	defer func() {
+		m.mu.Lock()
+		m.active, m.cancel, m.activeDataSource = false, nil, ""
+		close(done)
+		m.mu.Unlock()
+	}()
+	m.mu.Lock()
+	order := append([]string(nil), m.sourceOrder...)
+	if len(order) == 0 && len(m.jobs) > 0 {
+		order = []string{normalizeDataSource(m.jobs[0].DataSource)}
 	}
+	m.mu.Unlock()
+	for _, source := range order {
+		m.mu.Lock()
+		pending := false
+		for _, job := range m.jobs {
+			pending = pending || normalizeDataSource(job.DataSource) == source && job.Status == "queued"
+		}
+		if ctx.Err() != nil {
+			m.mu.Unlock()
+			return
+		}
+		if pending {
+			m.activeDataSource = source
+		}
+		m.mu.Unlock()
+		if !pending {
+			continue
+		}
+		if source == "hyperliquid" {
+			m.runHyperliquidDownloads(ctx, directory, workers)
+		} else {
+			m.runDukascopyDownloads(ctx, directory, workers)
+		}
+		if ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+func (m *Manager) runDukascopyDownloads(ctx context.Context, directory string, workers int) {
 	ctx, cleanup, err := withProviderSession(ctx, m.profile)
 	if err != nil {
 		m.mu.Lock()
 		for i := range m.jobs {
-			if m.jobs[i].Status == "queued" {
+			if m.jobs[i].Status == "queued" && normalizeDataSource(m.jobs[i].DataSource) == "dukascopy" {
 				m.jobs[i].Status, m.jobs[i].Message = "failed", "Prepare Dukascopy session: "+cleanMessage(err.Error())
 			}
 		}
@@ -528,14 +601,14 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 					}
 					i := next
 					next++
-					if m.jobs[i].Status != "queued" || (m.jobs[i].Timeframe == "w1") != weekly {
+					if normalizeDataSource(m.jobs[i].DataSource) != "dukascopy" || m.jobs[i].Status != "queued" || (m.jobs[i].Timeframe == "w1") != weekly {
 						m.mu.Unlock()
 						continue
 					}
 					if weekly {
 						ready := false
 						for _, daily := range m.jobs {
-							if daily.Symbol == m.jobs[i].Symbol && daily.Timeframe == "d1" && daily.Status == "completed" {
+							if normalizeDataSource(daily.DataSource) == "dukascopy" && daily.Symbol == m.jobs[i].Symbol && daily.Timeframe == "d1" && daily.Status == "completed" {
 								ready = true
 							}
 						}
