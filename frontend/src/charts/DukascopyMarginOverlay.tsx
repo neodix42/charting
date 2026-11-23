@@ -34,11 +34,11 @@ export function DukascopyMarginOverlay({api,feedKey,trades}:{api:Backend;feedKey
  const stale=!!metrics&&(!metrics.metricsTime||Date.now()-metrics.metricsTime>30000);
  return <aside className="dukascopy-margin-overlay" aria-label="Dukascopy leverage and margin">
   <strong>JForex margin {stale?'(stale)':''}</strong>
-  {metrics?<><span>Account <b>{ratio(metrics.accountLeverage)}</b> · Weekend <b>{ratio(metrics.weekendLeverage)}</b></span>
-   <span>Instrument cap <b>{ratio(metrics.instrumentMaxLeverage)}</b> · Current effective <b>{ratio(metrics.effectiveLeverage)}</b></span>
+  {metrics?<><span>Account <b>{ratio(metrics.accountLeverage)}</b> · Weekend setting <b>{ratio(metrics.weekendLeverage)}</b></span>
+   <span>Dukascopy instrument leverage <b>{metrics.instrumentMaxLeverage===0?'Account setting':ratio(metrics.instrumentMaxLeverage)}</b> · Effective margin leverage <b>{ratio(metrics.effectiveLeverage)}</b></span>
    <span>Margin cut <b>{percentage(metrics.marginCutUsePercent??null)} leverage use</b> / <b>{percentage(cutoff)} margin level</b></span>
    <span>Margin level <b>{percentage(level)}</b> · Equity stop <b>{formatCurrencyAmount(metrics.accountEquityStopLoss,metrics.availableBalanceCurrency)??'—'}</b> · Free <b>{formatCurrencyAmount(metrics.availableBalance,metrics.availableBalanceCurrency)??'—'}</b></span>
-   <small>Account-wide margin; broker rules can change.</small>
+   <small>Account-wide margin. Estimates use SDK settings; unreported broker adjustments are excluded.</small>
   </>:<small>{error?'Margin data unavailable: '+error:'Loading account margin…'}</small>}
   {activeTrades.length>0&&<div className="dukascopy-open-positions"><strong>Open positions ({activeTrades.length})</strong>
    {activeTrades.map(row=><span key={row.id}>{row.direction} {row.remainingSize} @ {row.entryPrice} · SL {row.stopLoss||'—'} · TP {row.takeProfit||'—'} · P/L {tradeProfitLoss(row).text}</span>)}

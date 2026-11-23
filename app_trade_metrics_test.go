@@ -60,6 +60,48 @@ func TestAccountMetricsTransportIsFlatAndCurrenciesIndependent(t *testing.T) {
 	}
 }
 
+func TestDukascopyLeverageTransportPreservesProviderValues(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		wire string
+		want *float64
+	}{
+		{name: "provider instrument limit", wire: `{"accountLeverage":180,"instrumentMaxLeverage":10,"effectiveLeverage":10}`, want: leverageValue(10)},
+		{name: "provider instrument overrides account default", wire: `{"accountLeverage":180,"instrumentMaxLeverage":250,"effectiveLeverage":250}`, want: leverageValue(250)},
+		{name: "SDK zero uses account", wire: `{"accountLeverage":180,"instrumentMaxLeverage":0,"effectiveLeverage":180}`, want: leverageValue(0)},
+		{name: "unavailable is not SDK zero", wire: `{"accountLeverage":180}`, want: nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var provider jforex.TradeMetrics
+			if err := json.Unmarshal([]byte(test.wire), &provider); err != nil {
+				t.Fatal(err)
+			}
+			got := dukascopyAccountMetrics(&provider)
+			encoded, err := json.Marshal(trading.Metrics{AccountMetrics: got})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded map[string]any
+			if err = json.Unmarshal(encoded, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			value, present := decoded["instrumentMaxLeverage"]
+			if test.want == nil {
+				if present {
+					t.Fatalf("missing SDK value became a reported limit: %s", encoded)
+				}
+			} else if !present || value != *test.want {
+				t.Fatalf("provider instrument limit changed in transport: %s", encoded)
+			}
+			if got.AccountLeverage != provider.AccountLeverage || got.EffectiveLeverage != provider.EffectiveLeverage {
+				t.Fatalf("provider account or effective leverage changed: %+v", got)
+			}
+		})
+	}
+}
+
+func leverageValue(value float64) *float64 { return &value }
+
 func TestTradeMetricsReadValidatesBeforeProviderAndEchoesDraft(t *testing.T) {
 	a := &App{}
 	request := trading.Request{FeedKey: domain.FeedKey{Exchange: "hyperliquid", Market: "perpetual", Instrument: "BTC", Timeframe: "1h"}, Side: "buy", Quantity: " 0.0100 ", Leverage: 7}

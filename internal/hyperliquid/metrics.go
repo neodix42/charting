@@ -370,10 +370,10 @@ func normalizedMarginTiers(raw []marginTier) ([]normalizedMarginTier, string) {
 	deduction, previousLower, previousRate := decimal.Zero, decimal.Zero, decimal.Zero
 	for i, item := range raw {
 		lower, ok := metricNumber(item.LowerBound, false)
-		if !ok || item.MaxLeverage < 1 || item.MaxLeverage > 1000 || i == 0 && !lower.IsZero() || i > 0 && !lower.GreaterThan(previousLower) {
+		if !ok || !validLeverageNumber(item.MaxLeverage) || i == 0 && !lower.IsZero() || i > 0 && !lower.GreaterThan(previousLower) {
 			return nil, "The maintenance-margin tiers are invalid"
 		}
-		rate := decimal.NewFromInt(1).DivRound(decimal.NewFromInt(int64(2*item.MaxLeverage)), 32)
+		rate := decimal.NewFromInt(1).DivRound(decimal.NewFromInt(int64(item.MaxLeverage)).Mul(decimal.NewFromInt(2)), 32)
 		if i > 0 {
 			if rate.LessThan(previousRate) {
 				return nil, "The maintenance-margin tiers are not monotonic"

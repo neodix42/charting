@@ -2,6 +2,7 @@ package hyperliquid
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -108,16 +109,16 @@ func TestPreviewValuationAndSubmitRecheckChangedAssetMaximum(t *testing.T) {
 	}
 }
 
-func TestEstimateFreshnessSettingsFenceAndMetadataBound(t *testing.T) {
+func TestEstimateFreshnessSettingsFenceAndMetadataValidity(t *testing.T) {
 	store, mock := mockStore(t)
 	stale := time.Now().Add(-time.Minute).UnixMilli()
 	mock.quoteTime = &stale
 	if _, err := store.Estimate(context.Background(), "perpetual", "BTC", "buy"); err == nil {
 		t.Fatal("stale quote accepted")
 	}
-	mock.quoteTime, mock.maxLeverage = nil, 1001
+	mock.quoteTime, mock.maxLeverage = nil, 0
 	if _, err := store.Estimate(context.Background(), "perpetual", "BTC", "buy"); err == nil {
-		t.Fatal("unbounded leverage metadata accepted")
+		t.Fatal("nonpositive leverage metadata accepted")
 	}
 	mock.maxLeverage = 20
 	started, release := make(chan struct{}), make(chan struct{})
@@ -131,6 +132,34 @@ func TestEstimateFreshnessSettingsFenceAndMetadataBound(t *testing.T) {
 	close(release)
 	if err := <-done; err == nil || !strings.Contains(err.Error(), "settings changed") {
 		t.Fatal("late estimate crossed settings/account/network fence", err)
+	}
+}
+
+func TestProviderLeverageAboveFormerApplicationCeiling(t *testing.T) {
+	store, mock := metricsStore(t)
+	mock.maxLeverage, mock.marginTableID = 1500, intPointer(50)
+	mock.marginTables = json.RawMessage(`[[50,{"marginTiers":[{"lowerBound":"0","maxLeverage":1500}]}]]`)
+	value, err := store.Estimate(context.Background(), "perpetual", "BTC", "buy")
+	if err != nil || value.MaxLeverage != 1500 {
+		t.Fatal("provider leverage was restricted by the app", value, err)
+	}
+	request := baseRequest()
+	request.Leverage = 1500
+	metrics, err := store.OrderMetrics(context.Background(), request)
+	if err != nil || metrics.MaximumQuantity == "" || metrics.MaximumQuantityError != "" || metrics.MarginRequired == "" || metrics.LiquidationPrice == "" {
+		t.Fatal("provider margin tier above 1000 was restricted", metrics, err)
+	}
+	preview, err := store.Preview(context.Background(), request)
+	if err != nil || preview.Request.Leverage != 1500 || preview.MaxLeverage != 1500 {
+		t.Fatal("provider leverage could not be reviewed", preview, err)
+	}
+	result, err := store.Submit(context.Background(), preview.ID)
+	if err != nil || result.Status != "filled" || len(mock.actions) < 2 || mock.actions[0]["type"] != "updateLeverage" || mock.actions[0]["leverage"] != float64(1500) {
+		t.Fatal("provider leverage was changed before submission", result, err, mock.actions)
+	}
+	request.Leverage = 1501
+	if _, err := store.Preview(context.Background(), request); err == nil {
+		t.Fatal("exchange-reported maximum was bypassed")
 	}
 }
 
@@ -154,7 +183,7 @@ func TestLiveHyperliquidValuationReadOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	value, err := store.Estimate(ctx, "perpetual", "BTC", "buy")
-	if err != nil || value.ReferencePrice == "" || value.AccountCurrency == "" || value.ProfitPerPriceUnit != "1" || value.ValuationError != "" || value.MaxLeverage < 1 || value.MaxLeverage > 1000 {
+	if err != nil || value.ReferencePrice == "" || value.AccountCurrency == "" || value.ProfitPerPriceUnit != "1" || value.ValuationError != "" || !validLeverageNumber(value.MaxLeverage) {
 		t.Fatal(value, err)
 	}
 	files, err := os.ReadDir(store.profile)

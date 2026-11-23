@@ -144,7 +144,7 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 		return instrument{}, err
 	}
 	for index, item := range meta.Universe {
-		if item.Name == r.Instrument && !item.Delisted && item.SzDecimals >= 0 && item.SzDecimals <= 6 && item.MaxLeverage > 0 && item.MaxLeverage <= 1000 {
+		if item.Name == r.Instrument && !item.Delisted && item.SzDecimals >= 0 && item.SzDecimals <= 6 && validLeverageNumber(item.MaxLeverage) {
 			currency, valuationErr := s.collateralCurrency(ctx, v, meta.CollateralToken)
 			tiers, tableErr := tableFor(item.MarginTableID, item.MaxLeverage, meta.MarginTables)
 			return instrument{asset: offset + index, szDecimals: item.SzDecimals, maxLeverage: item.MaxLeverage, dex: dex, accountCurrency: currency, valuationError: valuationErr, collateralToken: meta.CollateralToken, marginTiers: tiers, marginTableError: tableErr}, nil
@@ -152,6 +152,13 @@ func (s *Store) market(ctx context.Context, v Settings, r OrderRequest) (instrum
 	}
 	return instrument{}, errors.New("Perpetual instrument is not available on the selected network")
 }
+
+// Leverage crosses JSON/JavaScript boundaries. This checks exact representation,
+// not a trading ceiling; each instrument's provider metadata defines its limit.
+func validLeverageNumber(value int) bool {
+	return value > 0 && uint64(value) <= 1<<53-1
+}
+
 func positive(value string) (decimal.Decimal, error) {
 	if len(value) > 64 || strings.ContainsAny(value, "eE+") {
 		return decimal.Zero, errors.New("Use an ordinary positive decimal value")

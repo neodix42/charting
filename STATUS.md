@@ -1,4 +1,14 @@
-# Implementation status — updated 2026-11-22
+# Implementation status — updated 2026-11-23
+
+## Provider leverage without app ceilings — 2026-11-23
+
+Dukascopy margin estimates now use a positive SDK instrument leverage directly, otherwise the SDK account default. The former account/instrument minimum and app calendar-based weekend reduction are removed. The pinned vendor implementation confirms this instrument-override precedence and that instrument leverage is populated from provider account messages; a reported NZD/DKK 1:10 remains a Dukascopy setting. The chart labels the raw provider instrument leverage and informational weekend setting explicitly. SDK zero (Account setting) survives the Go transport, while missing data stays unavailable. Estimates disclose that unreported broker weekend/dynamic adjustments are excluded; the public strategy API supplies no weekend-activation flag. Production code does not call undocumented vendor helpers. Read-only SDK evidence is retained in `.tools/verification/provider-leverage-sdk.txt`.
+
+Hyperliquid no longer rejects metadata, margin tiers or user selections solely because leverage exceeds 1000x. The provider's current instrument/tier limits remain authoritative, with positive integer and exact JSON/JavaScript representation validation. Large provider ranges use numeric entry without allocating every possible dropdown option. Existing order confirmation, one-shot submission, spot behavior, credentials and stored workspace data are preserved.
+
+Verification passed: `python3 scripts/jforex_bundle.py --test`; race tests for `./internal/hyperliquid`, `./internal/jforex`, `./internal/trading`, the bindings root and native production root; related package/root vet checks; frontend typecheck/lint and all 326 unit tests; all 45 unique related browser cases (35 Dukascopy/general trading cases and 10 Hyperliquid estimate cases). The final Dukascopy overlay case was also rerun after its assertions were updated. Regression coverage verifies account 180x with instrument 10x or 250x, SDK zero/missing distinction, no app Friday calendar override, and a mocked Hyperliquid 1500x provider limit through sizing, review and signed mock submission. Independent read-only review found no blocking issue.
+
+Production rebuild passed with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`; the root executable, matching JForex runtime and Linux archive are updated. Evidence: `.tools/verification/provider-leverage-{build,browser,overlay-final,go-race,root-bindings,root-native,native-vet}.log`. The system preflight lacks global GTK/WebKit development pkg-config entries; native checks/build succeed using the existing project-local SDK and pinned Wails overlay. Actual native desktop interaction, authenticated live broker validation and Windows GUI checks remain unrun. No real orders, transfers or credential changes were made. The next manual check is to restart the rebuilt root application and compare the displayed leverage settings with the connected broker account.
 
 ## All data sources with sequential Enrichment — 2026-11-22
 

@@ -20,6 +20,16 @@ test('leverage choices wait for the real asset limit, preserve valid choices and
  await valuation(page,{maxLeverage:5});await page.clock.fastForward(10000);await page.evaluate(()=>(window as any).__releaseLeverageQuote());await expect(leverage(page)).toHaveValue('5');await expect(leverage(page).getByRole('option')).toHaveCount(5);await expect(ticket(page)).toContainText('Leverage adjusted to 5×');await leverage(page).selectOption('3');await valuation(page,{maxLeverage:10});await page.clock.fastForward(10000);await page.evaluate(()=>(window as any).__releaseLeverageQuote());await expect(leverage(page)).toHaveValue('3');await expect(ticket(page).getByLabel('Maximum leverage')).toHaveText('Max 10×');
 });
 
+test('provider leverage above 1000 remains available for review without allocating every option',async({page})=>{
+ await setup(page);await valuation(page,{maxLeverage:1500});await openOrder(page);
+ const entry=ticket(page).getByRole('spinbutton',{name:'Order leverage',exact:true});
+ await expect(entry).toHaveValue('1500');await expect(entry).toHaveAttribute('max','1500');await expect(ticket(page).getByLabel('Maximum leverage')).toHaveText('Max 1500×');
+ await ticket(page).getByLabel('Order quantity').fill('1');await entry.fill('1250');await ticket(page).getByRole('button',{name:'Review order',exact:true}).click();
+ await expect(ticket(page).getByRole('button',{name:'Confirm Buy at market',exact:true})).toBeVisible();await expect(entry).toHaveValue('1250');await expect(entry).toBeDisabled();
+ expect((await page.evaluate(()=>(window as any).__testTradeRequests())).at(-1)).toMatchObject({leverage:1250});
+ expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
+});
+
 test('long USDC estimates update quantity, levels and entry without multiplying P/L by leverage',async({page})=>{
  await setup(page);await page.clock.install();await valuation(page,{entryPrice:'100',accountCurrency:'USDC',profitPerPriceUnit:'1'});await openOrder(page);await ticket(page).getByLabel('Order quantity').fill('2');await ticket(page).getByLabel('Order stop loss').fill('95');await ticket(page).getByLabel('Order take profit').fill('110');await expect(sl(page)).toHaveText('-500.00 bps · -10.00 USDC');await expect(tp(page)).toHaveText('+1,000.00 bps · +20.00 USDC');await leverage(page).selectOption('20');await expect(sl(page)).toHaveText('-500.00 bps · -10.00 USDC');
  await ticket(page).getByLabel('Order quantity').fill('4');await ticket(page).getByLabel('Order stop loss').fill('98');await ticket(page).getByLabel('Order take profit').fill('115');await expect(sl(page)).toHaveText('-200.00 bps · -8.00 USDC');await expect(tp(page)).toHaveText('+1,500.00 bps · +60.00 USDC');await valuation(page,{entryPrice:'120'});await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();await expect(sl(page)).toHaveText('-1,833.33 bps · -88.00 USDC');await expect(tp(page)).toHaveText('-416.67 bps · -20.00 USDC');expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);

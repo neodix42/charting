@@ -1016,17 +1016,13 @@ public final class Bridge implements AutoCloseable {
                 throw new IllegalArgumentException("JForex did not supply the account and instrument leverage requirements");
             double requested = request.has("leverage") ? tradeNumber(request, "leverage", true) : 0;
             if (requested != 0 && requested != accountLeverage) throw new IllegalArgumentException("Dukascopy leverage is fixed by the account");
-            // The SDK uses zero when no instrument-specific leverage overrides
-            // the account setting (the usual FX case).
-            double effectiveLeverage = instrumentLeverage > 0 ? Math.min(accountLeverage, instrumentLeverage) : accountLeverage;
-            result.put("instrumentMaxLeverage", effectiveLeverage);
-            // Apply the published Friday 18:00 UTC to Sunday FX reopening reduction.
-            java.time.ZonedDateTime utc = java.time.Instant.ofEpochMilli(nowMillis.getAsLong()).atZone(java.time.ZoneOffset.UTC);
-            int day = utc.getDayOfWeek().getValue();
-            int sundayOpen = java.time.ZoneId.of("America/New_York").getRules().isDaylightSavings(utc.toInstant()) ? 21 : 22;
-            boolean weekend = day == 5 && utc.getHour() >= 18 || day == 6 || day == 7 && utc.getHour() < sundayOpen;
-            int weekendLeverage = context.getAccount().getOverWeekEndLeverage();
-            if (weekend && weekendLeverage > 0) effectiveLeverage = Math.min(effectiveLeverage, weekendLeverage);
+            // A positive SDK instrument leverage overrides the account default;
+            // zero uses the account setting. This matches the pinned vendor's
+            // InstrumentUtils.getLeverage precedence without an app ceiling.
+            double effectiveLeverage = instrumentLeverage > 0 ? instrumentLeverage : accountLeverage;
+            result.put("instrumentMaxLeverage", instrumentLeverage);
+            // The public SDK reports the account's weekend setting, but exposes
+            // no activation flag. Do not impose a calendar-derived app override.
             if (!result.containsKey("availableBalance") || !(result.get("accountCurrency") instanceof String currency) || currency.isEmpty())
                 throw new IllegalArgumentException("JForex free margin and account currency are required");
             Map<String, Object> valuation = knownValuation == null ? tradeValuation(instrument, quote.getTime()) : knownValuation;
@@ -1054,13 +1050,13 @@ public final class Bridge implements AutoCloseable {
                 || now - accountTime > 30_000 || accountTime > now + 5_000 || now - valuationTime > 30_000 || valuationTime > now + 5_000)
                 throw new IllegalArgumentException("The entry quote, account snapshot or currency conversion became stale while sizing the order");
             result.put("maximumQuantity", quantity);
-            result.put("maximumQuantityBasis", "Estimated new-exposure capacity from SDK free margin, instrument/account leverage (effective " + effectiveLeverage + "x), the expense-side upper bound of fresh account-currency FX quotes, five-pip execution bound and opening spread. Floored to the instrument increment and capped by instrument maximum and current visible executable liquidity. Commissions, dynamic exposure tiers and later market/account changes can reduce the final fill; this snapshot cannot guarantee execution.");
+            result.put("maximumQuantityBasis", "Estimated new-exposure capacity from SDK free margin and reported instrument/account leverage (effective " + effectiveLeverage + "x), the expense-side upper bound of fresh account-currency FX quotes, five-pip execution bound and opening spread. Floored to the instrument increment and capped by instrument maximum and current visible executable liquidity. Unreported broker weekend adjustments, dynamic exposure tiers, commissions and later market/account changes can reduce the final fill; this snapshot cannot guarantee execution.");
             if (units > 0) {
                 double requiredMargin = units * marginPerUnit;
                 if (Double.isFinite(requiredMargin)) {
                     result.put("marginRequired", requiredMargin);
                     result.remove("marginError");
-                    result.put("marginBasis", "Estimated new-exposure margin at the five-pip upper execution bound, converted at the expense-side upper bound of fresh SDK FX quotes; effective leverage " + effectiveLeverage + "x. Existing exposure offsets, broker tiers and commissions are not a pre-trade broker quote.");
+                    result.put("marginBasis", "Estimated new-exposure margin at the five-pip upper execution bound, converted at the expense-side upper bound of fresh SDK FX quotes; reported instrument/account leverage " + effectiveLeverage + "x. Unreported broker weekend adjustments, existing exposure offsets, broker tiers and commissions are excluded; this is not a pre-trade broker quote.");
                 } else result.put("marginError", "The entered quantity is too large to calculate a finite required-margin estimate");
             }
         } catch (Exception error) {

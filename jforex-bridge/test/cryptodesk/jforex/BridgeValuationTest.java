@@ -14,11 +14,12 @@ public final class BridgeValuationTest {
     static JsonObject estimate(Bridge bridge,Instrument instrument,String side){JsonObject r=request("tradeEstimate");r.addProperty("instrument",instrument.name());r.addProperty("side",side);return good(bridge,r).getAsJsonObject("result");}
     static ITick tick(double bid,double ask,long at){return fake(ITick.class,(method,args)->switch(method){case "getTime"->at;case "getBid"->bid;case "getAsk"->ask;case "getAskVolume"->0.01;case "getBidVolume"->0.02;default->null;});}
     static void run() throws Exception {
-        long now=System.currentTimeMillis();
+        long now=java.time.Instant.parse("2026-11-20T19:00:00Z").toEpochMilli();
         AtomicLong clock=new AtomicLong(now),conversionAge=new AtomicLong();
         AtomicBoolean connected=new AtomicBoolean(),conversionBlocked=new AtomicBoolean(),conversionStale=new AtomicBoolean(),entryStale=new AtomicBoolean(),accountReadFails=new AtomicBoolean(),modernCurrencyMissing=new AtomicBoolean();
         AtomicReference<ICurrency> currency=new AtomicReference<>(JFCurrency.getInstance("EUR"));
         AtomicReference<Double> equity=new AtomicReference<>(1100.0);
+        AtomicReference<Double> accountLeverage=new AtomicReference<>(100.0);
         AtomicReference<ITick> entryOverride=new AtomicReference<>();
         AtomicInteger conversionCalls=new AtomicInteger(),engineCalls=new AtomicInteger(),fxQuoteCalls=new AtomicInteger();
         Set<Instrument> subscribed=new HashSet<>();
@@ -44,7 +45,7 @@ public final class BridgeValuationTest {
             return instrument.getPipValue()*rate;
         });
         IAccount account=fake(IAccount.class,(method,args)->switch(method){
-            case "getLeverage"->100.0;case "getAccountCurrency"->modernCurrencyMissing.get()?null:currency.get();case "getCurrency"->currency.get().getJavaCurrency();
+            case "getLeverage"->accountLeverage.get();case "getOverWeekEndLeverage"->5;case "getAccountCurrency"->modernCurrencyMissing.get()?null:currency.get();case "getCurrency"->currency.get().getJavaCurrency();
             case "getBalance"->1000.0;case "getEquity"->equity.get();case "getUsedMargin"->{if(accountReadFails.get())throw new RuntimeException("explicit SDK failure");yield 100.0;}default->null;});
         IContext context=fake(IContext.class,(method,args)->switch(method){
             case "getHistory"->history;case "getUtils"->utils;case "getAccount"->account;
@@ -87,6 +88,23 @@ public final class BridgeValuationTest {
             check(money.get("maximumQuantity").getAsString().equals("108"),"maximum respects instrument 10x rather than account 100x, opening spread, slippage and integer step");
             near(money.get("marginRequired").getAsDouble(),2*(100.2+0.05)/1.11/10,"CFD margin covers expensive executable account-currency conversion");
             check(money.has("maximumQuantityBasis")&&money.has("marginBasis")&&!money.has("marginError"),"margin and maximum estimates identify their inputs");
+            accountLeverage.set(180.0);metricsRequest.addProperty("leverage",180);
+            money=good(bridge,metricsRequest).getAsJsonObject("result");
+            near(money.get("accountLeverage").getAsDouble(),180,"account leverage is the raw SDK value");
+            near(money.get("instrumentMaxLeverage").getAsDouble(),10,"10x instrument constraint comes directly from SDK metadata");
+            near(money.get("effectiveLeverage").getAsDouble(),10,"SDK instrument constraint applies to a 180x account");
+            near(money.get("weekendLeverage").getAsDouble(),5,"weekend setting remains raw SDK information");
+            check(money.get("maximumQuantityBasis").getAsString().contains("Unreported broker weekend adjustments"),"capacity identifies missing broker adjustments");
+            BridgeTradingTest.metadata(Instrument.AAPLUSUSD,"marginUse",250);
+            money=good(bridge,metricsRequest).getAsJsonObject("result");
+            near(money.get("instrumentMaxLeverage").getAsDouble(),250,"raw SDK instrument value is not replaced by the lower account setting");
+            near(money.get("effectiveLeverage").getAsDouble(),250,"positive SDK instrument override is not capped by the account default");
+            near(money.get("marginRequired").getAsDouble(),2*(100.2+0.05)/1.11/250,"margin uses the direct SDK instrument override above the account default");
+            BridgeTradingTest.metadata(Instrument.AAPLUSUSD,"marginUse",0);
+            money=good(bridge,metricsRequest).getAsJsonObject("result");
+            near(money.get("instrumentMaxLeverage").getAsDouble(),0,"SDK zero explicitly means account setting");
+            near(money.get("effectiveLeverage").getAsDouble(),180,"Friday 19 UTC adds no app calendar leverage ceiling");
+            accountLeverage.set(100.0);metricsRequest.addProperty("leverage",100);BridgeTradingTest.metadata(Instrument.AAPLUSUSD,"marginUse",10);
             equity.set(1098.9);money=good(bridge,metricsRequest).getAsJsonObject("result");
             check(money.get("maximumQuantity").getAsString().equals("107"),"expense-side FX rate lowers maximum when midpoint-funded last unit would exceed margin");equity.set(1100.0);
             metricsRequest.addProperty("quantity",1e308);money=good(bridge,metricsRequest).getAsJsonObject("result");

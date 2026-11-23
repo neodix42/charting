@@ -213,10 +213,10 @@ func maximumWithinMarginTiers(quantity, price decimal.Decimal, leverage, sizeDec
 	if len(tiers) == 0 || len(tiers) > 100 {
 		return decimal.Zero, "The instrument's margin tiers are unavailable"
 	}
-	previousLower, previousLeverage := decimal.Zero, 1001
+	previousLower, previousLeverage := decimal.Zero, 0
 	for i, tier := range tiers {
 		lower, ok := metricNumber(tier.LowerBound, false)
-		if !ok || tier.MaxLeverage < 1 || tier.MaxLeverage > 1000 || tier.MaxLeverage > previousLeverage || i == 0 && !lower.IsZero() || i > 0 && !lower.GreaterThan(previousLower) {
+		if !ok || !validLeverageNumber(tier.MaxLeverage) || i > 0 && tier.MaxLeverage > previousLeverage || i == 0 && !lower.IsZero() || i > 0 && !lower.GreaterThan(previousLower) {
 			return decimal.Zero, "The instrument's margin tiers are invalid"
 		}
 		if leverage > tier.MaxLeverage {
