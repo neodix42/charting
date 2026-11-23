@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {calendarMarketSession,regularMarketHours,regularMarketStatus} from '../charts/DukascopyTradingHours';
+import {calendarMarketSession,marketSessionTimes,regularMarketHours,regularMarketStatus} from '../charts/DukascopyTradingHours';
 
 const session={marketHoursStatus:'available',marketHoursFirstDay:'1',marketHoursLastDay:'5',marketHoursOpen:'09:30:00',marketHoursClose:'16:00:00',marketHoursTimeZone:'Asia/Hong_Kong'};
 
@@ -77,5 +77,49 @@ describe('dated provider instrument calendar',()=>{
   ])};
   expect(calendarMarketSession(value,instant('2026-11-21T12:00:00Z'))).toEqual({status:'Closed',hours:'Next opens Sun 2026-11-22 22:00 UTC'});
   expect(calendarMarketSession(value,instant('2026-11-22T22:00:00Z'))).toEqual({status:'Opened',hours:'Opened Sun 2026-11-22 22:00 UTC'});
+ });
+});
+
+describe('UTC session opening and closing times',()=>{
+ const times=(metadata:typeof session,time:string)=>marketSessionTimes(metadata,instant(time));
+ it('converts the actual current regular session from market clocks to UTC',()=>{
+  expect(times(session,'2026-11-23T02:00:00Z')).toEqual({opensAt:instant('2026-11-23T01:30:00Z'),closesAt:instant('2026-11-23T08:00:00Z')});
+  expect(times(session,'2026-11-22T23:59:59Z')).toEqual({opensAt:instant('2026-11-23T01:30:00Z'),closesAt:instant('2026-11-23T08:00:00Z')});
+ });
+ it('advances to the next supported weekday at closing rather than reusing an old session',()=>{
+  expect(times(session,'2026-11-27T08:00:00Z')).toEqual({opensAt:instant('2026-11-30T01:30:00Z'),closesAt:instant('2026-11-30T08:00:00Z')});
+  const friday={...session,marketHoursFirstDay:'5',marketHoursLastDay:'5'};
+  expect(times(friday,'2026-11-27T08:00:00Z')).toEqual({opensAt:instant('2026-12-04T01:30:00Z'),closesAt:instant('2026-12-04T08:00:00Z')});
+ });
+ it('uses the upcoming session offset across both daylight-saving weekends',()=>{
+  const ny={...session,marketHoursTimeZone:'America/New_York'};
+  expect(times(ny,'2026-03-06T22:00:00Z')).toEqual({opensAt:instant('2026-03-09T13:30:00Z'),closesAt:instant('2026-03-09T20:00:00Z')});
+  expect(times(ny,'2026-10-30T22:00:00Z')).toEqual({opensAt:instant('2026-11-02T14:30:00Z'),closesAt:instant('2026-11-02T21:00:00Z')});
+ });
+ it('handles fractional-hour offsets, UTC date changes and reported nonzero seconds',()=>{
+  const nepal={...session,marketHoursTimeZone:'Asia/Kathmandu',marketHoursOpen:'00:15:03',marketHoursClose:'01:15:07'};
+  expect(times(nepal,'2026-11-22T18:00:00Z')).toEqual({opensAt:instant('2026-11-22T18:30:03Z'),closesAt:instant('2026-11-22T19:30:07Z')});
+ });
+ it('does not choose between ambiguous DST clocks or invent a skipped opening time',()=>{
+  const sunday={...session,marketHoursFirstDay:'7',marketHoursLastDay:'7',marketHoursTimeZone:'America/New_York',marketHoursOpen:'01:30:00',marketHoursClose:'03:00:00'};
+  expect(times(sunday,'2026-11-01T04:00:00Z')).toBeNull();
+  expect(times({...sunday,marketHoursOpen:'02:30:00'},'2026-03-08T05:00:00Z')).toBeNull();
+ });
+ it('retains unsupported or invalid regular envelopes as unavailable',()=>{
+  for(const metadata of [undefined,{}, {...session,marketHoursTimeZone:'Unknown/Market'}, {...session,marketHoursOpen:'22:00:00',marketHoursClose:'06:00:00'}, {...session,marketHoursOpen:'00:00:00',marketHoursClose:'00:00:00'}, {...session,marketHoursFirstDay:'7'}])expect(marketSessionTimes(metadata,instant('2026-11-23T02:00:00Z'))).toBeNull();
+  expect(marketSessionTimes(session,NaN)).toBeNull();
+  expect(marketSessionTimes(session,Infinity)).toBeNull();
+ });
+ it('uses actual calendar session boundaries in preference to a conflicting daily schedule',()=>{
+  expect(marketSessionTimes({...session,...calendar},instant('2026-11-21T12:00:00Z'))).toEqual({opensAt:instant('2026-11-22T22:00:00Z'),closesAt:instant('2026-11-27T22:00:00Z')});
+  expect(marketSessionTimes(calendar,instant('2026-11-20T21:59:59Z'))).toEqual({opensAt:instant('2026-11-15T22:00:00Z'),closesAt:instant('2026-11-20T22:00:00Z')});
+  expect(marketSessionTimes(calendar,instant('2026-11-20T22:00:00Z'))).toEqual({opensAt:instant('2026-11-22T22:00:00Z'),closesAt:instant('2026-11-27T22:00:00Z')});
+ });
+ it('omits unknown calendar boundaries and never converts the coverage horizon into a session',()=>{
+  expect(marketSessionTimes(calendar,instant('2026-11-13T12:00:00Z'))).toEqual({closesAt:instant('2026-11-13T22:00:00Z')});
+  expect(marketSessionTimes(calendar,instant('2026-11-28T12:00:00Z'))).toEqual({});
+  expect(marketSessionTimes(calendar,instant('2026-11-29T00:00:00Z'))).toBeNull();
+  const oneClosure={...calendar,marketHoursClosedIntervals:JSON.stringify([[instant('2026-11-20T22:00:00Z'),instant('2026-11-22T22:00:00Z')]])};
+  expect(marketSessionTimes(oneClosure,instant('2026-11-21T12:00:00Z'))).toEqual({opensAt:instant('2026-11-22T22:00:00Z')});
  });
 });

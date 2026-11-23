@@ -61,32 +61,50 @@ async function selectInstrument(page:Page,name:string){
  await expect(picker(page)).toHaveCount(0);
 }
 
-test('Dukascopy regular hours and session status paint at the bottom left while last-trade prices stay at the top right',async({page})=>{
+test('Dukascopy UTC hours paint at the top left with larger corner legends across themes and widths',async({page})=>{
  await page.clock.install({time:new Date('2026-11-23T01:29:59Z')});
  await dukascopyFixtures(page);
  const position:TradeRecord={id:'dukascopy:'+'a'.repeat(32),provider:'dukascopy',environment:'demo',account:'hours-offline-demo',instrument:hk.nativeId,market:'jforex',orderId:'hours-fixture',submittedAt:Date.now()-2000,openDate:Date.now()-1000,closeDate:0,size:'10',remainingSize:'10',direction:'long',entryPrice:'65',stopLoss:'60',takeProfit:'70',slAmount:'-50',tpAmount:'50',currency:'HKD',balanceAtOpen:'1000',balanceCurrency:'HKD',balanceTime:Date.now()-2000,marginUsed:'65',marginCurrency:'HKD',status:'open',canClose:true,closeReason:'Explicit offline fixture',checkedAt:Date.now()};
  await page.evaluate(position=>(window as any).__testSetTradeHistory([position]),position);
  await selectInstrument(page,'0941.HK/HKD CFD');
- await expect(hours(page)).toContainText('Regular hours');
- for(const text of ['Mon','Fri','09:30','16:00','Asia/Hong_Kong'])await expect(hours(page)).toContainText(text);
+ const lines=hours(page).locator(':scope > span');
+ await expect(lines).toHaveText(['Opens at 2026-11-23 01:30 UTC','Closes at 2026-11-23 08:00 UTC']);
  await expect(hours(page)).toHaveAttribute('title',/breaks.*holidays|holidays.*breaks/i);
- const status=hours(page).getByLabel('Asset regular-session status',{exact:true});
- await expect(status).toHaveText('Closed');await expect(hours(page)).toContainText('regular schedule');
- await page.clock.fastForward(2000);await expect(status).toHaveText('Opened');
+ await expect(hours(page)).not.toContainText('Asia/Hong_Kong');
+ await expect(hours(page).getByLabel('Asset regular-session status',{exact:true})).toHaveCount(0);
+ await page.clock.fastForward(2000);
+ await expect(lines).toHaveText(['Opens at 2026-11-23 01:30 UTC','Closes at 2026-11-23 08:00 UTC']);
  const levels=page.getByRole('complementary',{name:'Last trade levels',exact:true});
+ const margin=page.getByRole('complementary',{name:'Dukascopy leverage and margin',exact:true});
  await expect(levels).toContainText('hours-fixture');
- const badge=await hours(page).boundingBox(),chart=await page.getByTestId('chart-canvas').boundingBox(),trade=await levels.boundingBox();
- expect(badge).not.toBeNull();expect(chart).not.toBeNull();expect(trade).not.toBeNull();
- expect(badge!.x).toBeGreaterThanOrEqual(chart!.x);
- expect(badge!.x).toBeLessThan(chart!.x+80);
- const attribution=await page.getByTestId('chart-canvas').locator('a[href*="tradingview.com"]').boundingBox();
- expect(attribution).not.toBeNull();expect(badge!.x).toBeGreaterThan(attribution!.x+attribution!.width);
- expect(badge!.y).toBeGreaterThan(chart!.y+chart!.height/2);
- expect(badge!.y+badge!.height).toBeLessThanOrEqual(chart!.y+chart!.height-25);
- expect(trade!.y).toBeLessThan(chart!.y+100);
- expect(await hours(page).evaluate(element=>getComputedStyle(element).pointerEvents)).toBe('none');
- await page.getByTestId('chart-cell').screenshot({path:'test-results/chart-bottom-corners.png'});
- await page.clock.setSystemTime(new Date('2026-11-23T08:00:01Z'));await page.clock.fastForward(1000);await expect(status).toHaveText('Closed');
+ await expect(margin).toContainText('JForex margin');
+ for(const [theme,width] of [['light',1600],['dark',1600],['light',900]] as const){
+  await page.setViewportSize({width,height:1000});
+  if(await page.evaluate(()=>document.documentElement.dataset.theme)!==theme){
+   await page.getByRole('button',{name:'Open settings',exact:true}).click();
+   await page.getByLabel('Theme',{exact:true}).selectOption(theme);
+   await page.getByRole('button',{name:'Close settings',exact:true}).click();
+   await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  }
+  const badge=await hours(page).boundingBox(),chart=await page.getByTestId('chart-canvas').boundingBox(),trade=await levels.boundingBox(),account=await margin.boundingBox();
+  expect(badge).not.toBeNull();expect(chart).not.toBeNull();expect(trade).not.toBeNull();expect(account).not.toBeNull();
+  expect(badge!.x).toBeGreaterThanOrEqual(chart!.x);
+  expect(badge!.x).toBeLessThan(chart!.x+80);
+  expect(badge!.y).toBeGreaterThanOrEqual(chart!.y);
+  expect(badge!.y).toBeLessThan(chart!.y+30);
+  expect(trade!.y).toBeLessThan(chart!.y+30);
+  expect(badge!.x+badge!.width).toBeLessThanOrEqual(trade!.x-8);
+  expect(account!.x+account!.width).toBeGreaterThan(chart!.x+chart!.width-100);
+  expect(account!.x+account!.width).toBeLessThanOrEqual(chart!.x+chart!.width-70);
+  expect(account!.y+account!.height).toBeLessThanOrEqual(chart!.y+chart!.height-25);
+  expect(account!.y).toBeGreaterThanOrEqual(trade!.y+trade!.height+8);
+  for(const legend of [hours(page),levels,margin])expect(await legend.evaluate(element=>parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(14);
+  expect(await margin.locator('small').evaluate(element=>parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(14);
+  for(const legend of [hours(page),margin])await expect(legend).toHaveCSS('pointer-events','none');
+  await page.getByTestId('chart-cell').screenshot({path:`test-results/chart-corner-legends-${theme}-${width}.png`});
+ }
+ await page.clock.setSystemTime(new Date('2026-11-23T08:00:01Z'));await page.clock.fastForward(1000);
+ await expect(lines).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
  await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
  await expect(hours(page)).toHaveCount(0);
  await exchange(page).selectOption('binance');
@@ -107,17 +125,14 @@ test('missing or malformed Dukascopy session metadata hides the hours badge',asy
 test('Dukascopy forex calendar paints actual next opening and updates across the weekend boundary',async({page})=>{
  await page.clock.install({time:new Date('2026-11-21T12:00:00Z')});
  await dukascopyFixtures(page,[forex]);
- await expect(hours(page)).toContainText('broker calendar');
- await expect(hours(page)).toContainText('Next opens Sun 2026-11-22 22:00 UTC');
- await expect(hours(page)).toContainText('closes Fri 2026-11-27 22:00 UTC');
- const status=hours(page).getByLabel('Asset regular-session status',{exact:true});
- await expect(status).toHaveText('Closed');
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at 2026-11-22 22:00 UTC','Closes at 2026-11-27 22:00 UTC']);
+ await expect(hours(page)).not.toContainText('broker calendar');
  await expect(hours(page)).toHaveAttribute('title',/dated coverage.*trading halts/);
  const badge=await hours(page).boundingBox(),chart=await page.getByTestId('chart-canvas').boundingBox();
- expect(badge!.x).toBeLessThan(chart!.x+80);expect(badge!.y).toBeGreaterThan(chart!.y+chart!.height/2);
+ expect(badge!.x).toBeLessThan(chart!.x+80);expect(badge!.y).toBeLessThan(chart!.y+30);
  await page.getByTestId('chart-cell').screenshot({path:'test-results/chart-forex-calendar.png'});
  await page.clock.setSystemTime(new Date('2026-11-22T21:59:59Z'));await page.clock.fastForward(1000);
- await expect(status).toHaveText('Opened');await expect(hours(page)).toContainText('Opened Sun 2026-11-22 22:00 UTC');
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at 2026-11-22 22:00 UTC','Closes at 2026-11-27 22:00 UTC']);
  await page.clock.setSystemTime(new Date('2026-11-29T00:00:00Z'));await page.clock.fastForward(1000);
  await expect(hours(page)).toHaveCount(0);
 });
@@ -131,7 +146,7 @@ test('an active Dukascopy chart picks up delayed calendar discovery and stops ch
   window.go!.main!.App!.RefreshDucascopyInstruments=async()=>{(window as any).__hoursRefreshes++;return structuredClone(items);};
  },[hk,unavailable,forex]);
  await page.clock.fastForward(5*60000+1000);
- await expect(hours(page)).toContainText('Next opens Sun 2026-11-22 22:00 UTC');
+ await expect(hours(page)).toContainText('Opens at 2026-11-22 22:00 UTC');
  expect(await page.evaluate(()=>(window as any).__hoursRefreshes)).toBeGreaterThan(0);
  await exchange(page).selectOption('binance');
  await expect(hours(page)).toHaveCount(0);
