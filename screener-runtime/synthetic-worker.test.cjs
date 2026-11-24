@@ -218,3 +218,38 @@ test('edited ratio CSV cannot acquire a fresh provenance hash through refresh, e
   await assert.rejects(download({...request,timeframe:'w1',output,dailyPlanFile:plan},{emit:()=>{}}),/provenance checksum/);
   assert.equal(await fs.readFile(request.output,'utf8'),edited);
 });
+test('ratio windows before common tick availability do not fetch either leg',async t=>{
+  for(const [symbol,from,to] of [['btcxau',Date.UTC(2010,0,1),Date.UTC(2011,0,1)],['xauspx',Date.UTC(2010,0,1),Date.UTC(2011,0,1)],
+    ['ethbtc',Date.UTC(2017,5,1),Date.UTC(2017,6,1)],['xauxag',Date.UTC(2003,4,4),Date.UTC(2003,4,5)]]){
+    const request=await fixture(t,symbol,from,to);let requests=0;
+    await assert.rejects(download(request,{api:transport(()=>{requests++;assert.fail('leg fetched before common availability');}),emit:()=>{}}),/simultaneous source BID/);
+    assert.equal(requests,0);assert.equal(await fs.readFile(request.output,'utf8'),'');
+    const saved=JSON.parse(await fs.readFile(path.join(path.dirname(request.output),'synthetic-checkpoint.json'),'utf8'));
+    assert.equal(saved.start,from);assert.equal(saved.end,to);assert.equal(saved.nextDay,to);
+  }
+});
+test('both legs start in the first common source hour and quotes before the exact common instant are excluded',async t=>{
+  const definitions=require('./synthetic-ratio.cjs').instruments;
+  for(const symbol of ['btcxau','xauspx','ethbtc']){
+    const definition=definitions[symbol],common=Math.max(...[definition.numerator,definition.denominator].map(leg=>Date.parse(api.instrumentMetaData[leg].startHourForTicks)));
+    const firstHour=Math.floor(common/HOUR)*HOUR,until=Math.floor(common/DAY)*DAY+DAY;
+    const request=await fixture(t,symbol,Date.UTC(2010,0,1),until),requests=[];
+    let result;await download(request,{api:transport(url=>{
+      const hour=hourOf(url);requests.push({url,hour});assert.ok(hour>=firstHour,'no leg source before first common hour');
+      if(hour!==firstHour)return empty(hour);
+      const numerator=url.includes('/'+api.instrumentMetaData[definition.numerator].code+'/');
+      return payload(hour,numerator?[999,10]:[1,2],[common-hour-1,common-hour]);
+    }),emit:event=>{if(event.type==='done')result=event;}});
+    assert.ok(requests.length>0);assert.equal(requests.filter(item=>item.hour===firstHour).length,2);
+    assert.equal(await fs.readFile(request.output,'utf8'),`timestamp,open,high,low,close\n${Math.floor(common/DAY)*DAY},5,5,5,5\n`);
+    assert.deepEqual(result.coverage,[{from:Date.UTC(2010,0,1),to:until}]);
+    const saved=JSON.parse(await fs.readFile(path.join(path.dirname(request.output),'synthetic-checkpoint.json'),'utf8'));assert.equal(saved.start,Date.UTC(2010,0,1));
+  }
+});
+test('missing or malformed required leg availability fails before any quote request',async t=>{
+  for(const startHourForTicks of [undefined,'invalid',-1]){
+    const request=await fixture(t);let requests=0;
+    await assert.rejects(download(request,{api:transport(()=>{requests++;assert.fail('invalid availability reached provider');},{xauusd:{...api.instrumentMetaData.xauusd,startHourForTicks}}),emit:()=>{}}),/availability metadata is invalid for xauusd/);
+    assert.equal(requests,0);
+  }
+});

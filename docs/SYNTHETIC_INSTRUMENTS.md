@@ -53,9 +53,14 @@ beside the provider session cache. Chunks and manifests are checksummed and atom
 published under per-hour cross-process locks. Live incomplete hours are not published.
 Decoding is bounded to one hour and validated size/row limits; daily output is streamed.
 
+Ratio requests are clipped to the later exact tick-availability instant of both
+legs; dates before any possible common observation require no source fetch. The
+original requested range remains the queue/checkpoint identity.
+
 Compatible published underlying tick CSVs are reused when their saved verified
 coverage ledger and checksum prove the requested hours. A filename or a few rows do
-not establish complete coverage. Unverified data cannot suppress a provider request.
+not establish complete coverage. Disjoint coverage is skipped before hashing or
+streaming irrelevant files. Unverified data cannot suppress a provider request.
 Incremental extension/refresh reuses completed hourly chunks and existing candle
 coverage. It does not redownload full history on each alert check. Daily checkpoints
 retain committed output and the frozen closed-bar cutoff for resume. Generated CSVs

@@ -76,4 +76,22 @@ test('abort cancels source iteration without leaving a held chunk lock',async t=
   await assert.rejects(collect(sourceQuotes('btcusd',start,start+HOUR,request,{signal:controller.signal,api:transport(async url=>{controller.abort();return tickPayload(sourceHour(url),[[0,10]]);})})),/abort/i);
   assert.equal((await fs.readdir(path.join(request.syntheticCacheDirectory,'btcusd'))).some(name=>name.endsWith('.lock')),false);
 });
+test('disjoint or invalid tick coverage skips historical file reads before fetching the requested hour',async t=>{
+  const query=Date.UTC(2026,0,1);
+  for(const coverage of [[{from:Date.UTC(2010,0,1),to:Date.UTC(2024,0,1)}],[{from:query-HOUR,to:query}],
+    [{from:query+HOUR,to:query+2*HOUR}],[{from:query,to:query+HOUR},{from:query+HOUR,to:NaN}],
+    [{from:query+HOUR,to:query}],Array(10001).fill({from:query,to:query+HOUR})]){
+    const request={...await fixture(t),asOf:query+HOUR},history=path.join(path.dirname(request.output),'history');await fs.mkdir(history);
+    const filename='btcusd-tick-2010-01-01-2024-01-01.csv',file=path.join(history,filename),csv='not a readable tick CSV\n';
+    await fs.writeFile(file,csv);await fs.mkdir(path.join(history,'.cryptodesk-screener-metadata'));
+    const metadata=path.join(history,'.cryptodesk-screener-metadata',createHash('sha256').update(file).digest('hex')+'.json');
+    await fs.writeFile(metadata,JSON.stringify({version:1,filename,verified:true,bytes:Buffer.byteLength(csv),checksum:createHash('sha256').update(csv).digest('hex'),coverage}));
+    const streams=require('node:fs'),original=streams.createReadStream;let historicalReads=0,fetches=0;
+    streams.createReadStream=function(filename,...options){if(filename===file){historicalReads++;throw Error('Historical file must not be read for disjoint or invalid coverage.');}return original.call(this,filename,...options);};
+    try{
+      const values=await collect(sourceQuotes('btcusd',query,query+HOUR,{...request,historyDirectory:history},{api:transport(async url=>{fetches++;return tickPayload(sourceHour(url),[[0,10]]);})}));
+      assert.deepEqual(values,[[query,10]]);assert.equal(historicalReads,0);assert.equal(fetches,1);
+    }finally{streams.createReadStream=original;}
+  }
+});
 module.exports={tickPayload,sourceHour,transport,start};

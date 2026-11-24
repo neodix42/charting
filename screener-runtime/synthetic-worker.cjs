@@ -38,11 +38,23 @@ function segment(source,from,to,kind){
 }
 async function* computedBars(request,definition,start,to,source,options){
   const signal=options.signal;
-  const ratios=(from,until)=>aggregateRatio(sourceQuotes(definition.numerator,from,until,request,options),sourceQuotes(definition.denominator,from,until,request,options),{period:'d1',maxAgeMs:0,from,to:until,signal});
+  const api=options.api??require('dukascopy-node');
+  const ratios=async function*(from,until){
+    const starts=[definition.numerator,definition.denominator].map(symbol=>{
+      const value=api.instrumentMetaData?.[symbol]?.startHourForTicks,time=Date.parse(value??'');
+      if(typeof value!=='string'||!Number.isSafeInteger(time)||time<0)throw Error(`Required BID tick availability metadata is invalid for ${symbol}.`);
+      return time;
+    });
+    const commonStart=Math.max(from,...starts);
+    if(until<=commonStart)return;
+    const shared={...options,historyRange:{from:commonStart,to:options.historyRange?.to??until}};
+    yield* aggregateRatio(sourceQuotes(definition.numerator,commonStart,until,request,shared),sourceQuotes(definition.denominator,commonStart,until,request,shared),
+      {period:'d1',maxAgeMs:0,from:commonStart,to:until,signal});
+  };
   if(request.symbol!=='xauxag'||request.synthetic===true||request.synthetic?.kind==='synchronized-bid-ratio'){
     segment(source,start,to,'synchronized-bid-ratio');yield* ratios(start,to);return;
   }
-  const api=options.api??require('dukascopy-node'),first=Date.parse(api.instrumentMetaData?.xauxag?.startHourForTicks??'');
+  const first=Date.parse(api.instrumentMetaData?.xauxag?.startHourForTicks??'');
   for(let day=bucket(start,'d1');day<to;day+=DAY){
     const from=Math.max(start,day),until=Math.min(day+DAY,to),nativeFrom=Number.isFinite(first)?Math.max(from,first):until;
     let bar;

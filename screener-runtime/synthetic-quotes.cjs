@@ -112,6 +112,15 @@ function covers(coverage,hour){
   }
   return false;
 }
+function overlaps(coverage,from,to){
+  if(!Array.isArray(coverage)||!coverage.length||coverage.length>10000)return false;
+  let intersects=false;
+  for(const range of coverage){
+    if(!range||!Number.isSafeInteger(range.from)||!Number.isSafeInteger(range.to)||range.from < -8640000000000000||range.to>8640000000000000||range.from>=range.to)return false;
+    intersects=intersects||range.from<to&&range.to>from;
+  }
+  return intersects;
+}
 async function importHistory(symbol,from,to,request,api,folder,options){
   const history=request.historyDirectory,signal=options.signal;
   if(!history)return;
@@ -124,7 +133,7 @@ async function importHistory(symbol,from,to,request,api,folder,options){
     try{
       info=await regular(file,Number.MAX_SAFE_INTEGER);await regular(metadataFile,8*1024*1024);
       metadata=JSON.parse(await fsp.readFile(metadataFile,'utf8'));
-      if(metadata.version!==1||metadata.filename!==filename||metadata.verified!==true||metadata.bytes!==info.size||!metadata.coverage?.length||
+      if(metadata.version!==1||metadata.filename!==filename||metadata.verified!==true||metadata.bytes!==info.size||!overlaps(metadata.coverage,from,to)||
         !/^[a-f0-9]{64}$/.test(metadata.checksum??'')||await digest(file)!==metadata.checksum)continue;
     }catch(error){if(error.code==='ENOENT'||error instanceof SyntaxError||/Invalid synthetic quote cache/.test(error.message))continue;throw error;}
     const {records}=require('./refresh-worker.cjs'),input=records(file);
