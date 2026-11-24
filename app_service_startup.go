@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"cryptodesk/internal/candlestorage"
+	"cryptodesk/internal/domain"
 	"cryptodesk/internal/exchange"
 	"cryptodesk/internal/hyperliquid"
 	"cryptodesk/internal/jforex"
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/predictions"
 	"cryptodesk/internal/screener"
+	"cryptodesk/internal/synthetic"
 	"cryptodesk/internal/telegram"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -207,7 +209,15 @@ func (a *App) initializeChartServices(ctx context.Context) error {
 		return scanner, nil
 	}}, Factory: func(provider string) (exchange.Adapter, error) {
 		if provider == "dukascopy" {
-			return forex, nil
+			return synthetic.New(forex, func(historyCtx context.Context, key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
+				if err := services.wait(historyCtx, "screener"); err != nil {
+					return nil, err
+				}
+				a.mu.Lock()
+				scanner := a.screener
+				a.mu.Unlock()
+				return scanner.SyntheticHistory(historyCtx, key, from, to, limit)
+			}), nil
 		}
 		return exchange.New(provider)
 	}, Emit: func(event market.Event) {

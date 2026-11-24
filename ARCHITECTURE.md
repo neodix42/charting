@@ -77,7 +77,9 @@ Dukascopy's native and calculated instrument integration is described in
 [Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md). Canonical Screener CSVs and
 SHA-bound provenance feed enrichment, analysis, alerts and the Wails-independent
 `internal/synthetic` chart adapter. Calculated charts do not create broker sessions;
-their active-tab subscription polls atomically published closed history. The provider
+their active-tab subscription polls atomically published closed history. Both deferred
+production startup and the synchronous initializer install this adapter; its history
+reader waits for Screener readiness only when historical data is requested. The provider
 fetcher, pacing, durable queue and publication infrastructure remain shared.
 
 Only the active tab creates charts: first launch 1; at maximum 9. Inactive tabs keep state,

@@ -15,7 +15,7 @@ const chartCatalog:Instrument[]=[{nativeId:'EURUSD',market:'forex',baseAsset:'EU
 const downloadCatalog:ScreenerCatalog={version:'explicit-synthetic-fixture',timeframes:['m1','h1','d1','w1'],groups:[{name:'Forex',instruments:[{id:'eurusd',name:'Euro vs US Dollar',earliestDate:'2003-05-04'}]},{name:category,instruments:definitions.map(item=>({id:item.id.toLowerCase(),nativeId:item.id,name:item.name,earliestDate:'2024-01-01',synthetic:item.calculated,category,supportedTimeframes:['d1','w1'],formula:item.calculated?`${item.base} / ${item.quote}`:undefined}))}]};
 const ratioFile={id:'ratio-d1',name:'btcxau-d1-2024-01-01-2024-02-01.csv',symbol:'btcxau',timeframe:'d1',fields:['timestamp','open','high','low','close','sma_10'],bytes:1024,synthetic:true,provenance:{version:1,kind:'synchronized-bid-ratio',numerator:'btcusd',denominator:'xauusd',priceType:'bid',maxQuoteAgeMs:0,sessionPolicy:'exact-timestamp-no-carry-v1',volume:'unavailable',approximate:true,observationResolution:'simultaneous millisecond BID ticks'}};
 
-async function installCatalogs(page:Page){
+async function installCatalogs(page:Page,charts=chartCatalog){
  await page.evaluate(async({charts,downloads})=>{
   const api=window.go!.main!.App!,original=api.ListInstruments.bind(api);
   await api.ConfigureDucascopy({username:'synthetic-offline',password:'explicit-fixture',environment:'demo'});
@@ -24,7 +24,7 @@ async function installCatalogs(page:Page){
   api.GetScreenerCatalog=async()=>structuredClone(downloads);
   const status=api.GetTradingStatus.bind(api);(window as any).__syntheticTradingReads=0;
   api.GetTradingStatus=async key=>{(window as any).__syntheticTradingReads++;return status(key);};
- },{charts:chartCatalog,downloads:downloadCatalog});
+ },{charts,downloads:downloadCatalog});
 }
 async function selectFamily(page:Page,id:string){
  await page.getByRole('button',{name:'Select instrument',exact:true}).click();
@@ -78,6 +78,50 @@ test('calculated chart selection is daily/weekly, clearly labelled, non-tradable
  await expect(menu.getByRole('menuitem',{name:'Buy at market…',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>(window as any).__syntheticTradingReads)).toBeGreaterThan(0);
  expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
+});
+
+for(const scenario of [
+ {instrument:'BTCXAU',state:'unavailable',reason:"download this instrument's D1/W1 history in Screener before opening its calculated chart"},
+ {instrument:'XAUSPX',state:'unknownInstrument',reason:'Instrument XAUSPX is not offered by the connected JForex account'},
+])test(`empty calculated ${scenario.instrument} shows downloaded-history guidance and Retry for ${scenario.state}`,async({page})=>{
+ await openTestApp(page);
+ const charts=chartCatalog.map(item=>item.nativeId===scenario.instrument?{...item,providerMetadata:{...item.providerMetadata,catalogWarning:'Native JForex account discovery is unavailable'}}:item);
+ await installCatalogs(page,charts);
+ await page.evaluate(({instrument,state,reason})=>{
+  const api=window.go!.main!.App!,attach=api.AttachChart.bind(api),history=api.GetHistory.bind(api);
+  (window as any).__missingSyntheticAttach=0;(window as any).__missingSyntheticHistory=0;(window as any).__automaticSyntheticDownloads=0;
+  api.AttachChart=async(...args)=>{
+   if(args[2].exchange!=='dukascopy'||args[2].instrument!==instrument)return attach(...args);
+   (window as any).__missingSyntheticAttach++;
+   // Match the empty market-service snapshot and provider health contract;
+   // do not call the success fixture, which would invent calculated candles.
+   return {leaseId:`missing-synthetic-${(window as any).__missingSyntheticAttach}`,revision:0,bars:[],health:{state,reason}};
+  };
+  api.GetHistory=async(...args)=>{
+   if(args[1].exchange!=='dukascopy'||args[1].instrument!==instrument)return history(...args);
+   (window as any).__missingSyntheticHistory++;
+   throw Error("download this instrument's D1/W1 history in Screener before opening its calculated chart");
+  };
+  api.StartScreenerDownload=async()=>{(window as any).__automaticSyntheticDownloads++;throw Error('Opening a chart must not start a history download');};
+ },scenario);
+ await page.getByRole('combobox',{name:'Exchange',exact:true}).selectOption('dukascopy');
+ await selectFamily(page,scenario.instrument);
+ const chart=page.getByTestId('chart-cell'),readout=chart.getByLabel('OHLCV',{exact:true}),message=chart.locator('.chart-message');
+ await expect(readout).toContainText(`${scenario.instrument} · 1d · awaiting downloaded calculated history`);
+ await expect(readout).not.toContainText('awaiting JForex');
+ await expect(readout.locator('b')).toHaveCount(0);
+ await expect(message).toContainText(scenario.reason);
+ await expect(message).toContainText(`Download ${scenario.instrument} in Screener, then retry.`);
+ await expect(message).not.toContainText('Native JForex account discovery is unavailable');
+ const retry=message.getByRole('button',{name:'Retry feed',exact:true});
+ await expect(retry).toBeVisible();await retry.click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__missingSyntheticAttach)).toBe(2);
+ await expect(message).toContainText(`Download ${scenario.instrument} in Screener, then retry.`);
+ await chart.getByRole('button',{name:'Return to live',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__missingSyntheticHistory)).toBe(1);
+ await expect(chart.locator('.chart-status')).toContainText("download this instrument's D1/W1 history in Screener");
+ await expect(readout.locator('b')).toHaveCount(0);await expect(retry).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__automaticSyntheticDownloads)).toBe(0);
 });
 
 test('saved native family intraday charts remain unchanged and ordinary symbols retain every timeframe',async({page})=>{
