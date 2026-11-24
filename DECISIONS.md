@@ -364,3 +364,20 @@ Reference APIs: [JForex history](https://www.dukascopy.com/client/javadoc3/com/d
 | D213 | 2026-11-22: durable sequential all-source Downloader batches | Keep concrete source identities for jobs and catalogs; add All only to Downloader selection/request types. Submit one atomic queue with separate per-source symbol selections and common H1/D1/W1 dates. Run Dukascopy then Hyperliquid, retaining normal within-source concurrency, provider pacing and source-qualified weekly dependencies. Persist an explicit source-order marker so restart, cancel, resume, Live Alerts pauses and save failures preserve the barrier between sources. Preserve existing selections, single-source behavior, legacy queues and published histories. |
 
 | D214 | 2026-11-22: sequential all-source Enrichment batches | Add All to Enrichment selection/request and combined file-list scopes while keeping concrete per-file/job identities and other source selectors unchanged. Submit one batch, filter by source/period/intraday compatibility before history grouping, then drain Dukascopy workers before starting Hyperliquid. Preserve per-source concurrency, exact backups, recipes and atomic publication. Report source order/current source under one cancellation lifecycle; retain completed files and existing explicit-rerun restart behavior. Keep the full enrichment period set in All mode and manual Refresh explicitly Dukascopy-only. |
+# Synthetic Dukascopy history — 2026-11-24
+
+Reuse BTCUSD/XAUXAG canonical identities and overlay a five-member Synthetic
+Instruments category, adding only BTCXAU, XAUSPX and ETHBTC. New family selections
+offer D1/W1; legacy native intraday data/workspaces remain valid. Use the actual
+USA500IDXUSD index. Prefer native BID history and preserve explicit native/ratio
+segments where a range crosses availability. Failures do not masquerade as absence.
+
+Without an authoritative historical common-session calendar, production joins only
+identical millisecond BID timestamps with no carried quotes. Label the resulting
+extrema approximate, omit unavailable volume, and reject volume-dependent enrichment.
+Cache complete source hours through existing provider pacing and transactionally
+publish canonical histories with checksum-bound provenance. Chart selection reads
+downloaded closed history; only active synthetic chart subscriptions poll for updates.
+Execution is forbidden for calculated ratios and simulations are analytical, without
+claiming executable underlying-position returns. Details and verification contracts:
+[Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md).

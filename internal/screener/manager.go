@@ -315,6 +315,9 @@ func validateRequest(request Request, now time.Time) error {
 		if selected[symbol] {
 			return fmt.Errorf("duplicate Dukascopy instrument %q", symbol)
 		}
+		if calculatedSynthetic(symbol) && request.Timeframe != "d1" && request.Timeframe != "w1" {
+			return errors.New("calculated synthetic instruments support only D1 and W1")
+		}
 		selected[symbol] = true
 	}
 	supported := false
@@ -670,6 +673,7 @@ type workerEvent struct {
 	Coverage       []dataRange         `json:"coverage"`
 	Recipes        []EnrichmentRequest `json:"recipes"`
 	NoChange       bool                `json:"noChange"`
+	Provenance     *DataProvenance     `json:"provenance,omitempty"`
 }
 
 func (m *Manager) download(ctx context.Context, index int, job Job, directory string, sourceBatchSize int) (string, string, error) {
@@ -710,19 +714,20 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	// JSON tags in this internal protocol are lowercase; no shell ever interprets
 	// symbols, dates, executable paths or destination directories.
 	input, _ := json.Marshal(struct {
-		Symbol          string           `json:"symbol"`
-		Timeframe       string           `json:"timeframe"`
-		From            string           `json:"from"`
-		To              string           `json:"to"`
-		Output          string           `json:"output"`
-		SourceBatchSize int              `json:"sourceBatchSize"`
-		Resume          bool             `json:"resume"`
-		OwnerPipe       bool             `json:"ownerPipe"`
-		PlanFile        string           `json:"planFile,omitempty"`
-		DailyPlanFile   string           `json:"dailyPlanFile,omitempty"`
-		AsOf            int64            `json:"asOf"`
-		ProviderSession *providerSession `json:"providerSession,omitempty"`
-	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), dailyPlanFile, plan.AsOf, sessionFromContext(ctx)})
+		Symbol           string           `json:"symbol"`
+		Timeframe        string           `json:"timeframe"`
+		From             string           `json:"from"`
+		To               string           `json:"to"`
+		Output           string           `json:"output"`
+		SourceBatchSize  int              `json:"sourceBatchSize"`
+		Resume           bool             `json:"resume"`
+		OwnerPipe        bool             `json:"ownerPipe"`
+		PlanFile         string           `json:"planFile,omitempty"`
+		DailyPlanFile    string           `json:"dailyPlanFile,omitempty"`
+		AsOf             int64            `json:"asOf"`
+		ProviderSession  *providerSession `json:"providerSession,omitempty"`
+		HistoryDirectory string           `json:"historyDirectory"`
+	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), dailyPlanFile, plan.AsOf, sessionFromContext(ctx), directory})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
 	owner, err := cmd.StdinPipe()
@@ -816,6 +821,12 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	}
 	if !done {
 		return "", "", errors.New("downloader exited without confirming any downloaded rows")
+	}
+	if err := validateSyntheticDataset(job.Symbol, job.Timeframe, result.Provenance); err != nil {
+		return "", "", err
+	}
+	if result.Provenance != nil && result.Checksum == "" {
+		return "", "", errors.New("synthetic dataset provenance lacks a content checksum")
 	}
 	if len(plan.Inputs) > 0 {
 		return m.publishExtendedDownload(ctx, index, job, directory, jobDirectory, partial, plan, originals, result)

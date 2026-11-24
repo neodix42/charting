@@ -93,7 +93,7 @@ func TestAnalysisContentIdentityNormalizesFormattingButPreservesDistinctHistorie
 
 func TestAnalysisDuplicateRemovalPrecedesCategoryPagingAndChartNavigation(t *testing.T) {
 	m := analysisTestManager(t)
-	crypto, forex := categoryForSymbol(t, "btcusd"), categoryForSymbol(t, "eurusd")
+	crypto, forex := categoryForSymbol(t, "ethusd"), categoryForSymbol(t, "eurusd")
 	var selected []Instrument
 	for _, group := range loadCatalog().Groups {
 		if group.Name == crypto {

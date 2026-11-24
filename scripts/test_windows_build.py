@@ -35,7 +35,7 @@ class WindowsPackagingTests(unittest.TestCase):
             root = Path(temporary)
             files = {"VERSION": "0.1.0" if override else "2.3.4", "wails.json": json.dumps({"info": {"productVersion": "0.1.0"}}),
                      "scripts/webview2-runtime.json": "{}", "APP_README.md": "readme", "LICENSE": "license", "STATUS.md": "status",
-                     "docs/WINDOWS_PORTABLE.md": "windows", "docs/THIRD_PARTY_NOTICES.md": "notices", "docs/licenses/example.txt": "license"}
+                     "docs/WINDOWS_PORTABLE.md": "windows", "docs/THIRD_PARTY_NOTICES.md": "notices", "docs/SYNTHETIC_INSTRUMENTS.md": "synthetic accuracy and provenance", "docs/licenses/example.txt": "license"}
             for name, content in files.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)

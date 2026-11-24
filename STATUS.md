@@ -1,4 +1,12 @@
-# Implementation status — updated 2026-11-22
+# Implementation status — updated 2026-11-24
+
+## Dukascopy Synthetic Instruments — 2026-11-24
+
+The Downloader and chart catalogs now expose BTCUSD, BTCXAU, XAUSPX, ETHBTC and XAUXAG in a dedicated Synthetic Instruments category. Existing native identities and datasets are reused. New category selections offer D1/W1, with ordinary instrument intervals and saved native intraday histories preserved. Calculated ratios use chronological simultaneous-millisecond BID observations, UTC days and the existing Monday weekly aggregation; extrema are explicitly approximate, volume is unavailable, and no quotes are carried over session gaps. Native history is preferred and mixed native/calculated XAUXAG provenance is recorded.
+
+Shared, checksummed hourly quote caches, verified local tick-history reuse, provider pacing, durable daily checkpoints, incremental extension/refresh and atomic history publication integrate the ratios with Enrichment, Analysis and Live Alerts. Price indicators work through existing recipes; volume indicators fail explicitly. Downloaded closed ratio history feeds active workspace charts, navigation, drawings and markers; charts poll published files without implicitly downloading years of ticks. UI and backend guards prevent direct execution or broker margin calculations for calculated instruments. Simulated ratio changes and Telegram signals explicitly identify their analytical basis. See [Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md) for the accuracy and availability contract.
+
+Local verification passed: the deterministic script (167 Python packaging/integration tests, Node, Go race, bindings, vet, frontend typecheck/lint, 332 unit tests and production build), 147 final runtime tests, 31 focused browser cases, native Go production compilation/tests and Java bridge checks. The isolated real GTK clipboard and packaged Telegram chart checks passed. Both platform runtime bundles validate with all synthetic modules and integrity manifests; the Linux packaged synthetic download/cache/enrichment/weekly probe passed, and the Windows application cross-build produced a complete portable archive. Full-browser and hosted workflow results are tracked in the pull request; no hosted result is asserted in this source record. A bounded public BTCXAU download was attempted through the real Go queue and packaged runtime, but Dukascopy returned HTTP 403 and correctly stopped publication. No credentialed JForex synthetic download or Windows GUI execution is claimed. Tests use temporary histories and explicit offline transports; existing user data and broker credentials are preserved.
 
 ## All data sources with sequential Enrichment — 2026-11-22
 

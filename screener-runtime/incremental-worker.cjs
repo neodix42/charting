@@ -104,6 +104,7 @@ async function extendDownload(request,options={}){
   const from=Date.parse(request.from),to=Math.min(Date.parse(request.to),plan.asOf),closed=closedBoundary(plan.asOf,request.timeframe);
   if(!Number.isFinite(from)||!Number.isFinite(to)||from>=to)throw Error('No available history in the requested UTC date range.');
   const headers=[],names=new Set(),scanned=[],covered=[],savedRecipes=[];
+  let latestProvenance;const provenanceEntries=[];
   for(const source of plan.inputs){
     const stat=await fs.lstat(source.input,{bigint:true});
     if(!stat.isFile()||Number(stat.size)!==source.bytes||Number(stat.mtimeNs/1000000n)!==source.modified)throw Error('Existing CSV changed since the download was queued; original kept.');
@@ -113,7 +114,10 @@ async function extendDownload(request,options={}){
     if(normalized.some(name=>!name)||new Set(normalized).size!==normalized.length)throw Error('CSV contains empty or duplicate field names; original kept.');
     for(const name of data.headers)if(!names.has(key(name))){names.add(key(name));headers.push(name);}
     const metadata=source.metadata??{};
+    latestProvenance??=metadata.provenance;
+    provenanceEntries.unshift({value:metadata.provenance,from:data.first,to:Math.min(nextBar(data.last,request.timeframe),plan.asOf)});
     const valid=metadata.checksum===data.checksum;
+    if(metadata.provenance&&!valid)throw Error('Synthetic provenance checksum does not match the existing CSV; original kept.');
     if(valid&&metadata.coverage?.length)covered.push(...metadata.coverage);
     else if(valid&&metadata.verified&&metadata.checkedThrough){
       covered.push({from:Math.min(Date.parse(source.from),data.first),to:closedBoundary(metadata.checkedThrough,request.timeframe)});
@@ -144,7 +148,7 @@ async function extendDownload(request,options={}){
   if(!snapshot.ranges.length&&plan.inputs.length===1){
     const coverage=union(covered);
     emit({type:'done',rows:scanned[0].rows,noChange:true,checksum:scanned[0].checksum,firstTimestamp:scanned[0].first,lastTimestamp:scanned[0].last,
-      ...(localOnly?{coverage,recipes,checkedThrough:coverage.length===1?coverage[0].to:0}:{}),message:'Requested data is already available; no download needed'});
+      provenance:latestProvenance,...(localOnly?{coverage,recipes,checkedThrough:coverage.length===1?coverage[0].to:0}:{}),message:'Requested data is already available; no download needed'});
     return scanned[0].rows;
   }
   recipes??=await recipesFor(headers,savedRecipes,[],request.timeframe);
@@ -158,14 +162,19 @@ async function extendDownload(request,options={}){
     emit({type:'progress',progress:2+index/Math.max(1,snapshot.ranges.length)*68,message:`Downloading missing range ${index+1}/${snapshot.ranges.length}: ${new Date(range.from).toISOString().replace(/\.\d{3}Z$/, 'Z')} → ${new Date(range.to).toISOString().replace(/\.\d{3}Z$/, 'Z')}`});
     let rows=0;
     try{
-      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(range.from).toISOString(),to:new Date(range.to).toISOString(),output,resume:true,sourceBatchSize:request.sourceBatchSize??1,asOf:plan.asOf,providerSession:request.providerSession},
-        {...options,emit:event=>{if(event.type==='done')rows=event.rows;if(event.type==='progress')emit({...event,progress:2+(index+event.progress/100)/snapshot.ranges.length*68});}});
+      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(range.from).toISOString(),to:new Date(range.to).toISOString(),output,resume:true,sourceBatchSize:request.sourceBatchSize??1,asOf:plan.asOf,providerSession:request.providerSession,
+        historyDirectory:request.historyDirectory,syntheticCacheDirectory:request.syntheticCacheDirectory,synthetic:request.synthetic??(request.symbol==='xauxag'&&!names.has('volume')?{kind:'mixed-native-ratio'}:undefined)},
+        {...options,emit:event=>{if(event.type==='done'){rows=event.rows;if(event.provenance){latestProvenance=event.provenance;provenanceEntries.push({value:event.provenance,from:range.from,to:closedBoundary(range.to,request.timeframe)});}}if(event.type==='progress')emit({...event,progress:2+(index+event.progress/100)/snapshot.ranges.length*68});}});
     }catch(error){if(!/Dukascopy returned no rows|No available history in the requested UTC date range/.test(error.message))throw error;}
     if(rows>0)downloaded.push(output);
     const end=closedBoundary(range.to,request.timeframe);
     if(range.from<end)covered.push({from:range.from,to:end});
   }
   const coverage=union(covered);
+  if(provenanceEntries.some(entry=>entry.value?.volume==='unavailable')&&names.has('volume')){
+    headers.splice(headers.findIndex(name=>key(name)==='volume'),1);names.delete('volume');
+    recipes=await recipesFor(headers,savedRecipes,[],request.timeframe);
+  }
   // Only owned, reproducible merge output is discarded on restart. Per-range
   // source checkpoints remain, so committed data is not fetched again.
   for(const name of await fs.readdir(directory))if(/^merge-\d+\.csv$/.test(name))await fs.unlink(path.join(directory,name));
@@ -187,7 +196,8 @@ async function extendDownload(request,options={}){
   }finally{await output?.close();await source.return();}
   const result=await scan(request.output,request.timeframe);
   const noChange=result.checksum===scanned[0].checksum;
-  emit({type:'done',rows,noChange,firstTimestamp:result.first,lastTimestamp:result.last,checksum:result.checksum,coverage,recipes,checkedThrough:coverage.length===1?coverage[0].to:0,
+  const provenance=require('./synthetic-worker.cjs').mergeProvenance(request.symbol,provenanceEntries,names.has('volume'))??latestProvenance;
+  emit({type:'done',rows,noChange,firstTimestamp:result.first,lastTimestamp:result.last,checksum:result.checksum,coverage,recipes,provenance,checkedThrough:coverage.length===1?coverage[0].to:0,
     message:localOnly?`Consolidated ${plan.inputs.length} local histories: ${rows.toLocaleString('en-US')} rows; ${recipes.length} indicator recipes recalculated`:noChange&&!snapshot.ranges.length?'Requested data is already available; no download needed':`Updated existing history: ${rows.toLocaleString('en-US')} rows; ${snapshot.ranges.length} missing ranges downloaded; ${recipes.length} indicator recipes recalculated`});
   return rows;
 }

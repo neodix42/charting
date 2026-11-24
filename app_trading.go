@@ -58,6 +58,10 @@ func (a *App) GetTradingStatus(key domain.FeedKey) (trading.Status, error) {
 	if err := key.Validate(); err != nil {
 		return status, err
 	}
+	if domain.IsCalculatedInstrument(key.Exchange, key.Instrument) {
+		status.Error = "Calculated synthetic instruments are analytical, not executable broker instruments"
+		return status, nil
+	}
 	switch key.Exchange {
 	case "hyperliquid":
 		if a.hyperliquid == nil {
@@ -88,6 +92,10 @@ func (a *App) GetTradingStatus(key domain.FeedKey) (trading.Status, error) {
 		status.CanBuy, status.CanSell = status.Enabled, status.Enabled
 		status.Environment, status.Error = info.Environment, info.Error
 		status.ProtectiveOrdersSupported = true
+		if (key.Instrument == "BTCUSD" || key.Instrument == "XAUXAG") && !a.jforex.NativeInstrumentAvailable(key.Instrument, key.Market) {
+			status.Enabled, status.CanBuy, status.CanSell = false, false, false
+			status.Error = "The connected account does not offer this native instrument; downloaded history does not enable execution"
+		}
 	}
 	return status, nil
 }
@@ -111,6 +119,9 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 	result := trading.Preview{FeedKey: request.FeedKey, Side: request.Side, Quantity: request.Quantity, StopLoss: request.StopLoss, TakeProfit: request.TakeProfit, Warnings: []string{}}
 	if err := request.FeedKey.Validate(); err != nil {
 		return result, err
+	}
+	if domain.IsCalculatedInstrument(request.FeedKey.Exchange, request.FeedKey.Instrument) {
+		return result, errors.New("calculated synthetic instruments cannot be traded")
 	}
 	if len(request.Quantity) > 128 || len(request.StopLoss) > 128 || len(request.TakeProfit) > 128 {
 		return result, errors.New("trade numbers exceed the supported length")
@@ -259,6 +270,9 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 	result := trading.Estimate{FeedKey: key, Side: side}
 	if err := key.Validate(); err != nil {
 		return result, err
+	}
+	if domain.IsCalculatedInstrument(key.Exchange, key.Instrument) {
+		return result, errors.New("calculated synthetic instruments have no executable broker valuation")
 	}
 	if key.Exchange != "dukascopy" && key.Exchange != "hyperliquid" {
 		return result, errors.New("trade estimates are available only for Hyperliquid and Dukascopy charts")

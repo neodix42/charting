@@ -32,12 +32,28 @@ func (k FeedKey) Validate() error {
 	if len(k.Instrument) > 128 || !validNativeInstrument(k.Exchange, k.Market, k.Instrument) {
 		return fmt.Errorf("invalid native instrument")
 	}
+	if IsCalculatedInstrument(k.Exchange, k.Instrument) && (k.Market != "cfd" || k.Timeframe != "1d" && k.Timeframe != "1w") {
+		return fmt.Errorf("calculated Dukascopy instruments support D1 and W1 only")
+	}
 	for _, v := range Intervals {
 		if k.Timeframe == v {
 			return nil
 		}
 	}
 	return fmt.Errorf("unsupported interval")
+}
+
+// Native BTCUSD/XAUXAG identities retain compatibility with saved intraday
+// workspaces. Only the new calculated ratios have no native intraday market.
+func IsCalculatedInstrument(provider, instrument string) bool {
+	if provider != "dukascopy" {
+		return false
+	}
+	switch strings.ToUpper(instrument) {
+	case "BTCXAU", "XAUSPX", "ETHBTC":
+		return true
+	}
+	return false
 }
 
 func supportedMarket(exchange, market string) bool {
@@ -65,15 +81,18 @@ func validNativeInstrument(exchange, market, instrument string) bool {
 }
 
 type Candle struct {
-	Time           int64   `json:"time"`
-	Open           float64 `json:"open"`
-	High           float64 `json:"high"`
-	Low            float64 `json:"low"`
-	Close          float64 `json:"close"`
-	Volume         float64 `json:"volume"`
-	Closed         bool    `json:"closed"`
-	Quality        string  `json:"quality"`
-	SourceRevision int64   `json:"sourceRevision"`
+	Time              int64   `json:"time"`
+	Open              float64 `json:"open"`
+	High              float64 `json:"high"`
+	Low               float64 `json:"low"`
+	Close             float64 `json:"close"`
+	Volume            float64 `json:"volume"`
+	VolumeUnavailable bool    `json:"volumeUnavailable,omitempty"`
+	Synthetic         bool    `json:"synthetic,omitempty"`
+	Approximate       bool    `json:"approximate,omitempty"`
+	Closed            bool    `json:"closed"`
+	Quality           string  `json:"quality"`
+	SourceRevision    int64   `json:"sourceRevision"`
 }
 
 func (c Candle) Validate() error {

@@ -32,14 +32,17 @@ export namespace domain {
 	    low: number;
 	    close: number;
 	    volume: number;
+	    volumeUnavailable?: boolean;
+	    synthetic?: boolean;
+	    approximate?: boolean;
 	    closed: boolean;
 	    quality: string;
 	    sourceRevision: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Candle(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
@@ -48,6 +51,9 @@ export namespace domain {
 	        this.low = source["low"];
 	        this.close = source["close"];
 	        this.volume = source["volume"];
+	        this.volumeUnavailable = source["volumeUnavailable"];
+	        this.synthetic = source["synthetic"];
+	        this.approximate = source["approximate"];
 	        this.closed = source["closed"];
 	        this.quality = source["quality"];
 	        this.sourceRevision = source["sourceRevision"];
@@ -633,6 +639,9 @@ export namespace market {
 export namespace predictions {
 
 	export class Dataset {
+	    category?: string;
+	    synthetic?: boolean;
+	    provenance?: number[];
 	    dataSource?: string;
 	    market?: string;
 	    id: string;
@@ -647,6 +656,9 @@ export namespace predictions {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.category = source["category"];
+	        this.synthetic = source["synthetic"];
+	        this.provenance = source["provenance"];
 	        this.dataSource = source["dataSource"];
 	        this.market = source["market"];
 	        this.id = source["id"];
@@ -1129,6 +1141,74 @@ export namespace predictions {
 
 export namespace screener {
 
+	export class DataProvenance {
+	    version: number;
+	    kind: string;
+	    numerator: string;
+	    denominator?: string;
+	    priceType: string;
+	    maxQuoteAgeMs: number;
+	    sessionPolicy: string;
+	    volume: string;
+	    approximate?: boolean;
+	    observationResolution?: string;
+	    segments?: ProvenanceSegment[];
+
+	    static createFrom(source: any = {}) {
+	        return new DataProvenance(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.kind = source["kind"];
+	        this.numerator = source["numerator"];
+	        this.denominator = source["denominator"];
+	        this.priceType = source["priceType"];
+	        this.maxQuoteAgeMs = source["maxQuoteAgeMs"];
+	        this.sessionPolicy = source["sessionPolicy"];
+	        this.volume = source["volume"];
+	        this.approximate = source["approximate"];
+	        this.observationResolution = source["observationResolution"];
+	        this.segments = this.convertValues(source["segments"], ProvenanceSegment);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class ProvenanceSegment {
+	    from: number;
+	    to: number;
+	    kind: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ProvenanceSegment(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.kind = source["kind"];
+	    }
+	}
+
 	export class LiveAlertAssetRef {
 	    market?: string;
 	    symbol: string;
@@ -1281,6 +1361,9 @@ export namespace screener {
 	    fields: string[];
 	    bytes: number;
 	    error?: string;
+	    synthetic?: boolean;
+	    provenance?: DataProvenance;
+	    simulationBasis?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new DataFile(source);
@@ -1302,7 +1385,28 @@ export namespace screener {
 	        this.fields = source["fields"];
 	        this.bytes = source["bytes"];
 	        this.error = source["error"];
+	        this.synthetic = source["synthetic"];
+	        this.provenance = this.convertValues(source["provenance"], DataProvenance);
+	        this.simulationBasis = source["simulationBasis"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class AnalysisCatalog {
 	    dataSource: string;
@@ -1394,6 +1498,9 @@ export namespace screener {
 	    trade?: AnalysisTradeLevels;
 	    tradeExecution?: AnalysisTradeExecution;
 	    signal?: AnalysisSignalLevels;
+	    synthetic?: boolean;
+	    provenance?: DataProvenance;
+	    simulationBasis?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisChart(source);
@@ -1417,6 +1524,9 @@ export namespace screener {
 	        this.trade = this.convertValues(source["trade"], AnalysisTradeLevels);
 	        this.tradeExecution = this.convertValues(source["tradeExecution"], AnalysisTradeExecution);
 	        this.signal = this.convertValues(source["signal"], AnalysisSignalLevels);
+	        this.synthetic = source["synthetic"];
+	        this.provenance = this.convertValues(source["provenance"], DataProvenance);
+	        this.simulationBasis = source["simulationBasis"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1590,6 +1700,9 @@ export namespace screener {
 	    firstTime?: number;
 	    lastTime?: number;
 	    simulation?: AnalysisSimulationSummary;
+	    synthetic?: boolean;
+	    provenance?: DataProvenance;
+	    simulationBasis?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new AnalysisResult(source);
@@ -1613,6 +1726,9 @@ export namespace screener {
 	        this.firstTime = source["firstTime"];
 	        this.lastTime = source["lastTime"];
 	        this.simulation = this.convertValues(source["simulation"], AnalysisSimulationSummary);
+	        this.synthetic = source["synthetic"];
+	        this.provenance = this.convertValues(source["provenance"], DataProvenance);
+	        this.simulationBasis = source["simulationBasis"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1747,6 +1863,12 @@ export namespace screener {
 	    id: string;
 	    name: string;
 	    earliestDate: string;
+	    synthetic?: boolean;
+	    calculated?: boolean;
+	    category?: string;
+	    supportedTimeframes?: string[];
+	    formula?: string;
+	    note?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Instrument(source);
@@ -1759,6 +1881,12 @@ export namespace screener {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.earliestDate = source["earliestDate"];
+	        this.synthetic = source["synthetic"];
+	        this.calculated = source["calculated"];
+	        this.category = source["category"];
+	        this.supportedTimeframes = source["supportedTimeframes"];
+	        this.formula = source["formula"];
+	        this.note = source["note"];
 	    }
 	}
 	export class Group {
@@ -2321,6 +2449,8 @@ export namespace screener {
 	    takeProfitHits: number;
 	    profitablePercent: number;
 	    profitabilityUnavailable?: boolean;
+	    synthetic?: boolean;
+	    simulationBasis?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new SavedConditionProfitability(source);
@@ -2335,6 +2465,8 @@ export namespace screener {
 	        this.takeProfitHits = source["takeProfitHits"];
 	        this.profitablePercent = source["profitablePercent"];
 	        this.profitabilityUnavailable = source["profitabilityUnavailable"];
+	        this.synthetic = source["synthetic"];
+	        this.simulationBasis = source["simulationBasis"];
 	    }
 	}
 	export class SavedConditionAnalysis {
@@ -2556,6 +2688,8 @@ export namespace screener {
 	    status: string;
 	    message: string;
 	    profitability?: SavedConditionProfitability;
+	    synthetic?: boolean;
+	    simulationBasis?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new LiveAlertOutcome(source);
@@ -2579,6 +2713,8 @@ export namespace screener {
 	        this.status = source["status"];
 	        this.message = source["message"];
 	        this.profitability = this.convertValues(source["profitability"], SavedConditionProfitability);
+	        this.synthetic = source["synthetic"];
+	        this.simulationBasis = source["simulationBasis"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

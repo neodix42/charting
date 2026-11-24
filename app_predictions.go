@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -122,7 +123,12 @@ func (a *App) predictionDatasets() ([]predictions.Dataset, error) {
 		if name == "" {
 			name = strings.ToUpper(file.Symbol)
 		}
+		provenance, _ := json.Marshal(file.Provenance)
+		if file.Provenance == nil {
+			provenance = nil
+		}
 		files = append(files, predictions.Dataset{
+			DataSource: file.DataSource, Category: file.Category, Synthetic: file.Synthetic, Provenance: provenance,
 			ID: file.ID, Symbol: file.Symbol, Name: name, Period: file.Timeframe,
 			Filename: file.Name, Directory: catalog.Directory,
 		})

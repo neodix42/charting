@@ -29,6 +29,8 @@ type SavedConditionProfitability struct {
 	TakeProfitHits           int64   `json:"takeProfitHits"`
 	ProfitablePercent        float64 `json:"profitablePercent"`
 	ProfitabilityUnavailable bool    `json:"profitabilityUnavailable,omitempty"`
+	Synthetic                bool    `json:"synthetic,omitempty"`
+	SimulationBasis          string  `json:"simulationBasis,omitempty"`
 }
 
 const savedProfitabilityAssetsLimit = 32000
@@ -150,7 +152,7 @@ func completedAnalysisProfitability(a *analysisState) (*SavedConditionAnalysis, 
 		if result.Matches <= 0 {
 			continue
 		}
-		row := SavedConditionProfitability{Symbol: result.Symbol, Timeframe: result.Timeframe, FileName: result.Name, Matches: result.Matches, ProfitabilityUnavailable: true}
+		row := SavedConditionProfitability{Symbol: result.Symbol, Timeframe: result.Timeframe, FileName: result.Name, Matches: result.Matches, ProfitabilityUnavailable: true, Synthetic: result.Synthetic, SimulationBasis: result.SimulationBasis}
 		if result.Simulation != nil && result.Simulation.Unavailable != result.Matches {
 			row.ProfitabilityUnavailable = false
 			row.TakeProfitHits = result.Simulation.TakeProfitHits

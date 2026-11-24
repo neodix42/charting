@@ -52,9 +52,8 @@ func TestAnalysisIndexScopeWeeklyOnlySkipsUnusedDraftOperandsAndOtherPeriods(t *
 	scopedIndexFile(t, m, "btcusd", "h1", 5)
 	scopedIndexFile(t, m, "ethusd", "d1", 200)
 	scopedIndexFile(t, m, "ethusd", "h1", 5)
-	if categoryForSymbol(t, "btcusd") != categoryForSymbol(t, "ethusd") {
-		t.Fatal("fixtures must share a category")
-	}
+	// BTCUSD's family category differs from ETHUSD; a broad scan must still
+	// avoid unrelated timeframes regardless of category membership.
 	condition := analysisCondition("above", analysisField("close"), analysisNumber(0))
 	condition.Right.Timeframe = "h1" // A numeric operand cannot require companion data.
 	condition.Upper = analysisField("close")

@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -153,6 +154,28 @@ func indexAnalysisCSV(ctx context.Context, directory, name, output string, progr
 	}
 	if metadata.Symbol == "" || metadata.Timeframe == "" {
 		return nil, errors.New("cannot determine asset and timeframe; CSV name must use symbol-timeframe-from-to.csv")
+	}
+	if _, family := SyntheticDefinitionFor(metadata.Symbol); family || metadata.Provenance != nil {
+		saved, err := readFileMetadata(directory, name)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateSyntheticDataset(metadata.Symbol, metadata.Timeframe, saved.Provenance); err != nil {
+			return nil, err
+		}
+		metadata.Provenance = copyProvenance(saved.Provenance)
+		metadata.Synthetic = syntheticData(metadata.Symbol, saved.Provenance)
+		metadata.SimulationBasis = syntheticBasis(metadata.Synthetic)
+	}
+	if metadata.Synthetic {
+		if metadata.Provenance == nil {
+			return nil, errors.New("calculated synthetic dataset is missing its source provenance; download it again through Screener")
+		}
+		for _, field := range metadata.Fields {
+			if strings.EqualFold(strings.TrimSpace(field), "volume") {
+				return nil, errors.New("calculated synthetic ratios cannot contain an invented volume column")
+			}
+		}
 	}
 	source := filepath.Join(directory, name)
 	original, err := os.Lstat(source)
@@ -324,6 +347,15 @@ func indexAnalysisCSV(ctx context.Context, directory, name, output string, progr
 	if err = analysisUnchanged(s); err != nil {
 		return nil, err
 	}
+	saved, savedErr := readFileMetadata(directory, name)
+	if metadata.Provenance != nil || saved.Provenance != nil {
+		if savedErr != nil {
+			return nil, savedErr
+		}
+		if !reflect.DeepEqual(metadata.Provenance, saved.Provenance) || !metadataMatches(saved, original) || saved.Checksum == "" || saved.Checksum != fmt.Sprintf("%x", checksum.Sum(nil)) {
+			return nil, errors.New("synthetic dataset checksum or provenance changed; refresh through Screener before analysis or alerts")
+		}
+	}
 	copy(s.contentHash[:], content.Sum(nil))
 	// The latest closed companion remains the latest until another companion
 	// candle could have closed. Refresh deliberately excludes the open candle,
@@ -339,7 +371,7 @@ func indexAnalysisCSV(ctx context.Context, directory, name, output string, progr
 	// A completed refresh can verify a market closure lasting longer than one
 	// interval. Only trust that horizon when the current CSV still has its exact
 	// verified bytes, even if an external edit preserved its size and mtime.
-	if saved, e := readFileMetadata(directory, name); e == nil && saved.Verified && metadataMatches(saved, original) && saved.Checksum == fmt.Sprintf("%x", checksum.Sum(nil)) {
+	if savedErr == nil && saved.Verified && metadataMatches(saved, original) && saved.Checksum == fmt.Sprintf("%x", checksum.Sum(nil)) {
 		s.coverageEnd = max(s.coverageEnd, saved.CheckedThrough)
 	}
 	complete = true

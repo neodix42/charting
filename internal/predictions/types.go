@@ -2,7 +2,10 @@
 // snapshots independently of Wails and the market-data files it reads.
 package predictions
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 const DefaultModel = "Datadog/Toto-2.0-313m"
 
@@ -25,14 +28,17 @@ type Selection struct {
 }
 
 type Dataset struct {
-	DataSource string `json:"dataSource,omitempty"`
-	Market     string `json:"market,omitempty"`
-	ID         string `json:"id"`
-	Symbol     string `json:"symbol"`
-	Name       string `json:"name"`
-	Period     string `json:"period"`
-	Filename   string `json:"filename"`
-	Directory  string `json:"-"`
+	Category   string          `json:"category,omitempty"`
+	Synthetic  bool            `json:"synthetic,omitempty"`
+	Provenance json.RawMessage `json:"provenance,omitempty"`
+	DataSource string          `json:"dataSource,omitempty"`
+	Market     string          `json:"market,omitempty"`
+	ID         string          `json:"id"`
+	Symbol     string          `json:"symbol"`
+	Name       string          `json:"name"`
+	Period     string          `json:"period"`
+	Filename   string          `json:"filename"`
+	Directory  string          `json:"-"`
 }
 
 type Observation struct {

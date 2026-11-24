@@ -1,3 +1,4 @@
+import {syntheticOnlyCategories} from '../workspace/syntheticInstruments';
 import {memo,useEffect,useId,useMemo,useState,type ReactNode} from 'react';
 import type {AnalysisCatalog,AnalysisCondition,AnalysisFieldScope,AnalysisOperand,AnalysisOperator} from '../workspace/screenerAnalysis';
 import {analysisEnrichmentMessage,analysisFieldGroups,analysisFieldLabel,analysisOperators,analysisRollingField,fieldOperand,numberOperand} from '../workspace/screenerAnalysis';
@@ -42,7 +43,8 @@ export function AnalysisOperandEditor({label,value,catalog,scope,onChange}:{labe
  const fields=catalog?.fields??emptyFields,{known}=fieldMenu(fields);
  const rolling=value.kind==='field'?analysisRollingField(value.field??''):null,helpID=useId();
  const enrichmentMessage=useMemo(()=>analysisEnrichmentMessage(value,catalog,scope),[value.kind,value.field,value.timeframe,catalog,scope?.period,scope?.categories]);
- const timeframes=useMemo(()=>[...new Set([...(catalog?.timeframes??[]),...(value.timeframe&&value.timeframe!=='same'?[value.timeframe]:[])])],[catalog?.timeframes,value.timeframe]);
+ const syntheticOnly=catalog?.dataSource!=='hyperliquid'&&syntheticOnlyCategories(scope?.categories);
+ const timeframes=useMemo(()=>[...new Set([...(catalog?.timeframes??[]),...(value.timeframe&&value.timeframe!=='same'?[value.timeframe]:[])])].filter(period=>!syntheticOnly||['d1','w1'].includes(period)),[catalog?.timeframes,value.timeframe,syntheticOnly]);
  return <div className="analysis-operand" role="group" aria-label={label}>
   <span className="analysis-operand-label">{label.endsWith(' left')?'Left value':label.endsWith(' right')?'Right value':label.endsWith(' upper')?'Upper value':'Distance value'}</span>
   <div className="analysis-operand-main"><select aria-label={`${label} type`} value={value.kind} onChange={event=>onChange(event.target.value==='number'?numberOperand():fieldOperand(known.has('close')?'close':catalog?.fields[0]||'close'))}><option value="field">Field</option><option value="number">Constant</option></select>
@@ -53,7 +55,7 @@ export function AnalysisOperandEditor({label,value,catalog,scope,onChange}:{labe
   </div>
   {value.kind==='field'&&<div className="analysis-operand-context">
    {rolling&&<label title="Includes the selected bar. Use Bars ago to shift the window.">Lookback bars<NumberInput aria-label={`${label} lookback bars`} min={1} max={2000} step={1} value={rolling.period} onChange={next=>onChange({...value,field:`${rolling.family}_${next}`})}/></label>}
-   <label>Timeframe<select aria-label={`${label} timeframe`} value={value.timeframe||'same'} onChange={event=>onChange({...value,timeframe:event.target.value})}><option value="same">Same as file</option>{timeframes.map(timeframe=><option key={timeframe} value={timeframe}>{timeframe}</option>)}</select></label>
+   <label>Timeframe<select aria-label={`${label} timeframe`} value={value.timeframe||'same'} onChange={event=>onChange({...value,timeframe:event.target.value})}><option value="same">Same as file</option>{syntheticOnly&&value.timeframe&&!['same','d1','w1'].includes(value.timeframe)&&<option value={value.timeframe} disabled>{value.timeframe} (saved; unsupported)</option>}{timeframes.map(timeframe=><option key={timeframe} value={timeframe}>{timeframe}</option>)}</select></label>
    <label>Bars ago<NumberInput aria-label={`${label} bars ago`} min={0} max={10000} step={1} value={value.offset??0} onChange={next=>onChange({...value,offset:next})}/></label>
    <label>Value<select aria-label={`${label} aggregation`} value={value.aggregate||'value'} onChange={event=>onChange({...value,aggregate:event.target.value as AnalysisOperand['aggregate'],window:Math.max(1,value.window??1)})}><option value="value">At bar</option><option value="highest">Highest</option><option value="lowest">Lowest</option></select></label>
    {value.aggregate&&value.aggregate!=='value'&&<label>Window<NumberInput aria-label={`${label} aggregation window`} min={1} max={10000} step={1} value={value.window??1} onChange={next=>onChange({...value,window:next})}/></label>}

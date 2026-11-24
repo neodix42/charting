@@ -13,6 +13,16 @@ import (
 func sampleTrade() TradeRequest {
 	return TradeRequest{Instrument: "EURUSD", Side: "buy", Quantity: 1000, StopLoss: 1.09, TakeProfit: 1.12}
 }
+
+func TestCalculatedInstrumentsAreRejectedBeforeBrokerSession(t *testing.T) {
+	for _, symbol := range []string{"BTCXAU", "XAUSPX", "ETHBTC"} {
+		request := sampleTrade()
+		request.Instrument = symbol
+		if err := validateTradeRequest(request); err == nil || !strings.Contains(err.Error(), "synthetic") {
+			t.Fatal(symbol, err)
+		}
+	}
+}
 func TestTradePreviewConfirmationClaimAndDuplicate(t *testing.T) {
 	trace := filepath.Join(t.TempDir(), "trace")
 	t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)

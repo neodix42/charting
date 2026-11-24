@@ -25,7 +25,7 @@ export interface Grid {rows:number;columns:number;rowFractions:number[];columnFr
 export interface Tab {id:string;name:string;grid:Grid;charts:ChartConfig[]}
 export interface ChartRightGap {unit:'bars'|'pixels';value:number}
 export interface Workspace {schemaVersion:1;app:'cryptodesk';id:string;theme:ThemeName;fontSize?:number;displayTimezone:string;chartRightGap?:ChartRightGap;activeTabId:string;window:{width:number;height:number;maximized:boolean};tabs:Tab[]}
-export interface Candle {time:number;open:number|string;high:number|string;low:number|string;close:number|string;volume:number|string;closed:boolean;quality:string;sourceRevision:number}
+export interface Candle {synthetic?:boolean;approximate?:boolean;volumeUnavailable?:boolean;time:number;open:number|string;high:number|string;low:number|string;close:number|string;volume:number|string;closed:boolean;quality:string;sourceRevision:number}
 export interface Quote {bid:number|null;ask:number|null;time:number}
 export interface Health {quote?:Quote;state:string;reason?:string;lastMessageAt?:number|string;lastTradeAt?:number|string}
 export interface Snapshot {leaseId:string;revision:number;bars:Candle[];health:Health}
@@ -62,7 +62,8 @@ export type ScreenerDataSource='dukascopy'|'hyperliquid';
 export type ScreenerDownloadDataSource=ScreenerDataSource|'all';
 export type ScreenerEnrichmentDataSource=ScreenerDataSource|'all';
 export interface ScreenerSourceSelection {dataSource:ScreenerDataSource;symbols:string[]}
-export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string}
+export interface SyntheticProvenance {version:number;kind:'native'|'synchronized-bid-ratio'|'mixed-native-ratio';segments?:Array<{from:number;to:number;kind:'native'|'synchronized-bid-ratio'}>;numerator:string;denominator?:string;priceType:string;maxQuoteAgeMs:number;sessionPolicy:string;volume:'provider'|'unavailable';approximate?:boolean;observationResolution?:string}
+export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string;synthetic?:boolean;calculated?:boolean;category?:string;supportedTimeframes?:string[];formula?:string;note?:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
 export interface ScreenerDownloadRequest {dataSource?:ScreenerDownloadDataSource;sourceSelections?:ScreenerSourceSelection[];symbols:string[];timeframe:string;from:string;to:string;concurrency:number}
 export interface ScreenerView extends ScreenerDownloadRequest {collapsedCategories:string[];hyperliquidSymbols?:string[];hyperliquidSelectionInitialized?:boolean}
@@ -71,7 +72,7 @@ export interface ScreenerInfo {directory:string;runtimeAvailable:boolean;runtime
 export interface IndicatorParameter {key:string;label:string;default:number;min:number;max:number;step:number}
 export interface ScreenerIndicator {id:string;name:string;category:string;input:'price'|'low'|'high'|'open'|'close'|'hl'|'hlc'|'hlcv'|'ohlcv'|'timestamp';parameters:IndicatorParameter[];note?:string;intradayOnly?:boolean}
 export interface ScreenerIndicators {version:string;indicators:ScreenerIndicator[]}
-export interface ScreenerDataFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string}
+export interface ScreenerDataFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol?:string;timeframe?:string;from?:string;to?:string;firstTimestamp?:number;lastTimestamp?:number;fields:string[];bytes:number;error?:string;synthetic?:boolean;provenance?:SyntheticProvenance}
 export interface ScreenerFilePage {directory:string;files:ScreenerDataFile[];total:number;allTotal?:number;offset:number;limit:number;periodCounts?:Record<string,number>}
 export interface ScreenerEnrichmentRequest {dataSource?:ScreenerEnrichmentDataSource;indicator:string;group?:string;parameters:Record<string,number>;source:string;period?:string}
 export interface ScreenerEnrichmentJob {dataSource?:ScreenerDataSource;id:string;fileId:string;name:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';progress:number;rows:number;message:string;columns:string[];backupPath?:string}

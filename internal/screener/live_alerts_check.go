@@ -398,7 +398,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		if e != nil {
 			return e
 		}
-		if scheduled {
+		if scheduled || s.metadata.Synthetic {
 			interval, _, _ := liveAlertCalendarPeriod(SavedAnalysisCondition{}, s.metadata.Timeframe)
 			expected := liveAlertPeriodStart(time.UnixMilli(asOf), s.metadata.Timeframe).Add(-interval).UnixMilli()
 			if latest.timestamp != expected {
@@ -825,7 +825,7 @@ func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index i
 	if !ok || !analysisFinite(row.values[position]) {
 		return LiveAlert{}, errors.New("Live Alerts requires a finite closing price")
 	}
-	alert := LiveAlert{ConditionID: saved.ID, ConditionName: saved.Name, Symbol: s.metadata.Symbol, AssetName: s.metadata.Description, Timeframe: s.metadata.Timeframe, Time: row.timestamp, EntryPrice: row.values[position]}
+	alert := LiveAlert{ConditionID: saved.ID, ConditionName: saved.Name, Symbol: s.metadata.Symbol, AssetName: s.metadata.Description, Timeframe: s.metadata.Timeframe, Time: row.timestamp, EntryPrice: row.values[position], Synthetic: s.metadata.Synthetic, Provenance: copyProvenance(s.metadata.Provenance), SimulationBasis: s.metadata.SimulationBasis}
 	liveAlertAttribution(&alert, saved)
 	alert.Profitability, _ = SavedConditionProfitabilityFor(saved, s.metadata.Symbol, s.metadata.Timeframe)
 	config := saved.Request.TradeSimulation
@@ -890,7 +890,7 @@ func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionI
 		return nil
 	}
 	priorRecent := append([]LiveAlertOutcome{}, l.state.Recent...)
-	l.state.Recent = append([]LiveAlertOutcome{{AlertID: alert.AlertID, AlertName: alert.AlertName, SavedConditionID: alert.SavedConditionID, SavedConditionName: alert.SavedConditionName, ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
+	l.state.Recent = append([]LiveAlertOutcome{{AlertID: alert.AlertID, AlertName: alert.AlertName, SavedConditionID: alert.SavedConditionID, SavedConditionName: alert.SavedConditionName, ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability), Synthetic: alert.Synthetic, SimulationBasis: alert.SimulationBasis}}, l.state.Recent...)
 	if len(l.state.Recent) > 50 {
 		l.state.Recent = l.state.Recent[:50]
 	}

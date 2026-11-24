@@ -338,6 +338,14 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 	if err != nil {
 		return err
 	}
+	file := describeFileName(directory, job.Name)
+	if file.Synthetic {
+		for _, member := range members {
+			if strings.Contains(indicatorDefinitions()[member.Indicator].Input, "v") {
+				return errors.New("volume-based indicators are unavailable for calculated synthetic ratios")
+			}
+		}
+	}
 	work, err := os.MkdirTemp(directory, ".cryptodesk-enrichment-*")
 	if err != nil {
 		return fmt.Errorf("create enrichment temporary folder: %w", err)
@@ -478,6 +486,9 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 		return err
 	}
 	coverageUnchanged := metadataMatches(metadataState, original) && metadataState.Checksum != "" && metadataState.Checksum == result.InputChecksum
+	if metadataState.Provenance != nil && (metadataState.Checksum == "" || metadataState.Checksum != result.InputChecksum) {
+		return errors.New("synthetic source checksum does not match its recorded provenance; original CSV kept")
+	}
 	metadataState.Verified = metadataState.Verified && coverageUnchanged
 	if !coverageUnchanged {
 		metadataState.Coverage = nil

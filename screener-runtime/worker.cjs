@@ -52,6 +52,20 @@ async function download(request, options = {}) {
   if (request.timeframe === 'w1') return require('./weekly-worker.cjs').weeklyDownload(request, options);
   if (request.planFile) return require('./incremental-worker.cjs').extendDownload(request, options);
   const api = options.api || require('dukascopy-node');
+  const synthetic = require('./synthetic-worker.cjs');
+  if(request.symbol==='xauxag'&&request.resume&&!options.nativeAttempt){
+    let saved;
+    try{saved=JSON.parse(await fs.promises.readFile(path.join(path.dirname(request.output),'synthetic-checkpoint.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+    if(saved)return synthetic.syntheticDownload({...request,synthetic:saved.mode==='ratio'?true:{kind:'mixed-native-ratio'}},options);
+  }
+  if (synthetic.calculated(request, api)) return synthetic.syntheticDownload(request, options);
+  if(request.symbol==='xauxag'&&request.timeframe==='d1'&&!options.nativeAttempt){
+    try{return await download(request,{...options,nativeAttempt:true});}
+    catch(error){
+      if(!/^Dukascopy returned no rows for this symbol and date range\.$/.test(error.message))throw error;
+      return synthetic.syntheticDownload({...request,synthetic:true},options);
+    }
+  }
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));
   const requestedBatchSize = request.sourceBatchSize ?? 1;
   if (!Number.isInteger(requestedBatchSize) || requestedBatchSize < 1 || requestedBatchSize > 4) {
@@ -186,7 +200,7 @@ async function download(request, options = {}) {
     const coveredTo=closedBoundary(+endDate,request.timeframe);
     const coverage=+input.dates.from<coveredTo?[{from:+input.dates.from,to:coveredTo}]:[];
     emit({ type: 'done', rows, firstTimestamp:actual.first,lastTimestamp:actual.last,checksum:actual.checksum,
-      coverage,checkedThrough:coveredTo,message: `Downloaded ${rows.toLocaleString('en-US')} rows` });
+      coverage,checkedThrough:coveredTo,provenance:synthetic.provenance(request.symbol,false),message: `Downloaded ${rows.toLocaleString('en-US')} rows` });
     return rows;
   } finally {
     await handle?.close();

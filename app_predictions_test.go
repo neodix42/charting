@@ -73,7 +73,7 @@ func TestPredictionFacadeUsesDownloadedCandleInventory(t *testing.T) {
 		}
 	}
 	datasets, err := a.GetPredictionDatasets()
-	if err != nil || len(datasets) != 2 || datasets[0].Symbol != "btcusd" || datasets[0].Period != "d1" || datasets[1].Period != "h1" || datasets[0].Name != "Bitcoin vs US Dollar" {
+	if err != nil || len(datasets) != 2 || datasets[0].Symbol != "btcusd" || datasets[0].Period != "d1" || datasets[1].Period != "h1" || datasets[0].Name != "Bitcoin / US Dollar" || datasets[0].Category != screener.SyntheticCategory || datasets[0].Synthetic {
 		t.Fatalf("prediction inventory: %+v %v", datasets, err)
 	}
 	encoded, err := json.Marshal(datasets)

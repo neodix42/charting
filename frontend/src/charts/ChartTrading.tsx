@@ -14,6 +14,7 @@ import {HyperliquidBalancesPanel} from './HyperliquidBalancesPanel';
 import {TRADING_CONFIGURED} from '../workspace/trading';
 import {orderMarketStatus} from './orderMarketStatus';
 import './ChartTrading.css';
+import {isCalculatedInstrument} from '../workspace/syntheticInstruments';
 
 const validLeverageCap=(value:number|undefined)=>Number.isSafeInteger(value)&&Number(value)>=1&&Number(value)<=1000?Number(value):0;
 interface Ticket {key:FeedKey;side:'buy'|'sell';status:TradingStatus;quoteCurrency?:string}
@@ -26,18 +27,19 @@ export function ChartTrading({api,feedKey:currentKey,target,quoteCurrency,health
  const initializeLeverage=useRef(false);
  const [riskSnapshot,setRiskSnapshot]=useState<RiskSnapshot|null>(null),[riskAccountRevision,setRiskAccountRevision]=useState(0);
  const {metrics,request:metricsRequest,loading:metricsLoading,error:metricsError}=useTradeMetrics(api,ticket&&!preview&&phase==='edit'&&!result&&!transferOpen&&!ticketInvalidated?{feedKey:ticket.key,side:ticket.side,quantity:quantity.trim(),stopLoss:ticket.key.exchange==='hyperliquid'&&ticket.key.market==='perpetual'?stopLoss.trim():'',takeProfit:'',leverage:ticket.status.leverageSupported?Number(leverage):0}:null,quoteRefresh);
+ const calculated=isCalculatedInstrument(currentKey,providerMetadata);
  const keyText=JSON.stringify(currentKey),supported=currentKey.exchange==='hyperliquid'||currentKey.exchange==='dukascopy';
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;sequence.current++;};},[]);
  useEffect(()=>{
   const host=target.current;if(!host||!supported)return;
   const show=(event:MouseEvent)=>{
    if(inFlight.current||transferBusyRef.current)return;event.preventDefault();const version=++sequence.current,key=JSON.parse(keyText) as FeedKey;
-   setMenu(null);void api.GetTradingStatus(key).then(status=>{if(alive.current&&version===sequence.current&&status.configured)setMenu({x:Math.min(event.clientX,window.innerWidth-220),y:Math.min(event.clientY,window.innerHeight-150),key,status});}).catch(reason=>{if(alive.current&&version===sequence.current)setError(errorText(reason));});
+   setMenu(null);if(calculated){setMenu({x:Math.min(event.clientX,window.innerWidth-220),y:Math.min(event.clientY,window.innerHeight-150),key,status:{configured:true,enabled:false,environment:'Calculated instrument',canBuy:false,canSell:false,leverageSupported:false,maxLeverage:0,protectiveOrdersSupported:false,quantityLabel:'',error:'Calculated synthetic instruments are approximate analytical series and cannot be traded.'}});return;}void api.GetTradingStatus(key).then(status=>{if(alive.current&&version===sequence.current&&status.configured)setMenu({x:Math.min(event.clientX,window.innerWidth-220),y:Math.min(event.clientY,window.innerHeight-150),key,status});}).catch(reason=>{if(alive.current&&version===sequence.current)setError(errorText(reason));});
   };
   host.addEventListener('contextmenu',show);return()=>{sequence.current++;host.removeEventListener('contextmenu',show);};
- },[api,keyText,supported,target]);
+ },[api,keyText,supported,target,calculated]);
  useEffect(()=>{const invalidate=()=>{sequence.current++;setMenu(null);if(transferBusyRef.current){ticketInvalidatedRef.current=true;setTicketInvalidated(true);setError('Hyperliquid settings changed. Close and reopen this ticket before trading again.');}else if(!submitted.current){setPreview(null);setTicket(null);setPhase('edit');transferOpenRef.current=false;setTransferOpen(false);}};window.addEventListener(TRADING_CONFIGURED,invalidate);return()=>window.removeEventListener(TRADING_CONFIGURED,invalidate);},[]);
- useEffect(()=>{sequence.current++;setMenu(null);if(transferBusyRef.current){ticketInvalidatedRef.current=true;setTicketInvalidated(true);setError('The chart changed. Close and reopen this ticket before trading again.');}else if(!submitted.current){setPreview(null);setTicket(null);setPhase('edit');transferOpenRef.current=false;setTransferOpen(false);}},[keyText]);
+ useEffect(()=>{sequence.current++;setMenu(null);if(transferBusyRef.current){ticketInvalidatedRef.current=true;setTicketInvalidated(true);setError('The chart changed. Close and reopen this ticket before trading again.');}else if(!submitted.current){setPreview(null);setTicket(null);setPhase('edit');transferOpenRef.current=false;setTransferOpen(false);}},[keyText,calculated]);
  useEffect(()=>{if(!menu)return;menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();const dismiss=(event:PointerEvent)=>{if(!menuRef.current?.contains(event.target as Node))setMenu(null);};const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setMenu(null);};window.addEventListener('pointerdown',dismiss);window.addEventListener('keydown',escape);return()=>{window.removeEventListener('pointerdown',dismiss);window.removeEventListener('keydown',escape);};},[menu]);
  useEffect(()=>{if(!preview)return;setClock(Date.now());submitButton.current?.focus();const timer=setInterval(()=>setClock(Date.now()),500);return()=>clearInterval(timer);},[preview]);
  useEffect(()=>{

@@ -1,3 +1,4 @@
+import {calculatedLabel,isCalculatedSymbol,SYNTHETIC_CATEGORY} from '../workspace/syntheticInstruments';
 import {useEffect,useId,useRef,useState} from 'react';
 import type {PredictionDataset,PredictionsBackend} from '../workspace/predictions';
 import {predictionDate} from '../workspace/predictions';
@@ -11,7 +12,7 @@ import './PredictionStatistics.css';
 
 const windows=[[0,'All downloaded history'],[52,'Last 52 weeks'],[156,'Last 156 weeks'],[260,'Last 260 weeks'],[520,'Last 520 weeks']] as const;
 const supportedPeriods:PredictionStatisticsPeriod[]=['h1','d1','w1'];
-const assetPeriods=(items:PredictionDataset[],request:PredictionStatisticsRequest)=>supportedPeriods.filter(period=>items.some(item=>item.dataSource===request.dataSource&&item.symbol===request.asset&&item.period===period));
+const assetPeriods=(items:PredictionDataset[],request:PredictionStatisticsRequest)=>supportedPeriods.filter(period=>(request.dataSource!=='dukascopy'||!items.some(item=>item.dataSource==='dukascopy'&&item.symbol===request.asset&&(item.category===SYNTHETIC_CATEGORY||isCalculatedSymbol(item.symbol)))||period!=='h1')&&items.some(item=>item.dataSource===request.dataSource&&item.symbol===request.asset&&item.period===period));
 const reconcilePeriod=(request:PredictionStatisticsRequest,items:PredictionDataset[]):PredictionStatisticsRequest=>{
  const periods=assetPeriods(items,request);
  return periods.length&&!periods.includes(request.period)?{...request,period:periods.includes('d1')?'d1':periods[0]}:request;
@@ -35,7 +36,7 @@ export function PredictionStatistics({api,visible,suspended=false}:{api:Predicti
  const change=(patch:Partial<PredictionStatisticsRequest>)=>{generation.current++;const next=reconcilePeriod({...current.current,...patch},datasets);current.current=next;setRequest(next);setForecast(null);setError('');};
  const assets=[...new Map(datasets.filter(item=>item.dataSource===request.dataSource).map(item=>[item.symbol,item])).values()].sort((a,b)=>a.name.localeCompare(b.name));
  const selected=assets.find(item=>item.symbol===request.asset);
- const choices=assets.map(item=>({id:item.symbol,label:item.name,details:item.symbol,market:item.market,search:item.symbol}));
+ const choices=assets.map(item=>({id:item.symbol,label:item.name,details:`${item.symbol}${request.dataSource==='dukascopy'&&(item.synthetic||isCalculatedSymbol(item.symbol))?' · '+calculatedLabel:''}`,market:item.market,category:request.dataSource==='dukascopy'&&(item.category===SYNTHETIC_CATEGORY||isCalculatedSymbol(item.symbol))?SYNTHETIC_CATEGORY:undefined,search:item.symbol}));
  const periods=assetPeriods(datasets,request),selectedDataset=datasets.find(item=>item.dataSource===request.dataSource&&item.symbol===request.asset&&item.period===request.period);
  const result=forecast&&statisticsResultKey(forecast)===statisticsKey(request)?forecast:null;
  const finishDownload=async(input:PredictionStatisticsRequest):Promise<'done'|'deferred'|'recalculated'>=>{
@@ -79,6 +80,7 @@ export function PredictionStatistics({api,visible,suspended=false}:{api:Predicti
   <form className="prediction-controls" aria-label="Statistics inputs" onSubmit={event=>{event.preventDefault();void calculate();}}>
    <label>Data source<select aria-label="Statistics data source" value={request.dataSource} onChange={event=>{change({dataSource:event.target.value as ScreenerDataSource,asset:''});}}><option value="dukascopy">Dukascopy</option><option value="hyperliquid">Hyperliquid</option></select></label>
    <div className="prediction-asset-choice"><span>Asset</span><AssetPicker className="statistics-asset-selector" exchange={request.dataSource} choices={choices} selected={request.asset} label={selected?`${selected.name} · ${selected.symbol}`:'Select a downloaded asset'} buttonLabel="Statistics asset" panelLabel="Statistics assets" active={visible&&!suspended} disabled={loading} loading={loading} empty={`No downloaded ${sourceName(request.dataSource)} assets`} onSelect={asset=>change({asset})}/></div>
+   {request.dataSource==='dukascopy'&&(selected?.synthetic||isCalculatedSymbol(request.asset))&&<p className="prediction-input-help">{calculatedLabel}. Statistics use synchronized BID ratio observations; their prices are estimates and volume is unavailable.</p>}
    <label>Time period<select aria-label="Statistics time period" value={request.period} disabled={loading||!periods.length} onChange={event=>change({period:event.target.value as PredictionStatisticsPeriod})}>{!periods.length&&<option value={request.period}>Select an asset first</option>}{periods.map(period=><option key={period} value={period}>{period.toUpperCase()}</option>)}</select></label>
    <label>Historical lookback<select aria-label="Statistics history period" value={request.lookbackWeeks} onChange={event=>change({lookbackWeeks:Number(event.target.value)})}>{windows.map(([weeks,label])=><option key={weeks} value={weeks}>{label}</option>)}</select></label>
    <button className="primary" type="submit" aria-label="Calculate next bar" disabled={loading||calculating||dataDownload.locked||!selectedDataset}>{calculating?'Calculating…':'Calculate next bar'}</button>

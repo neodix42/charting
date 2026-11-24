@@ -25,6 +25,7 @@ type fileMetadata struct {
 	Checksum       string              `json:"checksum,omitempty"`
 	CheckedThrough int64               `json:"checkedThrough,omitempty"`
 	Coverage       []dataRange         `json:"coverage,omitempty"`
+	Provenance     *DataProvenance     `json:"provenance,omitempty"`
 }
 
 type dataRange struct {
@@ -62,6 +63,9 @@ func readFileMetadata(directory, name string) (fileMetadata, error) {
 	if len(metadata.Coverage) > 10000 {
 		return metadata, errors.New("too many saved data coverage ranges")
 	}
+	if err := validateDataProvenance(metadata.Provenance); err != nil {
+		return metadata, err
+	}
 	for _, span := range metadata.Coverage {
 		if span.From < -8640000000000000 || span.To <= span.From || span.To > 8640000000000000 {
 			return metadata, errors.New("invalid saved data coverage range; original files kept")
@@ -78,6 +82,9 @@ func readFileMetadata(directory, name string) (fileMetadata, error) {
 }
 
 func writeFileMetadata(directory, name string, metadata fileMetadata) error {
+	if err := validateDataProvenance(metadata.Provenance); err != nil {
+		return err
+	}
 	if len(metadata.Recipes) > 2000 {
 		return errors.New("at most 2,000 distinct applied indicator recipes may be retained for one CSV")
 	}

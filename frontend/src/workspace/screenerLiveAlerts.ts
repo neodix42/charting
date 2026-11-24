@@ -1,3 +1,4 @@
+import {syntheticOnlyCategories} from './syntheticInstruments';
 import type {SavedAnalysisCondition,SavedConditionProfitability} from './screenerAnalysis';
 export interface LiveAlertConditionPeriod {conditionId:string;period:string}
 export type LiveAlertDataSource='dukascopy'|'hyperliquid'|'binance'|'bybit';
@@ -8,7 +9,7 @@ export interface LiveAlertAssetSelection {dataSource:LiveAlertDataSource;assets:
 export interface LiveAlertDefinition {assetSelections?:LiveAlertAssetSelection[];id:string;name:string;conditionId:string;period:LiveAlertPeriod;dataSource:LiveAlertDataSource;enabled:boolean}
 export interface LiveAlertsConfig {enabled:boolean;alerts?:LiveAlertDefinition[];conditionIds?:string[];conditionSources?:LiveAlertConditionSource[]}
 export interface LiveAlertAsset {symbol:string;name:string;category:string;periods:string[]}
-export interface LiveAlertOutcome {alertId?:string;alertName?:string;savedConditionId?:string;savedConditionName?:string;conditionId?:string;dataSource?:LiveAlertDataSource;market?:string;confirmedRecipients?:number;assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message?:string;profitability?:SavedConditionProfitability|null}
+export interface LiveAlertOutcome {synthetic?:boolean;simulationBasis?:string;alertId?:string;alertName?:string;savedConditionId?:string;savedConditionName?:string;conditionId?:string;dataSource?:LiveAlertDataSource;market?:string;confirmedRecipients?:number;assetName:string;symbol:string;timeframe:string;time:number;conditionName:string;status:'sent'|'failed'|'claimed'|'uncertain';message?:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertConditionScope {alertId?:string;savedConditionId?:string;conditionId:string;period:string;dataSource?:LiveAlertDataSource;allAssets?:boolean;availableTargets?:LiveAlertTarget[];targets:LiveAlertTarget[];error:string}
 export type LiveAlertProgressState='queued'|'running'|'completed'|'failed'|'cancelled'|'skipped';
@@ -115,7 +116,7 @@ export function renameConditionAlerts(config:LiveAlertsConfig,conditionId:string
  if(previousName===name||!config.alerts?.some(entry=>entry.conditionId===conditionId&&entry.name===previousName))return config;
  return{...config,alerts:config.alerts.map(entry=>entry.conditionId===conditionId&&entry.name===previousName?{...entry,name}:entry)};
 }
-export function defaultLiveAlertPeriod(condition:SavedAnalysisCondition|undefined):LiveAlertPeriod{const period=condition?.request.period;return period==='h1'||period==='d1'||period==='w1'?period:'h1';}
+export function defaultLiveAlertPeriod(condition:SavedAnalysisCondition|undefined):LiveAlertPeriod{const period=condition?.request.period;return syntheticOnlyCategories(condition?.request.categories)&&condition?.request.dataSource!=='hyperliquid'?(period==='w1'?'w1':'d1'):period==='h1'||period==='d1'||period==='w1'?period:'h1';}
 export function liveAlertPeriodLabel(period:string):string {
  switch(period){case 'w1':return 'Weekly (W1)';case 'd1':return 'Daily (D1)';case 'h1':return 'Hourly (H1)';case '':case 'all':return 'All analyzed periods (W1 / D1 / H1)';default:return period.toUpperCase();}
 }

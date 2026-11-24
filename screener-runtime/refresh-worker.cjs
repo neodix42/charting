@@ -87,11 +87,12 @@ async function scan(filename,timeframe,onProgress) {
   let headers,first,last=-Infinity,rows=0,timestampIndex=-1,baseIndexes;
   const checksum=createHash('sha256');
   let bytes=0;
-  const base=timeframe==='tick'?tickFields:candleFields;
+  let base=timeframe==='tick'?tickFields:candleFields;
   for await(const row of records(filename,chunk=>{checksum.update(chunk);bytes+=chunk.length;onProgress?.(bytes,rows);})){
     if(!headers){
       headers=row;
       const normalized=headers.map(key);
+      if(timeframe!=='tick'&&!normalized.includes('volume'))base=candleFields.filter(field=>field!=='volume');
       if(base.some(field=>!normalized.includes(field)))throw Error(`Refresh requires the original Dukascopy ${base.join(', ')} fields.`);
       timestampIndex=normalized.indexOf('timestamp');
       baseIndexes=base.map(name=>normalized.indexOf(name));
@@ -153,6 +154,7 @@ async function refresh(request,options={}) {
   const scanned=await scan(request.input,request.timeframe,(bytes,rows)=>{
     if(Date.now()-lastScanProgress>=200){lastScanProgress=Date.now();report({type:'progress',progress:Math.min(1.9,bytes/Math.max(1,original.size)*2),rows,message:'Verifying saved CSV coverage and indicator recipes'});}
   });
+  if(request.provenance&&request.coverageDigest!==scanned.checksum)throw Error('Synthetic provenance checksum does not match the CSV; original kept.');
   let savedRecipes=request.recipes??[];
   if(request.recipeFile){
     if(!path.isAbsolute(request.recipeFile)||path.dirname(request.recipeFile)!==path.dirname(request.output))throw Error('Recipe file must be in the private refresh folder.');
@@ -165,7 +167,7 @@ async function refresh(request,options={}) {
   const requiredFields=request.requiredFields??[];
   const recipes=await recipesFor(scanned.headers,savedRecipes,requiredFields,request.timeframe);
   const headers=[...scanned.headers],normalized=headers.map(key);
-  const calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,request.timeframe)));
+  let calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,request.timeframe)));
   const available=new Set(calculations.flatMap(calculate=>calculate.columns));
   for(const field of requiredFields.map(key)){
     if(normalized.includes(field))continue;
@@ -186,14 +188,15 @@ async function refresh(request,options={}) {
   const from=Math.max(initial,coverageVerified?overlapStart(scanned.last,request.timeframe):initial);
   const downloaded=`${request.output}.downloaded.csv`;
   await fsp.writeFile(downloaded,'',{flag:'wx',mode:0o600});
-  let hasDownloaded=false;
+  let hasDownloaded=false,latestProvenance;
   if(from<now){
     report({type:'progress',progress:2,rows:scanned.rows,message:coverageVerified?'Downloading recent overlap and new data':'Checking complete history for missing data (first refresh or changed source)'});
     try{
       // Each Go file worker fetches its source requests serially; the owner
       // shares request pacing and cooldowns across parallel file workers.
-      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1,providerSession:request.providerSession},
-        {api:options.api,pauseMs:options.pauseMs,emit:event=>{if(event.type==='progress')report({...event,progress:2+event.progress*0.58});}});
+      await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1,providerSession:request.providerSession,
+        historyDirectory:request.historyDirectory,syntheticCacheDirectory:request.syntheticCacheDirectory,synthetic:request.synthetic??(request.symbol==='xauxag'&&!normalized.includes('volume')?{kind:'mixed-native-ratio'}:undefined),asOf:now},
+        {...options,emit:event=>{if(event.type==='done'&&event.provenance)latestProvenance=event.provenance;if(event.type==='progress')report({...event,progress:2+event.progress*0.58});}});
       hasDownloaded=true;
     }catch(error){
       // A public market closure can legitimately return zero new records.
@@ -201,8 +204,14 @@ async function refresh(request,options={}) {
       if(!/Dukascopy returned no rows|No available history in the requested UTC date range/.test(error.message))throw error;
     }
   }
+  const droppedVolume=normalized.includes('volume')&&latestProvenance?.volume==='unavailable';
+  if(droppedVolume){
+    if(requiredFields.map(key).includes('volume'))throw Error('Volume is unavailable for calculated synthetic data; original CSV kept.');
+    const index=normalized.indexOf('volume');headers.splice(index,1);normalized.splice(index,1);
+    calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,request.timeframe)));
+  }
   const timestampIndex=normalized.indexOf('timestamp');
-  const base=request.timeframe==='tick'?tickFields:candleFields;
+  const base=request.timeframe==='tick'?tickFields:candleFields.filter(name=>normalized.includes(name));
   const baseIndexes=base.map(name=>normalized.indexOf(name));
   const outputs=calculations.map(calculate=>calculate.columns.map(name=>normalized.indexOf(name)));
   const leftRows=records(request.input);await leftRows.next();
@@ -215,15 +224,29 @@ async function refresh(request,options={}) {
   let a=await left.next(),b=hasDownloaded?await right.next():{done:true};
   let handle,rows=0,addedRows=0,updatedRows=0,buffer='',bytes=0,lastProgress=0,firstTimestamp,lastTimestamp;
   const outputChecksum=createHash('sha256');
+  const originalNames=scanned.headers.map(key),originalRow=row=>droppedVolume?headers.map(name=>row[originalNames.indexOf(key(name))]??''):[...row];
+  const observedOrigins=[];
+  const origin=(provenance,timestamp)=>{
+    if(request.symbol!=='xauxag'||request.timeframe!=='d1'||!provenance)return;
+    const end=Math.min(timestamp+86400000,closed);
+    for(const item of provenance.segments??[{from:timestamp,to:end,kind:provenance.kind}]){
+      const from=Math.max(timestamp,item.from),to=Math.min(end,item.to);if(from>=to)continue;
+      const last=observedOrigins.at(-1);
+      if(last&&last.kind===item.kind&&last.to<=from)last.to=to;
+      else{if(observedOrigins.length>=512)throw Error('Synthetic provenance exceeds its bounded segment count.');observedOrigins.push({from,to,kind:item.kind});}
+    }
+  };
   const transform=fetched=>{
     const row=Array(headers.length).fill('');
     base.forEach((name,i)=>{row[baseIndexes[i]]=fetched[fetchedNormalized.indexOf(name)];});
     return row;
   };
   const baseKey=row=>JSON.stringify(baseIndexes.map(index=>Number(row[index])));
-  const append=async row=>{
+  const priorProvenance=request.provenance??(request.symbol==='xauxag'&&originalNames.includes('volume')?require('./synthetic-worker.cjs').provenance(request.symbol,false):undefined);
+  const append=async(row,provenance=priorProvenance)=>{
     while(row.length<headers.length)row.push('');
     const timestamp=Number(row[timestampIndex]);
+    origin(provenance,timestamp);
     firstTimestamp??=timestamp;lastTimestamp=timestamp;
     for(let index=0;index<calculations.length;index++){
       const values=calculations[index].next(row,rows+2);
@@ -239,19 +262,19 @@ async function refresh(request,options={}) {
     const headerLine=line(headers);outputChecksum.update(headerLine);await writeAll(handle,headerLine);
     while(!a.done||!b.done){
       if(b.done||(!a.done&&a.value.timestamp<b.value.timestamp)){
-        for(const row of a.value.rows)await append([...row]);
+        for(const row of a.value.rows)await append(originalRow(row));
         a=await left.next();
       }else if(a.done||b.value.timestamp<a.value.timestamp){
         // Newly added candles must be closed. If an older download already
         // contained its open candle, the equal-timestamp branch revises it.
-        if(request.timeframe==='tick'||b.value.timestamp<closed)for(const row of b.value.rows){await append(transform(row));addedRows++;}
+        if(request.timeframe==='tick'||b.value.timestamp<closed)for(const row of b.value.rows){await append(transform(row),latestProvenance);addedRows++;}
         b=await right.next();
       }else{
-        const originals=a.value.rows,fetched=b.value.rows.map(transform);
+        const originals=a.value.rows.map(originalRow),fetched=b.value.rows.map(transform);
         if(request.timeframe!=='tick'){
           if(fetched.length!==1||originals.length!==1)throw Error('Dukascopy returned duplicate candle timestamps.');
           if(baseKey(originals[0])!==baseKey(fetched[0]))updatedRows++;
-          await append(fetched[0]);
+          await append(fetched[0],latestProvenance);
         }else{
           // Keep source ordering for the common prefix, consume equal records
           // as a multiset, then append unmatched originals. Identical ticks at
@@ -267,7 +290,11 @@ async function refresh(request,options={}) {
     if(buffer)await writeAll(handle,buffer);
     await handle.sync();
     const columns=headers.filter(name=>!base.includes(key(name)));
-    const result={type:'done',rows,addedRows,updatedRows,columns,recipes,firstTimestamp,lastTimestamp,checksum:outputChecksum.digest('hex'),checkedThrough:now,coverage:initial<closed?[{from:initial,to:closed}]:[],message:`Refreshed ${rows.toLocaleString('en-US')} rows: ${addedRows.toLocaleString('en-US')} added, ${updatedRows.toLocaleString('en-US')} updated; ${recipes.length} indicator recipes recalculated`};
+    const synthetic=require('./synthetic-worker.cjs');
+    const provenance=synthetic.mergeProvenance(request.symbol,observedOrigins.length?[{value:{...synthetic.provenance(request.symbol,true),segments:observedOrigins},from:initial,to:closed}]:[
+      {value:priorProvenance,from:initial,to:closed},
+      {value:latestProvenance,from,to:closed}],normalized.includes('volume'));
+    const result={type:'done',rows,addedRows,updatedRows,columns,recipes,firstTimestamp,lastTimestamp,checksum:outputChecksum.digest('hex'),checkedThrough:now,coverage:initial<closed?[{from:initial,to:closed}]:[],provenance,message:`Refreshed ${rows.toLocaleString('en-US')} rows: ${addedRows.toLocaleString('en-US')} added, ${updatedRows.toLocaleString('en-US')} updated; ${recipes.length} indicator recipes recalculated`};
     report(result);return result;
   }finally{
     await handle?.close();await left.return();await right.return();

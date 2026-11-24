@@ -278,6 +278,7 @@ type refreshEvent struct {
 	CheckedThrough int64               `json:"checkedThrough"`
 	Coverage       []dataRange         `json:"coverage"`
 	Message        string              `json:"message"`
+	Provenance     *DataProvenance     `json:"provenance,omitempty"`
 }
 
 func (m *Manager) refreshFile(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64) error {
@@ -346,7 +347,9 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		AsOf             int64            `json:"asOf"`
 		RequiredFields   []string         `json:"requiredFields,omitempty"`
 		ProviderSession  *providerSession `json:"providerSession,omitempty"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx)})
+		HistoryDirectory string           `json:"historyDirectory"`
+		Provenance       *DataProvenance  `json:"provenance,omitempty"`
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx), HistoryDirectory: directory, Provenance: copyProvenance(metadata.Provenance)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work
@@ -442,6 +445,12 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 	if !done {
 		return errors.New("data refresh exited without confirming its rows and indicator recipes")
 	}
+	if err = validateSyntheticDataset(match[1], match[2], result.Provenance); err != nil {
+		return err
+	}
+	if result.Provenance != nil && result.Checksum == "" {
+		return errors.New("synthetic refresh provenance lacks a content checksum")
+	}
 	for _, recipe := range result.Recipes {
 		if _, err = m.validateEnrichment(recipe); err != nil {
 			return fmt.Errorf("refresh returned invalid indicator recipe: %w", err)
@@ -465,7 +474,7 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		return err
 	}
 	sources := []downloadSource{{Input: source, Name: job.Name, From: match[3], To: match[4], Bytes: original.Size(), Modified: original.ModTime().UnixMilli(), Metadata: metadata}}
-	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough, Coverage: result.Coverage}
+	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough, Coverage: result.Coverage, Provenance: copyProvenance(result.Provenance)}
 	// Date filenames express an exclusive upper bound. A refresh runs through
 	// its execution instant, so today's partial range ends at tomorrow's date.
 	to := time.UnixMilli(asOf).UTC().Add(24 * time.Hour).Format("2006-01-02")

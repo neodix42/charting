@@ -455,7 +455,7 @@ func TestAnalysisSimulationDuplicateAndCategoryPagingKeepPerAssetTotals(t *testi
 	target := simulationBar(100, 115, 95, 100)
 	target.signal = 1
 	csv := simulationCSV([]simulationTestBar{bar, target, bar}, 1704067200000)
-	for _, symbol := range []string{"btcusd", "ethusd", "eurusd"} {
+	for _, symbol := range []string{"ltcusd", "ethusd", "eurusd"} {
 		for _, from := range []string{"2000", "2001"} {
 			writeDataFile(t, m, fmt.Sprintf("%s-m1-%s-01-01-2024-01-02.csv", symbol, from), csv)
 		}
@@ -468,7 +468,7 @@ func TestAnalysisSimulationDuplicateAndCategoryPagingKeepPerAssetTotals(t *testi
 	if all.Total != 6 || all.TotalResults != 3 || all.TotalMatches != 9 {
 		t.Fatalf("duplicates counted twice: %+v", all)
 	}
-	crypto := categoryForSymbol(t, "btcusd")
+	crypto := categoryForSymbol(t, "ethusd")
 	seen := map[string]bool{}
 	for offset := 0; offset < 2; offset++ {
 		page, err := m.AnalysisFiltered(offset, 1, AnalysisFilter{Categories: []string{crypto}})

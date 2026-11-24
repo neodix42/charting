@@ -1,3 +1,4 @@
+import {isSyntheticFamilyKey,syntheticIntervals} from './syntheticInstruments';
 import {DEFAULT_FONT_SIZE,MIN_FONT_SIZE,MAX_FONT_SIZE} from './appearance';
 import {isThemeName} from './themes';
 import type {ChartConfig, ChartRightGap, Grid, IndicatorConfig, Interval, Tab, Workspace} from '../types';
@@ -35,6 +36,7 @@ export function reduceWorkspace(w:Workspace,a:Action):Workspace {
  case 'chart':return change({...current,charts:current.charts.map(c=>c.id===a.id?{...c,...a.patch,id:c.id}:c)});
  case 'tabTimeframe':{
   if(a.tabId!==w.activeTabId||!current)throw Error('The target tab is no longer active');
+  if(current.charts.some(isSyntheticFamilyKey)&&!syntheticIntervals.includes(a.timeframe))throw Error('Synthetic Instruments support D1 and W1 only.');
   return change({...current,charts:current.charts.map(chart=>({...chart,timeframe:a.timeframe,view:liveView()}))});
  }
  case 'tabIndicator':{

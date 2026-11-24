@@ -255,6 +255,9 @@ func Validate(w Workspace) error {
 			if !member(chart.Timeframe, "1m", "5m", "15m", "1h", "4h", "1d", "1w") || !member(chart.ChartType, "candlestick", "line") {
 				return bad("unsupported timeframe or chart type")
 			}
+			if IsCalculatedInstrument(chart.Exchange, chart.Instrument) && (chart.Market != "cfd" || chart.Timeframe != "1d" && chart.Timeframe != "1w") {
+				return bad("calculated Dukascopy instruments support D1 and W1 only")
+			}
 			p := chart.PriceScale
 			if !member(p.Mode, "linear", "log") {
 				return bad("unsupported price scale")

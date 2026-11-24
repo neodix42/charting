@@ -1,4 +1,5 @@
-import type {ScreenerDataSource} from '../types';
+import {syntheticOnlyCategories} from './syntheticInstruments';
+import type {SyntheticProvenance,ScreenerDataSource} from '../types';
 import {calendarRangeNames,isCalendarRange,isIntradayPeriod} from '../../../screener-runtime/calendar-ranges.mjs';
 
 export type AnalysisOperator='above'|'below'|'equal'|'crossesAbove'|'crossesBelow'|'between'|'withinDistance'|'occurredWithin'|'remainedFor'|'highest'|'lowest';
@@ -10,17 +11,17 @@ export interface AnalysisSimulationResult {takeProfitHits:number;stopLossHits:nu
 export type AnalysisPeriod='all'|'w1'|'d1'|'h1';
 export interface AnalysisRequest {dataSource?:ScreenerDataSource;conditions:AnalysisCondition[];period?:AnalysisPeriod|'';categories?:string[]|null;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number;onlyOneSignalPerDay?:boolean}
 export interface AnalysisResultFilter {categories?:string[]|null;includeEmpty:boolean;profitableSort?:'asc'|'desc'|'';profitabilityFilter?:number}
-export interface SavedConditionProfitability {profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
+export interface SavedConditionProfitability {synthetic?:boolean;simulationBasis?:string;profitabilityUnavailable?:boolean;symbol:string;timeframe:string;fileName:string;matches:number;takeProfitHits:number;profitablePercent:number}
 export interface SavedConditionAnalysis {analyzedAt:number;failedFiles?:number;assets:SavedConditionProfitability[]}
 export interface SavedAnalysisCondition {id:string;name:string;request:AnalysisRequest;analysis?:SavedConditionAnalysis|null}
 export interface SavedConditionRename {previousName:string;condition:SavedAnalysisCondition}
-export interface AnalysisFile {dataSource?:ScreenerDataSource;id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
+export interface AnalysisFile {synthetic?:boolean;provenance?:SyntheticProvenance;dataSource?:ScreenerDataSource;id:string;name:string;symbol:string;timeframe:string;fields:string[];bytes:number;from?:string;to?:string;error?:string;description?:string;category?:string}
 export interface AnalysisCatalog {dataSource?:ScreenerDataSource;directory:string;fields:string[];timeframes:string[];files:AnalysisFile[];categories:string[]}
-export interface AnalysisResult {id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}
+export interface AnalysisResult {synthetic?:boolean;provenance?:SyntheticProvenance;simulationBasis?:string;id:string;fileId:string;name:string;symbol:string;timeframe:string;status:string;error?:string;rows:number;matches:number;assetMatches?:number;assetFiles?:number;firstTime?:number;lastTime?:number;description?:string;category?:string;simulation?:AnalysisSimulationResult|null}
 export interface AnalysisInfo {dataSource?:ScreenerDataSource;active:boolean;phase:'idle'|'indexing'|'scanning'|'completed'|'cancelled';total:number;completed:number;failed:number;currentFile:string;progress:number;rows:number;totalMatches:number;matchedFiles:number;results:AnalysisResult[];offset:number;limit:number;totalResults:number;error?:string;tradeSimulation?:AnalysisTradeSimulation|null;profitabilityFilter?:number}
 export interface AnalysisBar {index:number;time:number;values:Record<string,number>}
 export interface AnalysisTradeExecution {entryTime:number;outcome:'takeProfit'|'stopLoss'|'expired'|'insufficientData'|'unavailable';exitTime?:number}
-export interface AnalysisChart {resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];direction?:'long'|'short';profitableMatches?:Array<{index:number;time:number}>;trade?:{entry:number;stopLoss:number;takeProfit:number};signal?:{entry:number;stopLoss?:number;takeProfit?:number};tradeExecution?:AnalysisTradeExecution}
+export interface AnalysisChart {synthetic?:boolean;provenance?:SyntheticProvenance;simulationBasis?:string;resultId:string;name:string;symbol:string;timeframe:string;occurrence:number;totalMatches:number;matchTime:number;matchIndex:number;startIndex:number;fields:string[];bars:AnalysisBar[];direction?:'long'|'short';profitableMatches?:Array<{index:number;time:number}>;trade?:{entry:number;stopLoss:number;takeProfit:number};signal?:{entry:number;stopLoss?:number;takeProfit?:number};tradeExecution?:AnalysisTradeExecution}
 export interface ScreenerAnalysisBackend {
  GetScreenerAnalysisCatalog():Promise<AnalysisCatalog>;
  GetScreenerAnalysisCatalogForSource(source:ScreenerDataSource):Promise<AnalysisCatalog>;
@@ -93,6 +94,14 @@ export function analysisFieldGroups(fields:string[]){
 export function analysisPriceOverlay(field:string){const base=fieldParts(field).base;return isCalendarRange(base.toLowerCase())||priceFields.has(base.toLowerCase())||/^(?:low|high|sma|ema|wma|wsma|rma|dema|tema|trima|zlema|hma|kama|alma|vwma|vwap|bb_(?:lower|middle|upper)|donchian|tenkan|kijun|senkou)(?:_|$)/i.test(base);}
 export {utcDate as analysisDate} from './time';
 export function analysisInputError(view:AnalysisRequest){
+ if(view.dataSource!=='hyperliquid'&&syntheticOnlyCategories(view.categories)){
+  if(view.period==='h1')return 'Synthetic Instruments support D1 and W1 only.';
+  if(view.conditions.some(condition=>{
+   const operator=condition.operator==='occurredWithin'||condition.operator==='remainedFor'?condition.comparison||'above':condition.operator;
+   const operands=[condition.left,condition.right,...(operator==='between'?[condition.upper]:[]),...(operator==='withinDistance'?[condition.distance]:[])];
+   return operands.some(operand=>operand?.kind==='field'&&operand.timeframe&&!['same','d1','w1'].includes(operand.timeframe));
+  }))return 'Synthetic Instruments require Same as file, D1 or W1 operand timeframes.';
+ }
  if(view.dataSource&&!['dukascopy','hyperliquid'].includes(view.dataSource))return'Choose Dukascopy or Hyperliquid as the data source.';
  if(view.profitabilityFilter!==undefined&&(!Number.isInteger(view.profitabilityFilter)||view.profitabilityFilter<0||view.profitabilityFilter>100||view.profitabilityFilter%5!==0))return'Profitability must be 0–100 in steps of 5.';
  if(view.period&&!['all','w1','d1','h1'].includes(view.period))return'Choose All periods, w1, d1 or h1 before scanning.';
@@ -152,7 +161,7 @@ export function savedConditionProfitability(condition:SavedAnalysisCondition,sym
 export function savedConditionAllowsAsset(condition:SavedAnalysisCondition,symbol:string,period:string):boolean{
  return (condition.request.profitabilityFilter??0)===0?!!condition.analysis?.assets.some(row=>row.symbol===symbol&&row.timeframe===period&&row.matches>0):!!savedConditionProfitability(condition,symbol,period);
 }
-export function profitabilityLabel(value:SavedConditionProfitability):string{return`Profitability: ${value.profitablePercent.toFixed(2)}%, ${value.takeProfitHits} / ${value.matches} hit TP`;}
+export function profitabilityLabel(value:SavedConditionProfitability):string{return`${value.synthetic?'Analytical TP rate':'Profitability'}: ${value.profitablePercent.toFixed(2)}%, ${value.takeProfitHits} / ${value.matches} hit TP`;}
 
 /** Compare semantic rule values across Go JSON defaults and older saved drafts. */
 export function analysisRequestIdentity(value:AnalysisRequest,includeProfitability=true):string{
