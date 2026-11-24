@@ -13,6 +13,7 @@ import {cachedInstruments,clearInstrumentCatalog,DUCASCOPY_CONFIGURED,instrument
 import {DEFAULT_CHART_RIGHT_GAP,MAX_DRAWINGS,liveView} from '../workspace/model';
 import {tickPrecision} from './format';
 import {capturePriceScale,chartPriceScaleDiagnostics} from './priceScale';
+import {captureTimeViewport,restoreTimeViewport} from './timeViewport';
 import {IndicatorDialog,IndicatorOptions,indicatorLabel} from './IndicatorDialog';
 import {IndicatorLayer} from './indicators/IndicatorLayer';
 import {indicatorHistoryLimit,indicatorWarmupBars} from './indicators/math';
@@ -56,13 +57,18 @@ export function ChartCell(p:Props){
  const applyWorkspaceGap=()=>{const ca=chart.current,last=allBars.current.at(-1);if(!ca||!last||!followingLive.current)return;applyRightGap(ca.timeScale(),last.time as UTCTimestamp,options.current.workspace.chartRightGap??DEFAULT_CHART_RIGHT_GAP);lastSpacing.current=ca.timeScale().options().barSpacing;};
  const capture=()=>{const chartApi=chart.current,config=options.current.config;if(!chartApi||applying.current)return;const indicators=indicatorLayer.current?.capturePaneLayout(config.indicators??[]);if(!initialized.current||restoringHistorical.current){if(indicators)options.current.onChange({indicators});return;}const ts=chartApi.timeScale(),range=ts.getVisibleRange(),from=timeNumber(range?.from),to=timeNumber(range?.to);const last=allBars.current.at(-1);const live=last?latestCandleVisible(ts,last.time as UTCTimestamp):config.view.mode==='live';followingLive.current=live;const view:View={mode:live?'live':'historical',fromSec:from===null?null:Math.floor(from),toSec:to===null?null:Math.floor(to),barSpacing:Math.min(100,Math.max(1,ts.options().barSpacing)),rightOffset:Math.min(5000,Math.max(-5000,ts.scrollPosition()))};const priceScale=capturePriceScale(chartApi.priceScale('right'),config.priceScale);if(indicators||JSON.stringify(view)!==JSON.stringify(config.view)||JSON.stringify(priceScale)!==JSON.stringify(config.priceScale))options.current.onChange({view,priceScale,...(indicators?{indicators}:{})});};
  const renderBars=(incoming:Candle[],replace:boolean,window?:'oldest'|'newest')=>{
-  const ca=chart.current,cs=candleSeries.current,ls=lineSeries.current,vs=volumeSeries.current;if(!ca||!cs||!ls||!vs)return;const before=allBars.current,holdingHistory=!followingLive.current;const policy=window||(holdingHistory?'oldest':'newest');const merged=mergeBars(replace&&!initialized.current?[]:before,incoming,indicatorHistoryLimit(options.current.config.indicators??[],options.current.config.timeframe),policy);const lastTime=before.at(-1)?.time??-1;const canIncrement=!replace&&incoming.length>0&&incoming.every(b=>b.time>=lastTime)&&merged.length>=before.length&&(!before.length||merged[0]?.time===before[0].time)&&incoming.every(b=>merged.some(v=>v.time===b.time));const range=ca.timeScale().getVisibleRange(),palette=getThemePalette(options.current.workspace.theme);applying.current=true;
+  const ca=chart.current,cs=candleSeries.current,ls=lineSeries.current,vs=volumeSeries.current;if(!ca||!cs||!ls||!vs)return;const before=allBars.current,holdingHistory=!followingLive.current;const policy=window||(holdingHistory?'oldest':'newest');const merged=mergeBars(replace&&!initialized.current?[]:before,incoming,indicatorHistoryLimit(options.current.config.indicators??[],options.current.config.timeframe),policy);const lastTime=before.at(-1)?.time??-1;const canIncrement=!replace&&incoming.length>0&&incoming.every(b=>b.time>=lastTime)&&merged.length>=before.length&&(!before.length||merged[0]?.time===before[0].time)&&incoming.every(b=>merged.some(v=>v.time===b.time));const palette=getThemePalette(options.current.workspace.theme);
+  const preserveViewport=holdingHistory&&initialized.current&&!restoringHistorical.current;
+  const retainedTimes=preserveViewport?new Set(merged.map(bar=>bar.time)):null;
+  const anchor=retainedTimes?before.find(bar=>retainedTimes.has(bar.time)):undefined;
+  const viewport=preserveViewport?captureTimeViewport(ca.timeScale(),anchor?.time as UTCTimestamp|undefined):null;
+  applying.current=true;
   try{
    if(canIncrement){for(const bar of [...incoming].sort((a,b)=>a.time-b.time)){const accepted=merged.find(b=>b.time===bar.time);if(accepted!==bar)continue;const value={time:bar.time as UTCTimestamp,open:Number(bar.open),high:Number(bar.high),low:Number(bar.low),close:Number(bar.close)};cs.update(value);ls.update({time:value.time,value:value.close});vs.update({time:value.time,value:Number(bar.volume),color:`${value.close>=value.open?palette.up:palette.danger}66`});}}
    else{cs.setData(merged.map(b=>({time:b.time as UTCTimestamp,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close)})));ls.setData(merged.map(b=>({time:b.time as UTCTimestamp,value:Number(b.close)})));vs.setData(merged.map(b=>({time:b.time as UTCTimestamp,value:Number(b.volume),color:`${Number(b.close)>=Number(b.open)?palette.up:palette.danger}66`})));}
    allBars.current=merged;setBarCount(merged.length);indicatorLayer.current?.update(merged,options.current.config.indicators??[],options.current.config.timeframe,!followingLive.current);updateDrawings();setReadout(crosshairTime.current===null?merged.at(-1)??null:merged.find(b=>b.time===crosshairTime.current)??null);
    if((!initialized.current||restoringHistorical.current)&&merged.length){const config=options.current.config;const view=config.view;followingLive.current=view.mode==='live';ca.timeScale().applyOptions({barSpacing:view.barSpacing,rightOffset:view.rightOffset});lastSpacing.current=view.barSpacing;if(view.mode==='historical'&&view.fromSec!==null&&view.toSec!==null){const overlaps=merged.some(b=>b.time>=view.fromSec!&&b.time<=view.toSec!);if(overlaps){ca.timeScale().setVisibleRange({from:view.fromSec as UTCTimestamp,to:view.toSec as UTCTimestamp});restoringHistorical.current=false;}}else{applyWorkspaceGap();restoringHistorical.current=false;}if(!config.priceScale.autoScale&&config.priceScale.manualRange)ca.priceScale('right').setVisibleRange({from:config.priceScale.manualRange.min,to:config.priceScale.manualRange.max});initialized.current=true;}
-   else if(range&&!followingLive.current)ca.timeScale().setVisibleRange(range);
+   else if(!followingLive.current)restoreTimeViewport(ca.timeScale(),viewport);
    else if(followingLive.current)applyWorkspaceGap();
   }finally{applying.current=false;}
  };
@@ -122,7 +128,7 @@ export function ChartCell(p:Props){
     const count=Math.min(1000,warmupBars-current.length),requestId=crypto.randomUUID();const result=await api.GetHistory(requestId,key,historyFrom(key.exchange,key.timeframe,oldest,count),oldest,1000);
     if(cancelled||generation.current!==gen)return;if(result.requestId!==requestId||keyOf(result.feedKey)!==keyOf(key))throw Error('History response did not match the requested chart.');
     const older=(result.bars??[]).filter(bar=>bar.time<oldest);if(!older.length)break;
-    const range=chart.current?.timeScale().getVisibleRange();renderRef.current(older,false,followingLive.current?'newest':'oldest');if(range&&!followingLive.current){applying.current=true;try{chart.current?.timeScale().setVisibleRange(range);}finally{applying.current=false;}}
+    renderRef.current(older,false,followingLive.current?'newest':'oldest');
     if(allBars.current.length<=current.length||!result.moreHistory)break;
    }
    if(!cancelled&&generation.current===gen&&allBars.current.length<warmupBars)setWarmupError('Not enough earlier history is available. Indicators appear after their required bars are loaded.');

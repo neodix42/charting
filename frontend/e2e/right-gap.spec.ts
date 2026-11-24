@@ -121,6 +121,72 @@ test('pixel gaps stay fixed through zoom, resize, future Ichimoku spans and a ne
  await page.screenshot({path:'test-results/right-gap-settings.png'});expect(errors).toEqual([]);
 });
 
+for(const updateTiming of ['before capture','after capture'] as const)test(`real wheel zoom survives a historical price update ${updateTiming}`,async({page},testInfo)=>{
+ await openTestApp(page);await expectGap(page,1,'bars',10);
+ const canvas=page.getByTestId('chart-canvas'),box=(await canvas.boundingBox())!;
+ // Use the actual browser wheel path after panning the newest candle offscreen.
+ const initial=(await gaps(page))[0];
+ await page.evaluate(id=>(window as any).__testChartPan(id,-35),initial.id);
+ await expect.poll(async()=>(await gaps(page))[0]?.followingLive).toBe(false);
+ await page.waitForTimeout(120);
+ const before=(await gaps(page))[0];
+ await page.mouse.move(box.x+box.width*.5,box.y+box.height*.4);
+ await page.evaluate(()=>{
+  document.querySelector('[data-testid="chart-canvas"]')!.addEventListener('wheel',()=>{(window as any).__zoomWheelAt=performance.now();},{capture:true,once:true});
+ });
+ await page.mouse.wheel(0,240);
+ const afterWheel=await page.evaluate(async()=>{
+  await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+  return {geometry:(window as any).__testChartGaps()[0],elapsedMs:performance.now()-(window as any).__zoomWheelAt};
+ });
+ expect(afterWheel.geometry.barSpacing).toBeLessThan(before.barSpacing);
+ const publish=()=>page.evaluate(()=>{
+  const subscription=(window as any).__testSubscriptions()[0],geometry=(window as any).__testChartGaps()[0];
+  (window as any).__testPublish({...subscription,kind:'bars',revision:subscription.revision+1,bars:[{time:geometry.latestTime,open:60990,high:61020,low:60970,close:61001,volume:3,closed:false,quality:'provisional',sourceRevision:2}]});
+ });
+ if(updateTiming==='before capture')await publish();
+ await page.waitForTimeout(120);
+ const afterCapture=(await gaps(page))[0];
+ if(updateTiming==='after capture')await publish();
+ await page.waitForTimeout(160);
+ const afterPrice=(await gaps(page))[0];
+ const evidence={updateTiming,before,afterWheel,afterCapture,afterPrice};
+ await testInfo.attach('wheel-zoom-evidence',{body:JSON.stringify(evidence,null,2),contentType:'application/json'});
+ expect(afterPrice.followingLive).toBe(false);
+ expect(afterPrice.barSpacing).toBeCloseTo(afterWheel.geometry.barSpacing,6);
+ expect(afterPrice.visibleTo).toBeCloseTo(afterWheel.geometry.visibleTo,6);
+ await page.getByRole('button',{name:'Return to live',exact:true}).click();
+ await expectGap(page,1,'bars',10);
+});
+
+test('real wheel zoom keeps its fractional historical window when older candles are prepended',async({page},testInfo)=>{
+ await openTestApp(page);await expectGap(page,1,'bars',10);
+ await page.evaluate(()=>{
+  window.go!.main!.App!.GetHistory=async(requestId,feedKey,_from,to)=>new Promise(resolve=>{
+   (window as any).__releaseZoomPrepend=()=>resolve({requestId,feedKey,moreHistory:false,bars:Array.from({length:100},(_,index)=>({time:to-(100-index)*60,open:60000,high:60030,low:59980,close:60010,volume:2,closed:true,quality:'provisional',sourceRevision:1}))});
+  });
+ });
+ await page.getByRole('button',{name:'Timeframe 1m',exact:true}).click();
+ await expectGap(page,1,'bars',10);
+ const initial=(await gaps(page))[0];
+ await page.evaluate(id=>(window as any).__testChartPan(id,-35),initial.id);
+ await expect.poll(async()=>(await gaps(page))[0]?.followingLive).toBe(false);
+ await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releaseZoomPrepend)).toBe('function');
+ const box=(await page.getByTestId('chart-canvas').boundingBox())!;
+ await page.mouse.move(box.x+box.width*.5,box.y+box.height*.4);await page.mouse.wheel(0,240);
+ await expect.poll(async()=>(await gaps(page))[0]?.barSpacing).toBeLessThan(initial.barSpacing);
+ await page.waitForTimeout(120);
+ const beforePrepend=(await gaps(page))[0];
+ await page.evaluate(()=>(window as any).__releaseZoomPrepend());
+ await expect.poll(async()=>(await gaps(page))[0]?.latestLogical).toBe(initial.latestLogical+100);
+ const afterPrepend=(await gaps(page))[0];
+ await testInfo.attach('wheel-prepend-evidence',{body:JSON.stringify({beforePrepend,afterPrepend},null,2),contentType:'application/json'});
+ expect(afterPrepend.barSpacing).toBeCloseTo(beforePrepend.barSpacing,6);
+ expect(afterPrepend.visibleTo-afterPrepend.latestLogical).toBeCloseTo(beforePrepend.visibleTo-beforePrepend.latestLogical,6);
+ expect(afterPrepend.followingLive).toBe(false);
+ await page.getByRole('button',{name:'Return to live',exact:true}).click();await expectGap(page,1,'bars',10);
+});
+
 test('invalid and unapplied gap drafts preserve the saved rule and zero is accepted',async({page})=>{
  await openTestApp(page);await expectGap(page,1,'bars',10);await page.getByRole('button',{name:'Open settings',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Workspace settings',exact:true}),value=dialog.getByLabel('Chart right gap',{exact:true}),apply=dialog.getByRole('button',{name:'Apply chart gap',exact:true});

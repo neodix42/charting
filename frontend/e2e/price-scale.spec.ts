@@ -43,3 +43,26 @@ test('manual price ranges save and restore while a range crossing zero preserves
  await expect.poll(async()=>(await actualScale(page))?.autoScale).toBe(true);
  expect(errors).toEqual([]);
 });
+
+test('a native price-axis drag preserves its manual scale through a price refresh',async({page},testInfo)=>{
+ await page.goto('/');await expect(page.getByLabel('OHLCV')).toContainText('C');
+ const canvas=page.getByTestId('chart-canvas'),box=(await canvas.boundingBox())!;
+ const before=await actualScale(page);
+ expect(before?.autoScale).toBe(true);
+ await page.mouse.move(box.x+box.width-25,box.y+box.height*.3);
+ await page.mouse.down();await page.mouse.move(box.x+box.width-25,box.y+box.height*.55,{steps:8});await page.mouse.up();
+ await expect.poll(async()=>(await actualScale(page))?.autoScale).toBe(false);
+ const manual=await actualScale(page);
+ expect(manual?.range).not.toEqual(before?.range);
+ await page.mouse.move(0,0);
+ await page.evaluate(()=>{
+  const subscription=(window as any).__testSubscriptions()[0],geometry=(window as any).__testChartGaps()[0];
+  (window as any).__testPublish({...subscription,kind:'bars',revision:subscription.revision+1,bars:[{time:geometry.latestTime,open:60990,high:61020,low:60970,close:61001,volume:3,closed:false,quality:'provisional',sourceRevision:2}]});
+ });
+ await expect(page.getByLabel('OHLCV')).toContainText('61,001');
+ const afterPrice=await actualScale(page);
+ await testInfo.attach('native-price-axis-evidence',{body:JSON.stringify({before,manual,afterPrice},null,2),contentType:'application/json'});
+ expect(afterPrice?.autoScale).toBe(false);
+ expect(afterPrice!.range!.from).toBeCloseTo(manual!.range!.from,6);
+ expect(afterPrice!.range!.to).toBeCloseTo(manual!.range!.to,6);
+});
