@@ -11,7 +11,12 @@ test('Downloader selects and restores w1 and explains retained daily history',as
  await page.getByRole('checkbox',{name:'BTCUSD — Bitcoin vs US Dollar',exact:true}).check();
  await page.getByRole('button',{name:'Download 1 symbol',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).__testScreenerRequest()?.timeframe)).toBe('w1');
- await expect(page.locator('.screener-job')).toHaveCount(2);await expect(page.locator('.screener-job-title > span:first-of-type')).toHaveText(['d1','w1']);await expect(page.getByLabel('Download summary',{exact:true})).toContainText('2 total');
+ const jobs=page.locator('#screener-downloader .screener-job');
+ await expect(jobs).toHaveCount(2);
+ const badges=jobs.locator('.screener-job-title > span');
+ await expect(badges.filter({hasText:/^(d1|w1)$/})).toHaveText(['d1','w1']);
+ await expect(badges.filter({hasText:/^Dukascopy$/})).toHaveText(['Dukascopy','Dukascopy']);
+ await expect(page.getByLabel('Download summary',{exact:true})).toContainText('2 total');
  await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();await reloadTestApp(page);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Downloader',exact:true}).click();await expect(period).toHaveValue('w1');
 });
