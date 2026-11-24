@@ -225,9 +225,10 @@ async function refresh(request,options={}) {
   let handle,rows=0,addedRows=0,updatedRows=0,buffer='',bytes=0,lastProgress=0,firstTimestamp,lastTimestamp;
   const outputChecksum=createHash('sha256');
   const originalNames=scanned.headers.map(key),originalRow=row=>droppedVolume?headers.map(name=>row[originalNames.indexOf(key(name))]??''):[...row];
-  const observedOrigins=[];
+  const observedOrigins=[],observedHistorySources=new Set();
   const origin=(provenance,timestamp)=>{
     if(request.symbol!=='xauxag'||request.timeframe!=='d1'||!provenance)return;
+    observedHistorySources.add(provenance.historySource??'dukascopy-node');
     const end=Math.min(timestamp+86400000,closed);
     for(const item of provenance.segments??[{from:timestamp,to:end,kind:provenance.kind}]){
       const from=Math.max(timestamp,item.from),to=Math.min(end,item.to);if(from>=to)continue;
@@ -242,7 +243,7 @@ async function refresh(request,options={}) {
     return row;
   };
   const baseKey=row=>JSON.stringify(baseIndexes.map(index=>Number(row[index])));
-  const priorProvenance=request.provenance??(request.symbol==='xauxag'&&originalNames.includes('volume')?require('./synthetic-worker.cjs').provenance(request.symbol,false):undefined);
+  const priorProvenance=request.provenance??(['btcusd','xauxag'].includes(request.symbol)&&originalNames.includes('volume')?require('./synthetic-worker.cjs').provenance(request.symbol,false):undefined);
   const append=async(row,provenance=priorProvenance)=>{
     while(row.length<headers.length)row.push('');
     const timestamp=Number(row[timestampIndex]);
@@ -291,7 +292,8 @@ async function refresh(request,options={}) {
     await handle.sync();
     const columns=headers.filter(name=>!base.includes(key(name)));
     const synthetic=require('./synthetic-worker.cjs');
-    const provenance=synthetic.mergeProvenance(request.symbol,observedOrigins.length?[{value:{...synthetic.provenance(request.symbol,true),segments:observedOrigins},from:initial,to:closed}]:[
+    const historySource=observedHistorySources.has('mixed')||observedHistorySources.size>1?'mixed':observedHistorySources.has('jforex-sdk')?'jforex-sdk':undefined;
+    const provenance=synthetic.mergeProvenance(request.symbol,observedOrigins.length?[{value:{...synthetic.provenance(request.symbol,true),...(historySource?{historySource}:{}),segments:observedOrigins},from:initial,to:closed}]:[
       {value:priorProvenance,from:initial,to:closed},
       {value:latestProvenance,from,to:closed}],normalized.includes('volume'));
     const result={type:'done',rows,addedRows,updatedRows,columns,recipes,firstTimestamp,lastTimestamp,checksum:outputChecksum.digest('hex'),checkedThrough:now,coverage:initial<closed?[{from:initial,to:closed}]:[],provenance,message:`Refreshed ${rows.toLocaleString('en-US')} rows: ${addedRows.toLocaleString('en-US')} added, ${updatedRows.toLocaleString('en-US')} updated; ${recipes.length} indicator recipes recalculated`};

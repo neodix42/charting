@@ -165,8 +165,8 @@ func (m *Manager) recordHistoryRenameLocked(directory, name string, sources []do
 func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Job, directory, work, partial string, plan downloadPlan, originals map[string]os.FileInfo, result workerEvent) (string, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if ctx.Err() != nil {
-		return "", "", ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
 	}
 	for filename, original := range originals {
 		if err := unchangedFile(filename, original); err != nil {
@@ -203,6 +203,9 @@ func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Jo
 		if err := checkHistoryFamily(directory, historyPublication{Name: name, Sources: []historyOriginal{{Name: target.Name}}}); err != nil {
 			return "", "", err
 		}
+		if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+			return "", "", sourceErr
+		}
 		if result.Coverage != nil {
 			if err := writeFileMetadata(directory, name, metadata); err != nil {
 				return "", "", err
@@ -224,6 +227,9 @@ func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Jo
 	}
 	if err := os.Chmod(partial, originals[target.Input].Mode().Perm()); err != nil {
 		return "", "", err
+	}
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
 	}
 	m.publication[job.ID] = name
 	if !m.saveDownloadsLocked() {

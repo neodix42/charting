@@ -381,3 +381,16 @@ downloaded closed history; only active synthetic chart subscriptions poll for up
 Execution is forbidden for calculated ratios and simulations are analytical, without
 claiming executable underlying-position returns. Details and verification contracts:
 [Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md).
+
+## Authenticated underlying history for synthetic downloads — 2026-11-24
+
+Use the existing configured JForex SDK connection for bounded historical tick exports
+and native BTCUSD/XAUXAG daily prices. Inject a provider interface into Screener before
+restored queues resume in both startup paths. Keep credentials in Go/Java, files in
+private owner-created temporary paths, and public/SDK quote caches separate. Freeze
+source/account identity across a batch and fence final publication even for cached
+work. Retain shared pacing, rate-limit deadlines, cancellation and queue ownership;
+a public HTTP 403 does not deny a distinct SDK request. Do not silently change source
+after an SDK error. Preserve old public partials before upgrading checkpoints, record
+public/SDK/mixed provenance and omit incompatible SDK quote volume from saved price
+histories. Calculated OHLC remains explicitly approximate, and orders stay disabled.

@@ -606,7 +606,7 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 	m.refreshJobs = jobs
 	m.mu.Unlock()
 	l.reportCheckPreparation(ctx, nil, "Preparing provider session")
-	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	ctx, cleanup, err := withProviderSessionWithHistory(ctx, m.profile, m.dukascopyHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -689,14 +689,18 @@ func liveAlertProviderStopped(ctx context.Context, err error) bool {
 	}
 	if session := sessionFromContext(ctx); session != nil && session.limiter != nil {
 		session.limiter.mu.Lock()
-		stopped := max(session.limiter.state.DeniedTill, session.limiter.state.LimitedTill) > time.Now().UnixMilli()
+		stopped := session.limiter.state.LimitedTill > time.Now().UnixMilli() || session.SDK == nil && session.limiter.state.DeniedTill > time.Now().UnixMilli()
 		session.limiter.mu.Unlock()
 		if stopped {
 			return true
 		}
 	}
 	message := strings.ToLower(err.Error())
-	for _, marker := range []string{"403", "429", "access-denial", "rate-limit", "rate limit", "cooldown"} {
+	markers := []string{"403", "429", "access-denial", "rate-limit", "rate limit", "cooldown"}
+	if session := sessionFromContext(ctx); session != nil && session.SDK != nil {
+		markers = []string{"429", "rate-limit", "rate limit"}
+	}
+	for _, marker := range markers {
 		if strings.Contains(message, marker) {
 			return true
 		}

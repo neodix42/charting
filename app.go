@@ -84,7 +84,11 @@ func (a *App) initializeServices(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	scanner := screener.New(profile)
+	forex := jforex.New(profile)
+	a.mu.Lock()
+	a.jforex = forex
+	a.mu.Unlock()
+	scanner := screener.NewWithDukascopyHistory(profile, dukascopyScreenerHistory{client: forex})
 	a.mu.Lock()
 	a.screener = scanner
 	a.mu.Unlock()
@@ -98,7 +102,6 @@ func (a *App) initializeServices(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	forex := jforex.New(profile)
 	trader := hyperliquid.NewStore(profile)
 	messenger := telegram.NewStore(profile)
 	a.mu.Lock()

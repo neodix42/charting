@@ -93,15 +93,22 @@ function mergeProvenance(symbol,entries,hasVolume){
       if(from>=to)continue;
       if(!['native','synchronized-bid-ratio'].includes(part.kind))throw Error('Unsupported synthetic provenance segment.');
       segments=segments.flatMap(old=>old.to<=from||old.from>=to?[old]:[{...old,to:Math.min(old.to,from)},{...old,from:Math.max(old.from,to)}].filter(value=>value.from<value.to));
-      segments.push({from,to,kind:part.kind});
+      segments.push({from,to,kind:part.kind,historySource:entry.value.historySource??'dukascopy-node',
+        observationResolution:entry.value.kind==='native'?entry.value.observationResolution:undefined});
     }
   }
   if(!segments.length)return entries.map(entry=>entry.value).find(Boolean);
   segments.sort((a,b)=>a.from-b.from);const normalized={segments:[]};for(const value of segments)segment(normalized,value.from,value.to,value.kind);
+  const historySources=new Set(segments.map(value=>value.historySource));
   const ratio=segments.some(value=>value.kind==='synchronized-bid-ratio'),native=segments.some(value=>value.kind==='native');
   const result={...provenance(symbol,ratio),volume:hasVolume?'provider':'unavailable'};
+  if(historySources.has('mixed')||historySources.size>1)result.historySource='mixed';
+  else if(historySources.has('jforex-sdk'))result.historySource='jforex-sdk';
   if(ratio&&native){result.kind='mixed-native-ratio';result.segments=normalized.segments;result.observationResolution='simultaneous millisecond BID ratios and provider native BID ticks';}
-  if(!ratio&&!hasVolume)result.observationResolution='provider native BID ticks';
+  if(!ratio&&!hasVolume){
+    const resolutions=new Set(segments.map(value=>value.observationResolution));
+    result.observationResolution=resolutions.size===1&&segments[0].observationResolution?segments[0].observationResolution:'provider native BID price observations';
+  }
   return result;
 }
 async function syntheticDownload(request,options={}){
@@ -111,17 +118,23 @@ async function syntheticDownload(request,options={}){
   if(!definition?.denominator)throw Error('Unsupported computed synthetic instrument.');
   const emit=options.emit??(event=>process.stdout.write(`${JSON.stringify(event)}\n`)),signal=options.signal;
   const mode=request.symbol!=='xauxag'||request.synthetic===true||request.synthetic?.kind==='synchronized-bid-ratio'?'ratio':'mixed';
-  const identity=createHash('sha256').update(JSON.stringify({version:1,symbol:request.symbol,from:request.from,to:request.to,mode,
+  const sdk=request.providerSession?.sdk;
+  if(sdk&&!/^[a-f0-9]{64}$/.test(sdk.sourceKey??''))throw Error('Invalid private JForex history source identity.');
+  const identity=createHash('sha256').update(JSON.stringify({version:1,symbol:request.symbol,from:request.from,to:request.to,mode,...(sdk?{sourceKey:sdk.sourceKey}:{}),
     numerator:definition.numerator,denominator:definition.denominator,priceType:'bid',maxAgeMs:0,sessionPolicy:'exact-timestamp-no-carry-v1'})).digest('hex');
+  const publicIdentity=sdk?createHash('sha256').update(JSON.stringify({version:1,symbol:request.symbol,from:request.from,to:request.to,mode,
+    numerator:definition.numerator,denominator:definition.denominator,priceType:'bid',maxAgeMs:0,sessionPolicy:'exact-timestamp-no-carry-v1'})).digest('hex'):identity;
   const from=Date.parse(request.from),requestedTo=Date.parse(request.to),asOf=request.asOf??Date.now();
   if(!Number.isSafeInteger(asOf)||asOf<0||!Number.isSafeInteger(from)||!Number.isSafeInteger(requestedTo)||from<0||from>=requestedTo||!path.isAbsolute(request.output))throw Error('Invalid synthetic download range or output.');
   let to=Math.min(requestedTo,bucket(asOf,'d1'));
   if(from>=to)throw Error('No available history in the requested UTC date range.');
-  const source={...provenance(request.symbol,true),segments:[]},checkpointFile=path.join(path.dirname(request.output),'synthetic-checkpoint.json');
+  const source={...provenance(request.symbol,true),...(sdk?{historySource:'jforex-sdk'}:{}),segments:[]},checkpointFile=path.join(path.dirname(request.output),'synthetic-checkpoint.json');
   let checkpoint;
   if(request.resume){
+    if(sdk){const upgradedEnd=await require('./sdk-worker.cjs').finishPublicUpgrade(request,publicIdentity,options);if(upgradedEnd!==null)to=Math.min(to,upgradedEnd);}
     try{checkpoint=JSON.parse(await fs.readFile(checkpointFile,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
-    if(checkpoint&&(checkpoint.version!==1||checkpoint.kind!=='synchronized-bid-ratio'||checkpoint.identity!==identity||checkpoint.mode!==mode||checkpoint.symbol!==request.symbol||checkpoint.from!==request.from||checkpoint.to!==request.to||
+    const publicUpgrade=sdk&&checkpoint?.identity===publicIdentity&&(!checkpoint.provenance?.historySource||checkpoint.provenance.historySource==='dukascopy-node');
+    if(checkpoint&&(checkpoint.version!==1||checkpoint.kind!=='synchronized-bid-ratio'||checkpoint.identity!==(publicUpgrade?publicIdentity:identity)||checkpoint.mode!==mode||checkpoint.symbol!==request.symbol||checkpoint.from!==request.from||checkpoint.to!==request.to||
       checkpoint.start!==from||!Number.isSafeInteger(checkpoint.end)||checkpoint.end<=from||checkpoint.end>to||!Number.isSafeInteger(checkpoint.nextDay)||checkpoint.nextDay<from||checkpoint.nextDay>checkpoint.end||
       !Number.isSafeInteger(checkpoint.rows)||checkpoint.rows<0||!Number.isSafeInteger(checkpoint.bytes)||checkpoint.bytes<0||
       (checkpoint.rows===0?(checkpoint.bytes!==0||checkpoint.lastTimestamp!==null):(checkpoint.bytes===0||!Number.isSafeInteger(checkpoint.lastTimestamp)||checkpoint.lastTimestamp<from||checkpoint.lastTimestamp>=to))))
@@ -139,6 +152,11 @@ async function syntheticDownload(request,options={}){
     }
     source.segments=checkpoint.provenance.segments.map(value=>({...value,to:Math.min(value.to,checkpoint.nextDay)})).filter(value=>value.from<value.to);
   }
+  if(sdk&&checkpoint?.identity===publicIdentity){
+    await require('./sdk-worker.cjs').archivePublicPartial(request,checkpoint,publicIdentity,options);
+    emit({type:'progress',progress:0,message:'Preserved the unpublished public partial in a private archive; restarting with the configured JForex source'});
+    checkpoint=null;source.segments=[];
+  }
   let rows=checkpoint?.rows??0,bytes=checkpoint?.bytes??0,last=checkpoint?.lastTimestamp??null,handle;
   const {writeCheckpoint}=require('./worker.cjs');
   const commit=async nextDay=>{
@@ -154,7 +172,8 @@ async function syntheticDownload(request,options={}){
     let chunks=0;
     const total=Math.ceil((to-(checkpoint?.nextDay??from))/3600000)*2;
     const onChunk=event=>{chunks++;emit({type:'progress',progress:Math.min(95,chunks/Math.max(total,1)*95),message:`${event.reused?'Reused cached':'Fetched'} ${event.symbol} BID quotes; ${chunks}/${total} hourly sources`});options.onChunk?.(event);};
-    const start=checkpoint?.nextDay??from,sourceOptions={...options,onChunk,importedHistories:new Set(),historyRange:{from:start,to}};
+    const onRetry=event=>{emit({type:'progress',progress:Math.min(95,chunks/Math.max(total,1)*95),message:`JForex ${event.symbol} history loading timed out; retrying the same UTC hour once in 5 seconds. Completed quote hours are retained.`});options.onRetry?.(event);};
+    const start=checkpoint?.nextDay??from,sourceOptions={...options,onChunk,onRetry,importedHistories:new Set(),historyRange:{from:start,to}};
     if(start<to){
       for await(const bar of computedBars(request,definition,start,to,source,sourceOptions)){
         signal?.throwIfAborted();
@@ -178,4 +197,4 @@ async function syntheticDownload(request,options={}){
     return rows;
   }finally{await handle?.close();}
 }
-module.exports={calculated,provenance,mergeProvenance,syntheticDownload};
+module.exports={calculated,provenance,mergeProvenance,syntheticDownload,nativeBars};

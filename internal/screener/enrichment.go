@@ -339,9 +339,12 @@ func (m *Manager) enrichFile(ctx context.Context, index int, directory string, j
 		return err
 	}
 	file := describeFileName(directory, job.Name)
-	if file.Synthetic {
+	if file.Synthetic || file.Provenance != nil && file.Provenance.Volume == "unavailable" {
 		for _, member := range members {
 			if strings.Contains(indicatorDefinitions()[member.Indicator].Input, "v") {
+				if !file.Synthetic {
+					return errors.New("volume-based indicators are unavailable for SDK price history without volume")
+				}
 				return errors.New("volume-based indicators are unavailable for calculated synthetic ratios")
 			}
 		}

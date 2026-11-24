@@ -85,6 +85,7 @@ type Manager struct {
 	wg                         sync.WaitGroup
 	profile, directory         string
 	runtime                    workerRuntime
+	dukascopyHistory           DukascopyHistoryProvider
 	runtimeError, lastError    string
 	jobs                       []Job
 	sourceOrder                []string
@@ -123,12 +124,18 @@ type Manager struct {
 func New(profile string) *Manager {
 	return newManager(profile, discoverRuntime)
 }
+func NewWithDukascopyHistory(profile string, provider DukascopyHistoryProvider) *Manager {
+	return newManagerWithDukascopyHistory(profile, discoverRuntime, provider)
+}
 func newManager(profile string, discover func() (workerRuntime, error)) *Manager {
+	return newManagerWithDukascopyHistory(profile, discover, nil)
+}
+func newManagerWithDukascopyHistory(profile string, discover func() (workerRuntime, error), provider DukascopyHistoryProvider) *Manager {
 	absolute, err := filepath.Abs(profile)
 	if err == nil {
 		profile = absolute
 	}
-	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: DefaultConcurrency, savedConditionsChanged: make(chan struct{}, 1)}
+	m := &Manager{profile: profile, directory: filepath.Join(profile, "screener"), jobs: []Job{}, concurrency: DefaultConcurrency, savedConditionsChanged: make(chan struct{}, 1), dukascopyHistory: provider}
 	if err := m.loadPreferences(); err != nil {
 		m.settingsError = "Load screener settings (original state preserved): " + err.Error()
 	}
@@ -571,7 +578,7 @@ func (m *Manager) run(ctx context.Context, directory string, done chan struct{},
 }
 
 func (m *Manager) runDukascopyDownloads(ctx context.Context, directory string, workers int) {
-	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	ctx, cleanup, err := withProviderSessionWithHistory(ctx, m.profile, m.dukascopyHistory)
 	if err != nil {
 		m.mu.Lock()
 		for i := range m.jobs {
@@ -643,11 +650,7 @@ func (m *Manager) runDukascopyDownloads(ctx context.Context, directory string, w
 					saved := m.saveDownloadsLocked()
 					terminal := m.jobs[i].Status == "completed" || m.jobs[i].Status == "cancelled"
 					if m.jobs[i].Status == "failed" {
-						if _, checkpointErr := os.Stat(filepath.Join(m.jobDirectory(job), "checkpoint.json")); errors.Is(checkpointErr, os.ErrNotExist) {
-							// Existing histories keep one checkpoint per missing range.
-							_, rangesErr := os.Stat(filepath.Join(m.jobDirectory(job), "ranges.json"))
-							terminal = errors.Is(rangesErr, os.ErrNotExist)
-						}
+						terminal = !retainedDownloadWork(m.jobDirectory(job))
 					}
 					m.mu.Unlock()
 					if saved && terminal {
@@ -806,8 +809,8 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		_ = cmd.Cancel()
 	}
 	err = cmd.Wait()
-	if ctx.Err() != nil {
-		return "", "", ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
 	}
 	if workerError != "" {
 		return "", "", errors.New(workerError)
@@ -837,8 +840,8 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	// Holding the lock makes publication and completion indivisible with Cancel.
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if ctx.Err() != nil {
-		return "", "", ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
 	}
 	for filename, original := range originals {
 		if err := unchangedFile(filename, original); err != nil {
@@ -865,6 +868,9 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		}
 	}
 	output := filepath.Join(directory, name)
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
+	}
 	m.publication[job.ID] = name
 	if !m.saveDownloadsLocked() {
 		return "", "", errors.New(m.stateError)

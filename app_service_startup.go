@@ -235,7 +235,7 @@ func (a *App) initializeChartServices(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		scanner := screener.New(profile)
+		scanner := screener.NewWithDukascopyHistory(profile, dukascopyScreenerHistory{client: forex})
 		a.mu.Lock()
 		a.screener = scanner
 		a.mu.Unlock()

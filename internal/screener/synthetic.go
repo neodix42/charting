@@ -54,6 +54,7 @@ type DataProvenance struct {
 	Volume                string              `json:"volume"`
 	Approximate           bool                `json:"approximate,omitempty"`
 	ObservationResolution string              `json:"observationResolution,omitempty"`
+	HistorySource         string              `json:"historySource,omitempty"`
 	Segments              []ProvenanceSegment `json:"segments,omitempty"`
 }
 
@@ -78,6 +79,9 @@ func validateDataProvenance(value *DataProvenance) error {
 	}
 	if value.Version != 1 || value.Numerator == "" || len(value.Numerator) > 128 || len(value.Denominator) > 128 || value.PriceType != "bid" || value.MaxQuoteAgeMs < 0 || value.MaxQuoteAgeMs > 86_400_000 || len(value.SessionPolicy) > 1024 || len(value.ObservationResolution) > 256 {
 		return errors.New("invalid synthetic dataset provenance")
+	}
+	if value.HistorySource != "" && value.HistorySource != "dukascopy-node" && value.HistorySource != "jforex-sdk" && value.HistorySource != "mixed" {
+		return errors.New("invalid Dukascopy history source provenance")
 	}
 	if value.Kind != "mixed-native-ratio" && len(value.Segments) != 0 {
 		return errors.New("segmented synthetic provenance must identify its mixed origins")

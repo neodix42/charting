@@ -211,25 +211,28 @@ async function* readQuotes(chunk,from,to,signal){
 async function* sourceQuotes(symbol,from,to,request,options={}){
   const api=options.api??require('dukascopy-node'),signal=options.signal;
   if(!/^[a-z0-9]+$/.test(symbol)||!api.instrumentMetaData[symbol]||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||from>=to)throw Error('Invalid synthetic source quote range.');
-  const root=request.syntheticCacheDirectory??path.join(request.providerSession?path.dirname(request.providerSession.tokenCache):path.dirname(request.output),'synthetic-quotes-v1');
-  if(!path.isAbsolute(root))throw Error('Synthetic quote cache path must be absolute.');
-  const folder=path.join(root,symbol);await directory(root);await directory(folder);
+  const base=request.syntheticCacheDirectory??path.join(request.providerSession?path.dirname(request.providerSession.tokenCache):path.dirname(request.output),'synthetic-quotes-v1');
+  const sdk=request.providerSession?.sdk;
+  if(sdk&&!/^[a-f0-9]{64}$/.test(sdk.sourceKey??''))throw Error('Invalid private JForex history source identity.');
+  if(!path.isAbsolute(base))throw Error('Synthetic quote cache path must be absolute.');
+  const root=sdk?path.join(base,`jforex-${sdk.sourceKey}`):base;
+  const folder=path.join(root,symbol);await directory(base);await directory(root);await directory(folder);
   const config={instrument:symbol,dates:{from:new Date(from),to:new Date(to)},timeframe:'tick',format:'array',priceType:'bid',volumes:false,ignoreFlats:false,utcOffset:0,
     batchSize:1,requestIntervalMs:250,retryCount:0,retryOnEmpty:false,failAfterRetryCount:true,rateLimitRetryCount:2,wafMode:'auto',wafTimeoutMs:60000,wafTokenCache:true,
     wafTokenCachePath:request.providerSession?.tokenCache??path.join(root,'.dukascopy-waf-token.json')};
   const checked=api.validateConfigNode(config);
   if(!checked.isValid)throw Error(`Invalid synthetic source request: ${JSON.stringify(checked.validationErrors)}`);
-  const input=checked.input,fetcher=createProviderFetcher(api,input,request.providerSession);
+  const input=checked.input,fetcher=sdk?null:createProviderFetcher(api,input,request.providerSession);
   const first=Math.max(Math.floor(from/HOUR)*HOUR,Math.floor(Date.parse(api.instrumentMetaData[symbol].startHourForTicks)/HOUR)*HOUR);
   let imported=false;
   for(let hour=first;hour<to;hour+=HOUR){
     signal?.throwIfAborted();
     // Only complete source hours are cached or used by published daily bars.
     if(hour+HOUR>Math.min(request.asOf??Date.now(),Date.now()))break;
-    const urls=api.generateUrls({instrument:symbol,timeframe:'tick',priceType:'bid',startDate:new Date(hour),endDate:new Date(hour+HOUR)});
+    const urls=sdk?[`jforex://${sdk.sourceKey}/ticks/${symbol}/${hour}`]:api.generateUrls({instrument:symbol,timeframe:'tick',priceType:'bid',startDate:new Date(hour),endDate:new Date(hour+HOUR)});
     if(urls.length!==1)throw Error('Provider changed the one-hour tick source plan.');
     const url=urls[0];let chunk=await cached(folder,hour,url),reused=!!chunk;
-    if(!chunk&&!imported){
+    if(!chunk&&!imported&&!sdk){
       const key=`${root}|${symbol}`;
       if(!options.importedHistories?.has(key)){
         await importHistory(symbol,Math.max(options.historyRange?.from??from,first),options.historyRange?.to??to,request,api,folder,options);
@@ -242,10 +245,16 @@ async function* sourceQuotes(symbol,from,to,request,options={}){
       try{
         chunk=await cached(folder,hour,url);reused=!!chunk;
         if(!chunk){
-          const buffers=await fetcher.fetch([url]);signal?.throwIfAborted();
-          if(buffers.length!==1||buffers[0].url!==url||!Buffer.isBuffer(buffers[0].buffer)||buffers[0].buffer.length>MAX_BYTES)throw Error('Invalid or oversized provider tick source.');
-          const rows=emptySource(buffers[0])?[]:api.processData({...input,requestedTimeframe:'tick',bufferObjects:buffers});
-          chunk=await publish(folder,hour,url,rows,signal);
+          if(sdk){
+            const result=await require('./sdk-worker.cjs').requestSDKChunk(request,{symbol,timeframe:'tick',from:hour,to:hour+HOUR},options);
+            try{chunk=await publish(folder,hour,url,require('./sdk-worker.cjs').readSDKCSV(result,'tick',hour,hour+HOUR,signal),signal);}
+            finally{await fsp.unlink(result.path).catch(error=>{if(error.code!=='ENOENT')throw error;});}
+          }else{
+            const buffers=await fetcher.fetch([url]);signal?.throwIfAborted();
+            if(buffers.length!==1||buffers[0].url!==url||!Buffer.isBuffer(buffers[0].buffer)||buffers[0].buffer.length>MAX_BYTES)throw Error('Invalid or oversized provider tick source.');
+            const rows=emptySource(buffers[0])?[]:api.processData({...input,requestedTimeframe:'tick',bufferObjects:buffers});
+            chunk=await publish(folder,hour,url,rows,signal);
+          }
         }
       }finally{await release();}
     }

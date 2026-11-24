@@ -34,7 +34,11 @@ function createProviderFetcher(api, input, state) {
 
   async function checkBlocked() {
     if (!state) return;
-    try { throw new Error(JSON.parse(await fs.readFile(blocked, 'utf8')).message); }
+    try {
+      const cause=JSON.parse(await fs.readFile(blocked, 'utf8')).message;
+      const error=new Error(`No HTTP request was sent for this job: an earlier Dukascopy batch request was refused. Earlier batch cause: ${cause}`);
+      error.code='DUKASCOPY_BATCH_BLOCKED';throw error;
+    }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
   async function fetch(urls) {

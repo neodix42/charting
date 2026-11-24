@@ -193,6 +193,25 @@ test('Downloader keeps one family category, restricts only its selected periods,
  await expect(period).toHaveValue('d1');await expect(period.locator('option')).toHaveText(['d1','w1']);
 });
 
+test('Downloader submits exactly BTCUSD and BTCXAU with daily or weekly choices',async({page})=>{
+ await openTestApp(page);await installCatalogs(page);await downloader(page);
+ const period=page.getByRole('combobox',{name:'Download timeframe',exact:true});
+ await period.selectOption('h1');
+ await page.getByRole('checkbox',{name:'BTCUSD — Bitcoin / US Dollar',exact:true}).check();
+ await page.getByRole('checkbox',{name:'BTCXAU — Bitcoin / Gold',exact:true}).check();
+ await expect(period).toHaveValue('d1');await expect(period.locator('option')).toHaveText(['d1','w1']);
+ await expect(page.getByRole('checkbox',{name:'ETHBTC — Ethereum / Bitcoin',exact:true})).not.toBeChecked();
+ await reloadTestApp(page);await installCatalogs(page);await downloader(page);
+ await expect(page.getByRole('checkbox',{name:'BTCUSD — Bitcoin / US Dollar',exact:true})).toBeChecked();
+ await expect(page.getByRole('checkbox',{name:'BTCXAU — Bitcoin / Gold',exact:true})).toBeChecked();
+ await expect(period.locator('option')).toHaveText(['d1','w1']);
+ await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toMatchObject({symbols:['btcusd','btcxau'],timeframe:'d1'});
+ await expect(page.getByRole('article',{name:'BTCUSD download',exact:true})).toBeVisible();
+ await expect(page.getByRole('article',{name:'BTCXAU download',exact:true})).toBeVisible();
+ await expect(page.getByRole('article',{name:'ETHBTC download',exact:true})).toHaveCount(0);
+});
+
 test('Enrichment and Analysis preserve calculated provenance and synthetic-only operand periods',async({page})=>{
  await openTestApp(page);await installCatalogs(page);
  await page.evaluate(file=>{

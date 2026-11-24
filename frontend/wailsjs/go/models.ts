@@ -1152,6 +1152,7 @@ export namespace screener {
 	    volume: string;
 	    approximate?: boolean;
 	    observationResolution?: string;
+	    historySource?: string;
 	    segments?: ProvenanceSegment[];
 
 	    static createFrom(source: any = {}) {
@@ -1170,6 +1171,7 @@ export namespace screener {
 	        this.volume = source["volume"];
 	        this.approximate = source["approximate"];
 	        this.observationResolution = source["observationResolution"];
+	        this.historySource = source["historySource"];
 	        this.segments = this.convertValues(source["segments"], ProvenanceSegment);
 	    }
 

@@ -336,7 +336,11 @@ Dukascopy has a **Synthetic Instruments** category with BTCUSD, BTCXAU, XAUSPX,
 ETHBTC and XAUXAG, offering **D1/W1**. Download these through Screener before opening
 calculated workspace charts. Ratios use simultaneous millisecond BID ticks and display
 **approximate OHLC**; they have no traded volume or direct order placement. Native
-BTCUSD/XAUXAG history and trading remain available where supported. See
+BTCUSD/XAUXAG history and trading remain available where supported. With a configured
+JForex connection, Downloader obtains the underlying ticks through that connection,
+builds and saves each ratio locally, and reuses completed quote hours on Resume.
+Public-download HTTP 403 cooldowns do not block this authenticated SDK path. Native
+SDK downloads preserve BID prices but omit volume rather than mix volume units. See
 [Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md) for formulas, native fallback,
 accuracy, caching and analysis-return limitations.
 

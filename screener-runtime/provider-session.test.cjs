@@ -71,6 +71,9 @@ test('WAF browser 403 stops all waiting workers and later chunks without retryin
     assert.match(result.reason.message, /Dukascopy refused access \(HTTP 403\)/);
     assert.match(result.reason.message, /saved data and checkpoints are retained/);
   }
+  const peers=results.filter(result=>result.reason.code==='DUKASCOPY_BATCH_BLOCKED');
+  assert.equal(peers.length,19);
+  for(const peer of peers){assert.match(peer.reason.message,/No HTTP request was sent for this job/);assert.match(peer.reason.message,/Earlier batch cause:/);}
   await assert.rejects(workers[0].fetch(['next']), /HTTP 403/);
   assert.equal(requests, 1);
   await assert.rejects(fs.stat(path.join(state.directory, 'initializing')), {code: 'ENOENT'});

@@ -377,7 +377,7 @@ def synthetic_smoke(runtime, node, directory):
     script = r"""
 const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
 const input=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
-for(const module of ['synthetic-ratio.cjs','synthetic-quotes.cjs','synthetic-worker.cjs'])require(path.join(input.runtime,module));
+for(const module of ['synthetic-ratio.cjs','synthetic-quotes.cjs','synthetic-worker.cjs','sdk-worker.cjs'])require(path.join(input.runtime,module));
 const api=require(path.join(input.runtime,'node_modules','dukascopy-node'));
 const {download}=require(path.join(input.runtime,'worker.cjs'));
 const {enrich}=require(path.join(input.runtime,'enrich-worker.cjs'));
@@ -409,8 +409,48 @@ const local={...api,BufferFetcher:class extends api.BufferFetcher{constructor(op
   const weekly=path.join(input.directory,'synthetic-weekly.csv');await fs.writeFile(weekly,'');let week;
   await download({...request,timeframe:'w1',output:weekly,dailyPlanFile:plan},{api:new Proxy({},{get(){throw Error('Weekly synthetic aggregation reached provider');}}),emit:e=>{if(e.type==='done')week=e;}});
   assert.equal(await fs.readFile(weekly,'utf8'),expected);assert.equal(week.provenance.volume,'unavailable');
+  const {EventEmitter}=require('node:events'),{installProviderTransport}=require(path.join(input.runtime,'provider-transport.cjs'));
+  const batch=path.join(input.directory,'sdk-batch');await fs.mkdir(batch);
+  await fs.writeFile(path.join(batch,'blocked.json'),JSON.stringify({message:'Earlier public HTTP 403 ETH-USD request'}));
+  const session={directory:batch,tokenCache:path.join(input.directory,'unused-token.json'),rateLimit:true,sdk:{sourceKey:'a'.repeat(64)}};
+  const sdkOutput=path.join(input.directory,'sdk-ratio.csv');await fs.writeFile(sdkOutput,'');
+  const sdkRequest={...request,output:sdkOutput,providerSession:session,ownerPipe:true},lines=new EventEmitter(),sdkEvents=[];
+  const originalFetch=global.fetch;let httpRequests=0;global.fetch=()=>{httpRequests++;throw Error('Packaged SDK probe sent HTTP');};
+  const control=installProviderTransport(lines,sdkRequest,event=>{
+    sdkEvents.push(event);
+    queueMicrotask(async()=>{
+      try{
+        assert.equal(event.operation,'history');assert.ok(['btcusd','xauusd'].includes(event.symbol));
+        const filename=path.join(batch,`export-${event.requestId}.csv`);let csv,rows;
+        if(event.timeframe==='tick'){
+          const bids=event.from===start?(event.symbol==='btcusd'?[10,20,30]:[2,4,5]):[];rows=bids.length;
+          csv=['timestamp,askPrice,bidPrice,askVolume,bidVolume',...bids.map((bid,i)=>`${event.from+i*100},${bid+1},${bid},1,2`),''].join(newline);
+        }else{
+          assert.equal(event.timeframe,'d1');assert.equal(event.symbol,'btcusd');rows=0;
+          csv=['timestamp,open,high,low,close',''].join(newline);
+        }
+        await fs.writeFile(filename,csv,{mode:384});lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId,path:filename,rows}));
+      }catch(error){lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId,error:error.message}));}
+    });
+  });
+  let sdkReport;
+  try{
+    const guard={...api,BufferFetcher:class{constructor(){throw Error('Packaged SDK probe constructed a public fetcher');}}};let ratio,native;
+    await download(sdkRequest,{api:guard,emit:e=>{if(e.type==='done')ratio=e;}});
+    assert.equal(await fs.readFile(sdkOutput,'utf8'),expected);assert.equal(ratio.provenance.historySource,'jforex-sdk');assert.equal(sdkEvents.length,48);
+    const sdkCached=path.join(input.directory,'sdk-cached.csv');await fs.writeFile(sdkCached,'');
+    await download({...sdkRequest,output:sdkCached},{api:guard,emit:()=>{}});assert.equal(sdkEvents.length,48);
+    const sdkNative=path.join(input.directory,'sdk-native-btcusd.csv');await fs.writeFile(sdkNative,'');
+    await download({...sdkRequest,symbol:'btcusd',output:sdkNative},{api:guard,emit:e=>{if(e.type==='done')native=e;}});
+    assert.equal(await fs.readFile(sdkNative,'utf8'),['timestamp,open,high,low,close',`${start},10,30,10,30`,''].join(newline));
+    assert.equal(native.provenance.historySource,'jforex-sdk');assert.equal(native.provenance.volume,'unavailable');assert.equal(httpRequests,0);
+    assert.equal(native.provenance.kind,'native');assert.equal(native.provenance.approximate,false);assert.match(native.provenance.observationResolution,/derived from native BID ticks/);
+    assert.equal(sdkEvents.length,49,'empty native daily history reuses all24already verified native BTCUSD tick hours');
+    assert.equal((await fs.readdir(batch)).some(name=>name.startsWith('export-')),false);
+    sdkReport={passed:true,historyRequests:sdkEvents.length,tickRequests:48,nativeDailyRequests:1,nativeEmptyDailyFallback:true,nativeTickCacheReuse:true,httpRequests,cachedReuse:true,priorHTTPDenialBypassed:true,ownedExportsRemoved:true};
+  }finally{control.close();global.fetch=originalFetch;}
   process.stdout.write(JSON.stringify({passed:true,rows:daily.rows,weeklyRows:week.rows,localTransportFetches:fetches,cachedReuse:true,exactBidRatios:true,
-    volumeUnavailable:true,priceEnrichment:true,approximationExplicit:true,originalPreserved:await fs.readFile(output,'utf8')===expected,networkRequired:false}));
+    volumeUnavailable:true,priceEnrichment:true,approximationExplicit:true,originalPreserved:await fs.readFile(output,'utf8')===expected,sdkHistory:sdkReport,networkRequired:false}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
     result = subprocess.run([str(node), "-e", script],

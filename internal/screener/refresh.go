@@ -185,7 +185,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64, 
 		m.refreshActive, m.refreshCancel = false, nil
 		close(m.refreshDone)
 	}()
-	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	ctx, cleanup, err := withProviderSessionWithHistory(ctx, m.profile, m.dukascopyHistory)
 	if err != nil {
 		m.mu.Lock()
 		for i := range m.refreshJobs {
@@ -433,8 +433,8 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		_ = cmd.Cancel()
 	}
 	err = cmd.Wait()
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return sourceErr
 	}
 	if workerError != "" {
 		return errors.New(workerError)
@@ -462,8 +462,8 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return sourceErr
 	}
 	for filename, info := range dailyOriginals {
 		if err := unchangedFile(filename, info); err != nil {
@@ -481,6 +481,9 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 	name, err := canonicalHistoryName(match[1], match[2], match[3], to, sources, metadata)
 	if err != nil {
 		return err
+	}
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return sourceErr
 	}
 	backup, err := publishHistory(directory, name, output, sources, map[string]os.FileInfo{source: original}, metadata)
 	if err != nil {

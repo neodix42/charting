@@ -62,7 +62,7 @@ export type ScreenerDataSource='dukascopy'|'hyperliquid';
 export type ScreenerDownloadDataSource=ScreenerDataSource|'all';
 export type ScreenerEnrichmentDataSource=ScreenerDataSource|'all';
 export interface ScreenerSourceSelection {dataSource:ScreenerDataSource;symbols:string[]}
-export interface SyntheticProvenance {version:number;kind:'native'|'synchronized-bid-ratio'|'mixed-native-ratio';segments?:Array<{from:number;to:number;kind:'native'|'synchronized-bid-ratio'}>;numerator:string;denominator?:string;priceType:string;maxQuoteAgeMs:number;sessionPolicy:string;volume:'provider'|'unavailable';approximate?:boolean;observationResolution?:string}
+export interface SyntheticProvenance {version:number;kind:'native'|'synchronized-bid-ratio'|'mixed-native-ratio';segments?:Array<{from:number;to:number;kind:'native'|'synchronized-bid-ratio'}>;numerator:string;denominator?:string;priceType:string;maxQuoteAgeMs:number;sessionPolicy:string;volume:'provider'|'unavailable';approximate?:boolean;observationResolution?:string;historySource?:'dukascopy-node'|'jforex-sdk'|'mixed'}
 export interface ScreenerInstrument {id:string;name:string;earliestDate:string;nativeId?:string;market?:string;synthetic?:boolean;calculated?:boolean;category?:string;supportedTimeframes?:string[];formula?:string;note?:string}
 export interface ScreenerCatalog {version:string;groups:Array<{name:string;instruments:ScreenerInstrument[]}>;timeframes:string[]}
 export interface ScreenerDownloadRequest {dataSource?:ScreenerDownloadDataSource;sourceSelections?:ScreenerSourceSelection[];symbols:string[];timeframe:string;from:string;to:string;concurrency:number}

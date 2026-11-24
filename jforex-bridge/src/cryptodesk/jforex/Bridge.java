@@ -8,7 +8,10 @@ import com.google.gson.*;
 import java.io.*;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.*;
+import java.nio.file.attribute.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
@@ -24,6 +27,11 @@ public final class Bridge implements AutoCloseable {
     static final List<String> INTERVALS = List.of("1m", "5m", "15m", "1h", "4h", "1d", "1w");
     static final int MAX_LINE = 65536;
     static final int SEED_RANGE_BARS = 1000;
+    static final long TICK_HOUR = 3_600_000;
+    static final int TICK_EXPORT_MAX_ROWS = 1_000_000;
+    static final long TICK_EXPORT_MAX_BYTES = 64L * 1024 * 1024;
+    static final long TICK_HISTORY_TIMEOUT_MILLIS = 120_000;
+    static final String NATIVE_DOWNLOAD_TIMEOUT = "JForex native daily download timed out. Completed history is retained; retry to resume.";
     // Read-only planning may use an actual last quote over a market closure.
     // Execution and maximum-size calculations retain their 30-second limit.
     static final long REFERENCE_QUOTE_MAX_AGE = 14L * 86_400_000;
@@ -45,10 +53,16 @@ public final class Bridge implements AutoCloseable {
         new ArrayBlockingQueue<>(32), r -> daemon(r, "jforex-history"));
     private final ExecutorService trading = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), r -> daemon(r, "jforex-trading"));
     private final Set<DataJob> dataJobs = ConcurrentHashMap.newKeySet();
+    private final Object tickExportLock = new Object();
+    private final Map<String, TickExport> tickExports = new HashMap<>();
+    private final Set<String> canceledTickExports = new HashSet<>();
+    private final LinkedHashSet<String> finishedTickExports = new LinkedHashSet<>();
     private final Object instrumentLock = new Object();
     private final Map<Instrument, Integer> historyUsers = new HashMap<>();
     private final Set<Instrument> requestedInstruments = new HashSet<>();
     private final long historyTimeoutMillis;
+    private final long tickHistoryTimeoutMillis;
+    private final ThreadLocal<Boolean> nativeHistoryDownload = ThreadLocal.withInitial(() -> false);
     private final long historyRetryMillis;
     private final LongSupplier nowMillis;
     private volatile IClient client;
@@ -114,7 +128,7 @@ public final class Bridge implements AutoCloseable {
     };
 
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output) {
-        this(factory, output, 45_000);
+        this(factory, output, 45_000, System::currentTimeMillis, 2_000, TICK_HISTORY_TIMEOUT_MILLIS);
     }
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis) {
         this(factory, output, historyTimeoutMillis, System::currentTimeMillis);
@@ -123,8 +137,12 @@ public final class Bridge implements AutoCloseable {
         this(factory, output, historyTimeoutMillis, nowMillis, 2_000);
     }
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis, long historyRetryMillis) {
+        this(factory, output, historyTimeoutMillis, nowMillis, historyRetryMillis, historyTimeoutMillis);
+    }
+    Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis, long historyRetryMillis, long tickHistoryTimeoutMillis) {
         this.factory = factory; this.output = output;
-        this.historyTimeoutMillis = historyTimeoutMillis; this.nowMillis = nowMillis; this.historyRetryMillis = historyRetryMillis;
+        this.historyTimeoutMillis = historyTimeoutMillis; this.tickHistoryTimeoutMillis = tickHistoryTimeoutMillis;
+        this.nowMillis = nowMillis; this.historyRetryMillis = historyRetryMillis;
         deadlines.setRemoveOnCancelPolicy(true);
         reconnect.scheduleWithFixedDelay(this::heartbeat, 15, 15, TimeUnit.SECONDS);
     }
@@ -144,6 +162,9 @@ public final class Bridge implements AutoCloseable {
     // Only control work uses the command queue. A slow SDK HTTP history load
     // must never queue login checks, subscriptions or unsubscribe behind it.
     void dispatch(JsonObject request, Consumer<JsonObject> reply) {
+        if (request.has("op") && "historyTicks".equals(request.get("op").getAsString())) {
+            dispatchTickExport(request, reply); return;
+        }
         if (request.has("op") && request.get("op").getAsString().startsWith("trade")) {
             try { trading.execute(() -> reply.accept(handle(request))); }
             catch (RejectedExecutionException error) { reply.accept(failure(request.has("id") ? request.get("id").getAsString() : "", "restricted", "JForex trading is busy; no order was submitted by this request")); }
@@ -151,22 +172,138 @@ public final class Bridge implements AutoCloseable {
         }
         if (request.has("op") && "history".equals(request.get("op").getAsString())) {
             String id = request.has("id") ? request.get("id").getAsString() : "";
+            final boolean download;
+            try { download = nativeHistoryDownload(request); }
+            catch (Failure error) { reply.accept(failure(id, error.kind, error.getMessage())); return; }
             AtomicBoolean replied = new AtomicBoolean();
             Consumer<JsonObject> once = response -> { if (replied.compareAndSet(false, true)) reply.accept(response); };
-            submitData(() -> once.accept(handle(request)),
-                message -> once.accept(failure(id, "timeout", message)));
+            Runnable work = () -> {
+                try { nativeHistoryDownload.set(download); once.accept(handle(request)); }
+                finally { nativeHistoryDownload.remove(); }
+            };
+            Consumer<String> failed = message -> once.accept(failure(id, "timeout", message));
+            if (download) submitData(work, failed, tickHistoryTimeoutMillis, false, NATIVE_DOWNLOAD_TIMEOUT);
+            else submitData(work, failed);
         } else reply.accept(handle(request));
     }
 
+    private boolean nativeHistoryDownload(JsonObject request) {
+        if (!request.has("download")) return false;
+        if (!request.get("download").isJsonPrimitive() || !request.getAsJsonPrimitive("download").isBoolean())
+            throw new Failure("internal", "Invalid JForex native history download flag");
+        if (!request.get("download").getAsBoolean()) return false;
+        JsonObject key = request.has("feedKey") && request.get("feedKey").isJsonObject() ? request.getAsJsonObject("feedKey") : new JsonObject();
+        String instrument = text(key, "instrument", 128), market = text(key, "market", 32);
+        long from = optionalLong(request, "from"), to = optionalLong(request, "to");
+        long day = 86_400;
+        boolean nativeInstrument = instrument.equals("BTCUSD") && market.equals("cfd") || instrument.equals("XAUXAG") && market.equals("metal");
+        if (!nativeInstrument || !text(key, "exchange", 32).equals("dukascopy") || !text(key, "timeframe", 8).equals("1d")
+                || from < 0 || to <= from || from % day != 0 || to % day != 0 || to - from > 366 * day
+                || to > Math.floorDiv(nowMillis.getAsLong(), day * 1000) * day)
+            throw new Failure("internal", "Native JForex downloads require BTCUSD/XAUXAG and at most 366 closed UTC daily candles");
+        integer(request, "limit", 1, 1000);
+        return true;
+    }
+
+    private void dispatchTickExport(JsonObject request, Consumer<JsonObject> reply) {
+        String id = request.has("id") ? request.get("id").getAsString() : "";
+        final String token;
+        final TickExport export = new TickExport();
+        try {
+            token = text(request, "exportId", 128);
+            synchronized (tickExportLock) {
+                // A cancellation may reach the pipe before a canceled Go
+                // caller's original write. Retain that cancellation until the
+                // corresponding request arrives; never reopen its output.
+                if (canceledTickExports.remove(token)) {
+                    rememberFinishedTickExport(token);
+                    throw new Failure("timeout", "JForex tick history export was canceled.");
+                }
+                if (tickExports.containsKey(token) || finishedTickExports.contains(token))
+                    throw new Failure("internal", "Duplicate JForex tick history export");
+                if (tickExports.size() >= 32) throw new Failure("restricted", "JForex tick history export queue is full");
+                tickExports.put(token, export);
+            }
+        } catch (Failure error) { reply.accept(failure(id, error.kind, error.getMessage())); return; }
+        AtomicBoolean replied = new AtomicBoolean();
+        Consumer<JsonObject> once = response -> { if (replied.compareAndSet(false, true)) reply.accept(response); };
+        export.job = submitData(() -> {
+            try { once.accept(handle(request)); }
+            finally { completeTickExport(token, export); }
+        }, message -> {
+            export.cancel(); completeTickExport(token, export);
+            once.accept(failure(id, "timeout", message));
+        }, tickHistoryTimeoutMillis, false, "JForex tick history loading timed out. Completed quote hours are retained; retry to resume.");
+        if (export.canceled.get()) export.job.cancel();
+    }
+
+    // Called with tickExportLock held. Completed tokens are bounded and prevent
+    // a late cancellation from creating an orphaned pre-start cancellation.
+    private void rememberFinishedTickExport(String token) {
+        finishedTickExports.add(token);
+        while (finishedTickExports.size() > 128) finishedTickExports.remove(finishedTickExports.iterator().next());
+    }
+    private void completeTickExport(String token, TickExport export) {
+        synchronized (tickExportLock) {
+            tickExports.remove(token, export); canceledTickExports.remove(token); rememberFinishedTickExport(token);
+        }
+    }
+    private Object cancelTickExport(String token) {
+        TickExport export;
+        synchronized (tickExportLock) {
+            export = tickExports.get(token);
+            if (export == null && !finishedTickExports.contains(token)) {
+                if (canceledTickExports.size() >= 64 && !canceledTickExports.contains(token))
+                    throw new Failure("restricted", "Too many unacknowledged JForex tick history cancellations");
+                canceledTickExports.add(token);
+            }
+        }
+        if (export != null) {
+            // Closing the file precedes this control reply, even if a provider
+            // getTicks call ignores interruption and returns after cancellation.
+            export.cancel();
+            if (export.job != null) export.job.cancel();
+        }
+        return Map.of("cancelled", true);
+    }
+    private final class TickExport {
+        final AtomicBoolean canceled = new AtomicBoolean();
+        volatile DataJob job;
+        private FileChannel file;
+        synchronized void attach(FileChannel value) throws Exception {
+            if (canceled.get() || closing || Thread.currentThread().isInterrupted()) { value.close(); throw new InterruptedException(); }
+            file = value;
+        }
+        synchronized void cancel() {
+            canceled.set(true);
+            if (file != null) try { file.close(); } catch (IOException ignored) { }
+        }
+        void check() throws InterruptedException {
+            if (canceled.get() || closing || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+        }
+    }
+
     private DataJob submitData(Runnable action, Consumer<String> failed) {
+        return submitData(action, failed, historyTimeoutMillis, true,
+            "JForex historical data loading timed out. Live quotes can continue; retry the chart to reload history.");
+    }
+    private DataJob submitData(Runnable action, Consumer<String> failed, long timeoutMillis, boolean includeQueue, String timeoutMessage) {
         DataJob job = new DataJob(failed);
         dataJobs.add(job);
         job.task = new FutureTask<>(() -> {
-            try { if (!job.finished.get()) action.run(); }
+            try {
+                if (!job.finished.get()) {
+                    // A download may wait behind chart history or another SDK
+                    // cache read. Its tick budget measures actual work rather
+                    // than expiring before getTicks has even been attempted.
+                    if (!includeQueue) job.deadline(timeoutMillis, timeoutMessage);
+                    if (!job.finished.get()) action.run();
+                }
+            }
             finally { job.finish(); }
             return null;
         });
-        job.timeout = deadlines.schedule(() -> job.fail("JForex historical data loading timed out. Live quotes can continue; retry the chart to reload history."), historyTimeoutMillis, TimeUnit.MILLISECONDS);
+        if (includeQueue) job.deadline(timeoutMillis, timeoutMessage);
         try { data.execute(job.task); }
         catch (RejectedExecutionException error) { job.fail("JForex history request queue is full. Retry after the pending requests finish."); }
         return job;
@@ -176,6 +313,11 @@ public final class Bridge implements AutoCloseable {
         final AtomicBoolean finished = new AtomicBoolean(); final Consumer<String> failed;
         volatile FutureTask<Void> task; volatile Future<?> timeout;
         DataJob(Consumer<String> failed) { this.failed = failed; }
+        void deadline(long millis, String message) {
+            Future<?> scheduled = deadlines.schedule(() -> fail(message), millis, TimeUnit.MILLISECONDS);
+            timeout = scheduled;
+            if (finished.get()) scheduled.cancel(false);
+        }
         void finish() { if (finished.compareAndSet(false, true)) { if (timeout != null) timeout.cancel(false); dataJobs.remove(this); } }
         void fail(String message) { if (finished.compareAndSet(false, true)) { if (task != null) task.cancel(true); if (timeout != null) timeout.cancel(false); dataJobs.remove(this); failed.accept(message); } }
         void cancel() { fail("JForex historical data request was canceled."); }
@@ -190,7 +332,7 @@ public final class Bridge implements AutoCloseable {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
                 case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1", "tradePnL", "account-pnl-v1");
+                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1", "tradePnL", "account-pnl-v1", "tickHistory", "bid-hour-file-v1");
                 case "instruments" -> instruments();
                 case "tradePreview" -> tradePreview(request);
                 case "tradeEstimate" -> tradeEstimate(request);
@@ -199,6 +341,8 @@ public final class Bridge implements AutoCloseable {
                 case "tradeHistory" -> tradeHistory(request);
                 case "tradeClose" -> tradeClose(request);
                 case "history" -> history(request);
+                case "historyTicks" -> historyTicks(request);
+                case "historyTicksCancel" -> cancelTickExport(text(request, "exportId", 128));
                 case "subscribe" -> subscribe(request);
                 case "unsubscribe" -> unsubscribe(text(request, "subscriptionId", 128));
                 case "disconnect" -> { disconnect(); yield Map.of(); }
@@ -461,6 +605,7 @@ public final class Bridge implements AutoCloseable {
 
     private List<JsonObject> history(JsonObject request) throws Exception {
         requireConnected();
+        nativeHistoryDownload(request);
         Feed feed = feed(request.getAsJsonObject("feedKey"));
         int limit = integer(request, "limit", 1, 5000);
         long from = optionalLong(request, "from"), to = optionalLong(request, "to");
@@ -479,7 +624,9 @@ public final class Bridge implements AutoCloseable {
             // exhaust the requested number of actual historical candles.
             boolean currentRequested = separateCurrent(feed.period) && end >= current && from * 1000 <= current;
             long closedEnd = separateCurrent(feed.period) ? Math.min(end, current - feed.period.getInterval()) : end;
-            if (from == 0 || from * 1000 <= closedEnd)
+            if (nativeHistoryDownload.get())
+                source.addAll(readNativeDownloadBars(history, feed.instrument, from * 1000, closedEnd));
+            else if (from == 0 || from * 1000 <= closedEnd)
                 source.addAll(readHistoryWindow(history, feed.instrument, feed.period, from * 1000, closedEnd, limit));
             while (currentRequested) {
                 List<IBar> active = readCurrentBars(history, feed.instrument, feed.period, current);
@@ -507,6 +654,115 @@ public final class Bridge implements AutoCloseable {
                 releaseInstruments();
             }
         }
+    }
+
+    private List<IBar> readNativeDownloadBars(IHistory history, Instrument instrument, long from, long end) throws Exception {
+        IContext activeContext = context;
+        long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis);
+        while (activeContext != null && !activeContext.getSubscribedInstruments().contains(instrument)) {
+            if (closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
+            if (System.nanoTime() >= readyBy) throw new Failure("timeout", NATIVE_DOWNLOAD_TIMEOUT);
+            Thread.sleep(10);
+        }
+        if (activeContext == null || closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
+        // readBars streams callbacks from the SDK's background cache loader.
+        // A download needs the blocking server/cache-loaded collection contract
+        // of getBars. Only validated, <=366-day closed native D1 requests reach
+        // this bounded worker; quote callbacks and chart reads remain async.
+        List<IBar> bars = history.getBars(instrument, Period.DAILY, OfferSide.BID, Filter.WEEKENDS, from, end);
+        if (closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
+        long day = Period.DAILY.getInterval();
+        if (bars == null || bars.size() > 366 || bars.size() > (end - from) / day + 1)
+            throw new Failure("internal", "JForex native daily download exceeded its requested candle bounds");
+        long previous = -1;
+        for (IBar bar : bars) {
+            if (bar == null) throw new Failure("internal", "JForex returned a missing native daily candle");
+            validateBar(bar);
+            if (bar.getTime() < from || bar.getTime() > end || bar.getTime() % day != 0 || bar.getTime() <= previous)
+                throw new Failure("internal", "JForex returned an invalid native daily candle time or ordering");
+            previous = bar.getTime();
+        }
+        return bars;
+    }
+
+    private static BasicFileAttributes tickOutputAttributes(Path path, boolean empty) throws IOException {
+        if (!path.isAbsolute() || !path.normalize().equals(path))
+            throw new Failure("internal", "JForex tick output must be an absolute private file path");
+        BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        if (!attributes.isRegularFile()
+                || attributes.isSymbolicLink() || empty && attributes.size() != 0 || attributes.size() > TICK_EXPORT_MAX_BYTES)
+            throw new Failure("internal", "JForex tick output must be an existing empty regular private file");
+        if (Files.getFileAttributeView(path, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS) != null
+                && !Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS).equals(PosixFilePermissions.fromString("rw-------")))
+            throw new Failure("internal", "JForex tick output permissions must be 0600");
+        return attributes;
+    }
+
+    private Object historyTicks(JsonObject request) throws Exception {
+        requireConnected();
+        String token = text(request, "exportId", 128);
+        TickExport export;
+        synchronized (tickExportLock) { export = tickExports.get(token); }
+        if (export == null) throw new Failure("internal", "JForex tick exports require bounded asynchronous dispatch");
+        Instrument instrument = tradeInstrument(request);
+        long from = optionalLong(request, "from"), to = optionalLong(request, "to");
+        if (from < 0 || to <= from || from % TICK_HOUR != 0 || to - from != TICK_HOUR
+                || to > Math.floorDiv(nowMillis.getAsLong(), TICK_HOUR) * TICK_HOUR)
+            throw new Failure("internal", "JForex tick history requires exactly one closed UTC hour");
+        Path path = Path.of(text(request, "output", 4096));
+        BasicFileAttributes original = tickOutputAttributes(path, true);
+        IContext activeContext = context;
+        synchronized (instrumentLock) { historyUsers.merge(instrument, 1, Integer::sum); }
+        try {
+            export.check(); ensureInstrument(instrument);
+            long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis);
+            while (activeContext != null && !activeContext.getSubscribedInstruments().contains(instrument)) {
+                export.check();
+                if (System.nanoTime() >= readyBy) throw new Failure("timeout", "JForex tick history subscription timed out");
+                Thread.sleep(10);
+            }
+            if (activeContext == null || activeContext != context) throw new Failure("offline", "The JForex history session changed");
+            export.check();
+            // The SDK's upper endpoint is inclusive; the exported hour is
+            // strictly [from,to), preserving duplicate millisecond observations.
+            List<ITick> ticks = activeContext.getHistory().getTicks(instrument, from, to - 1);
+            export.check();
+            if (ticks == null || ticks.size() > TICK_EXPORT_MAX_ROWS)
+                throw new Failure("internal", "JForex tick history exceeded its bounded row limit");
+            BasicFileAttributes current = tickOutputAttributes(path, true);
+            if (!Objects.equals(original.fileKey(), current.fileKey()))
+                throw new Failure("internal", "JForex tick output was replaced");
+            try (FileChannel file = FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+                export.attach(file);
+                long bytes = writeTickLine(file, "timestamp,askPrice,bidPrice,askVolume,bidVolume\n", 0);
+                long previous = -1, rows = 0;
+                for (ITick tick : ticks) {
+                    export.check();
+                    if (tick == null) throw new Failure("internal", "JForex returned a missing historical tick");
+                    long at = tick.getTime(); double ask = tick.getAsk(), bid = tick.getBid(), askVolume = tick.getAskVolume(), bidVolume = tick.getBidVolume();
+                    if (at < from || at >= to || at < previous || !finite(ask, bid, askVolume, bidVolume)
+                            || ask <= 0 || bid <= 0 || askVolume < 0 || bidVolume < 0)
+                        throw new Failure("internal", "JForex returned invalid historical tick values or ordering");
+                    bytes = writeTickLine(file, at + "," + ask + "," + bid + "," + askVolume + "," + bidVolume + "\n", bytes);
+                    previous = at; rows++;
+                }
+                export.check(); file.force(true); export.check();
+                return Map.of("rows", rows);
+            }
+        } finally {
+            synchronized (instrumentLock) {
+                historyUsers.computeIfPresent(instrument, (item, count) -> count == 1 ? null : count - 1);
+                releaseInstruments();
+            }
+        }
+    }
+    private static long writeTickLine(FileChannel file, String line, long written) throws IOException {
+        byte[] bytes = line.getBytes(StandardCharsets.UTF_8);
+        if (written > TICK_EXPORT_MAX_BYTES - bytes.length)
+            throw new Failure("internal", "JForex tick history exceeded its 64 MiB output limit");
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        while (buffer.hasRemaining()) file.write(buffer);
+        return written + bytes.length;
     }
 
     private Object subscribe(JsonObject request) throws Exception {
@@ -730,6 +986,7 @@ public final class Bridge implements AutoCloseable {
         return loadBars(history, instrument, period, SEED_RANGE_BARS, from, end, true);
     }
     private List<IBar> loadBars(IHistory history, Instrument instrument, Period period, int limit, long from, long end, boolean range) throws Exception {
+        long workTimeout = nativeHistoryDownload.get() ? tickHistoryTimeoutMillis : historyTimeoutMillis;
         CompletableFuture<List<IBar>> result = new CompletableFuture<>();
         ConcurrentNavigableMap<Long, IBar> bars = new ConcurrentSkipListMap<>();
         AtomicBoolean canceled = new AtomicBoolean();
@@ -755,7 +1012,7 @@ public final class Bridge implements AutoCloseable {
         };
         try {
             IContext activeContext = context;
-            long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(historyTimeoutMillis);
+            long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(workTimeout);
             while (activeContext != null && !activeContext.getSubscribedInstruments().contains(instrument)) {
                 if (closing || Thread.currentThread().isInterrupted()) throw new InterruptedException();
                 if (System.nanoTime() >= readyBy) throw new TimeoutException();
@@ -764,9 +1021,9 @@ public final class Bridge implements AutoCloseable {
             if (activeContext == null || closing) throw new InterruptedException();
             if (range) history.readBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, from, end, listener, progress);
             else history.readBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, limit, end, 0, listener, progress);
-            return result.get(historyTimeoutMillis, TimeUnit.MILLISECONDS);
+            return result.get(workTimeout, TimeUnit.MILLISECONDS);
         } catch (TimeoutException error) {
-            throw new Failure("timeout", "JForex historical data loading timed out. Retry the chart to reload history.");
+            throw new Failure("timeout", nativeHistoryDownload.get() ? NATIVE_DOWNLOAD_TIMEOUT : "JForex historical data loading timed out. Retry the chart to reload history.");
         } catch (ExecutionException error) {
             if (error.getCause() instanceof Failure failure) throw failure;
             throw error;

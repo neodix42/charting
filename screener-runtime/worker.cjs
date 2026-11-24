@@ -56,9 +56,25 @@ async function download(request, options = {}) {
   if(request.symbol==='xauxag'&&request.resume&&!options.nativeAttempt){
     let saved;
     try{saved=JSON.parse(await fs.promises.readFile(path.join(path.dirname(request.output),'synthetic-checkpoint.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+    if(!saved&&request.providerSession?.sdk){
+      try{
+        const journalFile=path.join(path.dirname(request.output),'public-sdk-upgrade.json'),info=await fs.promises.lstat(journalFile);
+        if(!info.isFile()||info.size>4096)throw Error('Invalid public-to-SDK upgrade journal.');
+        const journal=JSON.parse(await fs.promises.readFile(journalFile,'utf8'));
+        if(journal.kind==='ratio'&&['ratio','mixed'].includes(journal.mode))saved={mode:journal.mode};
+      }catch(error){if(error.code!=='ENOENT')throw error;}
+    }
     if(saved)return synthetic.syntheticDownload({...request,synthetic:saved.mode==='ratio'?true:{kind:'mixed-native-ratio'}},options);
   }
-  if (synthetic.calculated(request, api)) return synthetic.syntheticDownload(request, options);
+  if (synthetic.calculated(request, api)) {
+    if(request.symbol==='xauxag'&&request.timeframe==='d1'&&request.resume&&request.providerSession?.sdk){
+      try{
+        await fs.promises.lstat(path.join(path.dirname(request.output),'checkpoint.json'));
+        throw Error('Saved native XAUXAG partial is preserved; click Download again instead of Resume to start the calculated history in a new job.');
+      }catch(error){if(error.code!=='ENOENT')throw error;}
+    }
+    return synthetic.syntheticDownload(request, options);
+  }
   if(request.symbol==='xauxag'&&request.timeframe==='d1'&&!options.nativeAttempt){
     try{return await download(request,{...options,nativeAttempt:true});}
     catch(error){
@@ -66,6 +82,7 @@ async function download(request, options = {}) {
       return synthetic.syntheticDownload({...request,synthetic:true},options);
     }
   }
+  if(request.providerSession?.sdk&&request.timeframe==='d1'&&['btcusd','xauxag'].includes(request.symbol))return require('./sdk-worker.cjs').sdkNativeDownload(request,options);
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));
   const requestedBatchSize = request.sourceBatchSize ?? 1;
   if (!Number.isInteger(requestedBatchSize) || requestedBatchSize < 1 || requestedBatchSize > 4) {

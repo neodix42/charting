@@ -32,7 +32,7 @@ func inspectRuntime(directory string, allowSystemNode bool) (workerRuntime, erro
 	if st, err := os.Stat(filepath.Join(directory, "provider-transport.cjs")); err != nil || !st.Mode().IsRegular() {
 		return workerRuntime{}, fmt.Errorf("provider pacing worker is missing from %s; rebuild or restore the complete Screener runtime", directory)
 	}
-	for _, name := range []string{"synthetic-ratio.cjs", "synthetic-quotes.cjs", "synthetic-worker.cjs"} {
+	for _, name := range []string{"synthetic-ratio.cjs", "synthetic-quotes.cjs", "synthetic-worker.cjs", "sdk-worker.cjs"} {
 		if st, err := os.Stat(filepath.Join(directory, name)); err != nil || !st.Mode().IsRegular() || st.Size() == 0 {
 			return workerRuntime{}, fmt.Errorf("synthetic instrument module %s is missing from %s; rebuild or restore the complete Screener runtime", name, directory)
 		}
