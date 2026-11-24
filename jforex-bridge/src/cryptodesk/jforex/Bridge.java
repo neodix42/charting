@@ -351,19 +351,7 @@ public final class Bridge implements AutoCloseable {
             if (instrument.getDescription() != null) metadata.put("description", instrument.getDescription());
             if (instrument.getGroup() != null && instrument.getGroup().getName() != null)
                 metadata.put("group", instrument.getGroup().getName());
-            Map<String, String> hours = marketHoursMetadata(instrument);
-            boolean unavailable = !"available".equals(hours.get("marketHoursStatus"));
-            // A daily MarketInfo window cannot establish continuous Forex,
-            // overnight or wrapped-week sessions. Prefer dated SDK closures
-            // for those envelopes, retaining supplied regular hours if the
-            // calendar has not loaded yet.
-            boolean ambiguous = !unavailable && (Integer.parseInt(hours.get("marketHoursFirstDay")) > Integer.parseInt(hours.get("marketHoursLastDay"))
-                || hours.get("marketHoursOpen").compareTo(hours.get("marketHoursClose")) >= 0);
-            if (unavailable || ambiguous) {
-                Map<String, String> calendar = calendarHoursMetadata(instrument);
-                if (unavailable || "available".equals(calendar.get("marketHoursStatus"))) hours = calendar;
-            }
-            metadata.putAll(hours);
+            metadata.putAll(instrumentHoursMetadata(instrument));
             result.add(Map.of("nativeId", instrument.name(), "market", market(instrument),
                 "baseAsset", instrument.getPrimaryJFCurrency().getCurrencyCode(), "quoteAsset", instrument.getSecondaryJFCurrency().getCurrencyCode(),
                 "priceIncrement", BigDecimal.ONE.movePointLeft(instrument.getTickScale()).toPlainString(),
@@ -375,25 +363,39 @@ public final class Bridge implements AutoCloseable {
 
     private void awaitMarketHours() throws InterruptedException {
         // Authentication supplies instrument identities before the asynchronous
-        // MarketResponseMessage fills their shared MarketInfo placeholders.
-        // One bounded wait for that response avoids caching an empty catalog
-        // for an hour. Null/throwing records are genuinely unavailable; they
-        // must not hold up otherwise ready instruments.
+        // market/calendar responses create and fill their shared records. Null
+        // is also pending; one ready instrument says nothing about its peers.
+        // Share one deadline across the catalog, never one wait per instrument.
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.min(2_000, historyTimeoutMillis));
-        while (!closing && System.nanoTime() < deadline) {
-            boolean pending = false;
-            for (Instrument instrument : available) {
-                try {
-                    IMarketInfo info = instrument.getMarketInfo();
-                    if (info == null) continue;
-                    if (info.getZoneId() != null && info.getFirstWorkingDay() != null && info.getLastWorkingDay() != null
-                            && info.getOpenTime() != null && info.getCloseTime() != null) return;
-                    pending = true;
-                } catch (RuntimeException ignored) { }
+        Set<Instrument> pending = new HashSet<>(available);
+        while (!closing && !pending.isEmpty() && System.nanoTime() < deadline) {
+            for (Iterator<Instrument> iterator = pending.iterator(); iterator.hasNext();) {
+                if (closing || System.nanoTime() >= deadline) return;
+                Map<String, String> hours = instrumentHoursMetadata(iterator.next());
+                if ("available".equals(hours.get("marketHoursStatus")) && !needsCalendar(hours)) iterator.remove();
             }
-            if (!pending) return;
-            Thread.sleep(20);
+            long remaining = deadline - System.nanoTime();
+            if (!pending.isEmpty() && remaining > 0) TimeUnit.NANOSECONDS.sleep(Math.min(TimeUnit.MILLISECONDS.toNanos(20), remaining));
         }
+    }
+
+    private Map<String, String> instrumentHoursMetadata(Instrument instrument) {
+        Map<String, String> hours = marketHoursMetadata(instrument);
+        boolean unavailable = !"available".equals(hours.get("marketHoursStatus"));
+        // A daily window cannot establish continuous, overnight or wrapped-week
+        // sessions. Prefer actual dated closures while retaining supplied regular
+        // hours when the calendar has not loaded within the shared deadline.
+        if (unavailable || needsCalendar(hours)) {
+            Map<String, String> calendar = calendarHoursMetadata(instrument);
+            if (unavailable || "available".equals(calendar.get("marketHoursStatus"))) hours = calendar;
+        }
+        return hours;
+    }
+
+    private static boolean needsCalendar(Map<String, String> hours) {
+        return "JForex regular market session".equals(hours.get("marketHoursSource"))
+            && (Integer.parseInt(hours.get("marketHoursFirstDay")) > Integer.parseInt(hours.get("marketHoursLastDay"))
+                || hours.get("marketHoursOpen").compareTo(hours.get("marketHoursClose")) >= 0);
     }
 
     private Map<String, String> calendarHoursMetadata(Instrument instrument) {

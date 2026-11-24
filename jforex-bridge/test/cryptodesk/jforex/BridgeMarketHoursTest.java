@@ -79,7 +79,126 @@ public final class BridgeMarketHoursTest {
             Files.delete(cache);
         }
         delayedMarketResponse();
+        delayedNullMarketResponse(false);
+        delayedNullMarketResponse(true);
+        delayedInstrumentCalendar();
+        boundedUnavailableCatalog();
         instrumentCalendarFallback();
+    }
+
+    private static void delayedInstrumentCalendar() throws Exception {
+        Field marketInfo = Instrument.class.getDeclaredField("marketInfo"); marketInfo.setAccessible(true);
+        Object original = marketInfo.get(Instrument.EURUSD);
+        AtomicBoolean connected = new AtomicBoolean(), loaded = new AtomicBoolean();
+        long now = Instant.parse("2026-11-24T06:00:00Z").toEpochMilli();
+        long closed = Instant.parse("2026-11-27T22:00:00Z").toEpochMilli();
+        IDataService service = fake(IDataService.class, (method, values) -> method.equals("getOfflineTimeDomains")
+            ? loaded.get() ? Set.of(domain(closed, closed + 2 * 86_400_000L)) : Set.of() : null);
+        IContext context = fake(IContext.class, (method, values) -> method.equals("getDataService") ? service : null);
+        IClient client = fake(IClient.class, (method, values) -> switch (method) {
+            case "isConnected" -> connected.get();
+            case "connect" -> { connected.set(true); yield null; }
+            case "getAvailableInstruments" -> Set.of(Instrument.EURUSD);
+            case "startStrategy" -> { ((IStrategy) values[0]).onStart(context); yield 1L; }
+            case "disconnect" -> { connected.set(false); yield null; }
+            default -> null;
+        });
+        Thread response = new Thread(() -> {
+            try { Thread.sleep(100); loaded.set(true); }
+            catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new AssertionError(error); }
+        });
+        Path cache = Files.createTempDirectory("cryptodesk-jforex-delayed-calendar-");
+        try {
+            marketInfo.set(Instrument.EURUSD, null);
+            try (Bridge bridge = new Bridge(() -> client, event -> {}, 500, () -> now)) {
+                JsonObject login = request("connect");
+                login.addProperty("username", "offline-user"); login.addProperty("password", "offline-password");
+                login.addProperty("environment", "demo"); login.addProperty("cacheDirectory", cache.toString()); good(bridge, login);
+                response.start();
+                JsonObject metadata = good(bridge, request("instruments")).getAsJsonArray("result").get(0).getAsJsonObject().getAsJsonObject("providerMetadata");
+                response.join();
+                check(metadata.get("marketHoursStatus").getAsString().equals("available")
+                    && metadata.get("marketHoursSource").getAsString().equals("JForex instrument calendar"), "cold calendar is retried within the same bounded readiness wait");
+            }
+        } finally {
+            if (response.isAlive()) response.join();
+            marketInfo.set(Instrument.EURUSD, original); Files.delete(cache);
+        }
+    }
+
+    private static void boundedUnavailableCatalog() throws Exception {
+        Set<Instrument> offered = new HashSet<>(Arrays.asList(Instrument.values()));
+        AtomicBoolean connected = new AtomicBoolean();
+        IContext context = fake(IContext.class, (method, values) -> null);
+        IClient client = fake(IClient.class, (method, values) -> switch (method) {
+            case "isConnected" -> connected.get();
+            case "connect" -> { connected.set(true); yield null; }
+            case "getAvailableInstruments" -> offered;
+            case "startStrategy" -> { ((IStrategy) values[0]).onStart(context); yield 1L; }
+            case "disconnect" -> { connected.set(false); yield null; }
+            default -> null;
+        });
+        Path cache = Files.createTempDirectory("cryptodesk-jforex-bounded-hours-");
+        try (Bridge bridge = new Bridge(() -> client, event -> {}, 100)) {
+            JsonObject login = request("connect");
+            login.addProperty("username", "offline-user"); login.addProperty("password", "offline-password");
+            login.addProperty("environment", "demo"); login.addProperty("cacheDirectory", cache.toString()); good(bridge, login);
+            long start = System.nanoTime();
+            JsonArray catalog = good(bridge, request("instruments")).getAsJsonArray("result");
+            check(catalog.size() == offered.size(), "unavailable hours never remove instruments");
+            check(System.nanoTime() - start < 2_000_000_000L, "whole catalog shares a 100ms readiness budget instead of per-instrument waits");
+        } finally { Files.delete(cache); }
+    }
+
+    private static void delayedNullMarketResponse(boolean readyPeer) throws Exception {
+        Field marketInfo = Instrument.class.getDeclaredField("marketInfo"); marketInfo.setAccessible(true);
+        Object original = marketInfo.get(Instrument.EURUSD), peerOriginal = marketInfo.get(Instrument.AAPLUSUSD);
+        Class<?> type = Class.forName("com.dukascopy.api.instrument.MarketInfo");
+        var constructor = type.getDeclaredConstructor(String.class); constructor.setAccessible(true);
+        var fill = type.getDeclaredMethod("addInfo", String.class, String.class, int.class, int.class); fill.setAccessible(true);
+        Object delayed = constructor.newInstance("offline-null-market"), ready = constructor.newInstance("offline-ready-market");
+        fill.invoke(ready, "Offline ready market", "UTC", 9 * 3600, 17 * 3600);
+        Path cache = Files.createTempDirectory("cryptodesk-jforex-null-market-");
+        AtomicBoolean connected = new AtomicBoolean();
+        IContext context = fake(IContext.class, (method, values) -> null);
+        IClient client = fake(IClient.class, (method, values) -> switch (method) {
+            case "isConnected" -> connected.get();
+            case "connect" -> { connected.set(true); yield null; }
+            case "getAvailableInstruments" -> readyPeer ? Set.of(Instrument.AAPLUSUSD, Instrument.EURUSD) : Set.of(Instrument.EURUSD);
+            case "startStrategy" -> { ((IStrategy) values[0]).onStart(context); yield 1L; }
+            case "disconnect" -> { connected.set(false); yield null; }
+            default -> null;
+        });
+        Thread response = new Thread(() -> {
+            try {
+                Thread.sleep(100);
+                fill.invoke(delayed, "Offline delayed market", "UTC", 10 * 3600, 18 * 3600);
+                marketInfo.set(Instrument.EURUSD, delayed);
+            } catch (Exception error) { throw new AssertionError(error); }
+        });
+        try {
+            marketInfo.set(Instrument.EURUSD, null); marketInfo.set(Instrument.AAPLUSUSD, ready);
+            try (Bridge bridge = new Bridge(() -> client, event -> {}, 500)) {
+                JsonObject login = request("connect");
+                login.addProperty("username", "offline-user"); login.addProperty("password", "offline-password");
+                login.addProperty("environment", "demo"); login.addProperty("cacheDirectory", cache.toString()); good(bridge, login);
+                response.start();
+                JsonArray catalog = good(bridge, request("instruments")).getAsJsonArray("result");
+                response.join();
+                for (JsonElement element : catalog) {
+                    JsonObject item = element.getAsJsonObject();
+                    if (!item.get("nativeId").getAsString().equals(Instrument.EURUSD.name())) continue;
+                    JsonObject metadata = item.getAsJsonObject("providerMetadata");
+                    check(metadata.get("marketHoursStatus").getAsString().equals("available"), readyPeer
+                        ? "ready peer must not end readiness wait for a still-null market record"
+                        : "initially null SDK market record must remain pending until bounded metadata response");
+                    check(metadata.get("marketHoursOpen").getAsString().equals("10:00:00"), "response populated real SDK opening time retained");
+                }
+            }
+        } finally {
+            if (response.isAlive()) response.join();
+            marketInfo.set(Instrument.EURUSD, original); marketInfo.set(Instrument.AAPLUSUSD, peerOriginal); Files.delete(cache);
+        }
     }
 
     private static void delayedMarketResponse() throws Exception {

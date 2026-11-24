@@ -1,4 +1,16 @@
-# Implementation status — updated 2026-11-23
+# Implementation status — updated 2026-11-24
+
+## Trading hours remain visible through incomplete provider metadata — 2026-11-24
+
+Read-only inspection reproduced the user's disappearance: the saved 06:01:49 UTC catalog marked all 1,492 instruments' hours unavailable, including EUR/USD and ALFAA.MX/MXN, so the previous component returned null. During investigation, an automatic 06:07:30 UTC refresh restored valid hours for those two instruments (10 available schedules overall). This confirms a metadata transition rather than a corner-position problem. Sanitized observations and production component results are retained in `.tools/verification/hours-availability-cache.json` and `hours-disappearance-component.json`; account identities and credentials are excluded.
+
+An isolated Java production-protocol test first failed with the real SDK MarketInfo initially null and populated 100ms later. Discovery previously treated null records as finished and stopped as soon as any peer was ready. It now retries null/partial records and cold calendars under one shared, at-most-two-second deadline, checking the deadline during scans. Valid instrument identities remain available even when hours never load. A successful incomplete Go catalog refresh now preserves a validated still-usable prior hours group only within the same account/environment/native instrument/market, retaining the original capture timestamp and visibly marking it Last-known. Fresh non-hours metadata and new valid schedules remain authoritative. Expired calendar horizons are never extended, removed instruments are not restored, and retained hours retry sooner.
+
+The top-left legend always renders both UTC labels. Unknown boundaries show — with a loading, unavailable, expired or partial-calendar explanation; retained schedules show their original retrieval time. Valid fresh schedules remain two timestamp lines. Browser coverage verifies disappearance/recovery, pending discovery, picker/tab context, calendar expiry, retained-to-fresh transitions and the existing last-trade/account isolation behavior. The final unavailable and retained screenshots were visually inspected.
+
+Verification passed: full Java bridge suite; full JForex race suite and focused retention/validation/persistence regressions; bindings and native production-root race tests and related vet checks; frontend typecheck/lint, all 339 unit tests and all 17 related browser cases. Independent read-only review found no concrete defect. Evidence: `.tools/verification/hours-availability-{bridge-before,bridge-after,unit,browser,root-bindings,root-native,native-vet,build}.log`. IntelliJ exposed no runnable Java configuration, so debugger launch was unavailable; temporary agent logpoints were removed and isolated production-protocol tests supplied the runtime reproduction instead.
+
+Production rebuild passed with `CRYPTODESK_UPDATE_SCREENER=0 ./build.sh`; the root executable, matching JForex runtime and Linux archive are updated. Authenticated recovery with the newly rebuilt bridge, native desktop interaction and Windows GUI checks remain unrun. The investigation did not alter the user's catalog, workspace, credentials, orders or transfers. Restart the matching root application/runtime to validate provider recovery on the connected account; genuinely absent provider hours now stay explicit instead of disappearing.
 
 ## Top-left UTC hours and larger corner legends — 2026-11-23
 

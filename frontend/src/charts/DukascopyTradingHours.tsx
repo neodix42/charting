@@ -122,19 +122,41 @@ export function marketSessionTimes(metadata:Instrument['providerMetadata'],now:n
  return regularSessionTimes(metadata,now);
 }
 
-export function DukascopyTradingHours({instrument}:{instrument?:Instrument}) {
+export function marketSessionDisplay(metadata:Instrument['providerMetadata'],now:number,loading=false):SessionTimes&{notice?:string} {
+ const times=marketSessionTimes(metadata,now);
+ if(times?.opensAt!==undefined||times?.closesAt!==undefined){
+  const boundaryNotice=times.opensAt===undefined?'Opening time unavailable in the supplied calendar.':times.closesAt===undefined?'Closing time unavailable in the supplied calendar.':'';
+  const fetchedAt=Number(metadata?.marketHoursFetchedAt);
+  const retainedNotice=metadata?.marketHoursRetained==='true'?`Last-known provider schedule.${timestamp(fetchedAt)?` Saved ${utcTime(fetchedAt)}.`:''}`:'';
+  const notice=[boundaryNotice,retainedNotice].filter(Boolean).join(' ');
+  return {...times,...(notice?{notice}:{})};
+ }
+ if(loading)return {notice:'Hours loading…'};
+ if(metadata?.marketHoursSource==='JForex instrument calendar'){
+  const from=Number(metadata.marketHoursFrom),to=Number(metadata.marketHoursTo);
+  if(timestamp(from)&&timestamp(to)&&from<to&&Number.isFinite(now)){
+   if(now>=to)return {notice:'Hours expired: refresh needed.'};
+   if(now<from)return {notice:'Hours unavailable: outside calendar coverage.'};
+   if(times)return {notice:'Hours unavailable: no session boundaries in calendar coverage.'};
+  }
+ }
+ if(metadata?.marketHoursStatus!=='available')return {notice:'Hours unavailable: provider schedule not supplied.'};
+ return {notice:'Hours unavailable: provider schedule cannot be resolved.'};
+}
+
+export function DukascopyTradingHours({instrument,loading=false}:{instrument?:Instrument;loading?:boolean}) {
  const [now,setNow]=useState(Date.now);
  const metadata=instrument?.providerMetadata;
- const times=marketSessionTimes(metadata,now);
+ const times=marketSessionDisplay(metadata,now,loading);
  useEffect(()=>{
   if(metadata?.marketHoursStatus!=='available')return;
   setNow(Date.now());const timer=setInterval(()=>setNow(Date.now()),1000);
   return()=>clearInterval(timer);
  },[metadata]);
- if(!times||times.opensAt===undefined&&times.closesAt===undefined)return null;
  const hint='Provider schedule converted to UTC. Intraday breaks and holidays may differ from regular sessions; instrument calendars apply only within dated coverage, and trading halts may change actual tradability.';
  return <aside className="chart-market-hours chart-market-schedule" aria-label="Dukascopy trading hours" title={hint}>
-  {times.opensAt!==undefined&&<span>Opens at {utcTime(times.opensAt)}</span>}
-  {times.closesAt!==undefined&&<span>Closes at {utcTime(times.closesAt)}</span>}
+  <span>Opens at {times.opensAt!==undefined?utcTime(times.opensAt):'— UTC'}</span>
+  <span>Closes at {times.closesAt!==undefined?utcTime(times.closesAt):'— UTC'}</span>
+  {times.notice&&<small className="market-hours-notice" role="status">{times.notice}</small>}
  </aside>;
 }

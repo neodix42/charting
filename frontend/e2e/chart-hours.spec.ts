@@ -106,20 +106,22 @@ test('Dukascopy UTC hours paint at the top left with larger corner legends acros
  await page.clock.setSystemTime(new Date('2026-11-23T08:00:01Z'));await page.clock.fastForward(1000);
  await expect(lines).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
  await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
- await expect(hours(page)).toHaveCount(0);
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at — UTC','Closes at — UTC']);
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule not supplied.');
  await exchange(page).selectOption('binance');
  await expect(hours(page)).toHaveCount(0);
 });
 
-test('missing or malformed Dukascopy session metadata hides the hours badge',async({page})=>{
+test('missing or malformed Dukascopy session metadata leaves a visible unavailable explanation',async({page})=>{
  const invalid=item('INVALIDHKHKD','INVALID.HK/HKD',{...session,marketHoursOpen:'09:60:00'});
  await dukascopyFixtures(page,[invalid]);
  // The default EURUSD is absent from this synthetic catalog.
- await expect(hours(page)).toHaveCount(0);
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at — UTC','Closes at — UTC']);
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule not supplied.');
  await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
- await expect(hours(page)).toHaveCount(0);
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule not supplied.');
  await selectInstrument(page,'INVALID.HK/HKD CFD');
- await expect(hours(page)).toHaveCount(0);
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule cannot be resolved.');
 });
 
 test('Dukascopy forex calendar paints actual next opening and updates across the weekend boundary',async({page})=>{
@@ -134,13 +136,14 @@ test('Dukascopy forex calendar paints actual next opening and updates across the
  await page.clock.setSystemTime(new Date('2026-11-22T21:59:59Z'));await page.clock.fastForward(1000);
  await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at 2026-11-22 22:00 UTC','Closes at 2026-11-27 22:00 UTC']);
  await page.clock.setSystemTime(new Date('2026-11-29T00:00:00Z'));await page.clock.fastForward(1000);
- await expect(hours(page)).toHaveCount(0);
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at — UTC','Closes at — UTC']);
+ await expect(hours(page)).toContainText('Hours expired: refresh needed.');
 });
 
 test('an active Dukascopy chart picks up delayed calendar discovery and stops checks when its source changes',async({page})=>{
  await page.clock.install({time:new Date('2026-11-21T12:00:00Z')});
  await dukascopyFixtures(page);
- await expect(hours(page)).toHaveCount(0);
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule not supplied.');
  await page.evaluate(items=>{
   (window as any).__hoursRefreshes=0;
   window.go!.main!.App!.RefreshDucascopyInstruments=async()=>{(window as any).__hoursRefreshes++;return structuredClone(items);};
@@ -153,6 +156,64 @@ test('an active Dukascopy chart picks up delayed calendar discovery and stops ch
  const count=await page.evaluate(()=>(window as any).__hoursRefreshes);
  await page.clock.fastForward(10*60000);
  expect(await page.evaluate(()=>(window as any).__hoursRefreshes)).toBe(count);
+});
+
+test('Dukascopy hours stay visible through unavailable catalog refreshes and recover on fresh data',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-24T02:00:00Z')});
+ const available={...forex,providerMetadata:{...session,sdkSymbol:'EUR/USD'}};
+ await dukascopyFixtures(page,[available]);
+ const lines=hours(page).locator(':scope > span');
+ await expect(lines).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
+ await expect(hours(page).locator('.market-hours-notice')).toHaveCount(0);
+ await page.evaluate(items=>{window.go!.main!.App!.RefreshDucascopyInstruments=async()=>structuredClone(items);},[hk,unavailable,{...forex,providerMetadata:{sdkSymbol:'EUR/USD',marketHoursStatus:'unavailable'}}]);
+ await page.clock.fastForward(5*60000+1000);
+ await expect(lines).toHaveText(['Opens at — UTC','Closes at — UTC']);
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule not supplied.');
+ await expect(page.getByRole('complementary',{name:'Dukascopy leverage and margin',exact:true})).toContainText('JForex margin');
+ await page.getByTestId('chart-cell').screenshot({path:'test-results/chart-hours-unavailable-visible.png'});
+ await page.evaluate(items=>{window.go!.main!.App!.RefreshDucascopyInstruments=async()=>structuredClone(items);},[hk,unavailable,available]);
+ await page.clock.fastForward(5*60000+1000);
+ await expect(lines).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
+ await expect(hours(page).locator('.market-hours-notice')).toHaveCount(0);
+});
+
+test('Dukascopy hours show loading while catalog discovery is pending and preserve picker and tab context',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-24T02:00:00Z')});
+ await openTestApp(page);
+ await page.evaluate(async()=>{
+  const api=window.go!.main!.App!,original=api.ListInstruments.bind(api);
+  await api.ConfigureDucascopy({username:'hours-loading-demo',password:'explicit-fixture',environment:'demo'});
+  const pending=new Promise<Instrument[]>(resolve=>{(window as any).__hoursRelease=resolve;});
+  api.ListInstruments=async source=>source==='dukascopy'?pending:original(source);
+  api.RefreshDucascopyInstruments=async()=>pending;
+ });
+ await exchange(page).selectOption('dukascopy');
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at — UTC','Closes at — UTC']);
+ await expect(hours(page)).toContainText('Hours loading…');
+ await page.evaluate(items=>(window as any).__hoursRelease(items),[hk,unavailable,{...forex,providerMetadata:{...session,sdkSymbol:'EUR/USD'}}]);
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
+ await selectInstrument(page,'UNKNOWN.HK/HKD CFD');
+ await expect(hours(page)).toContainText('Hours unavailable: provider schedule not supplied.');
+ await selectInstrument(page,'EUR/USD Forex');
+ await expect(hours(page)).toContainText('Opens at 2026-11-24 01:30 UTC');
+ await page.getByLabel('Add tab',{exact:true}).click();
+ await expect(hours(page)).toHaveCount(0);
+ await page.locator('[role="tab"][data-tab-id]').first().click();
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
+ await expect(hours(page).locator('.market-hours-notice')).toHaveCount(0);
+});
+
+test('retained provider hours keep their original capture time visible until a fresh schedule arrives',async({page})=>{
+ await page.clock.install({time:new Date('2026-11-24T02:00:00Z')});
+ const available={...forex,providerMetadata:{...session,sdkSymbol:'EUR/USD'}};
+ await dukascopyFixtures(page,[{...available,providerMetadata:{...available.providerMetadata,marketHoursRetained:'true',marketHoursFetchedAt:String(Date.parse('2026-11-23T06:01:49.519Z'))}}]);
+ await expect(hours(page).locator(':scope > span')).toHaveText(['Opens at 2026-11-24 01:30 UTC','Closes at 2026-11-24 08:00 UTC']);
+ await expect(hours(page)).toContainText('Last-known provider schedule. Saved 2026-11-23 06:01:49 UTC.');
+ await page.getByTestId('chart-cell').screenshot({path:'test-results/chart-hours-retained-visible.png'});
+ await page.evaluate(items=>{window.go!.main!.App!.RefreshDucascopyInstruments=async()=>structuredClone(items);},[hk,unavailable,available]);
+ await page.clock.fastForward(5*60000+1000);
+ await expect(hours(page)).toContainText('Opens at 2026-11-24 01:30 UTC');
+ await expect(hours(page).locator('.market-hours-notice')).toHaveCount(0);
 });
 
 test('instrument search preserves inside interaction and closes on Escape, chart or toolbar clicks',async({page})=>{

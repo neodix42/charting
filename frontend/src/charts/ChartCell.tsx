@@ -154,7 +154,7 @@ export function ChartCell(p:Props){
   {hyperliquid&&<div className="bid-ask" aria-label="Bid and Ask" title={health.quote?`Top of book · ${freshness(health.quote.time)}`:'Waiting for top of book'}><span>Bid <b>{health.quote?.bid==null?'—':price(health.quote.bid)}</b></span><span>Ask <b>{health.quote?.ask==null?'—':price(health.quote.ask)}</b></span><span className="muted">{health.quote?freshness(health.quote.time):'Awaiting quotes'}</span></div>}
   <div className="chart-plot">
   <div className="chart-canvas" ref={host} data-testid="chart-canvas"/>
-  {jforex&&<DukascopyTradingHours instrument={metadata}/>}
+  {jforex&&<DukascopyTradingHours instrument={metadata} loading={catalogLoading}/>}
   {jforex&&<DukascopyMarginOverlay api={api} feedKey={feedKey(c)} trades={p.tradeRows}/>}
   <div className="chart-overlays">
   {(tradeLevels.length>0||tradeError)&&<aside className="chart-trade-levels" aria-label="Last trade levels">{tradeLevels.length>0&&<><div className="muted">Last trade</div><ul>{tradeLevels.map(level=><li key={level.id} className={level.kind}><span>{level.title}</span><strong>{price(level.price)}</strong></li>)}</ul></>}{tradeError&&<p role="status">Trade levels: {tradeError}</p>}</aside>}

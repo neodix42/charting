@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {calendarMarketSession,marketSessionTimes,regularMarketHours,regularMarketStatus} from '../charts/DukascopyTradingHours';
+import {calendarMarketSession,marketSessionDisplay,marketSessionTimes,regularMarketHours,regularMarketStatus} from '../charts/DukascopyTradingHours';
 
 const session={marketHoursStatus:'available',marketHoursFirstDay:'1',marketHoursLastDay:'5',marketHoursOpen:'09:30:00',marketHoursClose:'16:00:00',marketHoursTimeZone:'Asia/Hong_Kong'};
 
@@ -121,5 +121,33 @@ describe('UTC session opening and closing times',()=>{
   expect(marketSessionTimes(calendar,instant('2026-11-29T00:00:00Z'))).toBeNull();
   const oneClosure={...calendar,marketHoursClosedIntervals:JSON.stringify([[instant('2026-11-20T22:00:00Z'),instant('2026-11-22T22:00:00Z')]])};
   expect(marketSessionTimes(oneClosure,instant('2026-11-21T12:00:00Z'))).toEqual({opensAt:instant('2026-11-22T22:00:00Z')});
+ });
+});
+
+describe('visible market-hours availability',()=>{
+ it('reports loading without replacing known provider timestamps',()=>{
+  expect(marketSessionDisplay(undefined,instant('2026-11-24T02:00:00Z'),true)).toEqual({notice:'Hours loading…'});
+  expect(marketSessionDisplay(session,instant('2026-11-24T02:00:00Z'),true)).toEqual({opensAt:instant('2026-11-24T01:30:00Z'),closesAt:instant('2026-11-24T08:00:00Z')});
+ });
+ it('makes unavailable and malformed provider schedules explicit instead of disappearing',()=>{
+  expect(marketSessionDisplay({marketHoursStatus:'unavailable'},instant('2026-11-24T02:00:00Z'))).toEqual({notice:'Hours unavailable: provider schedule not supplied.'});
+  expect(marketSessionDisplay({...session,marketHoursOpen:'09:60:00'},instant('2026-11-24T02:00:00Z'))).toEqual({notice:'Hours unavailable: provider schedule cannot be resolved.'});
+  expect(marketSessionDisplay({...session,marketHoursOpen:'22:00:00',marketHoursClose:'06:00:00'},instant('2026-11-24T02:00:00Z'))).toEqual({notice:'Hours unavailable: provider schedule cannot be resolved.'});
+ });
+ it('distinguishes expired calendar coverage from missing session boundaries',()=>{
+  expect(marketSessionDisplay(calendar,instant('2026-11-29T00:00:00Z'))).toEqual({notice:'Hours expired: refresh needed.'});
+  expect(marketSessionDisplay(calendar,instant('2026-11-12T23:59:59Z'))).toEqual({notice:'Hours unavailable: outside calendar coverage.'});
+  expect(marketSessionDisplay(calendar,instant('2026-11-28T12:00:00Z'))).toEqual({notice:'Hours unavailable: no session boundaries in calendar coverage.'});
+ });
+ it('preserves a known boundary while explaining the missing one without inventing dates',()=>{
+  expect(marketSessionDisplay(calendar,instant('2026-11-13T12:00:00Z'))).toEqual({closesAt:instant('2026-11-13T22:00:00Z'),notice:'Opening time unavailable in the supplied calendar.'});
+  const oneClosure={...calendar,marketHoursClosedIntervals:JSON.stringify([[instant('2026-11-20T22:00:00Z'),instant('2026-11-22T22:00:00Z')]])};
+  expect(marketSessionDisplay(oneClosure,instant('2026-11-21T12:00:00Z'))).toEqual({opensAt:instant('2026-11-22T22:00:00Z'),notice:'Closing time unavailable in the supplied calendar.'});
+ });
+ it('labels retained provider schedules with their original capture time without replacing valid hours',()=>{
+  const retained={...session,marketHoursRetained:'true',marketHoursFetchedAt:String(instant('2026-11-23T06:01:49.519Z'))};
+  expect(marketSessionDisplay(retained,instant('2026-11-24T02:00:00Z'))).toEqual({opensAt:instant('2026-11-24T01:30:00Z'),closesAt:instant('2026-11-24T08:00:00Z'),notice:'Last-known provider schedule. Saved 2026-11-23 06:01:49 UTC.'});
+  expect(marketSessionDisplay({...retained,marketHoursFetchedAt:'unknown'},instant('2026-11-24T02:00:00Z')).notice).toBe('Last-known provider schedule.');
+  expect(marketSessionDisplay({...calendar,marketHoursRetained:'true'},instant('2026-11-29T00:00:00Z')).notice).toBe('Hours expired: refresh needed.');
  });
 });
