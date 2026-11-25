@@ -170,6 +170,14 @@ hover; model-only resize/render events clear it, and a guard suppresses recursiv
 events emitted by line-style updates. Highlighting changes width without replacing
 data, reconnecting feeds or resetting the viewport.
 
+Comparison legend buttons control both the line and separate dots series through
+the public `visible` option. Session-only hidden symbols belong to the parent
+screen so refreshes, period changes and hidden-chart disposal retain the choices
+without changing saved selections or triggering history requests. Visibility
+updates reuse the chart, exclude hidden geometry from hover, clear active focus
+and move the single zero-percent reference to the first visible series. An
+all-hidden chart keeps its legend and data available for restoration.
+
 ## Stale-response protection
 
 Every chart attach/selection change increments its runtime generation. Requests and results

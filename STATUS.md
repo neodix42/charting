@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-11-25
 
+## Comparison legend visibility — 2026-11-25
+
+Each asset name below the Comparison chart is now a pressed toggle button. Hiding greys its name, percentage and marker and hides both its line and daily dots. Showing restores its original colour and data. The chart and logical time range remain intact, hidden geometry cannot produce hover labels, and the zero-percent reference moves to a visible asset. All lines may be hidden while the legend remains usable. Enter and Space work through native buttons.
+
+Hidden choices remain in parent session state through Refresh, period changes and screen navigation, independently of the saved selected assets. Toggling makes no history, catalog or save requests. Restarting restores all selected assets to visible; no saved-file migration is needed.
+
+Frontend typecheck, lint and all **359 unit tests** pass. All **16 Comparison browser cases** pass in **36.3 seconds**, including two new regressions for line/dot visibility, grey positive/negative readouts and markers, keyboard restoration, unchanged provider/save counters, preserved canvas/logical zoom, hidden hover, all-hidden recovery and canonical TON (GRAM) visibility through refresh/navigation. Light/dark screenshots were visually inspected. Evidence: `.tools/verification/comparison-toggle-browser.log` and `comparison-toggle-browser-results/`. Production build and hosted workflow results are tracked against the delivery commit; native desktop interaction and Windows GUI execution for this change remain unverified. No user profile, market history or broker credentials were changed.
+
 ## SDK past-year archive recovery — 2026-11-25
 
 Fast history now recovers eligible completed years through the pinned SDK's canonical combined ASK/BID archive before trying a monthly BID file. The request starts at UTC January 1, and loaded first-H1 availability must be at or before that start; current and partial listing years retain monthly recovery. Validate the exact full-year paired hourly coverage, both sides' OHLC and timestamps before taking immutable BID snapshots. SDK splits then account feed commission preserve normal SDK pricing and exact timestamps. Unavailable null/empty yearly results may try monthly history with independent retired attempt state; positive failed/corrupt archives abort without hiding the failure. The original 120-second deadline, source/account/default-provider/metadata fences, historical-calendar proof and bounded verified-month cache remain in place. A missing Sunday is never assumed closed or empty. V2 caches and Resume preserve completed valid data rather than refetching positive neighbors.

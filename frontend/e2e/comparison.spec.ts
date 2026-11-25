@@ -35,8 +35,8 @@ test('Comparison is a fixed Daily change tool with seven common-baseline percent
  const result=await page.evaluate(()=>(window as any).__testComparisonLastResult());
  expect(result.lastClosedTime-result.baselineTime).toBe(28*86400);expect(result.baselineTime%86400).toBe(0);
  for(const series of result.series){expect(series.points).toHaveLength(29);expect(series.points[0]).toMatchObject({time:result.baselineTime,pct:0});expect(series.points.at(-1).time).toBe(result.lastClosedTime);}
- await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('BTC',{exact:true})})).toContainText('+28.00%');
- await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('ETH',{exact:true})})).toContainText('-14.00%');
+ await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('BTC',{exact:true})})).toContainText('+28.00%');
+ await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('ETH',{exact:true})})).toContainText('-14.00%');
  await expect(panel(page)).toContainText('Latest completed daily close');expect(await page.evaluate(()=>(window as any).__testSubscriptions())).toHaveLength(0);expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(before);
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await frames(page);await panel(page).screenshot({path:testInfo.outputPath('comparison-default-seven-assets.png')});
  await page.locator('[data-tab-id]').first().click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});await expect(page.getByTestId('chart-cell')).toHaveCount(1);
@@ -49,7 +49,7 @@ test('the verified TON rename displays GRAM while keeping canonical selection an
  await expect(renamed).toContainText('Hyperliquid · Perpetual · USDC');
  const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),ton=result.series.find((series:any)=>series.asset.symbol==='TON');
  expect(ton.asset).toMatchObject({symbol:'TON',displaySymbol:'TON (GRAM)',name:'Gram (formerly Toncoin)',nativeId:'GRAM',feedKey:{instrument:'GRAM'}});
- await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('TON (GRAM)',{exact:true})})).toHaveAttribute('title','Hyperliquid · Perpetual · USDC · GRAM');
+ await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('TON (GRAM)',{exact:true})})).toHaveAttribute('title','Hyperliquid · Perpetual · USDC · GRAM');
  await page.getByRole('button',{name:'Remove TON from comparison',exact:true}).click();await loaded(page,6);
  await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();const picker=page.getByLabel('Comparison assets',{exact:true});
  await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('GRAM');await expect(picker.locator('.product-list > button')).toHaveCount(1);
@@ -62,7 +62,7 @@ test('the verified TON rename displays GRAM while keeping canonical selection an
 test('refreshed actual sources override stale catalog labels and unavailable assets never retain an old provider',async({page})=>{
  await openTestApp(page);await enter(page);await loaded(page);
  const btc=selected(page).locator('.comparison-asset').filter({has:page.getByText('BTC',{exact:true})});
- const legend=page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('BTC',{exact:true})});
+ const legend=page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('BTC',{exact:true})});
  await expect(btc.locator('small')).toHaveText('Hyperliquid · Perpetual · USDC');
  const refreshActual=async(unavailable:boolean)=>{
   await page.evaluate(()=>(window as any).__testComparisonHoldNextData());await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();
@@ -160,7 +160,7 @@ test('catalog and data errors are retryable without inventing prices or overridi
  expect(at(line.line,9)).toMatchObject({value:9,color:'rgba(0, 0, 0, 0)'});expect(at(line.line,10)?.value).toBeUndefined();expect(at(line.line,11)).toMatchObject({value:11});expect(at(line.dots,9)).toMatchObject({value:9});expect(at(line.dots,10)?.value).toBeUndefined();
  const gap=await page.evaluate(time=>(window as any).__testComparisonChart(time),btc.points[10].time),bounds=(await chart(page).boundingBox())!;
  await page.mouse.move(bounds.x+gap.leftWidth+gap.x,bounds.y+200);await expect(panel(page).locator('.comparison-readout')).toContainText(comparisonDate(btc.points[10].time));
- await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('BTC',{exact:true})})).toContainText('—');await page.mouse.move(0,0);
+ await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('BTC',{exact:true})})).toContainText('—');await page.mouse.move(0,0);
 });
 
 test('late daily results cannot replace a new period, hiding cancels work and releases every chart resource',async({page})=>{
@@ -188,6 +188,71 @@ test('Comparison accepts twenty saved assets, disables additions at the limit an
  await enter(page);await loaded(page,20);await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeDisabled();await expect(selected(page).locator('.comparison-asset')).toHaveCount(20);
  await page.getByRole('button',{name:'Remove ASSET0 from comparison',exact:true}).click();await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeEnabled();await add(page,'SOL');await loaded(page,20);
  await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets.length)).toBe(20);await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeDisabled();
+});
+
+test('legend toggles hide lines and markers without reloading or resetting zoom, with mouse and keyboard',async({page},testInfo)=>{
+ await openTestApp(page);await enter(page);await loaded(page);await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);
+ const legend=page.getByLabel('Comparison legend',{exact:true}),btc=legend.getByRole('button',{name:'BTC',exact:true}),eth=legend.getByRole('button',{name:'ETH',exact:true});
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),time=result.baselineTime+14*86400;
+ const read=()=>page.evaluate(time=>(window as any).__testComparisonChart(time),time);
+ const visibility=async()=>Object.fromEntries((await read()).series.map((series:any)=>[series.symbol,[series.visible,series.dotsVisible]]));
+ const beforeCalls=await calls(page),beforeView=await page.evaluate(()=>(window as any).__testComparisonView()),canvas=await chart(page).locator('canvas').first().elementHandle();
+ const initial=(await read()).logicalRange,bounds=(await chart(page).boundingBox())!;
+ await page.mouse.move(bounds.x+bounds.width/2,bounds.y+200);await page.mouse.wheel(0,-180);
+ await expect.poll(async()=>{const range=(await read()).logicalRange;return range.to-range.from;}).toBeLessThan(initial.to-initial.from);
+ await page.mouse.move(0,0);await frames(page);const zoomed=(await read()).logicalRange;
+ const colors=async(button:typeof btc)=>button.evaluate(element=>({text:getComputedStyle(element).color,label:getComputedStyle(element.querySelector('strong')!).color,value:getComputedStyle(element.querySelector('span')!).color,dot:getComputedStyle(element.querySelector('i')!).backgroundColor}));
+ const shownBTC=await colors(btc),shownETH=await colors(eth);
+ await btc.click();await expect(btc).toHaveAttribute('aria-pressed','false');
+ await expect.poll(visibility).toEqual(Object.fromEntries(defaults.map(symbol=>[symbol,[symbol!=='BTC',symbol!=='BTC']])));
+ await expect.poll(async()=>(await read()).referenceSymbol).toBe('ETH');
+ const hiddenBTC=await colors(btc);expect(new Set(Object.values(hiddenBTC)).size).toBe(1);expect(hiddenBTC.text).not.toBe(shownBTC.text);expect(hiddenBTC.dot).not.toBe(shownBTC.dot);
+ const hiddenRange=(await read()).logicalRange;expect(hiddenRange.from).toBeCloseTo(zoomed.from,5);expect(hiddenRange.to).toBeCloseTo(zoomed.to,5);
+ expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);expect(await resources(page)).toEqual({charts:1,observers:2,listeners:1});
+ await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);
+ const hidden=await read(),hiddenBounds=(await chart(page).boundingBox())!,hiddenLine=hidden.series.find((series:any)=>series.symbol==='BTC');
+ expect(Number.isFinite(hidden.x)).toBe(true);expect(Number.isFinite(hiddenLine.y)).toBe(true);
+ await page.mouse.move(hiddenBounds.x+hidden.leftWidth+hidden.x,hiddenBounds.y+hiddenLine.y);
+ await expect(panel(page).getByRole('tooltip')).toHaveCount(0);expect((await read()).hoveredSymbol).toBeNull();expect((await read()).series.find((series:any)=>series.symbol==='BTC').lineWidth).toBe(2);
+ await eth.focus();await eth.press('Space');await expect(eth).toHaveAttribute('aria-pressed','false');
+ const hiddenETH=await colors(eth);expect(new Set(Object.values(hiddenETH)).size).toBe(1);expect(hiddenETH.value).not.toBe(shownETH.value);
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await frames(page);
+ for(const button of [btc,eth])expect(new Set(Object.values(await colors(button))).size).toBe(1);
+ await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-hidden-btc-eth.png')});
+ await eth.press('Enter');await expect(eth).toHaveAttribute('aria-pressed','true');await btc.focus();await btc.press('Space');await expect(btc).toHaveAttribute('aria-pressed','true');
+ await expect.poll(visibility).toEqual(Object.fromEntries(defaults.map(symbol=>[symbol,[true,true]])));await expect.poll(async()=>(await read()).referenceSymbol).toBe('BTC');
+ const restored=(await read()).logicalRange;expect(restored.from).toBeCloseTo(zoomed.from,5);expect(restored.to).toBeCloseTo(zoomed.to,5);
+ await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);const visible=await read(),visibleBounds=(await chart(page).boundingBox())!,visibleBTC=visible.series.find((series:any)=>series.symbol==='BTC');
+ await page.mouse.move(visibleBounds.x+visible.leftWidth+visible.x,visibleBounds.y+visibleBTC.y);await expect(panel(page).getByRole('tooltip')).toContainText('Bitcoin');
+ await expect(selected(page).locator('strong')).toHaveText(defaults.map(symbol=>symbol==='TON'?'TON (GRAM)':symbol));
+ expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(beforeView);expect(await calls(page)).toEqual(beforeCalls);expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);
+});
+
+test('all legend assets may be hidden and canonical TON visibility survives refresh and navigation',async({page},testInfo)=>{
+ await openTestApp(page);await enter(page);await loaded(page);await frames(page);
+ const legend=page.getByLabel('Comparison legend',{exact:true}),ton=legend.getByRole('button',{name:'TON (GRAM)',exact:true});
+ const read=()=>page.evaluate(()=>(window as any).__testComparisonChart());
+ const visibility=async()=>Object.fromEntries((await read()).series.map((series:any)=>[series.symbol,[series.visible,series.dotsVisible]]));
+ const beforeCalls=await calls(page),beforeView=await page.evaluate(()=>(window as any).__testComparisonView()),canvas=await chart(page).locator('canvas').first().elementHandle();
+ for(const symbol of defaults)await legend.getByRole('button',{name:symbol==='TON'?'TON (GRAM)':symbol,exact:true}).click();
+ await expect(legend.getByRole('button',{pressed:false})).toHaveCount(7);await expect.poll(visibility).toEqual(Object.fromEntries(defaults.map(symbol=>[symbol,[false,false]])));
+ await expect.poll(async()=>(await read()).referenceSymbol).toBeNull();expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);expect(await resources(page)).toEqual({charts:1,observers:2,listeners:1});
+ await expect(panel(page).getByRole('alert')).toHaveCount(0);await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);const bounds=(await chart(page).boundingBox())!;
+ await page.mouse.move(bounds.x+bounds.width/2,bounds.y+200);await expect(panel(page).getByRole('tooltip')).toHaveCount(0);expect((await read()).hoveredSymbol).toBeNull();
+ await ton.focus();await ton.press('Enter');await expect(ton).toHaveAttribute('aria-pressed','true');
+ const onlyTON=Object.fromEntries(defaults.map(symbol=>[symbol,[symbol==='TON',symbol==='TON']]));await expect.poll(visibility).toEqual(onlyTON);await expect.poll(async()=>(await read()).referenceSymbol).toBe('TON');
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),time=result.baselineTime+14*86400;
+ await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);const rendered=await page.evaluate(time=>(window as any).__testComparisonChart(time),time),tonBounds=(await chart(page).boundingBox())!,line=rendered.series.find((series:any)=>series.symbol==='TON');
+ expect(Number.isFinite(line.y)).toBe(true);await page.mouse.move(tonBounds.x+rendered.leftWidth+rendered.x,tonBounds.y+line.y);
+ await expect(panel(page).getByRole('tooltip')).toContainText('TON (GRAM)');await expect(panel(page).getByRole('tooltip')).toContainText('Gram (formerly Toncoin)');
+ await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-only-ton-gram.png')});
+ expect(await calls(page)).toEqual(beforeCalls);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(beforeView);
+ await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(async()=>(await calls(page)).data).toBe(beforeCalls.data+1);await loaded(page);
+ await expect.poll(visibility).toEqual(onlyTON);await expect(legend.getByRole('button',{pressed:false})).toHaveCount(6);await expect(ton).toHaveAttribute('aria-pressed','true');await expect.poll(async()=>(await read()).referenceSymbol).toBe('TON');
+ expect((await calls(page)).save).toBe(beforeCalls.save);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(beforeView);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+ await enter(page);await loaded(page);await expect.poll(visibility).toEqual(onlyTON);await expect(legend.getByRole('button',{pressed:false})).toHaveCount(6);await expect(ton).toHaveAttribute('aria-pressed','true');await expect.poll(async()=>(await read()).referenceSymbol).toBe('TON');
+ expect((await calls(page)).save).toBe(beforeCalls.save);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(beforeView);await expect(selected(page).locator('strong')).toHaveText(defaults.map(symbol=>symbol==='TON'?'TON (GRAM)':symbol));
 });
 
 test('canvas line hover reveals the asset name and highlights only real observations, then clears on leave and hide',async({page},testInfo)=>{

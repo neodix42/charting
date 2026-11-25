@@ -15,8 +15,9 @@ const hitDistance=(x:number,y:number,ax:number,ay:number,bx=ax,by=ay)=>{
  return Math.hypot(x-ax-t*dx,y-ay-t*dy);
 };
 
-export function ComparisonChart({result}:{result:ComparisonResult}){
+export function ComparisonChart({result,hiddenAssets,onToggleAsset}:{result:ComparisonResult;hiddenAssets:ReadonlySet<string>;onToggleAsset:(symbol:string)=>void}){
  const host=useRef<HTMLDivElement>(null),chartRef=useRef<IChartApi|null>(null),fontSize=useAppearanceFontSize();
+ const applyVisibility=useRef<((hidden:ReadonlySet<string>)=>void)|null>(null);
  const [error,setError]=useState(''),[hover,setHover]=useState<number|null>(null),[focus,setFocus]=useState<{symbol:string;x:number;y:number}|null>(null);
  const usable=result.series.filter(series=>!series.error&&series.points.some(point=>point.pct!==null));
  useEffect(()=>{
@@ -44,8 +45,9 @@ export function ComparisonChart({result}:{result:ComparisonResult}){
     const dots=chart.addSeries(LineSeries,{color:comparisonColor(series.asset.symbol),priceScaleId:'left',lineVisible:false,pointMarkersVisible:true,pointMarkersRadius:3,crosshairMarkerVisible:false,lastValueVisible:false,priceLineVisible:false,priceFormat:{type:'custom',formatter:(value:number)=>`${Number(value.toFixed(2))}%`,minMove:.01}});
     dots.setData(series.points.map(point=>point.pct===null?{time:point.time as UTCTimestamp}:{time:point.time as UTCTimestamp,value:point.pct}));
     if(index===0)zeroLine=line.createPriceLine({price:0,color:palette.chartBorder,lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
-    return{symbol:series.asset.symbol,line,dots,points:new Map(series.points.filter(point=>point.pct!==null).map(point=>[point.time,point.pct!]))};
+    return{symbol:series.asset.symbol,line,dots,visible:true,points:new Map(series.points.filter(point=>point.pct!==null).map(point=>[point.time,point.pct!]))};
    });
+   let zeroOwner:typeof plotted[number]|undefined=plotted[0];
    const times=[...new Set(plotted.flatMap(item=>[...item.points.keys()]))].sort((a,b)=>a-b);
    const xAt=(index:number)=>chart.timeScale().timeToCoordinate(times[index] as UTCTimestamp);
    const lowerX=(x:number)=>{let low=0,high=times.length;while(low<high){const mid=(low+high)>>>1,value=xAt(mid);if(value===null)return times.length;if(value<x)low=mid+1;else high=mid;}return low;};
@@ -60,6 +62,20 @@ export function ComparisonChart({result}:{result:ComparisonResult}){
     setFocus(symbol&&point&&host.current?{symbol,x:Math.max(8,Math.min(point.x+chart.priceScale('left').width()+12,host.current.clientWidth-208)),y:Math.max(8,Math.min(point.y+12,host.current.clientHeight-80))}:null);
    };
    const updateTheme=()=>{const next=getThemePalette(document.documentElement.dataset.theme??'light');chart.applyOptions({...chartThemeOptions(next),leftPriceScale:{borderColor:next.chartBorder},grid:{vertLines:{visible:false},horzLines:{color:next.chartGrid,style:LineStyle.Dotted}}});zeroLine?.applyOptions({color:next.chartBorder});};
+   // Keep visibility updates separate from chart creation and fitContent.
+   applyVisibility.current=hidden=>{
+    highlight(null);styling=true;
+    try{
+     for(const item of plotted){const visible=!hidden.has(item.symbol);if(item.visible!==visible){item.visible=visible;item.line.applyOptions({visible});item.dots.applyOptions({visible});}}
+     const nextOwner=plotted.find(item=>item.visible);
+     if(nextOwner!==zeroOwner){
+      if(zeroOwner&&zeroLine)zeroOwner.line.removePriceLine(zeroLine);
+      zeroOwner=nextOwner;
+      zeroLine=zeroOwner?.line.createPriceLine({price:0,color:getThemePalette(document.documentElement.dataset.theme??'light').chartBorder,lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
+     }
+    }finally{styling=false;}
+    setHover(null);
+   };
    theme=new MutationObserver(updateTheme);theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});comparisonChartResources.observers++;
    resize=new ResizeObserver(()=>{if(host.current)chart.resize(Math.max(280,host.current.clientWidth),460);highlight(null);});resize.observe(host.current);comparisonChartResources.observers++;
    mouse=event=>{
@@ -73,7 +89,7 @@ export function ComparisonChart({result}:{result:ComparisonResult}){
     // Test only real dots and adjacent daily segments using public coordinates.
     const radius=6,from=Math.max(0,lowerX(point.x-radius)-1),to=Math.min(times.length,lowerX(point.x+radius)+1);
     let nearest:string|null=null,distance=radius;
-    for(const item of plotted)for(let index=from;index<to;index++){
+    for(const item of plotted.filter(item=>item.visible))for(let index=from;index<to;index++){
      const time=times[index],value=item.points.get(time),x=xAt(index);
      if(value===undefined||x===null)continue;
      const y=item.line.priceToCoordinate(value);if(y===null)continue;
@@ -85,10 +101,11 @@ export function ComparisonChart({result}:{result:ComparisonResult}){
     highlight(nearest,point);
    };
    chart.subscribeCrosshairMove(mouse);comparisonChartResources.listeners++;chart.timeScale().fitContent();
-   if(window.__CRYPTO_TEST__){diagnostic=(time?:number)=>({baselineTime:result.baselineTime,lastClosedTime:result.lastClosedTime,x:time===undefined?null:chart.timeScale().timeToCoordinate(time as UTCTimestamp),leftWidth:chart.priceScale('left').width(),hoveredSymbol:activeSymbol,series:plotted.map(item=>({symbol:item.symbol,line:item.line.data(),dots:item.dots.data(),lineWidth:item.line.options().lineWidth,y:time===undefined||!item.points.has(time)?null:item.line.priceToCoordinate(item.points.get(time)!)}))});comparisonChartDiagnostics.read=diagnostic;}
+   if(window.__CRYPTO_TEST__){diagnostic=(time?:number)=>({baselineTime:result.baselineTime,lastClosedTime:result.lastClosedTime,x:time===undefined?null:chart.timeScale().timeToCoordinate(time as UTCTimestamp),leftWidth:chart.priceScale('left').width(),logicalRange:chart.timeScale().getVisibleLogicalRange(),referenceSymbol:zeroOwner?.symbol??null,hoveredSymbol:activeSymbol,series:plotted.map(item=>({symbol:item.symbol,line:item.line.data(),dots:item.dots.data(),visible:item.line.options().visible,dotsVisible:item.dots.options().visible,lineWidth:item.line.options().lineWidth,y:time===undefined||!item.points.has(time)?null:item.line.priceToCoordinate(item.points.get(time)!)}))});comparisonChartDiagnostics.read=diagnostic;}
   }catch(reason){setError(errorText(reason));}
-  return()=>{if(resize){resize.disconnect();comparisonChartResources.observers--;}if(theme){theme.disconnect();comparisonChartResources.observers--;}if(mouse){chart.unsubscribeCrosshairMove(mouse);comparisonChartResources.listeners--;}if(diagnostic&&comparisonChartDiagnostics.read===diagnostic)comparisonChartDiagnostics.read=()=>null;chart.remove();chartRef.current=null;comparisonChartResources.charts--;};
+  return()=>{applyVisibility.current=null;if(resize){resize.disconnect();comparisonChartResources.observers--;}if(theme){theme.disconnect();comparisonChartResources.observers--;}if(mouse){chart.unsubscribeCrosshairMove(mouse);comparisonChartResources.listeners--;}if(diagnostic&&comparisonChartDiagnostics.read===diagnostic)comparisonChartDiagnostics.read=()=>null;chart.remove();chartRef.current=null;comparisonChartResources.charts--;};
  },[result]);
+ useEffect(()=>{applyVisibility.current?.(hiddenAssets);},[hiddenAssets,result]);
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(12,fontSize)}});},[fontSize]);
  const date=hover??result.lastClosedTime;
  const focused=focus?usable.find(series=>series.asset.symbol===focus.symbol)?.asset:undefined;
@@ -100,7 +117,8 @@ export function ComparisonChart({result}:{result:ComparisonResult}){
   </div>
   <div className="comparison-legend" aria-label="Comparison legend">{usable.map(series=>{
    const point=series.points.find(point=>point.time===date);
-   return <div key={series.asset.symbol} data-highlighted={focus?.symbol===series.asset.symbol} title={`${comparisonSource(series.asset)} · ${series.asset.nativeId}`}><i style={{background:comparisonColor(series.asset.symbol)}}/><strong>{comparisonLabel(series.asset)}</strong><span className={(point?.pct??0)<0?'down':'up'}>{comparisonPercent(point?.pct)}</span></div>;
+   const visible=!hiddenAssets.has(series.asset.symbol);
+   return <button type="button" key={series.asset.symbol} aria-label={comparisonLabel(series.asset)} aria-pressed={visible} data-highlighted={visible&&focus?.symbol===series.asset.symbol} title={`${comparisonSource(series.asset)} · ${series.asset.nativeId}`} onClick={()=>onToggleAsset(series.asset.symbol)}><i style={{background:visible?comparisonColor(series.asset.symbol):'var(--muted)'}}/><strong>{comparisonLabel(series.asset)}</strong><span className={(point?.pct??0)<0?'down':'up'}>{comparisonPercent(point?.pct)}</span></button>;
   })}</div>
   <p className="comparison-readout" aria-live="off">{comparisonDate(date)} UTC{hover===null?' · Latest completed daily close':''}</p>
  </div>;

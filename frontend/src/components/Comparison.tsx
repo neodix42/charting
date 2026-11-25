@@ -10,6 +10,7 @@ export interface ComparisonHandle {flush():Promise<void>}
 export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visible:boolean;suspended?:boolean}>(function Comparison({api,visible,suspended=false},ref){
  const [view,setView]=useState<ComparisonView>(defaultComparisonView),[weeksInput,setWeeksInput]=useState('4'),[ready,setReady]=useState(false),[loading,setLoading]=useState(false),[catalog,setCatalog]=useState<ComparisonCatalog|null>(null),[result,setResult]=useState<ComparisonResult|null>(null);
  const [viewError,setViewError]=useState(''),[catalogError,setCatalogError]=useState(''),[loadError,setLoadError]=useState(''),[saveError,setSaveError]=useState(''),[reload,setReload]=useState(0),[catalogReload,setCatalogReload]=useState(0),[refresh,setRefresh]=useState(0);
+ const [hiddenAssets,setHiddenAssets]=useState<ReadonlySet<string>>(()=>new Set());
  const mounted=useRef(false),draft=useRef(view),writer=useRef<ComparisonViewWriter|null>(null),epoch=useRef(0),request=useRef<string|null>(null);
  if(!writer.current)writer.current=new ComparisonViewWriter(async value=>{const saved=await api.SaveComparisonView(value);if(mounted.current)setSaveError('');return saved;},reason=>{if(mounted.current)setSaveError(errorText(reason));});
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++;if(request.current)void api.CancelComparisonRequest(request.current).catch(()=>{});};},[]);
@@ -48,6 +49,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
   const timer=setTimeout(()=>setRefresh(value=>value+1),next-Date.now());return()=>clearTimeout(timer);
  },[visible,suspended,ready,refresh]);
  const edit=(patch:Partial<ComparisonView>)=>{const next={...draft.current,...patch};if(JSON.stringify(next)===JSON.stringify(draft.current))return;draft.current=next;setView(next);writer.current!.edit(next);};
+ const toggleAsset=(symbol:string)=>setHiddenAssets(previous=>{const next=new Set(previous);if(next.has(symbol))next.delete(symbol);else next.add(symbol);return next;});
  const weeks=Number(weeksInput),invalidWeeks=!Number.isInteger(weeks)||weeks<1||weeks>104;
  const selected=new Set(view.assets),choices=(catalog?.assets??[]).filter(asset=>!selected.has(asset.symbol)).map(asset=>({id:asset.symbol,label:comparisonLabel(asset),market:asset.market as Market,details:`${asset.name} · ${comparisonSource(asset)}`,search:`${asset.symbol} ${asset.name} ${asset.nativeId} ${asset.exchange}`}));
  const sourceFor=(symbol:string):ComparisonAsset|undefined=>result?.series.find(series=>series.asset.symbol===symbol)?.asset??catalog?.assets.find(asset=>asset.symbol===symbol);
@@ -71,7 +73,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    {loadError&&<p className="screener-error" role="alert">{loadError} <button type="button" onClick={()=>setRefresh(value=>value+1)}>Retry daily data</button></p>}
    {!!seriesErrors.length&&<ul className="comparison-series-errors" aria-label="Unavailable comparison assets">{seriesErrors.map(series=><li key={series.asset.symbol}><strong>{series.asset.symbol}</strong> · {series.error}</li>)}</ul>}
    {result?.warnings.map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
-   {visible&&!suspended&&result&&hasData&&<ComparisonChart result={result}/>}
+   {visible&&!suspended&&result&&hasData&&<ComparisonChart result={result} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>}
    {ready&&!view.assets.length&&<div className="comparison-empty"><h2>Add assets to compare</h2><p>Choose assets using Add asset. Your weeks selection will be kept.</p></div>}
    {ready&&!loading&&result&&!hasData&&!loadError&&<div className="comparison-empty"><h2>No comparable daily data</h2><p>Each asset needs a real closing price on {comparisonDate(result.baselineTime)} to share the same starting point.</p></div>}
    <p className="comparison-note">Percentage change from the starting close, using completed UTC daily candles. Hyperliquid USD-quoted markets are preferred; Binance USDT spot is used when none is available. Quotes are not converted. Source and market are shown per asset. Missing closes remain gaps.</p>

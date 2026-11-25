@@ -1,5 +1,13 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison legend visibility — 2026-11-25
+
+- [x] Click/Enter/Space hides or shows both the line and dots; the whole hidden legend entry is grey.
+- [x] Chart identity, logical zoom and selected assets are preserved; toggles make no provider or save requests.
+- [x] Hidden curves cannot activate hover; all-hidden restoration and the zero-percent reference remain usable.
+- [x] Session choices survive refresh/navigation; typecheck, lint, 359 units and all 16 Comparison browser cases pass, with light/dark screenshots inspected.
+- [ ] Final production builds and hosted checks are tracked for the delivery commit; native desktop interaction and Windows GUI execution remain unverified.
+
 ## Sequential all-source Enrichment — 2026-11-22
 
 - [x] One All data sources request, source-labelled combined file list, full enrichment periods and Dukascopy-only manual Refresh.
