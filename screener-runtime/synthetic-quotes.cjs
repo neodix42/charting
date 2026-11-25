@@ -39,31 +39,104 @@ async function cached(folder,hour,url){
     return {...value,file};
   }catch(error){if(error.code==='ENOENT'||error instanceof SyntaxError||/Invalid synthetic quote cache/.test(error.message))return null;throw error;}
 }
-async function lock(filename,signal){
-  const deadline=Date.now()+16*60*1000;
+const LOCK_TIMEOUT=16*60*1000;
+const initializerPattern=/^\.owner-([1-9][0-9]*)-([a-f0-9]{32})\.pending$/;
+function sameFile(a,b){return a&&b&&a.dev===b.dev&&a.ino===b.ino;}
+async function lockDirectory(filename){
+  try{
+    const info=await fsp.lstat(filename);
+    if(!info.isDirectory())throw Error('Synthetic quote cache lock is not a directory.');
+    return info;
+  }catch(error){if(error.code==='ENOENT')return null;throw error;}
+}
+function deadProcess(pid){
+  try{process.kill(pid,0);return false;}
+  catch(error){if(error.code==='ESRCH')return true;if(error.code==='EPERM')return false;throw error;}
+}
+async function lockOwner(filename){
+  try{
+    const info=await regular(path.join(filename,'owner.json'),4096);
+    const value=JSON.parse(await fsp.readFile(path.join(filename,'owner.json'),'utf8'));
+    if(Number.isSafeInteger(value?.pid)&&value.pid>0&&value.pid<=2147483647&&(value.id===undefined||/^[a-f0-9]{32}$/.test(value.id))){
+      return {pid:value.pid,id:value.id,dead:deadProcess(value.pid),proof:`owner:${info.dev}:${info.ino}:${value.pid}:${value.id??''}`};
+    }
+  }catch(error){
+    if(error.code!=='ENOENT'&&!(error instanceof SyntaxError)&&!/Invalid synthetic quote cache/.test(error.message))throw error;
+  }
+  // A live initializer can be paused for arbitrarily long by scheduling or disk
+  // I/O. Age, empty JSON and a missing file never prove that its process died.
+  const entries=await fsp.readdir(filename,{withFileTypes:true}).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
+  const pending=entries.filter(entry=>entry.isFile()&&initializerPattern.test(entry.name));
+  if(pending.length===1){
+    const match=pending[0].name.match(initializerPattern),pid=Number(match[1]);
+    if(Number.isSafeInteger(pid)&&pid<=2147483647)return {pid,id:match[2],dead:deadProcess(pid),proof:`pending:${pending[0].name}`};
+  }
+  return {dead:false,proof:null};
+}
+async function removeOwnLock(filename,directory,owner){
+  if(!sameFile(directory,await lockDirectory(filename)))return;
+  const current=await lockOwner(filename);
+  if(current.pid!==process.pid||current.id!==owner.id)return;
+  await fsp.unlink(path.join(filename,'owner.json'));
+  try{await fsp.rmdir(filename);}catch(error){if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(error.code))throw error;}
+}
+async function recoverDeadLock(filename,directory,owner,signal,deadline,depth){
+  // Keep recovery ownership beside the source lock, never inside a live
+  // successor's directory. This uses the same atomic PID/nonce protocol, so a
+  // crashed reaper can itself be recovered without stealing an unknown claim.
+  if(Date.now()>=deadline)return false;
+  if(depth>=8)throw Error('Shared synthetic quote lock recovery is too deeply interrupted. Cached history and ownership files are retained.');
+  const release=await lock(`${filename}.reaping`,signal,{deadline,depth:depth+1});
+  try{
+    if(!sameFile(directory,await lockDirectory(filename)))return false;
+    const current=await lockOwner(filename);
+    if(!current.dead||current.proof!==owner.proof)return false;
+    const abandoned=`${filename}.abandoned-${id()}`;
+    await fsp.rename(filename,abandoned);
+    // Retain the ownership evidence, including files from older versions.
+    if(!sameFile(directory,await lockDirectory(abandoned)))throw Error('Shared synthetic quote lock changed during recovery; retained its files.');
+    return true;
+  }finally{await release();}
+}
+async function lock(filename,signal,options={}){
+  const timeout=options.timeoutMs??LOCK_TIMEOUT;
+  if(!Number.isFinite(timeout)||timeout<=0||timeout>LOCK_TIMEOUT)throw Error('Invalid synthetic quote lock timeout.');
+  const deadline=options.deadline??Date.now()+timeout,depth=options.depth??0;
+  let initializing=false;
   while(true){
     signal?.throwIfAborted();
+    let directory;
     try{
       await fsp.mkdir(filename,{mode:0o700});
-      await fsp.writeFile(path.join(filename,'owner.json'),JSON.stringify({pid:process.pid}),{flag:'wx',mode:0o600});
-      return async()=>fsp.rm(filename,{recursive:true,force:true});
+      directory=await lockDirectory(filename);
     }catch(error){if(error.code!=='EEXIST')throw error;}
-    const info=await fsp.lstat(filename).catch(error=>{if(error.code==='ENOENT')return null;throw error;});
-    if(!info)continue;
-    if(!info.isDirectory())throw Error('Synthetic quote cache lock is not a directory.');
-    let dead=false;
-    try{
-      const value=JSON.parse(await fsp.readFile(path.join(filename,'owner.json'),'utf8'));
-      if(!Number.isSafeInteger(value.pid)||value.pid<=0)throw Error('Invalid synthetic quote cache owner.');
-      try{process.kill(value.pid,0);}catch(error){if(error.code==='ESRCH')dead=true;else if(error.code!=='EPERM')throw error;}
-    }catch(error){if(error.code==='ENOENT'&&Date.now()-info.mtimeMs>5000)dead=true;else if(error.code!=='ENOENT')throw error;}
-    if(dead){
-      const abandoned=`${filename}.abandoned-${id()}`;
-      try{await fsp.rename(filename,abandoned);await fsp.rm(abandoned,{recursive:true,force:true});}catch(error){if(error.code!=='ENOENT')throw error;}
-      continue;
+    if(directory){
+      const owner={pid:process.pid,id:id()},pending=path.join(filename,`.owner-${process.pid}-${owner.id}.pending`);
+      let published=false;
+      try{
+        // Peers see either no owner or a complete document. The PID in the
+        // private pending filename also proves liveness before publication.
+        await fsp.writeFile(pending,JSON.stringify(owner),{flag:'wx',mode:0o600});
+        const handle=await fsp.open(pending,'r+');try{await handle.sync();}finally{await handle.close();}
+        await fsp.rename(pending,path.join(filename,'owner.json'));published=true;
+        signal?.throwIfAborted();
+        return ()=>removeOwnLock(filename,directory,owner);
+      }catch(error){
+        if(published)await removeOwnLock(filename,directory,owner);
+        else if(sameFile(directory,await lockDirectory(filename))){
+          await fsp.unlink(pending).catch(failure=>{if(failure.code!=='ENOENT')throw failure;});
+          await fsp.rmdir(filename).catch(failure=>{if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(failure.code))throw failure;});
+        }
+        throw error;
+      }
     }
-    if(Date.now()>=deadline)throw Error('Timed out waiting for shared synthetic quotes. Retry the job.');
-    await delay(25,undefined,{signal});
+    const info=await lockDirectory(filename);
+    if(!info)continue;
+    const owner=await lockOwner(filename);
+    if(owner.dead&&await recoverDeadLock(filename,info,owner,signal,deadline,depth))continue;
+    initializing=!owner.proof;
+    if(Date.now()>=deadline)throw Error(initializing?'Shared synthetic quote lock initialization could not be verified. Cached history is retained; close other downloads and retry.':'Timed out waiting for shared synthetic quotes. Retry the job.');
+    await delay(Math.min(25,Math.max(1,deadline-Date.now())),undefined,{signal});
   }
 }
 function emptySource(item){

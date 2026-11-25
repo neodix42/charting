@@ -33,6 +33,8 @@ public final class BridgeResponsivenessTest {
         final AtomicBoolean connected = new AtomicBoolean();
         final AtomicBoolean acknowledge = new AtomicBoolean(true);
         final AtomicBoolean offline = new AtomicBoolean();
+        final AtomicReference<String> accountId = new AtomicReference<>("offline-test-account");
+        final AtomicReference<com.dukascopy.charts.data.datacache.IFeedDataProvider> defaultFeed = new AtomicReference<>();
         final AtomicInteger blockingCacheReads = new AtomicInteger();
         final Bridge bridge;
         Fixture(long timeout) throws Exception { this(timeout, System::currentTimeMillis); }
@@ -64,7 +66,10 @@ public final class BridgeResponsivenessTest {
                 default -> null;
             });
             IDataService service = calendar != null ? calendar : fake(IDataService.class, (method, args) -> method.equals("isOfflineTime") ? offline.get() : false);
+            if (service instanceof com.dukascopy.api.impl.connect.JForexDataService pinned) defaultFeed.set(pinned.getFeedDataProvider());
+            IAccount account = fake(IAccount.class, (method, args) -> method.equals("getAccountId") ? accountId.get() : null);
             IContext context = fake(IContext.class, (method, args) -> switch (method) {
+                case "getAccount" -> account;
                 case "getHistory" -> history;
                 case "getDataService" -> service;
                 case "getSubscribedInstruments" -> new HashSet<>(subscribed);
@@ -85,7 +90,7 @@ public final class BridgeResponsivenessTest {
                 case "disconnect" -> { connected.set(false); yield null; }
                 default -> null;
             });
-            bridge = new Bridge(() -> client, events::add, timeout, clock, retryMillis, downloadTimeout);
+            bridge = new Bridge(() -> client, events::add, timeout, clock, retryMillis, downloadTimeout, defaultFeed::get);
             login();
         }
         void login() {

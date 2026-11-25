@@ -35,7 +35,7 @@ func (m *Manager) DownloadHourlyHistory(ctx context.Context, key domain.FeedKey,
 	if err = p.call(ctx, map[string]any{"op": "version"}, &version); err != nil {
 		return nil, err
 	}
-	if fullOpenHours && version.HourlyHistory != "bid-full-open-hour-v1" || !fullOpenHours && version.NativeHourlyHistory != "bid-native-hour-v1" {
+	if fullOpenHours && version.HourlyHistory != "bid-full-open-hour-v2" || !fullOpenHours && version.NativeHourlyHistory != "bid-native-hour-v2" {
 		return nil, errors.New("The selected JForex bridge does not support the requested hourly history session contract; update the matching runtime")
 	}
 	var bars []domain.Candle

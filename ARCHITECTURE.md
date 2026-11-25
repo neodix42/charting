@@ -8,6 +8,7 @@ Wails desktop shell
     Workspace service → SQLite workspace store
     Market service → subscription manager → exchange adapters
                    → historical request coordinator → candle cache
+    Comparison service → existing market history/catalog APIs
   React / TypeScript
     workspace state → tab toolbar / grid / chart controls
     data bridge → bounded frontend series buffers → Lightweight Charts instances
@@ -88,6 +89,27 @@ Node. The source/account identity is frozen per batch, cached separately, and ch
 again before publication. Public HTTP denial affects the public route only; shared
 rate limiting, cancellation and atomic storage apply to both routes.
 
+Fast synthetic inputs are genuine H1 BID observations exported in at most
+28-day batches and read inside the SDK one UTC day at a time. An empty synchronous
+day receives an independent, fully completed date-range read. Because both paths
+can reuse a falsely empty SDK monthly cache, unresolved days require a direct,
+nonempty monthly BID source response with strict bounds, finite loaded availability,
+source/account fences and actual historical calendar proof. Selected BID candles
+apply SDK splits followed by account feed commission, matching the normal history
+path. A null monthly-file result permits one same-file retry after five seconds
+inside the original 120-second budget, with source fences before and after; empty,
+corrupt and changed-source results never authorize that retry. An unresolved null
+archive remains an error, never empty coverage. Only a verified complete
+past-month file can establish a genuine no-quote member day. Unknown/MAX metadata
+is not proof of absent history; one instrument-scoped RAM reload may recover a failed
+bootstrap within the absolute work deadline. Partial/error/cancelled reads cannot
+publish coverage. Hourly policies `verified-full-hour-v2` and `provider-native-h1-v2`
+use new cache identities; checksum-valid positive legacy days remain read-through,
+while legacy zeros are revalidated in bounded batches without rewriting valid
+neighbors or deleting original files. Shared Node cache ownership is published atomically
+with PID/nonce identity. Only proven-dead, unchanged generations can be retired;
+sibling reaper locks use the same bounded recovery protocol and retain evidence.
+
 Only the active tab creates charts: first launch 1; at maximum 9. Inactive tabs keep state,
 not mounted canvases. Empty grid cells create neither chart instances nor upstream leases.
 Each independent instrument cell gets its own chart instance; an optional volume pane is
@@ -102,6 +124,33 @@ Live bars use incremental updates. History prepend and older-bar corrections may
 controlled data replacement with viewport restoration; avoid full setData on every tick.
 Do not call fitContent on every update. Queue updates by candle timestamp, not only `latest`,
 so a batched flush crossing a candle boundary retains both bars. [S04, S05]
+
+## Comparison ownership
+
+The top-level Comparison screen is separate from saved chart tabs and contains
+Daily change. `internal/comparison` owns validated weeks/base-symbol selections,
+shared UTC baseline calculations and a small bounded cache of complete closed
+pages. `app_comparison.go` is its lazy Wails facade; it delegates catalogs and
+history to the existing market service, so provider pacing, retained candle
+storage and cancellation remain shared. Comparison creates no stream leases,
+broker sessions or trading services. Its private `comparison-view.json` is saved
+atomically with version validation; missing files alone receive defaults.
+
+Catalog selection prefers an exact native Hyperliquid perpetual, then exact-base
+spot, then an exact-base builder perpetual, all quoted in actual USD, USDC, USDT
+or USDH. USDC is preferred among equivalent spot pairs. Binance USDT spot is
+eligible only when complete Hyperliquid discovery proves no eligible USD-quoted
+market; provider failure cannot authorize fallback. Quotes are disclosed and are
+not converted or treated as aliases. TON has one explicitly verified same-asset
+rename to GRAM, supported by [TON](https://ton.org/) and the
+[Binance 1:1 rebranding notice](https://www.binance.com/en/support/announcement/detail/fe307fba935b44698fde4db01e84a7eb).
+The canonical saved TON selection discloses the actual GRAM feed; it does not stitch
+historical markets or accept wrapped/unrelated tokens. All lines use the same fully closed UTC
+baseline day and `(close / baselineClose - 1) * 100`; unavailable baselines cannot
+be rebased individually. Missing daily closes remain explicit gaps. The visible
+screen owns cancellable request IDs and its chart, observers and listeners;
+hidden Comparison charts are disposed and late replies cannot replace a newer
+selection. Empty selections persist and request no daily history.
 
 ## Stale-response protection
 

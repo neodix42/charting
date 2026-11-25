@@ -9,7 +9,8 @@ const {createHash,randomUUID}=require('node:crypto');
 const {cacheIO}=require('./synthetic-quotes.cjs');
 const {records}=require('./refresh-worker.cjs');
 const HOUR=3600000,DAY=24*HOUR,BATCH_DAYS=28;
-const policies={h1:'verified-full-hour-v1','h1-native':'provider-native-h1-v1'};
+const policies={h1:'verified-full-hour-v2','h1-native':'provider-native-h1-v2'};
+const legacyPolicies={h1:'verified-full-hour-v1','h1-native':'provider-native-h1-v1'};
 const MAX_BYTES=128*1024;
 
 async function syncDirectory(folder){
@@ -50,11 +51,12 @@ async function readRows(filename,from,to,expected,signal){
     return rows;
   }finally{await input.return();}
 }
-async function cached(folder,day,identity,signal){
+async function cached(folder,day,identity,signal,legacyIdentity){
   try{
     const manifest=path.join(folder,`${day}.json`);await cacheIO.regular(manifest,4096);
     const value=JSON.parse(await fs.readFile(manifest,'utf8'));
-    if(value.version!==1||value.day!==day||value.identity!==identity||!Number.isSafeInteger(value.rows)||value.rows<0||value.rows>24||
+    if(value.version!==1||value.day!==day||!Number.isSafeInteger(value.rows)||value.rows<0||value.rows>24||
+      (value.identity!==identity&&!(value.identity===legacyIdentity&&value.rows>0))||
       !Number.isSafeInteger(value.bytes)||value.bytes<0||value.bytes>MAX_BYTES||!/^[a-f0-9]{64}$/.test(value.checksum??'')||
       !new RegExp(`^${day}-[a-f0-9-]{36}\\.csv$`).test(value.file??''))return null;
     const file=path.join(folder,value.file),info=await cacheIO.regular(file,MAX_BYTES);
@@ -93,16 +95,23 @@ async function* hourlyBars(symbol,from,to,request,options={}){
   const folder=path.join(base,sourceKey,timeframe,symbol);
   await cacheIO.directory(base);await cacheIO.directory(path.join(base,sourceKey));await cacheIO.directory(path.join(base,sourceKey,timeframe));await cacheIO.directory(folder);
   const identity=createHash('sha256').update(JSON.stringify({sourceKey,symbol,timeframe,policy,available})).digest('hex');
+  // Nonempty v1 days contain actual validated observations. Its empty days
+  // cannot distinguish a closed session from the SDK's cached load failure.
+  const legacyIdentity=createHash('sha256').update(JSON.stringify({sourceKey,symbol,timeframe,policy:legacyPolicies[timeframe],available})).digest('hex');
   for(let day=firstDay;day<lastDay;day+=DAY){
     signal?.throwIfAborted();
-    let chunk=await cached(folder,day,identity,signal),reused=!!chunk;
+    let chunk=await cached(folder,day,identity,signal,legacyIdentity),reused=!!chunk;
     if(!chunk){
       const release=await cacheIO.lock(path.join(folder,'.fetch.lock'),signal);
       try{
-        chunk=await cached(folder,day,identity,signal);reused=!!chunk;
+        chunk=await cached(folder,day,identity,signal,legacyIdentity);reused=!!chunk;
         if(!chunk){
           const batchEnd=Math.min(fetchLastDay,day+BATCH_DAYS*DAY);let missingEnd=day+DAY;
-          while(missingEnd<batchEnd&&!await cached(folder,missingEnd,identity,signal))missingEnd+=DAY;
+          while(missingEnd<batchEnd){
+            const saved=await cached(folder,missingEnd,identity,signal,legacyIdentity);
+            if(saved?.identity===identity)break;
+            missingEnd+=DAY;
+          }
           const start=Math.max(day,firstHour),all=[];
           if(start<missingEnd){
             const result=await require('./sdk-worker.cjs').requestSDKChunk(request,{symbol,timeframe,from:start,to:missingEnd},options);
@@ -114,7 +123,9 @@ async function* hourlyBars(symbol,from,to,request,options={}){
           }
           // Validate the entire <=672-row export before publishing any day.
           for(let next=day;next<missingEnd;next+=DAY){
-            const value=await publish(folder,next,identity,all.filter(r=>r[0]>=next&&r[0]<next+DAY),signal);
+            // A repair may span legacy positive neighbors to retain bounded
+            // batching. Their validated observations and exact bytes survive.
+            const value=await cached(folder,next,identity,signal,legacyIdentity)??await publish(folder,next,identity,all.filter(r=>r[0]>=next&&r[0]<next+DAY),signal);
             if(next===day)chunk=value;
           }
         }

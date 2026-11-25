@@ -291,9 +291,9 @@ func (r *providerReplies) handle(event providerEvent) error {
 		if err != nil {
 			reply.Error = cleanMessage(err.Error())
 		} else if event.Operation == "history" && event.Timeframe == "h1" {
-			reply.SessionPolicy = "verified-full-hour-v1"
+			reply.SessionPolicy = "verified-full-hour-v2"
 		} else if event.Operation == "history" && event.Timeframe == "h1-native" {
-			reply.SessionPolicy = "provider-native-h1-v1"
+			reply.SessionPolicy = "provider-native-h1-v2"
 		}
 		r.mu.Lock()
 		_ = json.NewEncoder(r.owner).Encode(reply)

@@ -97,11 +97,12 @@ hidden tick fallback. Tick mode instead aggregates complete UTC-hour BTCUSD BID
 ticks and reuses cached chunks. Provenance distinguishes the fallback source;
 complete days are checkpointed and empty source days remain gaps. Authentication,
 transport, invalid-data and other failures never authorize empty-history fallback.
-For native hourly fallback, an empty day is accepted only when historical READ
-closure intervals cover that entire day. A partly open, open or unverified empty
-day fails before cache publication. Ratio sampling separately requires complete
-open hours. Cold calendar initialization may load one bounded source day, but no
-observation is accepted until the actual historical READ proof succeeds.
+For native hourly fallback, an empty day requires historical READ closure intervals
+covering the entire day or a verified complete past-month BID source file proving
+there were no usable observations that day. A partly open, open or unverified empty
+source response cannot establish absence. Ratio sampling separately requires
+complete open hours. Cold calendar initialization may load one bounded source day,
+but no observation is accepted until the actual historical READ proof succeeds.
 
 Each job freezes its observation mode. Existing jobs without a mode remain ticks
 through restart and Resume, independently of the new saved UI preference. To
@@ -123,13 +124,48 @@ to one UTC source day using `NO_FILTER`: the pinned SDK's multi-day path can
 silently return empty spans or carry a previous close across unloaded days.
 Ambiguous zero-volume flat shapes are excluded; genuine zero-volume non-flat
 observations remain eligible. Actual historical calendar proof precedes accepting
-and caching ratio observations. Unexpected empty days with open hours fail the
-export instead of recording incomplete history as coverage. Validated complete
-days are checksummed and cached
-under `synthetic-hourly-v1`, separately by account/source, symbol and verified-ratio
-versus native-hourly policy. Daily caches and output checkpoints survive Resume;
-incomplete days do not certify coverage. The API's wider row limit does not change
-the worker's 28-day batch bound.
+and caching ratio observations. Unexpected empty days first use the SDK's independent
+date-range loader, requiring finite loaded first-H1 metadata, exact full-range
+completion and unchanged connection/account. That loader can still reuse a falsely
+empty monthly SDK cache: a failed historical download can be stored as a successful
+empty month. If no observed rows are recovered, the exporter requests the actual
+monthly BID file directly, with strict UTC-month bounds and ordering. Its selected
+BID candles receive SDK split adjustments followed by the account's feed commission,
+matching the price convention of normal SDK history. A null monthly-file result
+permits one retry of that same file after five seconds, within the original
+120-second work deadline and with unchanged source/account checks. Empty, corrupt
+and changed-source responses do not receive this retry. An unresolved null archive
+remains a visible protected error and never certifies empty coverage. Null, empty,
+malformed or entirely ambiguous source files remain failures. A validated nonempty
+complete past-month file can establish a genuine no-quote day within that month;
+current-month absence is not inferred this way. The absolute 120-second export
+deadline and source fences cover every path. Unknown or MAX availability cannot
+establish absent history; one instrument-scoped RAM reset/bootstrap is allowed
+within that deadline. Partial, failed or cancelled reads cannot certify coverage.
+Genuine absent observations remain gaps, never carried candles.
+
+Validated complete days are checksummed and cached under `synthetic-hourly-v1`,
+separately by account/source and symbol. The cache directory/file format remains
+version 1, while source policies and their cache identities are now
+`verified-full-hour-v2` for ratio inputs and `provider-native-h1-v2` for native
+hourly fallback. Exact-identity, checksum-valid **nonempty** legacy days are reused
+without rewriting their manifests or CSVs. Legacy empty days are refetched. A
+repair can span positive legacy neighbors in one 28-day export while preserving
+their exact bytes; it publishes only missing/legacy-empty days and stops before
+verified v2 days. Failed or cancelled recovery preserves old cache files; completed
+new manifests are published atomically. Published user histories are not blindly
+rebuilt or discarded by this cache upgrade. Daily caches and output checkpoints
+survive Resume; incomplete days do not certify coverage. The API's wider row limit
+does not change the worker's 28-day batch bound.
+
+Shared hourly ownership uses an atomically published PID/nonce document, written
+and synced privately before rename. Peers wait through initialization rather than
+parsing a partially written JSON file. A dead-owner claim is rechecked against
+the same directory and owner generation before retirement; the old files are
+retained. Sibling reaper locks use the same protocol, so a crashed recovery owner
+can itself be recovered within the shared deadline. Live, unknown or malformed
+ownership is never stolen because it is old, and a stale release cannot remove a
+successor's lock. Cancellation preserves committed quote and candle caches.
 
 Complete UTC-hour BID chunks are privately cached in `synthetic-quotes-v1` beside
 the provider session cache. SDK chunks live in a separate account/source namespace;

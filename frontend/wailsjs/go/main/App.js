@@ -457,3 +457,23 @@ export function TestTelegramBot() {
 export function UpdateScreenerAnalysisCondition(arg1, arg2) {
   return window['go']['main']['App']['UpdateScreenerAnalysisCondition'](arg1, arg2);
 }
+
+export function CancelComparisonRequest(arg1) {
+  return window['go']['main']['App']['CancelComparisonRequest'](arg1);
+}
+
+export function GetComparisonCatalog() {
+  return window['go']['main']['App']['GetComparisonCatalog']();
+}
+
+export function GetComparisonDailyChanges(arg1, arg2) {
+  return window['go']['main']['App']['GetComparisonDailyChanges'](arg1, arg2);
+}
+
+export function GetComparisonView() {
+  return window['go']['main']['App']['GetComparisonView']();
+}
+
+export function SaveComparisonView(arg1) {
+  return window['go']['main']['App']['SaveComparisonView'](arg1);
+}

@@ -195,9 +195,9 @@ func TestSDKHourlyOwnerRepliesEnforceDistinctVerifiedAndNativePolicies(t *testin
 		if err := json.Unmarshal(output.Bytes(), &reply); err != nil {
 			t.Fatal(err)
 		}
-		wanted := "verified-full-hour-v1"
+		wanted := "verified-full-hour-v2"
 		if period == "h1-native" {
-			wanted = "provider-native-h1-v1"
+			wanted = "provider-native-h1-v2"
 		}
 		if reply.Error != "" || reply.SessionPolicy != wanted || reply.Rows != 1 {
 			t.Fatal("hourly owner contract lost", output.String())

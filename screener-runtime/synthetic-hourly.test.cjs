@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
+const {createHash}=require('node:crypto');
 const {hourlyBars,aggregateHourlyRatio,aggregateNativeHourly,HOUR,DAY}=require('./synthetic-hourly.cjs');
 const START=Date.UTC(2024,0,1),KEY='a'.repeat(64);
 async function* rows(values){yield* values;}
@@ -18,9 +19,19 @@ async function fixture(t,days=60){
     assert.ok(fields.to-fields.from<=1000*HOUR);
     const values=[];for(let hour=fields.from;hour<fields.to;hour+=HOUR){const close=fields.symbol==='btcusd'?10+(hour-START)/HOUR:2;values.push([hour,close,close+1,close/2,close]);}
     const file=path.join(dir,`export-${serial++}.csv`);await fs.writeFile(file,'timestamp,open,high,low,close\n'+values.map(row=>row.join(',')+'\n').join(''),{mode:0o600});
-    return{path:file,rows:values.length,sessionPolicy:fields.timeframe==='h1'?'verified-full-hour-v1':'provider-native-h1-v1'};
+    return{path:file,rows:values.length,sessionPolicy:fields.timeframe==='h1'?'verified-full-hour-v2':'provider-native-h1-v2'};
   };
   return{dir,request,api,requests,sdkHistory};
+}
+async function legacyDay(f,{native=false,day=START,values=[candle(0,42)],identityFields={},checksum}={}){
+  const timeframe=native?'h1-native':'h1',symbol='btcusd',policy=native?'provider-native-h1-v1':'verified-full-hour-v1';
+  const folder=path.join(f.request.hourlyCacheDirectory,KEY,timeframe,symbol);await fs.mkdir(folder,{recursive:true});
+  const file=`${day}-11111111-1111-4111-8111-111111111111.csv`,csv=path.join(folder,file),manifest=path.join(folder,`${day}.json`);
+  const text='timestamp,open,high,low,close\n'+values.map(row=>row.join(',')+'\n').join('');
+  const identity=createHash('sha256').update(JSON.stringify({sourceKey:KEY,symbol,timeframe,policy,available:START,...identityFields})).digest('hex');
+  const metadata=JSON.stringify({version:1,day,identity,file,rows:values.length,bytes:Buffer.byteLength(text),checksum:checksum??createHash('sha256').update(text).digest('hex')});
+  await fs.writeFile(csv,text,{mode:0o600});await fs.writeFile(manifest,metadata,{mode:0o600});
+  return{csv,manifest,text,metadata,identity};
 }
 
 test('hourly ratio OHLC uses paired observed closes; independent source extrema and unmatched hours never enter it',async()=>{
@@ -56,6 +67,138 @@ test('sixty days are fetched in three bounded source batches; compatible daily c
   assert.ok(f.requests.every(r=>r.timeframe==='h1'&&r.to-r.from<=28*DAY));
   assert.equal((await fs.readdir(f.dir)).filter(n=>n.startsWith('export-')).length,0);
 });
+test('validated nonempty legacy hourly days retain exact bytes and avoid SDK requests for both session policies',async t=>{
+  const f=await fixture(t,1),forbid=async()=>{throw Error('Valid legacy observations were fetched again');};
+  for(const native of [false,true]){
+    const old=await legacyDay(f,{native});
+    assert.deepEqual(await collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory:forbid,native})),[candle(0,42)]);
+    assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata);
+    assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
+  }
+});
+test('legacy empty hourly days are refetched under the v2 policy and published without deleting old observations',async t=>{
+  const f=await fixture(t,1);
+  for(const native of [false,true]){
+    const old=await legacyDay(f,{native,values:[]});
+    const sdkHistory=async(request,fields)=>{
+      assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata,'recovery replaced metadata before validating its source');
+      return f.sdkHistory(request,fields);
+    };
+    assert.equal((await collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory,native}))).length,24);
+    const fresh=JSON.parse(await fs.readFile(old.manifest,'utf8'));
+    assert.notEqual(fresh.identity,old.identity);assert.equal(fresh.rows,24);assert.notEqual(fresh.file,path.basename(old.csv));
+    assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
+    const forbid=async()=>{throw Error('Repaired observations were fetched again');};
+    assert.equal((await collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory:forbid,native}))).length,24);
+  }
+  assert.equal(f.requests.length,2);
+});
+test('verified v2 empty days retain explicit gaps and are reusable without another SDK request',async t=>{
+  const f=await fixture(t,1);let calls=0;
+  const sdkHistory=async()=>{
+    calls++;const file=path.join(f.dir,'verified-closure.csv');await fs.writeFile(file,'timestamp,open,high,low,close\n');
+    return{path:file,rows:0,sessionPolicy:'verified-full-hour-v2'};
+  };
+  assert.deepEqual(await collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory})),[]);
+  assert.equal(calls,1);
+  const forbid=async()=>{throw Error('A verified closed day was fetched again');};
+  assert.deepEqual(await collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory:forbid})),[]);
+});
+test('failed, canceled and legacy-policy recovery preserves old manifests and files, including invalid cache proofs',async t=>{
+  for(const mode of ['failure','cancel','legacy-policy','checksum-failure','identity-failure']){
+    const f=await fixture(t,1),old=await legacyDay(f,mode==='checksum-failure'?{checksum:'0'.repeat(64)}:mode==='identity-failure'?{identityFields:{sourceKey:'b'.repeat(64)}}:{values:[]}),controller=new AbortController();
+    const sdkHistory=async(request,fields)=>{
+      if(mode.endsWith('failure'))throw Error('source recovery failed');
+      const result=await f.sdkHistory(request,fields);
+      if(mode==='cancel')controller.abort(Error('recovery canceled'));
+      if(mode==='legacy-policy')result.sessionPolicy='verified-full-hour-v1';
+      return result;
+    };
+    await assert.rejects(()=>collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory,signal:controller.signal})),/recovery failed|recovery canceled|session policy/);
+    assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata);
+    assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
+    assert.equal((await fs.readdir(f.dir)).filter(name=>name.startsWith('export-')).length,0);
+  }
+});
+test('legacy observations require matching account, symbol, availability, session policy and checksum',async t=>{
+  const mismatches=[{sourceKey:'b'.repeat(64)},{symbol:'ethusd'},{available:START-HOUR},{policy:'provider-native-h1-v1'},null];
+  for(const identityFields of mismatches){
+    const f=await fixture(t,1),old=await legacyDay(f,identityFields?{identityFields}:{checksum:'0'.repeat(64)});
+    const result=await collect(hourlyBars('btcusd',START,START+DAY,f.request,{api:f.api,sdkHistory:f.sdkHistory}));
+    assert.equal(f.requests.length,1);assert.equal(result.length,24);assert.equal(result[0][4],10);
+    assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
+    assert.notEqual(await fs.readFile(old.manifest,'utf8'),old.metadata);
+  }
+});
+test('legacy empty repairs span positive neighbors in bounded batches while preserving every valid source byte',async t=>{
+  const f=await fixture(t,60),saved=[];
+  for(let day=0;day<60;day++)saved.push(await legacyDay(f,{day:START+day*DAY,values:day%2?[[START+day*DAY,42,43,41,42]]:[]}));
+  const result=await collect(hourlyBars('btcusd',START,START+60*DAY,f.request,{api:f.api,sdkHistory:f.sdkHistory}));
+  assert.equal(result.length,30*24+30);
+  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),[[START,START+28*DAY],[START+28*DAY,START+56*DAY],[START+56*DAY,START+60*DAY]]);
+  for(let day=0;day<saved.length;day++){
+    const old=saved[day];assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
+    if(day%2)assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata);
+    else assert.equal(JSON.parse(await fs.readFile(old.manifest,'utf8')).rows,24);
+  }
+  const forbid=async()=>{throw Error('Repaired mixed legacy cache was fetched again');};
+  assert.deepEqual(await collect(hourlyBars('btcusd',START,START+60*DAY,f.request,{api:f.api,sdkHistory:forbid})),result);
+});
+test('mixed legacy recovery failure and cancellation preserve empty and positive neighbors',async t=>{
+  for(const canceled of [false,true]){
+    const f=await fixture(t,4),saved=[],controller=new AbortController();
+    for(let day=0;day<4;day++)saved.push(await legacyDay(f,{day:START+day*DAY,values:day%2?[[START+day*DAY,42,43,41,42]]:[]}));
+    const sdkHistory=async(request,fields)=>{
+      assert.equal(fields.from,START);assert.equal(fields.to,START+4*DAY);
+      if(!canceled)throw Error('mixed recovery failed');
+      const result=await f.sdkHistory(request,fields);controller.abort(Error('mixed recovery canceled'));return result;
+    };
+    await assert.rejects(()=>collect(hourlyBars('btcusd',START,START+4*DAY,f.request,{api:f.api,sdkHistory,signal:controller.signal})),/mixed recovery failed|mixed recovery canceled/);
+    for(const old of saved){assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata);assert.equal(await fs.readFile(old.csv,'utf8'),old.text);}
+  }
+});
+test('legacy repair batches stop before a verified v2 day and reuse it unchanged',async t=>{
+  const f=await fixture(t,10),options={api:f.api,sdkHistory:f.sdkHistory};
+  await collect(hourlyBars('btcusd',START+5*DAY,START+6*DAY,f.request,options));
+  const manifest=path.join(f.request.hourlyCacheDirectory,KEY,'h1','btcusd',`${START+5*DAY}.json`),metadata=await fs.readFile(manifest,'utf8');
+  f.requests.length=0;
+  for(let day=0;day<10;day++)if(day!==5)await legacyDay(f,{day:START+day*DAY,values:day%2?[[START+day*DAY,42,43,41,42]]:[]});
+  await collect(hourlyBars('btcusd',START,START+10*DAY,f.request,options));
+  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),[[START,START+5*DAY],[START+6*DAY,START+10*DAY]]);
+  assert.equal(await fs.readFile(manifest,'utf8'),metadata);
+});
+test('three Fast ratio workers overlap owner publication and share complete BTC/Gold caches without JSON failures',{timeout:5000},async t=>{
+  const f=await fixture(t,1),{download}=require('./worker.cjs');
+  const lock=path.join(f.request.hourlyCacheDirectory,KEY,'h1','btcusd','.fetch.lock'),originalWrite=fs.writeFile,originalStat=fs.lstat;
+  let created,continueOwner,inspected,paused=false;
+  const ownerCreated=new Promise(resolve=>{created=resolve;}),releaseOwner=new Promise(resolve=>{continueOwner=resolve;}),peerInspected=new Promise(resolve=>{inspected=resolve;});
+  fs.writeFile=async function(filename,data,options){
+    if(!paused&&path.dirname(filename)===lock&&(path.basename(filename)==='owner.json'||/^\.owner-.*\.pending$/.test(path.basename(filename)))){
+      paused=true;await originalWrite.call(this,filename,'',options);created();await releaseOwner;
+      return originalWrite.call(this,filename,data,{...options,flag:'w'});
+    }
+    return originalWrite.call(this,filename,data,options);
+  };
+  fs.lstat=async function(filename,...options){
+    try{return await originalStat.call(this,filename,...options);}
+    finally{if(filename===path.join(lock,'owner.json'))inspected();}
+  };
+  t.after(()=>{continueOwner();fs.writeFile=originalWrite;fs.lstat=originalStat;});
+  const done=new Map(),jobs=[];
+  for(const symbol of ['btcxau','ethbtc','xauspx']){
+    const folder=path.join(f.dir,symbol);await fs.mkdir(folder);const output=path.join(folder,'data.part');await fs.writeFile(output,'');
+    jobs.push(download({...f.request,symbol,output,resume:true},{api:f.api,sdkHistory:f.sdkHistory,emit:event=>{if(event.type==='done')done.set(symbol,event);}}));
+  }
+  const settled=Promise.allSettled(jobs);
+  await ownerCreated;await peerInspected;continueOwner();
+  for(const result of await settled)if(result.status==='rejected')assert.ifError(result.reason);
+  assert.equal(done.size,3);
+  for(const event of done.values()){assert.equal(event.rows,1);assert.equal(event.provenance.syntheticSource,'h1-close');}
+  assert.deepEqual(f.requests.map(request=>request.symbol).sort(),['btcusd','ethusd','usa500idxusd','xauusd']);
+  assert.ok(f.requests.every(request=>request.timeframe==='h1'));
+  const cached=async()=>{throw Error('Completed shared input was downloaded again');};
+  for(const symbol of ['btcusd','xauusd'])assert.equal((await collect(hourlyBars(symbol,START,START+DAY,f.request,{api:f.api,sdkHistory:cached}))).length,24);
+});
 test('hourly caches isolate account and native/ratio session policies, and reject unverified or malformed exports',async t=>{
   const f=await fixture(t,1),options={api:f.api,sdkHistory:f.sdkHistory};
   await collect(hourlyBars('btcusd',START,START+DAY,f.request,options));
@@ -66,7 +209,7 @@ test('hourly caches isolate account and native/ratio session policies, and rejec
     const req={...f.request,hourlyCacheDirectory:path.join(f.dir,bad)};
     const sdkHistory=async(request,fields)=>{
       const result=await f.sdkHistory(request,fields);
-      if(bad==='policy')result.sessionPolicy='provider-native-h1-v1';
+      if(bad==='policy')result.sessionPolicy='provider-native-h1-v2';
       if(bad==='count')result.rows++;
       if(bad==='timestamp')await fs.appendFile(result.path,`${fields.to},1,2,0.5,1\n`);
       return result;

@@ -13,6 +13,7 @@ import (
 
 	"cryptodesk/internal/candlestorage"
 	"cryptodesk/internal/chartimage"
+	"cryptodesk/internal/comparison"
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/exchange"
 	"cryptodesk/internal/hyperliquid"
@@ -37,6 +38,8 @@ type App struct {
 	candles          *candlestorage.Manager
 	screener         *screener.Manager
 	predictions      *predictions.Manager
+	comparison       *comparison.Manager
+	comparisonClosed bool
 	hyperliquid      *hyperliquid.Store
 	tradingMu        sync.Mutex
 	tradingWG        sync.WaitGroup

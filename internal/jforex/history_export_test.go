@@ -346,8 +346,8 @@ func TestTickExportBridgeProcess(t *testing.T) {
 				version["tickHistory"] = tickHistoryCapability
 			}
 			if scenario == "hourly" {
-				version["hourlyHistory"] = "bid-full-open-hour-v1"
-				version["nativeHourlyHistory"] = "bid-native-hour-v1"
+				version["hourlyHistory"] = "bid-full-open-hour-v2"
+				version["nativeHourlyHistory"] = "bid-native-hour-v2"
 			}
 			respond(request.ID, version)
 		case "connect":

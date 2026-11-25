@@ -504,7 +504,7 @@ const dailyRow=index=>[start+index*day,5+12*index,16.5+12*index,5+12*index,16.5+
           assert.equal(event.from%hour,0);assert.equal(event.to%hour,0);
           assert.ok(event.to>event.from&&event.to-event.from<=28*day,'H1 batch exceeded28days/672hourly rows');
           assert.ok(event.from>=start&&event.to<=request.asOf,'hourly source looked beyond the closed request');
-          sessionPolicy=event.timeframe==='h1'?'verified-full-hour-v1':'provider-native-h1-v1';
+          sessionPolicy=event.timeframe==='h1'?'verified-full-hour-v2':'provider-native-h1-v2';
           if(event.timeframe==='h1-native')assert.equal(event.symbol,'btcusd');
           for(let time=event.from;time<event.to;time+=hour){
             const close=event.symbol==='btcusd'?10+(time-start)/hour:2;

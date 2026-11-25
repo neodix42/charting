@@ -16,6 +16,7 @@ public final class BridgeNativeDownloadTest {
         final Object[] args;
         final CompletableFuture<List<IBar>> result = new CompletableFuture<>();
         final AtomicBoolean canceled = new AtomicBoolean();
+        final AtomicBoolean returnAfterInterrupt = new AtomicBoolean();
         NativeLoad(Object[] args) { this.args = args; }
         void complete() { complete(Instrument.BTCUSD); }
         void complete(Instrument instrument) {
@@ -36,7 +37,11 @@ public final class BridgeNativeDownloadTest {
             charts = new Fixture(chartTimeout, () -> (TO + 3_600) * 1000, 2_000, downloadTimeout, Set.of(Instrument.BTCUSD, Instrument.EURUSD, Instrument.XAUUSD, Instrument.AAPLUSUSD), (method, args) -> {
                 NativeLoad call = new NativeLoad(args); calls.add(call);
                 try { return call.result.get(); }
-                catch (InterruptedException error) { call.canceled.set(true); throw error; }
+                catch (InterruptedException error) {
+                    call.canceled.set(true);
+                    if (call.returnAfterInterrupt.get()) return List.of(bar((Long) args[4], 1, 3, .5, 2));
+                    throw error;
+                }
             }, calendar);
             bridge = charts.bridge;
         }
@@ -66,13 +71,32 @@ public final class BridgeNativeDownloadTest {
         return calendarWithScheduleSupplier(loaded, () -> schedule, closed);
     }
     static IDataService calendarWithScheduleSupplier(boolean loaded, java.util.function.Supplier<com.dukascopy.holiday.HolidaySchedule> schedule, List<org.threeten.extra.Interval> closed) {
+        return calendarWithMetadata(loaded, schedule, closed, null);
+    }
+    static IDataService calendarWithMetadata(boolean loaded, java.util.function.Supplier<com.dukascopy.holiday.HolidaySchedule> schedule, List<org.threeten.extra.Interval> closed, com.dukascopy.charts.data.datacache.metadata.IFeedMetadataManager metadata) {
+        return calendarWithMetadata(loaded, schedule, closed, metadata, null);
+    }
+    static IDataService calendarWithMetadata(boolean loaded, java.util.function.Supplier<com.dukascopy.holiday.HolidaySchedule> schedule, List<org.threeten.extra.Interval> closed, com.dukascopy.charts.data.datacache.metadata.IFeedMetadataManager metadata, com.dukascopy.charts.data.datacache.ICurvesProtocolHandler handler) {
+        var splits = fake(com.dukascopy.charts.data.datacache.splits.ISplitsManager.class,(method,args) -> null);
+        var commissions = fake(com.dukascopy.charts.data.datacache.feed.IFeedCommissionManager.class,(method,args) -> method.equals("applyFeedCommissionToData") ? args[3] : null);
+        return calendarWithMetadata(loaded,schedule,closed,metadata,handler,splits,commissions);
+    }
+    static IDataService calendarWithMetadata(boolean loaded, java.util.function.Supplier<com.dukascopy.holiday.HolidaySchedule> schedule, List<org.threeten.extra.Interval> closed, com.dukascopy.charts.data.datacache.metadata.IFeedMetadataManager metadata, com.dukascopy.charts.data.datacache.ICurvesProtocolHandler handler, com.dukascopy.charts.data.datacache.splits.ISplitsManager splits, com.dukascopy.charts.data.datacache.feed.IFeedCommissionManager commissions) {
         var holidays = fake(com.dukascopy.dds2.greed.holiday.ClientHolidayScheduleService.class, (method, args) -> switch(method) {
             case "hasHolidaysScheduleLoaded" -> loaded;
             case "getHolidaySchedule" -> schedule.get();
             case "getHolidayIntervals" -> closed != null ? closed : schedule.get().getHolidayIntervalsSortedAndMerged((Long) args[1], (Long) args[2]);
             default -> null;
         });
-        var provider = fake(com.dukascopy.charts.data.datacache.IFeedDataProvider.class, (method, args) -> method.equals("getHolidayScheduleService") ? holidays : null);
+        var provider = fake(com.dukascopy.charts.data.datacache.IFeedDataProvider.class, (method, args) -> switch(method) {
+            case "getHolidayScheduleService" -> holidays;
+            case "getFeedMetadataManager" -> metadata;
+            case "getICurvesProtocolHandler" -> handler;
+            case "getSplitsManager" -> splits;
+            case "getFeedCommissionManager" -> commissions;
+            case "getTimeOfFirstCandle" -> metadata == null ? Long.MAX_VALUE : metadata.getTimeOfFirstCandle((Instrument) args[0], (Period) args[1]);
+            default -> null;
+        });
         return new com.dukascopy.api.impl.connect.JForexDataService(provider, new Properties());
     }
     public static void main(String[] args) throws Exception {
@@ -284,6 +308,7 @@ public final class BridgeNativeDownloadTest {
             check(!queued.isDone(), "queued native work receives its full SDK budget at executor entry");
             queuedLoad.complete(); check(queued.get(2, TimeUnit.SECONDS).getAsJsonArray("result").size() == 3, "queued native collection succeeds exactly once");
         }
+        BridgeHourlyRecoveryTest.run();
         System.out.println("JForex native loaded getBars collections, scoped download deadlines, genuine empty ranges, validation, queueing and chart isolation checks passed");
     }
 }

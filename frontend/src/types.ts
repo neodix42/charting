@@ -2,6 +2,7 @@ import type {TradeHistoryBackend} from './workspace/tradeHistory';
 import type {ScreenerAnalysisBackend} from './workspace/screenerAnalysis';
 import type {ScreenerLiveAlertsBackend} from './workspace/screenerLiveAlerts';
 import type {PredictionsBackend} from './workspace/predictions';
+import type {ComparisonBackend} from './workspace/comparison';
 import type {ThemeName} from './workspace/themes';
 
 export type Exchange = 'binance'|'bybit'|'coinbase'|'dukascopy'|'hyperliquid';
@@ -81,7 +82,7 @@ export interface ScreenerEnrichmentInfo {directory:string;active:boolean;runtime
 export interface ScreenerRefreshJob extends ScreenerEnrichmentJob {addedRows:number;updatedRows:number}
 export interface ScreenerRefreshInfo {directory:string;active:boolean;asOf?:number;runtimeAvailable:boolean;runtimeError?:string;total:number;completed:number;failed:number;cancelled:number;currentFile:string;currentProgress:number;progress?:number;jobs:ScreenerRefreshJob[]}
 export interface HistoryResult {requestId:string;feedKey:FeedKey;bars:Candle[];moreHistory:boolean}
-export interface Backend extends TradeHistoryBackend,TradingBackend,ScreenerAnalysisBackend,ScreenerLiveAlertsBackend,PredictionsBackend {
+export interface Backend extends TradeHistoryBackend,TradingBackend,ScreenerAnalysisBackend,ScreenerLiveAlertsBackend,PredictionsBackend,ComparisonBackend {
  GetStartupStatus():Promise<StartupStatus>;
  LoadWorkspace():Promise<LoadResult>; SaveWorkspace(revision:number,sessionId:string,sequence:number,workspace:Workspace):Promise<SaveResult>;
  ListInstruments(exchange:Exchange):Promise<Instrument[]>;

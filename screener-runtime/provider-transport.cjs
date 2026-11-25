@@ -16,7 +16,7 @@ async function requestSDKHistory(request,{symbol,timeframe,from,to}){
   try{result=await owner.ask('history',{symbol,timeframe,from,to});}
   catch(error){error.code='JFOREX_HISTORY';throw error;}
   if(typeof result.path!=='string'||!path.isAbsolute(result.path)||!Number.isSafeInteger(result.rows)||result.rows<0||!path.isAbsolute(session.directory))throw Error('Invalid JForex history export response.');
-  if(hourly&&result.sessionPolicy!==(timeframe==='h1'?'verified-full-hour-v1':'provider-native-h1-v1'))throw Error('JForex hourly history did not verify its requested session policy.');
+  if(hourly&&result.sessionPolicy!==(timeframe==='h1'?'verified-full-hour-v2':'provider-native-h1-v2'))throw Error('JForex hourly history did not verify its requested session policy.');
   const info=await fs.lstat(result.path),root=await fs.realpath(session.directory),filename=await fs.realpath(result.path),relative=path.relative(root,filename);
   if(!info.isFile()||info.size>64*1024*1024||!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw Error('JForex history export is outside its owned folder or exceeds 64 MiB.');
   return {path:result.path,rows:result.rows,...(hourly?{sessionPolicy:result.sessionPolicy}:{})};

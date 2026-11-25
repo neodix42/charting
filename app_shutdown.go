@@ -29,6 +29,8 @@ func (a *App) shutdown(context.Context) {
 func (a *App) closeServices() {
 	a.mu.Lock()
 	cancel := a.cancel
+	a.comparisonClosed = true
+	comparison := a.comparison
 	a.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -42,6 +44,9 @@ func (a *App) closeServices() {
 		a.services.wg.Wait()
 	}
 	workers := []func(){a.closeTrading}
+	if comparison != nil {
+		workers = append(workers, comparison.Close)
+	}
 	if a.liveAlerts != nil {
 		workers = append(workers, a.liveAlerts.Close)
 	}

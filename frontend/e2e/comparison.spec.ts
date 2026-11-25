@@ -1,0 +1,179 @@
+import {test,expect,type Page} from '@playwright/test';
+import {openTestApp,reloadTestApp} from './helpers/testApp';
+import {comparisonDate,defaultComparisonView} from '../src/workspace/comparison';
+import {getThemePalette,THEME_OPTIONS} from '../src/workspace/themes';
+
+const defaults=['BTC','ETH','TON','HYPE','ZEN','APT','NEAR'];
+const tab=(page:Page)=>page.getByRole('tab',{name:'Comparison',exact:true});
+const panel=(page:Page)=>page.locator('#comparison-panel');
+const chart=(page:Page)=>page.getByTestId('comparison-chart');
+const weeks=(page:Page)=>page.getByRole('spinbutton',{name:'Comparison weeks',exact:true});
+const calls=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonCalls());
+const resources=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonChartResources());
+const selected=(page:Page)=>page.getByLabel('Selected comparison assets',{exact:true});
+async function enter(page:Page){await tab(page).click();await expect(panel(page)).toBeVisible();}
+async function loaded(page:Page,count=7){await expect(chart(page)).toHaveAttribute('data-series-count',String(count));await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:1});}
+async function frames(page:Page){await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));}
+async function add(page:Page,symbol:string,market:'Perpetual'|'Spot'='Perpetual'){
+ await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();
+ const picker=page.getByLabel('Comparison assets',{exact:true});await picker.getByRole('button',{name:'All',exact:true}).click();
+ await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill(symbol);
+ await picker.getByRole('button',{name:`${symbol} ${market}`,exact:true}).click();
+}
+
+test('Comparison is a fixed Daily change tool with seven common-baseline percentage lines and explicit venue labels',async({page},testInfo)=>{
+ await page.setViewportSize({width:1600,height:1200});
+ await openTestApp(page);await expect(page.getByTestId('chart-cell')).toHaveCount(1);
+ expect(await calls(page)).toEqual({view:0,save:0,catalog:0,data:0,cancel:0});
+ await expect(page.locator('.tab-row > [role="tab"]')).toHaveText(['Screener','Predictions','Comparison','Trade history']);
+ const before=await page.evaluate(()=>(window as any).__testAttachCount());
+ await enter(page);await loaded(page);
+ await expect(panel(page).getByRole('tab',{name:'Daily change',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(weeks(page)).toHaveValue('4');await expect(selected(page).locator('strong')).toHaveText(defaults.map(symbol=>symbol==='TON'?'TON (GRAM)':symbol));
+ await expect(selected(page).locator('.comparison-asset').filter({has:page.getByText('ZEN',{exact:true})})).toContainText('Binance · Spot · USDT');
+ await expect(selected(page).locator('.comparison-asset').filter({has:page.getByText('BTC',{exact:true})})).toContainText('Hyperliquid · Perpetual · USDC');
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult());
+ expect(result.lastClosedTime-result.baselineTime).toBe(28*86400);expect(result.baselineTime%86400).toBe(0);
+ for(const series of result.series){expect(series.points).toHaveLength(29);expect(series.points[0]).toMatchObject({time:result.baselineTime,pct:0});expect(series.points.at(-1).time).toBe(result.lastClosedTime);}
+ await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('BTC',{exact:true})})).toContainText('+28.00%');
+ await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('ETH',{exact:true})})).toContainText('-14.00%');
+ await expect(panel(page)).toContainText('Latest completed daily close');expect(await page.evaluate(()=>(window as any).__testSubscriptions())).toHaveLength(0);expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(before);
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await frames(page);await panel(page).screenshot({path:testInfo.outputPath('comparison-default-seven-assets.png')});
+ await page.locator('[data-tab-id]').first().click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});await expect(page.getByTestId('chart-cell')).toHaveCount(1);
+ expect(await page.evaluate(()=>(window as any).__testWorkspace().tabs)).toHaveLength(1);
+});
+
+test('the verified TON rename displays GRAM while keeping canonical selection and the actual native feed',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);
+ const renamed=selected(page).locator('.comparison-asset').filter({has:page.getByText('TON (GRAM)',{exact:true})});
+ await expect(renamed).toContainText('Hyperliquid · Perpetual · USDC');
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),ton=result.series.find((series:any)=>series.asset.symbol==='TON');
+ expect(ton.asset).toMatchObject({symbol:'TON',displaySymbol:'TON (GRAM)',name:'Gram (formerly Toncoin)',nativeId:'GRAM',feedKey:{instrument:'GRAM'}});
+ await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('TON (GRAM)',{exact:true})})).toHaveAttribute('title','Hyperliquid · Perpetual · USDC · GRAM');
+ await page.getByRole('button',{name:'Remove TON from comparison',exact:true}).click();await loaded(page,6);
+ await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();const picker=page.getByLabel('Comparison assets',{exact:true});
+ await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('GRAM');await expect(picker.locator('.product-list > button')).toHaveCount(1);
+ await picker.getByRole('button',{name:'TON (GRAM) Perpetual',exact:true}).click();await loaded(page);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets)).toEqual(['BTC','ETH','HYPE','ZEN','APT','NEAR','TON']);
+ expect((await page.evaluate(()=>(window as any).__testComparisonRequests().at(-1).view.assets)).includes('GRAM')).toBe(false);
+ await reloadTestApp(page);await enter(page);await loaded(page);await expect(selected(page).locator('strong')).toHaveText(['BTC','ETH','HYPE','ZEN','APT','NEAR','TON (GRAM)']);
+});
+
+test('weeks edits request the selected period once, validate bounds and restore the saved choice',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);
+ await panel(page).getByRole('button',{name:'2w',exact:true}).click();await loaded(page);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonRequests().at(-1).view.weeks)).toBe(2);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(2);
+ expect((await page.evaluate(()=>(window as any).__testComparisonLastResult())).series[0].points).toHaveLength(15);
+ const count=(await calls(page)).data;await panel(page).getByRole('button',{name:'2w',exact:true}).click();await frames(page);expect((await calls(page)).data).toBe(count);
+ await weeks(page).fill('3');await weeks(page).press('Enter');await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(3);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonRequests().at(-1).view.weeks)).toBe(3);
+ const writes=(await calls(page)).save,requests=(await calls(page)).data;
+ for(const value of ['0','1.5','105']){await weeks(page).fill(value);await weeks(page).blur();await expect(panel(page).getByRole('alert')).toContainText('whole number from 1 to 104');}
+ expect((await calls(page)).save).toBe(writes);expect((await calls(page)).data).toBe(requests);
+ await weeks(page).fill('104');await weeks(page).press('Enter');await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonRequests().at(-1).view.weeks)).toBe(104);await loaded(page);
+ expect((await page.evaluate(()=>(window as any).__testComparisonLastResult())).series[0].points).toHaveLength(729);
+ await weeks(page).fill('3');await weeks(page).blur();await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(3);await reloadTestApp(page);await enter(page);await loaded(page);await expect(weeks(page)).toHaveValue('3');
+ expect((await page.evaluate(()=>(window as any).__testComparisonLastResult())).series[0].points).toHaveLength(22);
+});
+
+test('asset removal, search and market filters keep per-asset sources and persist an intentionally empty selection',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);
+ await page.getByRole('button',{name:'Remove ETH from comparison',exact:true}).click();await loaded(page,6);
+ await add(page,'LTC');await loaded(page,7);await expect(selected(page).locator('strong')).toHaveText(['BTC','TON (GRAM)','HYPE','ZEN','APT','NEAR','LTC']);
+ await page.getByRole('button',{name:'Remove ZEN from comparison',exact:true}).click();
+ await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();const picker=page.getByLabel('Comparison assets',{exact:true});
+ await picker.getByRole('button',{name:'Spot',exact:true}).click();await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('Horizen');
+ await expect(picker.locator('.product-list > button')).toHaveCount(1);await picker.getByRole('button',{name:'ZEN Spot',exact:true}).click();
+ await add(page,'SOL');await loaded(page,8);
+ await expect(selected(page).locator('.comparison-asset').filter({has:page.getByText('ZEN',{exact:true})})).toContainText('Binance · Spot');
+ const symbols=await page.evaluate(()=>(window as any).__testComparisonView().assets);
+ for(const symbol of symbols)await page.getByRole('button',{name:`Remove ${symbol} from comparison`,exact:true}).click();
+ await expect(panel(page)).toContainText('Add assets to compare');await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets)).toEqual([]);
+ await reloadTestApp(page);await enter(page);await expect(panel(page)).toContainText('Add assets to compare');await expect(selected(page).locator('.comparison-asset')).toHaveCount(0);expect((await calls(page)).data).toBe(0);
+ await add(page,'SOL');await loaded(page,1);await expect(selected(page).locator('strong')).toHaveText(['SOL']);
+});
+
+test('normal close commits an unblurred weeks edit and waits for its durable save',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);await page.evaluate(()=>(window as any).__testComparisonHoldSaves());
+ await weeks(page).fill('6');await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'comparison-weeks'}));
+ await expect.poll(()=>calls(page)).toMatchObject({save:1});expect(await page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(4);expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__testComparisonReleaseSaves());await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'comparison-weeks',discard:false});
+ expect(await page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(6);
+});
+
+test('failed saves keep Comparison edits, navigation and shutdown guarded until retry succeeds',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);await page.evaluate(()=>(window as any).__testComparisonErrors({save:'Comparison choices could not be saved: disk full'}));
+ await panel(page).getByRole('button',{name:'8w',exact:true}).click();await expect(panel(page).getByRole('alert')).toContainText('disk full');
+ await page.locator('[data-tab-id]').first().click();await expect(tab(page)).toHaveAttribute('aria-selected','true');expect(await page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(4);
+ await page.evaluate(()=>(window as any).__testEmit('prepare-close',{token:'comparison-save-error'}));await expect(page.getByText('Save failed during shutdown. Your changes remain open.',{exact:true})).toBeVisible();expect(await page.evaluate(()=>(window as any).__testCloseConfirmation())).toBeNull();
+ await page.evaluate(()=>(window as any).__testComparisonErrors({}));await panel(page).getByRole('button',{name:'Retry saving',exact:true}).click();await page.getByRole('button',{name:'Retry save and close',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testCloseConfirmation())).toEqual({token:'comparison-save-error',discard:false});expect(await page.evaluate(()=>(window as any).__testComparisonView().weeks)).toBe(8);
+});
+
+test('saved-choice failures never overwrite the stored selection or fetch default prices and retry remains available',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonErrors({view:'Saved Comparison choices are unavailable'}));
+ await enter(page);await expect(panel(page).getByRole('alert')).toContainText('Saved Comparison choices are unavailable');await expect(weeks(page)).toBeDisabled();expect((await calls(page)).data).toBe(0);expect((await calls(page)).save).toBe(0);
+ await page.evaluate(()=>(window as any).__testComparisonErrors({}));await panel(page).getByRole('button',{name:'Retry saved choices',exact:true}).click();await loaded(page);expect((await calls(page)).save).toBe(0);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(defaultComparisonView());
+});
+
+test('catalog and data errors are retryable without inventing prices or overriding other assets',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonErrors({catalog:'Hyperliquid asset discovery is unavailable'}));
+ await enter(page);await expect(panel(page).getByRole('alert')).toContainText('discovery is unavailable');expect((await calls(page)).data).toBe(0);await expect(chart(page)).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__testComparisonErrors({data:'Historical daily closes timed out'}));await panel(page).getByRole('button',{name:'Retry assets',exact:true}).click();await expect(panel(page).getByRole('alert')).toContainText('daily closes timed out');await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+ await page.evaluate(()=>{(window as any).__testComparisonErrors({});(window as any).__testComparisonSeries({ETH:{missingBaseline:true},TON:{error:'Daily source is unavailable'},BTC:{gaps:[10]}});});
+ await panel(page).getByRole('button',{name:'Retry daily data',exact:true}).click();await loaded(page,5);
+ const unavailable=page.getByLabel('Unavailable comparison assets',{exact:true});await expect(unavailable).toContainText('ETH');await expect(unavailable).toContainText('common UTC baseline');await expect(unavailable).toContainText('not rebased');await expect(unavailable).toContainText('TON');await expect(unavailable).toContainText('Daily source is unavailable');
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),btc=result.series.find((series:any)=>series.asset.symbol==='BTC');
+ expect(btc.points[0]).toMatchObject({time:result.baselineTime,pct:0});expect(btc.points[10]).toMatchObject({close:null,pct:null});expect(btc.points[11].pct).toBe(11);expect(btc.points.at(-1).pct).toBe(28);
+ expect(result.series.find((series:any)=>series.asset.symbol==='ETH').points).toEqual([]);
+ await expect(page.getByLabel('Comparison legend',{exact:true})).not.toContainText('ETH');await expect(page.getByLabel('Comparison legend',{exact:true})).not.toContainText('TON');
+ const rendered=await page.evaluate(()=>(window as any).__testComparisonChart()),line=rendered.series.find((series:any)=>series.symbol==='BTC');
+ const at=(data:any[],offset:number)=>data.find(point=>point.time===btc.points[offset].time);
+ expect(at(line.line,9)).toMatchObject({value:9,color:'rgba(0, 0, 0, 0)'});expect(at(line.line,10)?.value).toBeUndefined();expect(at(line.line,11)).toMatchObject({value:11});expect(at(line.dots,9)).toMatchObject({value:9});expect(at(line.dots,10)?.value).toBeUndefined();
+ const gap=await page.evaluate(time=>(window as any).__testComparisonChart(time),btc.points[10].time),bounds=(await chart(page).boundingBox())!;
+ await page.mouse.move(bounds.x+gap.leftWidth+gap.x,bounds.y+200);await expect(panel(page).locator('.comparison-readout')).toContainText(comparisonDate(btc.points[10].time));
+ await expect(page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('BTC',{exact:true})})).toContainText('—');await page.mouse.move(0,0);
+});
+
+test('late daily results cannot replace a new period, hiding cancels work and releases every chart resource',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonHoldNextData());await enter(page);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonPending().length)).toBe(1);const old=await page.evaluate(()=>(window as any).__testComparisonPending()[0]);
+ await panel(page).getByRole('button',{name:'2w',exact:true}).click();await loaded(page);const baseline=await chart(page).getAttribute('data-baseline-time');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonCancelled())).toContain(old);
+ await page.evaluate(id=>(window as any).__testComparisonReleaseData(id),old);await frames(page);await expect(chart(page)).toHaveAttribute('data-baseline-time',baseline!);await expect(weeks(page)).toHaveValue('2');
+ await page.evaluate(()=>(window as any).__testComparisonHoldNextData());await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonPending().length)).toBe(1);const hidden=await page.evaluate(()=>(window as any).__testComparisonPending()[0]);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonCancelled())).toContain(hidden);
+ const count=(await calls(page)).data;await page.evaluate(id=>(window as any).__testComparisonReleaseData(id),hidden);await frames(page);expect((await calls(page)).data).toBe(count);await expect(chart(page)).toHaveCount(0);
+ await enter(page);await loaded(page);await expect(weeks(page)).toHaveValue('2');
+});
+
+test('a saved-choice response arriving after hiding cannot restore an older selection',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonHoldView());await enter(page);await expect.poll(()=>calls(page)).toMatchObject({view:1});await page.getByRole('tab',{name:'Screener',exact:true}).click();
+ await page.evaluate(async()=>{await window.go!.main!.App!.SaveComparisonView({weeks:3,assets:['BTC','SOL']});(window as any).__testComparisonReleaseView();});await frames(page);expect((await calls(page)).data).toBe(0);
+ await enter(page);await loaded(page,2);await expect(weeks(page)).toHaveValue('3');await expect(selected(page).locator('strong')).toHaveText(['BTC','SOL']);
+});
+
+test('Comparison accepts twenty saved assets, disables additions at the limit and keeps the next selection bounded',async({page})=>{
+ const symbols=Array.from({length:20},(_,index)=>`ASSET${index}`);
+ await page.addInitScript(symbols=>sessionStorage.setItem('cryptodesk-explicit-test-comparison-view',JSON.stringify({weeks:1,assets:symbols})),symbols);await openTestApp(page);
+ await page.evaluate(symbols=>{const assets=[...symbols,'SOL'].map(symbol=>({symbol,name:symbol,exchange:'hyperliquid',market:'perpetual',nativeId:symbol,quoteAsset:'USDC'}));(window as any).__testComparisonCatalog({assets,warnings:[]});},symbols);
+ await enter(page);await loaded(page,20);await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeDisabled();await expect(selected(page).locator('.comparison-asset')).toHaveCount(20);
+ await page.getByRole('button',{name:'Remove ASSET0 from comparison',exact:true}).click();await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeEnabled();await add(page,'SOL');await loaded(page,20);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets.length)).toBe(20);await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeDisabled();
+});
+
+test('Comparison redraws theme in place, applies font changes and fits all controls at 900px',async({page},testInfo)=>{
+ await page.setViewportSize({width:900,height:1050});await openTestApp(page);await enter(page);await loaded(page);
+ const canvas=chart(page).locator('canvas').first(),handle=await canvas.elementHandle(),before=(await calls(page)).data;
+ const background=()=>canvas.evaluate((element:HTMLCanvasElement)=>{const context=element.getContext('2d')!,data=context.getImageData(0,0,element.width,element.height).data,counts=new Map<string,number>();for(let i=0;i<data.length;i+=4)if(data[i+3]===255){const color='#'+[data[i],data[i+1],data[i+2]].map(value=>value.toString(16).padStart(2,'0')).join('');counts.set(color,(counts.get(color)??0)+1);}return[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0];});
+ for(const theme of THEME_OPTIONS){
+  await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme.id);await expect.poll(background).toBe(getThemePalette(theme.id).chartBackground);expect(await handle!.evaluate(element=>element.isConnected)).toBe(true);expect((await calls(page)).data).toBe(before);
+  await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await expect(page.getByLabel('Comparison legend',{exact:true})).toBeInViewport({ratio:1});await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath(`comparison-${theme.id}-900.png`)});
+ }
+ const bounds=await chart(page).boundingBox();expect(bounds).not.toBeNull();expect(bounds!.width).toBeLessThanOrEqual(900);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(900);
+ await page.getByRole('button',{name:'Open settings',exact:true}).click();const settings=page.getByRole('dialog',{name:'Workspace settings',exact:true});await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});const hidden=(await calls(page)).data;
+ await settings.getByLabel('Font size',{exact:true}).selectOption('20');await frames(page);expect((await calls(page)).data).toBe(hidden);await settings.getByRole('button',{name:'Close settings',exact:true}).click();await loaded(page);await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).fontSize)).toBe('20px');
+ await page.locator('[data-tab-id]').first().click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+});

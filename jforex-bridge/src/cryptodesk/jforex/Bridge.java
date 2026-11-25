@@ -46,6 +46,7 @@ public final class Bridge implements AutoCloseable {
     private final Consumer<JsonObject> output;
     private final Map<String, Subscription> subscriptions = new ConcurrentHashMap<>();
     private final AtomicLong revision = new AtomicLong();
+    private final AtomicLong hourlyFileRecoveries = new AtomicLong();
     private final AtomicBoolean reconnecting = new AtomicBoolean();
     private final ScheduledExecutorService reconnect = Executors.newSingleThreadScheduledExecutor(r -> daemon(r, "jforex-reconnect"));
     private final ScheduledThreadPoolExecutor deadlines = new ScheduledThreadPoolExecutor(1, r -> daemon(r, "jforex-deadlines"));
@@ -63,9 +64,11 @@ public final class Bridge implements AutoCloseable {
     private final long historyTimeoutMillis;
     private final long tickHistoryTimeoutMillis;
     private final ThreadLocal<Boolean> nativeHistoryDownload = ThreadLocal.withInitial(() -> false);
+    private final ThreadLocal<Long> nativeDownloadDeadline = new ThreadLocal<>();
     private static final String HOURLY_DOWNLOAD_TIMEOUT = "JForex hourly history download timed out. Completed history is retained; retry to resume.";
     private final long historyRetryMillis;
     private final LongSupplier nowMillis;
+    private final Supplier<com.dukascopy.charts.data.datacache.IFeedDataProvider> defaultFeedProvider;
     private volatile IClient client;
     private volatile IContext context;
     private volatile boolean closing;
@@ -141,9 +144,13 @@ public final class Bridge implements AutoCloseable {
         this(factory, output, historyTimeoutMillis, nowMillis, historyRetryMillis, historyTimeoutMillis);
     }
     Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis, long historyRetryMillis, long tickHistoryTimeoutMillis) {
+        this(factory, output, historyTimeoutMillis, nowMillis, historyRetryMillis, tickHistoryTimeoutMillis, com.dukascopy.charts.data.datacache.FeedDataProvider::getDefaultInstance);
+    }
+    Bridge(Supplier<IClient> factory, Consumer<JsonObject> output, long historyTimeoutMillis, LongSupplier nowMillis, long historyRetryMillis, long tickHistoryTimeoutMillis, Supplier<com.dukascopy.charts.data.datacache.IFeedDataProvider> defaultFeedProvider) {
         this.factory = factory; this.output = output;
         this.historyTimeoutMillis = historyTimeoutMillis; this.tickHistoryTimeoutMillis = tickHistoryTimeoutMillis;
         this.nowMillis = nowMillis; this.historyRetryMillis = historyRetryMillis;
+        this.defaultFeedProvider = defaultFeedProvider;
         deadlines.setRemoveOnCancelPolicy(true);
         reconnect.scheduleWithFixedDelay(this::heartbeat, 15, 15, TimeUnit.SECONDS);
     }
@@ -183,8 +190,11 @@ public final class Bridge implements AutoCloseable {
             AtomicBoolean replied = new AtomicBoolean();
             Consumer<JsonObject> once = response -> { if (replied.compareAndSet(false, true)) reply.accept(response); };
             Runnable work = () -> {
-                try { nativeHistoryDownload.set(download); once.accept(handle(request)); }
-                finally { nativeHistoryDownload.remove(); }
+                try {
+                    nativeHistoryDownload.set(download);
+                    if (download) nativeDownloadDeadline.set(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis));
+                    once.accept(handle(request));
+                } finally { nativeHistoryDownload.remove(); nativeDownloadDeadline.remove(); }
             };
             Consumer<String> failed = message -> once.accept(failure(id, "timeout", message));
             if (download) submitData(work, failed, tickHistoryTimeoutMillis, false, request.has("fullOpenHours") ? HOURLY_DOWNLOAD_TIMEOUT : NATIVE_DOWNLOAD_TIMEOUT);
@@ -347,7 +357,7 @@ public final class Bridge implements AutoCloseable {
                 case "version" -> {
                     Map<String, Object> version = new HashMap<>(Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
                         "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1", "tradePnL", "account-pnl-v1", "tickHistory", "bid-hour-file-v1"));
-                    version.put("hourlyHistory", "bid-full-open-hour-v1"); version.put("nativeHourlyHistory", "bid-native-hour-v1"); version.put("historicalCalendar", "read-calendar-proof-v1"); yield version;
+                    version.put("hourlyHistory", "bid-full-open-hour-v2"); version.put("nativeHourlyHistory", "bid-native-hour-v2"); version.put("historicalCalendar", "read-calendar-proof-v1"); yield version;
                 }
                 case "instruments" -> instruments();
                 case "historyCalendar" -> historyCalendar(request);
@@ -711,8 +721,12 @@ public final class Bridge implements AutoCloseable {
         boolean calendarPending = fullOpenHours && historicalCalendarPending(activeContext.getDataService(), instrument);
         List<long[]> closures = fullOpenHours && !calendarPending ? verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour) : null;
         List<IBar> result = new ArrayList<>();
+        boolean[] metadataReloaded = {false};
+        Map<Long, List<IBar>> verifiedMonths = new HashMap<>();
+        Long deadline = nativeDownloadDeadline.get();
         for (long cursor = from; cursor <= end;) {
             if (closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
+            if (deadline != null && System.nanoTime() >= deadline) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
             long until = Math.min(end + hour, (Math.floorDiv(cursor, day) + 1) * day);
             boolean openHour = !fullOpenHours || calendarPending || hasFullOpenHour(closures, cursor, until, hour);
             if (openHour) {
@@ -721,6 +735,7 @@ public final class Bridge implements AutoCloseable {
                 // Bound every SDK read to its UTC source day. Calendar proof
                 // and the outer120s job budget cover the entire export.
                 List<IBar> bars = history.getBars(instrument, Period.ONE_HOUR, OfferSide.BID, Filter.NO_FILTER, cursor, until - hour);
+                if (deadline != null && System.nanoTime() >= deadline) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
                 if (calendarPending) {
                     // Subscription acknowledgement can precede SDK calendar
                     // initialization. A real day load may warm it, but no row
@@ -728,29 +743,197 @@ public final class Bridge implements AutoCloseable {
                     closures = verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour); calendarPending = false;
                 }
                 if (bars == null || bars.size() > (until - cursor) / hour) throw new Failure("internal", "JForex hourly source exceeded its requested day");
-                long previous = -1; int observed =0;
-                for (IBar bar : bars) {
-                    if (bar == null) throw new Failure("internal", "JForex returned a missing hourly candle");
-                    validateBar(bar);
-                    if (bar.getTime() < cursor || bar.getTime() >= until || bar.getTime() % hour !=0 || bar.getTime() <= previous)
-                        throw new Failure("internal", "JForex returned invalid hourly source ordering");
-                    previous = bar.getTime();
-                    // HistoryData manufactures exactly this shape for missing
-                    // observations. Real zero-volume non-flat OHLC survives;
-                    // ambiguous zero-volume flats cannot establish history.
-                    if (bar.getVolume() ==0 && bar.getOpen() == bar.getClose() && bar.getHigh() == bar.getLow()) continue;
-                    if (fullOpenHours && intersectsClosure(closures, bar.getTime(), bar.getTime() + hour)) continue;
-                    result.add(bar); observed++;
-                }
+                int observed = collectHourlyObservations(result, bars, closures, cursor, until, fullOpenHours);
                 if (observed ==0) {
                     if (closures == null) closures = verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour);
-                    if (fullOpenHours ? hasFullOpenHour(closures, cursor, until, hour) : !entirelyClosed(closures, cursor, until))
-                        throw new Failure("restricted", "JForex returned no observed hourly candles for an open UTC day; incomplete history was not cached");
+                    if (fullOpenHours ? hasFullOpenHour(closures, cursor, until, hour) : !entirelyClosed(closures, cursor, until)) {
+                        // Calendar openness is not evidence that quotes exist.
+                        // getBars can cache a successful false-empty response;
+                        // the independent date-range loader bypasses that cache.
+                        HourlyRecovery recovered;
+                        try { recovered = recoverHourlyDay(history, activeContext, instrument, cursor, until, metadataReloaded, verifiedMonths); }
+                        catch (Failure failure) {
+                            if (failure.kind.equals("timeout")) throw failure;
+                            throw new Failure(failure.kind, failure.getMessage() + " (" + instrument.name() + " " + java.time.Instant.ofEpochMilli(cursor).toString().substring(0,10) + ")");
+                        }
+                        if (collectHourlyObservations(result, recovered.bars(), closures, cursor, until, fullOpenHours) ==0 && !recovered.verifiedAbsence())
+                            throw new Failure("restricted", "JForex could not confirm observed hourly history for " + instrument.name() + " " + java.time.Instant.ofEpochMilli(cursor).toString().substring(0,10) + "; incomplete history was not cached");
+                    }
                 }
             }
             cursor = until;
         }
         return result;
+    }
+
+    private static int collectHourlyObservations(List<IBar> result, List<IBar> bars, List<long[]> closures, long from, long until, boolean fullOpenHours) {
+        long hour = Period.ONE_HOUR.getInterval(), previous = -1; int observed =0;
+        if (bars == null || bars.size() > (until - from) / hour) throw new Failure("internal", "JForex hourly source exceeded its requested day");
+        for (IBar bar : bars) {
+            if (bar == null) throw new Failure("internal", "JForex returned a missing hourly candle");
+            validateBar(bar);
+            if (bar.getTime() < from || bar.getTime() >= until || bar.getTime() % hour !=0 || bar.getTime() <= previous)
+                throw new Failure("internal", "JForex returned invalid hourly source ordering");
+            previous = bar.getTime();
+            // HistoryData manufactures exactly this shape for missing
+            // observations. Real zero-volume non-flat OHLC survives;
+            // ambiguous zero-volume flats cannot establish history.
+            if (bar.getVolume() ==0 && bar.getOpen() == bar.getClose() && bar.getHigh() == bar.getLow()) continue;
+            if (fullOpenHours && intersectsClosure(closures, bar.getTime(), bar.getTime() + hour)) continue;
+            result.add(bar); observed++;
+        }
+        return observed;
+    }
+
+    private void requireHourlySource(IContext active, IClient connection, String account, long deadline) throws InterruptedException {
+        if (closing || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+        if (System.nanoTime() >= deadline) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
+        if (context != active || client != connection || connection == null || !connection.isConnected()
+                || active.getAccount() == null || !Objects.equals(account, active.getAccount().getAccountId()))
+            throw new Failure("offline", "JForex hourly history source changed or disconnected; incomplete history was not cached");
+    }
+
+    private static boolean knownFirstHourlyCandle(Long value, long now) {
+        return value != null && value >0 && value < Long.MAX_VALUE && value <= now;
+    }
+
+    private record HourlyRecovery(List<IBar> bars, boolean verifiedAbsence) { }
+
+    private HourlyRecovery recoverHourlyDay(IHistory history, IContext active, Instrument instrument, long from, long until, boolean[] metadataReloaded, Map<Long, List<IBar>> verifiedMonths) throws Exception {
+        Long workDeadline = nativeDownloadDeadline.get();
+        final long deadline = workDeadline == null ? System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis) : workDeadline;
+        IClient connection = client;
+        String account = active.getAccount() == null ? null : active.getAccount().getAccountId();
+        if (account == null || account.isBlank()) throw new Failure("restricted", "JForex hourly history metadata is unavailable; incomplete history was not cached");
+        requireHourlySource(active, connection, account, deadline);
+        IDataService service = active.getDataService();
+        if (service == null || service.getClass() != com.dukascopy.api.impl.connect.JForexDataService.class)
+            throw new Failure("restricted", "Verified hourly recovery requires the pinned JForex metadata implementation");
+        var metadata = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider().getFeedMetadataManager();
+        if (metadata == null) throw new Failure("restricted", "JForex hourly history metadata is unavailable; incomplete history was not cached");
+        Long first = metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR);
+        if ((first == null || first == Long.MAX_VALUE) && !metadataReloaded[0]) {
+            // MAX also represents failed metadata loading in this SDK. Reset
+            // only this instrument's RAM entry once within the export budget.
+            metadataReloaded[0] = true; metadata.resetTimeOfFirstData(instrument);
+            service.getTimeOfFirstCandle(instrument, Period.ONE_HOUR);
+            requireHourlySource(active, connection, account, deadline);
+            first = metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR);
+        }
+        requireHourlySource(active, connection, account, deadline);
+        if (!knownFirstHourlyCandle(first, nowMillis.getAsLong()))
+            throw new Failure("restricted", "JForex hourly history metadata is unavailable; incomplete history was not cached");
+        final long earliest = first, end = until - Period.ONE_HOUR.getInterval();
+        long month = com.dukascopy.charts.data.datacache.DataCacheUtils.getChunkStartFast(Period.ONE_HOUR, from);
+        if (verifiedMonths.containsKey(month)) return verifiedHourlySlice(verifiedMonths.get(month), from, until, month);
+        CompletableFuture<List<IBar>> result = new CompletableFuture<>();
+        List<IBar> bars = new ArrayList<>(); Object lock = new Object(); AtomicBoolean canceled = new AtomicBoolean();
+        LoadingDataListener listener = new LoadingDataListener() {
+            public void newTick(Instrument ignored, long time, double ask, double bid, double askVolume, double bidVolume) { }
+            public void newBar(Instrument item, Period interval, OfferSide side, long time, double open, double close, double low, double high, double volume) {
+                synchronized (lock) {
+                    if (canceled.get() || result.isDone()) return;
+                    try {
+                        requireHourlySource(active, connection, account, deadline);
+                        IBar bar = new LoadedBar(time, open, high, low, close, volume); validateBar(bar);
+                        if (!instrument.equals(item) || !Period.ONE_HOUR.equals(interval) || side != OfferSide.BID || time < from || time > end
+                                || time % Period.ONE_HOUR.getInterval() !=0 || time < Math.floorDiv(earliest, Period.ONE_HOUR.getInterval()) * Period.ONE_HOUR.getInterval()
+                                || bars.size() >= (until - from) / Period.ONE_HOUR.getInterval() || !bars.isEmpty() && time <= bars.get(bars.size()-1).getTime())
+                            throw new Failure("internal", "JForex returned invalid recovered hourly observations");
+                        bars.add(bar);
+                    } catch (Exception error) { result.completeExceptionally(error); }
+                }
+            }
+        };
+        LoadingProgressListener progress = new LoadingProgressListener() {
+            public void dataLoaded(long start, long finish, long current, String information) { }
+            public void loadingFinished(boolean complete, long start, long finish, long current) {
+                synchronized (lock) {
+                    if (canceled.get() || result.isDone()) return;
+                    if (complete && start == from && finish == end && current == end) result.complete(new ArrayList<>(bars));
+                    else result.completeExceptionally(new Failure("offline", "JForex hourly recovery did not completely load its requested UTC day; incomplete history was not cached"));
+                }
+            }
+            public boolean stopJob() { return canceled.get() || closing || System.nanoTime() >= deadline || result.isCompletedExceptionally() || context != active || client != connection || !connection.isConnected()
+                || active.getAccount() == null || !Objects.equals(account, active.getAccount().getAccountId()); }
+        };
+        try {
+            requireHourlySource(active, connection, account, deadline);
+            history.readBars(instrument, Period.ONE_HOUR, OfferSide.BID, Filter.NO_FILTER, from, end, listener, progress);
+            List<IBar> loaded = result.get(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            requireHourlySource(active, connection, account, deadline);
+            Long confirmedFirst = metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR);
+            if (!Objects.equals(first, confirmedFirst)) throw new Failure("restricted", "JForex hourly history metadata changed; incomplete history was not cached");
+            if (loaded.stream().anyMatch(Bridge::observedHourlyBar)) return new HourlyRecovery(loaded, false);
+            // The SDK treats a null CFG download as a successfully loaded
+            // empty month and then caches it. The independent loader can reuse
+            // that same poisoned file. Require the actual monthly BID response.
+            var provider = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider();
+            if (defaultFeedProvider.get() != provider || provider.getICurvesProtocolHandler() == null)
+                throw new Failure("restricted", "JForex hourly file source is unavailable or changed; incomplete history was not cached");
+            AtomicBoolean failed = new AtomicBoolean();
+            var directProgress = new com.dukascopy.charts.data.datacache.ILoadingProgressListener() {
+                public void dataLoaded(long start, long finish, long current, String information) { }
+                public void loadingFinished(boolean complete, long start, long finish, long current, Throwable error) { if (!complete || error != null) failed.set(true); }
+                public boolean stopJob() { return progress.stopJob() || defaultFeedProvider.get() != provider; }
+            };
+            requireHourlySource(active, connection, account, deadline);
+            var raw = provider.getICurvesProtocolHandler().loadChunkFileFromCFG(instrument, Period.ONE_HOUR, OfferSide.BID, month, false, directProgress);
+            requireHourlySource(active, connection, account, deadline);
+            if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
+                throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
+            if (raw == null && !failed.get()) {
+                // A null file is a failed SDK download, never an empty market.
+                // Retry this exact file once, without renewing the job budget.
+                if (deadline-System.nanoTime() <= TimeUnit.SECONDS.toNanos(5)) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
+                Thread.sleep(5_000);
+                requireHourlySource(active, connection, account, deadline);
+                if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
+                    throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
+                raw = provider.getICurvesProtocolHandler().loadChunkFileFromCFG(instrument, Period.ONE_HOUR, OfferSide.BID, month, false, directProgress);
+                requireHourlySource(active, connection, account, deadline);
+                if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
+                    throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
+            }
+            long nextMonth = com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR, month);
+            if (failed.get() || raw == null || raw.length ==0 || raw.length > (nextMonth-month)/Period.ONE_HOUR.getInterval())
+                throw new Failure("offline", "JForex did not return a complete nonempty hourly BID file; incomplete history was not cached");
+            var splits = provider.getSplitsManager(); var commissions = provider.getFeedCommissionManager();
+            if (splits == null || commissions == null) throw new Failure("restricted", "JForex hourly price adjustments are unavailable; incomplete history was not cached");
+            // Mirror LocalCacheManager's ordinary BID reader. Raw CFG files
+            // precede corporate-action and account feed-price adjustments.
+            splits.applySplitsToData(instrument, raw);
+            raw = commissions.applyFeedCommissionToData(instrument, Period.ONE_HOUR, OfferSide.BID, raw);
+            if (raw == null || raw.length ==0 || raw.length > (nextMonth-month)/Period.ONE_HOUR.getInterval())
+                throw new Failure("internal", "JForex hourly price adjustments returned invalid candle bounds");
+            List<IBar> verified = new ArrayList<>(); long previous = -1;
+            for (var item : raw) {
+                if (!(item instanceof IBar bar)) throw new Failure("internal", "JForex hourly file returned an invalid candle type");
+                IBar snapshot = new LoadedBar(bar.getTime(), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose(), bar.getVolume()); validateBar(snapshot);
+                if (snapshot.getTime() < month || snapshot.getTime() >= nextMonth || snapshot.getTime() % Period.ONE_HOUR.getInterval() !=0 || snapshot.getTime() <= previous)
+                    throw new Failure("internal", "JForex hourly file returned invalid candle bounds or ordering");
+                previous = snapshot.getTime(); verified.add(snapshot);
+            }
+            if (verified.stream().noneMatch(Bridge::observedHourlyBar)) throw new Failure("offline", "JForex hourly file contained no observed BID candles; incomplete history was not cached");
+            requireHourlySource(active, connection, account, deadline);
+            if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
+                throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
+            if (verifiedMonths.size() >=3) throw new Failure("internal", "JForex hourly recovery exceeded its bounded monthly cache");
+            verifiedMonths.put(month, verified);
+            hourlyFileRecoveries.incrementAndGet();
+            return verifiedHourlySlice(verified, from, until, month);
+        } catch (TimeoutException error) { throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT); }
+        catch (ExecutionException error) { if (error.getCause() instanceof Failure failure) throw failure; throw error; }
+        finally { synchronized (lock) { canceled.set(true); } }
+    }
+
+    private static boolean observedHourlyBar(IBar bar) {
+        return bar.getVolume() !=0 || bar.getOpen() != bar.getClose() || bar.getHigh() != bar.getLow();
+    }
+    private HourlyRecovery verifiedHourlySlice(List<IBar> monthBars, long from, long until, long month) throws Exception {
+        long nextMonth = com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR, month);
+        boolean completePastMonth = nextMonth <= Math.floorDiv(nowMillis.getAsLong(), Period.DAILY.getInterval()) * Period.DAILY.getInterval();
+        return new HourlyRecovery(monthBars.stream().filter(bar -> bar.getTime() >=from && bar.getTime() <until).toList(), completePastMonth);
     }
 
     private static boolean intersectsClosure(List<long[]> closures, long from, long to) {
@@ -862,6 +1045,7 @@ public final class Bridge implements AutoCloseable {
                 Thread.sleep(10);
             }
             IHistory history = context.getHistory();
+            Map<String, Object> metadataBefore = hourlyMetadataDiagnostic(context.getDataService(), feed.instrument);
             List<IBar> bars = history.getBars(feed.instrument, Period.ONE_HOUR, OfferSide.BID, Filter.valueOf(filterName), from * 1000, (to - hour) * 1000);
             if (bars == null || bars.size() > 1000) throw new Failure("internal", "Hourly diagnostic exceeded its bar bounds");
             int zeroVolume = 0, zeroFlat = 0;
@@ -869,11 +1053,28 @@ public final class Bridge implements AutoCloseable {
                 validateBar(bar);
                 if (bar.getVolume() ==0) { zeroVolume++; if (bar.getOpen() == bar.getClose() && bar.getHigh() == bar.getLow()) zeroFlat++; }
             }
-            return Map.of("instrument", feed.instrument.name(), "filter", filterName, "from", from, "to", to, "rows", bars.size(), "zeroVolumeRows", zeroVolume, "zeroFlatRows", zeroFlat,
-                "first", bars.isEmpty() ? 0L : bars.get(0).getTime() / 1000, "last", bars.isEmpty() ? 0L : bars.get(bars.size()-1).getTime() / 1000);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("instrument", feed.instrument.name()); result.put("filter", filterName); result.put("from", from); result.put("to", to);
+            result.put("rows", bars.size()); result.put("zeroVolumeRows", zeroVolume); result.put("zeroFlatRows", zeroFlat);
+            result.put("first", bars.isEmpty() ? 0L : bars.get(0).getTime() / 1000); result.put("last", bars.isEmpty() ? 0L : bars.get(bars.size()-1).getTime() / 1000);
+            result.put("metadataBefore", metadataBefore); result.put("metadataAfter", hourlyMetadataDiagnostic(context.getDataService(), feed.instrument));
+            result.put("verifiedMonthlyFileRecoveries", hourlyFileRecoveries.get());
+            return result;
         } finally {
             synchronized (instrumentLock) { historyUsers.computeIfPresent(feed.instrument, (instrument, count) -> count == 1 ? null : count - 1); releaseInstruments(); }
         }
+    }
+
+    private static Map<String, Object> hourlyMetadataDiagnostic(IDataService service, Instrument instrument) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        boolean pinned = service != null && service.getClass() == com.dukascopy.api.impl.connect.JForexDataService.class;
+        result.put("pinnedImplementation", pinned);
+        if (pinned) {
+            var metadata = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider().getFeedMetadataManager();
+            Long first = metadata == null ? null : metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR);
+            result.put("firstHourFast", first == null ? "unloaded" : first == Long.MAX_VALUE ? "MAX" : first.toString());
+        }
+        return result;
     }
 
     static Map<String, Object> historicalCalendarDiagnostic(IDataService service, Instrument instrument, long from, long to) {
