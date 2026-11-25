@@ -34,7 +34,10 @@ public final class BridgeNativeDownloadTest {
             this(chartTimeout, downloadTimeout, null);
         }
         NativeFixture(long chartTimeout, long downloadTimeout, IDataService calendar) throws Exception {
-            charts = new Fixture(chartTimeout, () -> (TO + 3_600) * 1000, 2_000, downloadTimeout, Set.of(Instrument.BTCUSD, Instrument.EURUSD, Instrument.XAUUSD, Instrument.AAPLUSUSD), (method, args) -> {
+            this(chartTimeout,downloadTimeout,calendar,(TO+3_600)*1000);
+        }
+        NativeFixture(long chartTimeout, long downloadTimeout, IDataService calendar, long now) throws Exception {
+            charts = new Fixture(chartTimeout, () -> now, 2_000, downloadTimeout, Set.of(Instrument.BTCUSD, Instrument.EURUSD, Instrument.XAUUSD, Instrument.AAPLUSUSD, Instrument.USA500IDXUSD), (method, args) -> {
                 NativeLoad call = new NativeLoad(args); calls.add(call);
                 try { return call.result.get(); }
                 catch (InterruptedException error) {
@@ -309,6 +312,7 @@ public final class BridgeNativeDownloadTest {
             queuedLoad.complete(); check(queued.get(2, TimeUnit.SECONDS).getAsJsonArray("result").size() == 3, "queued native collection succeeds exactly once");
         }
         BridgeHourlyRecoveryTest.run();
+        BridgeYearlyRecoveryTest.run();
         System.out.println("JForex native loaded getBars collections, scoped download deadlines, genuine empty ranges, validation, queueing and chart isolation checks passed");
     }
 }

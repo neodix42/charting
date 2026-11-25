@@ -110,3 +110,28 @@ func (m *Manager) InspectHourlyCandleData(ctx context.Context, key domain.FeedKe
 	}
 	return result, nil
 }
+
+// InspectHourlyArchive compares official SDK archive routes without publishing
+// history, changing SDK caches, or exposing account/authentication fields.
+func (m *Manager) InspectHourlyArchive(ctx context.Context, key domain.FeedKey, from, to int64, archive string) (map[string]any, error) {
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+	if key.Timeframe != "1h" || from < 0 || from > 32503680000 || from%86400 != 0 || to-from != 86400 || to > time.Now().Unix()/86400*86400 || archive != "month" && archive != "year" {
+		return nil, errors.New("Hourly archive inspection requires one closed UTC day and an official month or year archive")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	stop := context.AfterFunc(m.ctx, cancel)
+	defer stop()
+	p, release, err := m.begin(ctx, true, "")
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	var result map[string]any
+	if err := p.call(ctx, map[string]any{"op": "historyArchiveDiagnostic", "feedKey": key, "from": from, "to": to, "archive": archive}, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

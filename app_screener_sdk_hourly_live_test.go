@@ -4,10 +4,15 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -335,6 +340,109 @@ func TestLiveSDKLongHistoryInitialSourceDiagnostics(t *testing.T) {
 			continue
 		}
 		t.Logf("%s initial28day observations=%d", symbol, len(bars))
+	}
+}
+
+func TestLiveSDKSundayArchiveRoutes(t *testing.T) {
+	client := isolatedLiveHistoryClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+	defer cancel()
+	sourceKey, configured := client.HistoricalSource()
+	if !configured {
+		t.Fatal("SDK source is not configured")
+	}
+	cache := os.Getenv("CRYPTODESK_SDK_REFERENCE_HOURLY_CACHE")
+	if cache == "" {
+		cache = filepath.Join(".tools", "verification", "sdk-recovery-final-hourly-cache")
+	}
+	for _, sample := range []struct{ symbol, market, date string }{{"XAUUSD", "metal", "2025-11-02"}, {"USA500IDXUSD", "cfd", "2024-12-01"}} {
+		start, err := time.Parse("2006-01-02", sample.date)
+		if err != nil {
+			t.Fatal(err)
+		}
+		folder := filepath.Join(cache, sourceKey, "h1", strings.ToLower(sample.symbol))
+		metadata, err := os.ReadFile(filepath.Join(folder, strconv.FormatInt(start.UnixMilli(), 10)+".json"))
+		if err != nil {
+			t.Fatal("genuine SDK hourly reference is unavailable")
+		}
+		var manifest struct {
+			File, Checksum string
+			Rows           int
+		}
+		if json.Unmarshal(metadata, &manifest) != nil || filepath.Base(manifest.File) != manifest.File || manifest.Rows != 1 {
+			t.Fatal("genuine SDK reference manifest is invalid")
+		}
+		content, err := os.ReadFile(filepath.Join(folder, manifest.File))
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(content)
+		if hex.EncodeToString(digest[:]) != manifest.Checksum {
+			t.Fatal("genuine SDK reference checksum changed")
+		}
+		records, err := csv.NewReader(strings.NewReader(string(content))).ReadAll()
+		if err != nil || len(records) != 2 || len(records[1]) != 5 {
+			t.Fatal("genuine SDK reference rows are invalid")
+		}
+		stamp, err := strconv.ParseInt(records[1][0], 10, 64)
+		if err != nil || stamp != start.Add(23*time.Hour).UnixMilli() {
+			t.Fatal("reference does not contain the known Sunday23:00UTC observation")
+		}
+		values := make([]float64, 4)
+		for index := range values {
+			values[index], err = strconv.ParseFloat(records[1][index+1], 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		key := domain.FeedKey{Exchange: "dukascopy", Market: sample.market, Instrument: sample.symbol, Timeframe: "1h"}
+		// Auxiliary SDK archives can be temporarily unavailable. Null/empty
+		// diagnostics never prove absence; the production export below must
+		// still return the exact known observation. Positive bad data is fatal.
+		for _, archive := range []string{"month", "year"} {
+			result, err := client.InspectHourlyArchive(ctx, key, start.Unix(), start.Add(24*time.Hour).Unix(), archive)
+			if err != nil {
+				t.Logf("%s %s %s error: %v", sample.symbol, sample.date, archive, err)
+				t.Fail()
+				continue
+			}
+			t.Logf("%s %s %s: null=%v rawRows=%v zeroPriceRows=%v zeroFlatRows=%v decodeError=%v", sample.symbol, sample.date, archive, result["nullResponse"], result["rawRows"], result["zeroPriceRows"], result["zeroFlatRows"], result["decodeError"])
+			positive, _ := result["rawRows"].(float64)
+			if positive > 0 && (result["failed"] == true || result["decodeError"] != nil) {
+				t.Error("positive SDK archive was failed or malformed")
+			}
+			encoded, err := json.Marshal(result["fullOpenBars"])
+			var bars []domain.Candle
+			if err != nil || json.Unmarshal(encoded, &bars) != nil {
+				t.Fatal("invalid SDK archive diagnostic result")
+			}
+			matched := false
+			for _, bar := range bars {
+				if bar.Time != stamp/1000 {
+					continue
+				}
+				for index, actual := range []float64{bar.Open, bar.High, bar.Low, bar.Close} {
+					if math.Abs(actual-values[index]) > 1e-9 {
+						t.Fatalf("%s %s %s differs from the genuine SDK BID reference", sample.symbol, sample.date, archive)
+					}
+				}
+				matched = true
+			}
+			t.Logf("%s %s %s: validatedFullOpenRows=%d known23UTCPriceParity=%v", sample.symbol, sample.date, archive, len(bars), matched)
+			if positive > 0 && !matched {
+				t.Error("positive SDK archive did not contain the known genuine Sunday observation")
+			}
+		}
+		downloaded, err := client.DownloadHourlyHistory(ctx, key, start.Unix(), start.Add(24*time.Hour).Unix(), 1000, true)
+		if err != nil || len(downloaded) != 1 || downloaded[0].Time != stamp/1000 {
+			t.Fatalf("%s %s actual hourly download did not recover its genuine Sunday row: rows=%d error=%v", sample.symbol, sample.date, len(downloaded), err)
+		}
+		for index, actual := range []float64{downloaded[0].Open, downloaded[0].High, downloaded[0].Low, downloaded[0].Close} {
+			if math.Abs(actual-values[index]) > 1e-9 {
+				t.Fatal("actual hourly download price differs from genuine SDK reference")
+			}
+		}
+		t.Logf("%s %s production DownloadHourlyHistory: one genuine23UTC row, exact reference OHLC", sample.symbol, sample.date)
 	}
 }
 

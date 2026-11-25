@@ -173,6 +173,16 @@ public final class Bridge implements AutoCloseable {
         if (request.has("op") && "historyTicks".equals(request.get("op").getAsString())) {
             dispatchTickExport(request, reply); return;
         }
+        if (request.has("op") && "historyArchiveDiagnostic".equals(request.get("op").getAsString())) {
+            String id = request.has("id") ? request.get("id").getAsString() : "";
+            AtomicBoolean replied = new AtomicBoolean();
+            Consumer<JsonObject> once = response -> { if (replied.compareAndSet(false,true)) reply.accept(response); };
+            submitData(() -> {
+                nativeDownloadDeadline.set(System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis));
+                try { once.accept(handle(request)); } finally { nativeDownloadDeadline.remove(); }
+            }, message -> once.accept(failure(id,"timeout",message)),tickHistoryTimeoutMillis,false,HOURLY_DOWNLOAD_TIMEOUT);
+            return;
+        }
         if (request.has("op") && Set.of("historyCalendar", "historyCandleDiagnostic").contains(request.get("op").getAsString())) {
             String id = request.has("id") ? request.get("id").getAsString() : "";
             submitData(() -> reply.accept(handle(request)), message -> reply.accept(failure(id, "timeout", message))); return;
@@ -362,6 +372,7 @@ public final class Bridge implements AutoCloseable {
                 case "instruments" -> instruments();
                 case "historyCalendar" -> historyCalendar(request);
                 case "historyCandleDiagnostic" -> historyCandleDiagnostic(request);
+                case "historyArchiveDiagnostic" -> historyArchiveDiagnostic(request);
                 case "tradePreview" -> tradePreview(request);
                 case "tradeEstimate" -> tradeEstimate(request);
                 case "tradeMetrics" -> tradeMetrics(request);
@@ -722,11 +733,12 @@ public final class Bridge implements AutoCloseable {
         List<long[]> closures = fullOpenHours && !calendarPending ? verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour) : null;
         List<IBar> result = new ArrayList<>();
         boolean[] metadataReloaded = {false};
-        Map<Long, List<IBar>> verifiedMonths = new HashMap<>();
+        Map<Long, VerifiedHourlyMonth> verifiedMonths = new HashMap<>();
         Long deadline = nativeDownloadDeadline.get();
         for (long cursor = from; cursor <= end;) {
             if (closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
             if (deadline != null && System.nanoTime() >= deadline) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
+            if(!verifiedMonths.isEmpty())requireCachedHourlySource(verifiedMonths.values().iterator().next(),activeContext,instrument,deadline);
             long until = Math.min(end + hour, (Math.floorDiv(cursor, day) + 1) * day);
             boolean openHour = !fullOpenHours || calendarPending || hasFullOpenHour(closures, cursor, until, hour);
             if (openHour) {
@@ -736,6 +748,7 @@ public final class Bridge implements AutoCloseable {
                 // and the outer120s job budget cover the entire export.
                 List<IBar> bars = history.getBars(instrument, Period.ONE_HOUR, OfferSide.BID, Filter.NO_FILTER, cursor, until - hour);
                 if (deadline != null && System.nanoTime() >= deadline) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
+                if(!verifiedMonths.isEmpty())requireCachedHourlySource(verifiedMonths.values().iterator().next(),activeContext,instrument,deadline);
                 if (calendarPending) {
                     // Subscription acknowledgement can precede SDK calendar
                     // initialization. A real day load may warm it, but no row
@@ -751,7 +764,7 @@ public final class Bridge implements AutoCloseable {
                         // getBars can cache a successful false-empty response;
                         // the independent date-range loader bypasses that cache.
                         HourlyRecovery recovered;
-                        try { recovered = recoverHourlyDay(history, activeContext, instrument, cursor, until, metadataReloaded, verifiedMonths); }
+                        try { recovered = recoverHourlyDay(history, activeContext, instrument, cursor, until, end + hour, metadataReloaded, verifiedMonths); }
                         catch (Failure failure) {
                             if (failure.kind.equals("timeout")) throw failure;
                             throw new Failure(failure.kind, failure.getMessage() + " (" + instrument.name() + " " + java.time.Instant.ofEpochMilli(cursor).toString().substring(0,10) + ")");
@@ -798,8 +811,31 @@ public final class Bridge implements AutoCloseable {
     }
 
     private record HourlyRecovery(List<IBar> bars, boolean verifiedAbsence) { }
+    private record HourlyFileAttempt(com.dukascopy.charts.data.datacache.Data[] rows,boolean failed) { }
+    private record VerifiedHourlyMonth(List<IBar> bars,com.dukascopy.charts.data.datacache.IFeedDataProvider provider,long first,IContext context,IClient client,String account) { }
 
-    private HourlyRecovery recoverHourlyDay(IHistory history, IContext active, Instrument instrument, long from, long until, boolean[] metadataReloaded, Map<Long, List<IBar>> verifiedMonths) throws Exception {
+    private void requireCachedHourlySource(VerifiedHourlyMonth proof,IContext active,Instrument instrument,Long deadline)throws Exception{
+        requireHourlySource(active,proof.client(),proof.account(),deadline==null?Long.MAX_VALUE:deadline);
+        if(active!=proof.context()||!(active.getDataService() instanceof com.dukascopy.api.impl.connect.JForexDataService service)
+                ||service.getFeedDataProvider()!=proof.provider()||defaultFeedProvider.get()!=proof.provider()
+                ||!Objects.equals(proof.first(),proof.provider().getFeedMetadataManager().getTimeOfFirstCandleFast(instrument,Period.ONE_HOUR)))
+            throw new Failure("restricted","JForex verified archive source or metadata changed; incomplete history was not cached");
+    }
+
+    private HourlyFileAttempt readHourlyArchive(com.dukascopy.charts.data.datacache.IFeedDataProvider provider,Instrument instrument,long start,boolean large,BooleanSupplier stop)throws Exception{
+        AtomicBoolean active=new AtomicBoolean(true),failed=new AtomicBoolean();
+        var progress=new com.dukascopy.charts.data.datacache.ILoadingProgressListener(){
+            public void dataLoaded(long from,long to,long current,String information){}
+            public void loadingFinished(boolean complete,long from,long to,long current,Throwable error){if(active.get()&&(!complete||error!=null))failed.set(true);}
+            public boolean stopJob(){return !active.get()||stop.getAsBoolean();}
+        };
+        try{
+            var rows=provider.getICurvesProtocolHandler().loadChunkFileFromCFG(instrument,Period.ONE_HOUR,OfferSide.BID,start,large,progress);
+            return new HourlyFileAttempt(rows,failed.get());
+        }finally{active.set(false);}
+    }
+
+    private HourlyRecovery recoverHourlyDay(IHistory history, IContext active, Instrument instrument, long from, long until, long exportUntil, boolean[] metadataReloaded, Map<Long, VerifiedHourlyMonth> verifiedMonths) throws Exception {
         Long workDeadline = nativeDownloadDeadline.get();
         final long deadline = workDeadline == null ? System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis) : workDeadline;
         IClient connection = client;
@@ -825,7 +861,8 @@ public final class Bridge implements AutoCloseable {
             throw new Failure("restricted", "JForex hourly history metadata is unavailable; incomplete history was not cached");
         final long earliest = first, end = until - Period.ONE_HOUR.getInterval();
         long month = com.dukascopy.charts.data.datacache.DataCacheUtils.getChunkStartFast(Period.ONE_HOUR, from);
-        if (verifiedMonths.containsKey(month)) return verifiedHourlySlice(verifiedMonths.get(month), from, until, month);
+        if(!verifiedMonths.isEmpty())requireCachedHourlySource(verifiedMonths.values().iterator().next(),active,instrument,deadline);
+        if (verifiedMonths.containsKey(month)) return verifiedHourlySlice(verifiedMonths.get(month).bars(), from, until, month);
         CompletableFuture<List<IBar>> result = new CompletableFuture<>();
         List<IBar> bars = new ArrayList<>(); Object lock = new Object(); AtomicBoolean canceled = new AtomicBoolean();
         LoadingDataListener listener = new LoadingDataListener() {
@@ -865,63 +902,59 @@ public final class Bridge implements AutoCloseable {
             Long confirmedFirst = metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR);
             if (!Objects.equals(first, confirmedFirst)) throw new Failure("restricted", "JForex hourly history metadata changed; incomplete history was not cached");
             if (loaded.stream().anyMatch(Bridge::observedHourlyBar)) return new HourlyRecovery(loaded, false);
-            // The SDK treats a null CFG download as a successfully loaded
-            // empty month and then caches it. The independent loader can reuse
-            // that same poisoned file. Require the actual monthly BID response.
+            // Both ordinary readers can reuse the SDK's falsely empty monthly
+            // cache. Use the canonical full-year file first for eligible past
+            // years, so a missing monthly file cannot consume the whole budget.
             var provider = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider();
             if (defaultFeedProvider.get() != provider || provider.getICurvesProtocolHandler() == null)
                 throw new Failure("restricted", "JForex hourly file source is unavailable or changed; incomplete history was not cached");
-            AtomicBoolean failed = new AtomicBoolean();
-            var directProgress = new com.dukascopy.charts.data.datacache.ILoadingProgressListener() {
-                public void dataLoaded(long start, long finish, long current, String information) { }
-                public void loadingFinished(boolean complete, long start, long finish, long current, Throwable error) { if (!complete || error != null) failed.set(true); }
-                public boolean stopJob() { return progress.stopJob() || defaultFeedProvider.get() != provider; }
+            BooleanSupplier stopArchive=()->progress.stopJob()||defaultFeedProvider.get()!=provider;
+            Callable<Void> verifyFileSource=()->{
+                requireHourlySource(active,connection,account,deadline);
+                if(defaultFeedProvider.get()!=provider||!Objects.equals(earliest,metadata.getTimeOfFirstCandleFast(instrument,Period.ONE_HOUR)))
+                    throw new Failure("restricted","JForex hourly file metadata or source changed; incomplete history was not cached");
+                return null;
             };
-            requireHourlySource(active, connection, account, deadline);
-            var raw = provider.getICurvesProtocolHandler().loadChunkFileFromCFG(instrument, Period.ONE_HOUR, OfferSide.BID, month, false, directProgress);
-            requireHourlySource(active, connection, account, deadline);
-            if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
-                throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
-            if (raw == null && !failed.get()) {
+            long year=com.dukascopy.charts.data.datacache.DataCacheUtils.getLargeChunkStartFast(Period.ONE_HOUR,from);
+            long nextYear=com.dukascopy.charts.data.datacache.DataCacheUtils.getNextLargeChunkStart(Period.ONE_HOUR,year);
+            boolean large=earliest<=year&&nextYear<=Math.floorDiv(nowMillis.getAsLong(),Period.DAILY.getInterval())*Period.DAILY.getInterval();
+            com.dukascopy.charts.data.datacache.Data[] raw=null;
+            HourlyFileAttempt attempt=null;
+            if(large){
+                verifyFileSource.call();
+                attempt=readHourlyArchive(provider,instrument,year,true,stopArchive);raw=attempt.rows();
+                verifyFileSource.call();
+                // Only unavailable data may try the other canonical granularity.
+                // A positive malformed archive must fail validation, not hide.
+                if(raw==null||raw.length==0)large=false;
+                else if(attempt.failed())throw new Failure("offline","JForex hourly archive loading failed; incomplete history was not cached");
+            }
+            if(!large){
+                verifyFileSource.call();
+                attempt=readHourlyArchive(provider,instrument,month,false,stopArchive);raw=attempt.rows();
+                verifyFileSource.call();
+            }
+            if (!large && raw == null && !attempt.failed()) {
                 // A null file is a failed SDK download, never an empty market.
                 // Retry this exact file once, without renewing the job budget.
                 if (deadline-System.nanoTime() <= TimeUnit.SECONDS.toNanos(5)) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
                 Thread.sleep(5_000);
-                requireHourlySource(active, connection, account, deadline);
-                if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
-                    throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
-                raw = provider.getICurvesProtocolHandler().loadChunkFileFromCFG(instrument, Period.ONE_HOUR, OfferSide.BID, month, false, directProgress);
-                requireHourlySource(active, connection, account, deadline);
-                if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
-                    throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
+                verifyFileSource.call();
+                attempt=readHourlyArchive(provider,instrument,month,false,stopArchive);raw=attempt.rows();
+                verifyFileSource.call();
             }
             long nextMonth = com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR, month);
-            if (failed.get() || raw == null || raw.length ==0 || raw.length > (nextMonth-month)/Period.ONE_HOUR.getInterval())
+            if (attempt.failed() || raw == null || raw.length ==0)
                 throw new Failure("offline", "JForex did not return a complete nonempty hourly BID file; incomplete history was not cached");
-            var splits = provider.getSplitsManager(); var commissions = provider.getFeedCommissionManager();
-            if (splits == null || commissions == null) throw new Failure("restricted", "JForex hourly price adjustments are unavailable; incomplete history was not cached");
-            // Mirror LocalCacheManager's ordinary BID reader. Raw CFG files
-            // precede corporate-action and account feed-price adjustments.
-            splits.applySplitsToData(instrument, raw);
-            raw = commissions.applyFeedCommissionToData(instrument, Period.ONE_HOUR, OfferSide.BID, raw);
-            if (raw == null || raw.length ==0 || raw.length > (nextMonth-month)/Period.ONE_HOUR.getInterval())
-                throw new Failure("internal", "JForex hourly price adjustments returned invalid candle bounds");
-            List<IBar> verified = new ArrayList<>(); long previous = -1;
-            for (var item : raw) {
-                if (!(item instanceof IBar bar)) throw new Failure("internal", "JForex hourly file returned an invalid candle type");
-                IBar snapshot = new LoadedBar(bar.getTime(), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose(), bar.getVolume()); validateBar(snapshot);
-                if (snapshot.getTime() < month || snapshot.getTime() >= nextMonth || snapshot.getTime() % Period.ONE_HOUR.getInterval() !=0 || snapshot.getTime() <= previous)
-                    throw new Failure("internal", "JForex hourly file returned invalid candle bounds or ordering");
-                previous = snapshot.getTime(); verified.add(snapshot);
+            List<IBar> verified=decodedArchiveBID(raw,large,large?year:month,large?nextYear:nextMonth,instrument,provider.getSplitsManager(),provider.getFeedCommissionManager());
+            verifyFileSource.call();
+            for(long cursor=month;cursor<exportUntil&&cursor<(large?nextYear:nextMonth);cursor=com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR,cursor)){
+                final long low=cursor,high=com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR,cursor);
+                if(!verifiedMonths.containsKey(cursor)&&verifiedMonths.size()>=3)throw new Failure("internal","JForex hourly recovery exceeded its bounded monthly cache");
+                verifiedMonths.put(cursor,new VerifiedHourlyMonth(verified.stream().filter(bar->bar.getTime()>=low&&bar.getTime()<high).toList(),provider,earliest,active,connection,account));
             }
-            if (verified.stream().noneMatch(Bridge::observedHourlyBar)) throw new Failure("offline", "JForex hourly file contained no observed BID candles; incomplete history was not cached");
-            requireHourlySource(active, connection, account, deadline);
-            if (defaultFeedProvider.get() != provider || !Objects.equals(first, metadata.getTimeOfFirstCandleFast(instrument, Period.ONE_HOUR)))
-                throw new Failure("restricted", "JForex hourly file metadata or source changed; incomplete history was not cached");
-            if (verifiedMonths.size() >=3) throw new Failure("internal", "JForex hourly recovery exceeded its bounded monthly cache");
-            verifiedMonths.put(month, verified);
             hourlyFileRecoveries.incrementAndGet();
-            return verifiedHourlySlice(verified, from, until, month);
+            return verifiedHourlySlice(verifiedMonths.get(month).bars(), from, until, month);
         } catch (TimeoutException error) { throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT); }
         catch (ExecutionException error) { if (error.getCause() instanceof Failure failure) throw failure; throw error; }
         finally { synchronized (lock) { canceled.set(true); } }
@@ -929,6 +962,99 @@ public final class Bridge implements AutoCloseable {
 
     private static boolean observedHourlyBar(IBar bar) {
         return bar.getVolume() !=0 || bar.getOpen() != bar.getClose() || bar.getHigh() != bar.getLow();
+    }
+
+    // Canonical SDK large H1 files contain ASK/BID pairs, in that order.
+    // Validate the complete decoded payload before selecting or adjusting BID.
+    static List<IBar> decodedArchiveBID(com.dukascopy.charts.data.datacache.Data[] raw, boolean large, long from, long until,
+            Instrument instrument, com.dukascopy.charts.data.datacache.splits.ISplitsManager splits,
+            com.dukascopy.charts.data.datacache.feed.IFeedCommissionManager commissions) {
+        long hour=Period.ONE_HOUR.getInterval(); int stride=large?2:1;
+        if(raw==null||raw.length==0||raw.length%stride!=0||raw.length>(until-from)/hour*stride||large&&raw.length!=(until-from)/hour*stride)
+            throw new Failure("offline","JForex did not return a complete nonempty hourly archive");
+        if(splits==null||commissions==null)throw new Failure("restricted","JForex hourly price adjustments are unavailable");
+        var selected=new com.dukascopy.charts.data.datacache.Data[raw.length/stride];long[] originalTimes=new long[selected.length];long previous=-1;
+        for(int index=0;index<raw.length;index+=stride){
+            long time=-1;
+            for(int side=0;side<stride;side++){
+                if(!(raw[index+side] instanceof IBar bar))throw new Failure("internal","JForex archive returned an invalid candle type");
+                validateBar(bar);
+                if(bar.getTime()<from||bar.getTime()>=until||bar.getTime()%hour!=0||side>0&&bar.getTime()!=time)
+                    throw new Failure("internal","JForex archive returned invalid candle bounds or side pairing");
+                time=bar.getTime();
+            }
+            if(time<=previous)throw new Failure("internal","JForex archive returned duplicate or unordered hourly observations");
+            if(large&&time!=from+(long)(index/stride)*hour)throw new Failure("internal","JForex yearly archive did not cover every paired hourly slot");
+            previous=time;IBar bid=(IBar)raw[index+stride-1];
+            var copy=new com.dukascopy.charts.data.datacache.CandleData(time,bid.getOpen(),bid.getClose(),bid.getLow(),bid.getHigh(),bid.getVolume());
+            copy.feedCommissionApplied=raw[index+stride-1].feedCommissionApplied;selected[index/stride]=copy;originalTimes[index/stride]=time;
+        }
+        splits.applySplitsToData(instrument,selected);
+        var adjusted=commissions.applyFeedCommissionToData(instrument,Period.ONE_HOUR,OfferSide.BID,selected);
+        if(adjusted==null||adjusted.length!=selected.length)throw new Failure("internal","JForex archive adjustments changed its candle count");
+        List<IBar> result=new ArrayList<>();previous=-1;
+        for(int index=0;index<adjusted.length;index++){
+            if(!(adjusted[index] instanceof IBar bar))throw new Failure("internal","JForex archive adjustments returned an invalid candle type");
+            IBar copy=new LoadedBar(bar.getTime(),bar.getOpen(),bar.getHigh(),bar.getLow(),bar.getClose(),bar.getVolume());validateBar(copy);
+            if(copy.getTime()!=originalTimes[index]||copy.getTime()<from||copy.getTime()>=until||copy.getTime()%hour!=0||copy.getTime()<=previous)
+                throw new Failure("internal","JForex archive adjustments changed candle times");
+            previous=copy.getTime();result.add(copy);
+        }
+        if(result.stream().noneMatch(Bridge::observedHourlyBar))throw new Failure("offline","JForex archive contained no observed BID candles");
+        return result;
+    }
+
+    private Object historyArchiveDiagnostic(JsonObject request) throws Exception {
+        requireConnected();Feed feed=feed(request.getAsJsonObject("feedKey"));
+        long from=optionalLong(request,"from")*1000,to=optionalLong(request,"to")*1000,hour=Period.ONE_HOUR.getInterval(),day=Period.DAILY.getInterval();
+        String archive=text(request,"archive",16);boolean large=archive.equals("year");
+        if(feed.period!=Period.ONE_HOUR||!Set.of("month","year").contains(archive)||from<0||from%day!=0||to-from!=day||to>Math.floorDiv(nowMillis.getAsLong(),day)*day)
+            throw new Failure("internal","Hourly archive diagnostics require one closed UTC source day");
+        long start=large?com.dukascopy.charts.data.datacache.DataCacheUtils.getLargeChunkStartFast(Period.ONE_HOUR,from):com.dukascopy.charts.data.datacache.DataCacheUtils.getChunkStartFast(Period.ONE_HOUR,from);
+        long finish=large?com.dukascopy.charts.data.datacache.DataCacheUtils.getNextLargeChunkStart(Period.ONE_HOUR,start):com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR,start);
+        if(large&&finish>Math.floorDiv(nowMillis.getAsLong(),day)*day)throw new Failure("restricted","Yearly archive diagnostics require a complete past UTC year");
+        IContext active=context;IClient connection=client;String account=active.getAccount()==null?null:active.getAccount().getAccountId();
+        if(account==null||account.isBlank())throw new Failure("restricted","JForex source account is unavailable");
+        Long configuredDeadline=nativeDownloadDeadline.get();long deadline=configuredDeadline==null?System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis):configuredDeadline;
+        synchronized(instrumentLock){historyUsers.merge(feed.instrument,1,Integer::sum);}
+        try{
+            ensureInstrument(feed.instrument);
+            while(!active.getSubscribedInstruments().contains(feed.instrument)){requireHourlySource(active,connection,account,deadline);Thread.sleep(10);}
+            requireHourlySource(active,connection,account,deadline);
+            if(!(active.getDataService() instanceof com.dukascopy.api.impl.connect.JForexDataService service))throw new Failure("restricted","Pinned JForex archive source is unavailable");
+            var provider=service.getFeedDataProvider();var metadata=provider.getFeedMetadataManager();
+            if(provider!=defaultFeedProvider.get()||metadata==null||provider.getICurvesProtocolHandler()==null)throw new Failure("restricted","JForex archive source changed or is unavailable");
+            Long first=metadata.getTimeOfFirstCandleFast(feed.instrument,Period.ONE_HOUR);
+            if(first==null||first==Long.MAX_VALUE){metadata.resetTimeOfFirstData(feed.instrument);service.getTimeOfFirstCandle(feed.instrument,Period.ONE_HOUR);first=metadata.getTimeOfFirstCandleFast(feed.instrument,Period.ONE_HOUR);}
+            requireHourlySource(active,connection,account,deadline);
+            if(!knownFirstHourlyCandle(first,nowMillis.getAsLong()))throw new Failure("restricted","JForex hourly archive metadata is unavailable");
+            AtomicBoolean failed=new AtomicBoolean();
+            var progress=new com.dukascopy.charts.data.datacache.ILoadingProgressListener(){
+                public void dataLoaded(long a,long b,long c,String information){}
+                public void loadingFinished(boolean complete,long a,long b,long c,Throwable error){if(!complete||error!=null)failed.set(true);}
+                public boolean stopJob(){return closing||Thread.currentThread().isInterrupted()||System.nanoTime()>=deadline||context!=active||client!=connection||!connection.isConnected()||provider!=defaultFeedProvider.get();}
+            };
+            var raw=provider.getICurvesProtocolHandler().loadChunkFileFromCFG(feed.instrument,Period.ONE_HOUR,OfferSide.BID,start,large,progress);
+            requireHourlySource(active,connection,account,deadline);
+            if(provider!=defaultFeedProvider.get()||!Objects.equals(first,metadata.getTimeOfFirstCandleFast(feed.instrument,Period.ONE_HOUR)))throw new Failure("restricted","JForex archive metadata or source changed");
+            Map<String,Object> result=new LinkedHashMap<>();result.put("instrument",feed.instrument.name());result.put("archive",archive);result.put("start",start);result.put("end",finish);
+            result.put("nullResponse",raw==null);result.put("rawRows",raw==null?0:raw.length);result.put("failed",failed.get());result.put("firstHourFast",first.toString());
+            if(raw==null||raw.length==0||failed.get()){result.put("bars",List.of());result.put("fullOpenBars",List.of());return result;}
+            int zeroPrices=0,zeroFlat=0;
+            for(var entry:raw)if(entry instanceof IBar bar){
+                if(bar.getOpen()==0&&bar.getHigh()==0&&bar.getLow()==0&&bar.getClose()==0&&bar.getVolume()==0)zeroPrices++;
+                if(!observedHourlyBar(bar))zeroFlat++;
+            }
+            result.put("zeroPriceRows",zeroPrices);result.put("zeroFlatRows",zeroFlat);
+            List<IBar> decoded;
+            try{decoded=decodedArchiveBID(raw,large,start,finish,feed.instrument,provider.getSplitsManager(),provider.getFeedCommissionManager());}
+            catch(Failure error){result.put("decodeError",error.getMessage());result.put("bars",List.of());result.put("fullOpenBars",List.of());return result;}
+            List<IBar> target=decoded.stream().filter(bar->bar.getTime()>=from&&bar.getTime()<to&&observedHourlyBar(bar)).toList();
+            List<long[]> closures=verifiedHistoricalClosures(service,feed.instrument,from,to);
+            result.put("bars",target.stream().map(bar->candle(bar,true)).toList());
+            result.put("fullOpenBars",target.stream().filter(bar->!intersectsClosure(closures,bar.getTime(),bar.getTime()+hour)).map(bar->candle(bar,true)).toList());
+            return result;
+        }finally{synchronized(instrumentLock){historyUsers.computeIfPresent(feed.instrument,(instrument,count)->count==1?null:count-1);releaseInstruments();}}
     }
     private HourlyRecovery verifiedHourlySlice(List<IBar> monthBars, long from, long until, long month) throws Exception {
         long nextMonth = com.dukascopy.charts.data.datacache.DataCacheUtils.getNextChunkStart(Period.ONE_HOUR, month);

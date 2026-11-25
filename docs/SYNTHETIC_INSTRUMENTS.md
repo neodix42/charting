@@ -98,7 +98,7 @@ ticks and reuses cached chunks. Provenance distinguishes the fallback source;
 complete days are checkpointed and empty source days remain gaps. Authentication,
 transport, invalid-data and other failures never authorize empty-history fallback.
 For native hourly fallback, an empty day requires historical READ closure intervals
-covering the entire day or a verified complete past-month BID source file proving
+covering the entire day or a verified complete past BID archive proving
 there were no usable observations that day. A partly open, open or unverified empty
 source response cannot establish absence. Ratio sampling separately requires
 complete open hours. Cold calendar initialization may load one bounded source day,
@@ -128,21 +128,36 @@ and caching ratio observations. Unexpected empty days first use the SDK's indepe
 date-range loader, requiring finite loaded first-H1 metadata, exact full-range
 completion and unchanged connection/account. That loader can still reuse a falsely
 empty monthly SDK cache: a failed historical download can be stored as a successful
-empty month. If no observed rows are recovered, the exporter requests the actual
-monthly BID file directly, with strict UTC-month bounds and ordering. Its selected
-BID candles receive SDK split adjustments followed by the account's feed commission,
-matching the price convention of normal SDK history. A null monthly-file result
-permits one retry of that same file after five seconds, within the original
-120-second work deadline and with unchanged source/account checks. Empty, corrupt
-and changed-source responses do not receive this retry. An unresolved null archive
-remains a visible protected error and never certifies empty coverage. Null, empty,
-malformed or entirely ambiguous source files remain failures. A validated nonempty
-complete past-month file can establish a genuine no-quote day within that month;
-current-month absence is not inferred this way. The absolute 120-second export
-deadline and source fences cover every path. Unknown or MAX availability cannot
-establish absent history; one instrument-scoped RAM reset/bootstrap is allowed
-within that deadline. Partial, failed or cancelled reads cannot certify coverage.
-Genuine absent observations remain gaps, never carried candles.
+empty month.
+
+For an eligible **fully closed UTC year**, recovery first requests the SDK's
+canonical combined ASK/BID yearly archive. The loaded first-H1 availability must
+be at or before January 1; current years and partial listing years keep the monthly
+route. The year request is aligned to January 1 because its timestamps are
+implicit in paired hourly slots. Validation requires the exact full-year slot count,
+matching ASK/BID times, strict hourly order/bounds and valid OHLC, including the ASK
+side. Only BID is copied into immutable snapshots. SDK splits and account feed
+commission are applied in the normal history order, with exact pre/post-adjustment
+timestamp equality and at least one observed BID candle. No independent source
+highs/lows are divided, and no Sunday is assumed empty.
+
+An unavailable **null/empty** yearly result may use the normal monthly BID file.
+Each attempt has its own retired callback/failure state, so an earlier failed
+attempt cannot poison a later one. Positive failed, malformed or corrupt archives
+abort without another archive route. An otherwise unfailed null monthly result
+permits one same-file retry after five seconds. Empty/corrupt data and source changes
+do not authorize that retry. Unresolved failures remain visible errors, never empty
+coverage.
+
+The same absolute **120-second export deadline** covers loading, retry, validation,
+adjustment and reuse. Context/client/account, active/default provider and loaded
+first-H1 metadata are checked around source reads and before cached-month reuse;
+only the requested months are retained, at most three within the bounded export.
+Actual historical-calendar proof remains required. Unknown/MAX availability gets
+one scoped RAM reset/bootstrap within that deadline. Partial, failed or cancelled
+reads cannot certify coverage. A fully validated past archive can establish genuine
+member-day gaps; an unavailable archive or the day of the week cannot. Genuine absent
+observations remain gaps, never carried candles.
 
 Validated complete days are checksummed and cached under `synthetic-hourly-v1`,
 separately by account/source and symbol. The cache directory/file format remains
@@ -251,3 +266,13 @@ user histories. The separate opt-in `sdkhistoryintegration` test copies connecti
 settings into a private temporary profile, reads real underlying history and checks
 saved calculated/native history without orders or changes to the original profile. See
 STATUS.md for the checks actually completed and outstanding desktop/live checks.
+
+The completed live archive check restored the actual **23:00 UTC H1** observations
+for **XAUUSD 2025-11-02** and **USA500IDXUSD 2024-12-01**, exactly matching untouched
+cached references. With those two source-day gaps in an isolated copied cache, the
+full Manager pipeline passed in **181.57 seconds**, using **2 H1 exports, 2 archive
+recoveries and 0 tick exports**. It published and opened all three charts with
+**1524 BTCXAU**, **1524 XAUSPX** and **1789 ETHBTC** D1 candles across all **59 months**.
+The original cache stayed unchanged. These results prove restoration of the known
+Sunday observations rather than a rule that skips Sundays. Final follow-up packages
+and hosted results remain tracked in the pull request.

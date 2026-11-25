@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -502,6 +503,173 @@ func TestSDKHistoryRealNodeRatioPublishesAndReusesAccountScopedQuotesWhileHTTPDe
 	if count != 48 || state.limiter.state.DeniedTill != denied {
 		t.Fatal("SDK cache reuse refetched sources or cleared HTTP denial", count, state.limiter.state)
 	}
+}
+
+func TestSDKFastHourlyFailureResumesCommittedDaysAndCachedSources(t *testing.T) {
+	m := sourceEnrichmentManager(t, false)
+	disallowSDKTestHTTP(t)
+	// Explicit offline SDK observations exercise the real Node worker and Go
+	// queue/publication path; neither public fetch nor a live account is used.
+	const start = int64(1704067200000)
+	const end = start + 30*sdkHistoryDay
+	provider := newFakeSDKHistory()
+	sourceKey, _ := provider.HistoricalSource()
+	var interrupted atomic.Bool
+	interrupted.Store(true)
+	provider.export = func(ctx context.Context, call sdkHistoryCall) (int64, error) {
+		accelerateSDKCleanupFixture(ctx)
+		if call.timeframe != "h1" || call.symbol != "xauusd" && call.symbol != "usa500idxusd" || call.from < start || call.to > end {
+			return 0, fmt.Errorf("unexpected offline Fast SDK source: %+v", call)
+		}
+		if interrupted.Load() && call.symbol == "xauusd" && call.from >= start+28*sdkHistoryDay {
+			return 0, errors.New("Explicit offline XAU H1 interruption after committed Fast days")
+		}
+		var data strings.Builder
+		data.WriteString("timestamp,open,high,low,close\n")
+		var rows int64
+		for at := call.from; at < call.to; at += sdkHistoryHour {
+			price := int64(10)
+			if call.symbol == "xauusd" {
+				price = 100 + (at-start)/sdkHistoryHour
+			}
+			fmt.Fprintf(&data, "%d,%d,%d,%d,%d\n", at, price, price+1, price-1, price)
+			rows++
+		}
+		return rows, os.WriteFile(call.output, []byte(data.String()), 0600)
+	}
+	m.dukascopyHistory = provider
+	retainedName := "btcxau-d1-2024-01-01-2024-01-04.csv"
+	retained := writeProvenanceCSV(t, m, retainedName, ratioCSV, testRatioProvenance("btcxau"))
+	retainedMetadata := filepath.Join(metadataDirectory(m.directory), dataFileID(m.directory, retainedName)+".json")
+	originalMetadata, err := os.ReadFile(retainedMetadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRetained := func() {
+		t.Helper()
+		if data, err := os.ReadFile(retained); err != nil || string(data) != ratioCSV {
+			t.Fatal("Fast recovery changed an existing published CSV", err)
+		}
+		if data, err := os.ReadFile(retainedMetadata); err != nil || !bytes.Equal(data, originalMetadata) {
+			t.Fatal("Fast recovery changed existing publication metadata", err)
+		}
+	}
+	request := Request{DataSource: "dukascopy", SyntheticSource: "h1-close", Symbols: []string{"xauspx"}, Timeframe: "d1", From: "2024-01-01", To: "2024-01-31"}
+	if _, err := m.Start(request); err != nil {
+		t.Fatal(err)
+	}
+	failed := waitSDKCleanupBatch(t, m)
+	if len(failed.Jobs) != 1 || failed.Jobs[0].Status != "failed" || !strings.Contains(failed.Jobs[0].Message, "Explicit offline XAU H1 interruption") {
+		t.Fatal("Fast worker did not exercise a necessary source failure", failed)
+	}
+	job := failed.Jobs[0]
+	directory := m.jobDirectory(job)
+	var checkpoint struct {
+		Symbol, From, To          string
+		Rows, Bytes, NextDay, End int64
+		Provenance                *DataProvenance
+	}
+	data, err := os.ReadFile(filepath.Join(directory, "synthetic-checkpoint.json"))
+	if err != nil {
+		t.Fatal("failed Fast job lost its durable checkpoint", err)
+	}
+	if err = json.Unmarshal(data, &checkpoint); err != nil || checkpoint.Rows <= 0 || checkpoint.Rows >= 30 || checkpoint.Bytes <= 0 || checkpoint.NextDay != start+checkpoint.Rows*sdkHistoryDay || checkpoint.End != end || checkpoint.Symbol != "xauspx" || checkpoint.From != request.From || checkpoint.To != request.To || checkpoint.Provenance == nil || checkpoint.Provenance.SyntheticSource != "h1-close" || checkpoint.Provenance.HistorySource != "jforex-sdk" {
+		t.Fatal("failed Fast job lost committed days, source mode or requested range", checkpoint, err)
+	}
+	partial, err := os.ReadFile(filepath.Join(directory, "data.part"))
+	if err != nil || int64(len(partial)) != checkpoint.Bytes || !ownedJob(directory, job) {
+		t.Fatal("manager cleanup discarded committed Fast progress", len(partial), err)
+	}
+	assertRetained()
+	// Snapshot both input caches after the failed process has exited. A peer
+	// leg may already have cached the final batch; Resume must reuse that too.
+	cachedDays := map[string]map[int64]bool{}
+	cachedBytes := map[string][]byte{}
+	for _, symbol := range []string{"xauusd", "usa500idxusd"} {
+		folder := filepath.Join(m.profile, "screener-provider", "synthetic-hourly-v1", sourceKey, "h1", symbol)
+		entries, err := os.ReadDir(folder)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cachedDays[symbol] = map[int64]bool{}
+		for _, entry := range entries {
+			if !strings.HasSuffix(entry.Name(), ".json") {
+				continue
+			}
+			name := filepath.Join(folder, entry.Name())
+			manifest, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved struct {
+				Day, Rows int64
+				File      string
+			}
+			if err = json.Unmarshal(manifest, &saved); err != nil || saved.Rows != 24 || saved.Day%sdkHistoryDay != 0 || saved.File == "" {
+				t.Fatal("offline full-session source day was not cached completely", saved, err)
+			}
+			cachedDays[symbol][saved.Day], cachedBytes[name] = true, manifest
+			name = filepath.Join(folder, saved.File)
+			cachedBytes[name], err = os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(cachedDays[symbol]) < 28 {
+			t.Fatal("interruption occurred before the first full input batch was durable", symbol, len(cachedDays[symbol]))
+		}
+	}
+	provider.mu.Lock()
+	beforeCalls := len(provider.calls)
+	provider.mu.Unlock()
+	interrupted.Store(false)
+	if _, err = m.Resume(); err != nil {
+		t.Fatal(err)
+	}
+	completed := waitSDKCleanupBatch(t, m)
+	if len(completed.Jobs) != 1 || completed.Jobs[0].Status != "completed" || completed.Jobs[0].ID != job.ID || completed.Jobs[0].AsOf != job.AsOf || completed.Jobs[0].DataSource != job.DataSource || completed.Jobs[0].SyntheticSource != "h1-close" || completed.Jobs[0].Symbol != job.Symbol || completed.Jobs[0].From != job.From || completed.Jobs[0].To != job.To {
+		t.Fatal("Resume replaced the saved Fast job, source or date range", completed)
+	}
+	output, err := os.ReadFile(completed.Jobs[0].OutputPath)
+	if err != nil || !bytes.HasPrefix(output, partial) {
+		t.Fatal("Resume replaced or lost its committed daily CSV prefix", err)
+	}
+	metadata, err := readFileMetadata(m.directory, filepath.Base(completed.Jobs[0].OutputPath))
+	if err != nil || metadata.Provenance == nil || metadata.Provenance.SyntheticSource != "h1-close" || metadata.Provenance.HistorySource != "jforex-sdk" || metadata.Provenance.MaxQuoteAgeMs != sdkHistoryHour {
+		t.Fatal("resumed publication lost its Fast SDK source provenance", metadata.Provenance, err)
+	}
+	provider.mu.Lock()
+	resumedCalls := append([]sdkHistoryCall(nil), provider.calls[beforeCalls:]...)
+	provider.mu.Unlock()
+	if len(resumedCalls) == 0 {
+		t.Fatal("Resume did not retry its missing H1 source")
+	}
+	for _, call := range resumedCalls {
+		if call.key != sourceKey || call.timeframe != "h1" || call.from < checkpoint.NextDay {
+			t.Fatal("Resume changed the SDK source or redownloaded committed days", call)
+		}
+		for at := call.from; at < call.to; at += sdkHistoryDay {
+			if cachedDays[call.symbol][at] {
+				t.Fatal("Resume refetched an already cached source day", call.symbol, at)
+			}
+		}
+	}
+	for name, before := range cachedBytes {
+		if after, err := os.ReadFile(name); err != nil || !bytes.Equal(before, after) {
+			t.Fatal("Resume changed a completed hourly cache file", name, err)
+		}
+	}
+	bars, err := m.SyntheticHistory(context.Background(), domain.FeedKey{Exchange: "dukascopy", Market: "cfd", Instrument: "XAUSPX", Timeframe: "1d"}, 0, 0, 1000)
+	if err != nil || len(bars) != 30 {
+		t.Fatal("resumed Fast publication is not chart-readable", len(bars), err)
+	}
+	for index, bar := range bars {
+		open, close := float64(100+index*24)/10, float64(123+index*24)/10
+		if bar.Time != (start+int64(index)*sdkHistoryDay)/1000 || bar.Open != open || bar.Low != open || bar.High != close || bar.Close != close || !bar.Approximate || !bar.VolumeUnavailable {
+			t.Fatal("Resume duplicated, skipped or changed an observed daily ratio", index, bar)
+		}
+	}
+	assertRetained()
 }
 
 func TestSDKHistoryRestoredNativeQueueUsesProviderBeforeAutomaticResume(t *testing.T) {

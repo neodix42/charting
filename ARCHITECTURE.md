@@ -91,19 +91,25 @@ rate limiting, cancellation and atomic storage apply to both routes.
 
 Fast synthetic inputs are genuine H1 BID observations exported in at most
 28-day batches and read inside the SDK one UTC day at a time. An empty synchronous
-day receives an independent, fully completed date-range read. Because both paths
-can reuse a falsely empty SDK monthly cache, unresolved days require a direct,
-nonempty monthly BID source response with strict bounds, finite loaded availability,
-source/account fences and actual historical calendar proof. Selected BID candles
-apply SDK splits followed by account feed commission, matching the normal history
-path. A null monthly-file result permits one same-file retry after five seconds
-inside the original 120-second budget, with source fences before and after; empty,
-corrupt and changed-source results never authorize that retry. An unresolved null
-archive remains an error, never empty coverage. Only a verified complete
-past-month file can establish a genuine no-quote member day. Unknown/MAX metadata
-is not proof of absent history; one instrument-scoped RAM reload may recover a failed
-bootstrap within the absolute work deadline. Partial/error/cancelled reads cannot
-publish coverage. Hourly policies `verified-full-hour-v2` and `provider-native-h1-v2`
+day receives an independent, fully completed date-range read. Both paths can reuse
+a falsely empty SDK monthly cache. Eligible fully closed UTC years therefore use
+the canonical paired ASK/BID yearly archive first, aligned to January 1 and only
+when loaded first-H1 availability is at or before that year start. Current and
+partial listing years retain monthly recovery. Validate the complete year, every pair,
+strict hourly ordering and observed BID data before taking immutable BID snapshots.
+Apply SDK splits then account feed commission without changing any timestamp.
+
+Only unavailable null/empty yearly results may try a monthly BID archive. Each
+attempt has independent retired callback/failure state; a positive failed or
+corrupt archive aborts without fallback. An otherwise unfailed null monthly result
+permits one same-file retry after five seconds within the original 120-second
+budget. Context, client, account, active/default provider and first-H1 metadata
+fence archive reads, adjustments, ordinary day reads and cached-month reuse.
+Retain at most the three requested months that fit the bounded export. Actual
+historical calendar proof remains required; Sunday or an archive failure never
+proves absence. Unknown/MAX metadata gets one scoped RAM bootstrap, and unresolved,
+partial or cancelled reads cannot publish coverage. Hourly policies
+`verified-full-hour-v2` and `provider-native-h1-v2`
 use new cache identities; checksum-valid positive legacy days remain read-through,
 while consecutive missing/legacy-zero days are revalidated in at most 28-day batches.
 Every compatible cached day stops the batch: valid neighbors retain their exact

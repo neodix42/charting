@@ -94,9 +94,13 @@ public final class BridgeHourlyRecoveryTest {
                     "raw monthly files mirror normal SDK split-then-commission pricing exactly once before immutable reuse");
             }
         }
-        for (String kind : List.of("observed", "gap", "null", "empty", "filled", "duplicate", "outside", "price", "type", "oversized", "failure", "progress-failed", "default-change", "metadata-change", "timeout")) {
+        for (String kind : List.of("observed", "gap", "null", "empty", "filled", "duplicate", "outside", "price", "type", "oversized", "failure", "progress-failed", "default-change", "metadata-change", "adjustment-time", "timeout")) {
             Metadata metadata = new Metadata(); AtomicInteger files = new AtomicInteger();
-            long past = java.time.Instant.parse("2023-01-01T00:00:00Z").toEpochMilli(); metadata.first.set(past-HOUR);
+            long past = java.time.Instant.parse("2024-01-01T00:00:00Z").toEpochMilli(); metadata.first.set(past-HOUR);
+            if(kind.equals("adjustment-time"))metadata.commissions=fake(com.dukascopy.charts.data.datacache.feed.IFeedCommissionManager.class,(method,args)->{
+                if(!method.equals("applyFeedCommissionToData"))return null;
+                var rows=(com.dukascopy.charts.data.datacache.Data[])args[3];for(var row:rows)row.time+=HOUR;return rows;
+            });
             AtomicReference<NativeFixture> owner = new AtomicReference<>();
             metadata.handler = fake(com.dukascopy.charts.data.datacache.ICurvesProtocolHandler.class, (method,args) -> {
                 if (!method.equals("loadChunkFileFromCFG")) return null;
@@ -117,7 +121,7 @@ public final class BridgeHourlyRecoveryTest {
                 if (kind.equals("duplicate")) return new com.dukascopy.charts.data.datacache.Data[]{candle,candle};
                 return new com.dukascopy.charts.data.datacache.Data[]{candle};
             });
-            try (NativeFixture f = new NativeFixture(50, kind.equals("timeout") ? 150 : 1_000, metadata.service(List.of()))) {
+            try (NativeFixture f = new NativeFixture(50, kind.equals("timeout") ? 150 : 1_000, metadata.service(List.of()),java.time.Instant.parse("2024-03-01T00:00:00Z").toEpochMilli())) {
                 owner.set(f); JsonObject query=query(); query.addProperty("from", past/1000+86400); query.addProperty("to", past/1000+86400+3*3600);
                 var reply = dispatch(f,query); f.load().result.complete(List.of()); Load recovery=f.charts.load(); recovery.finish(true);
                 JsonObject result=reply.get(2, TimeUnit.SECONDS);
