@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-11-25
 
+## Comparison line hover — 2026-11-25
+
+Hovering a visible Comparison line or daily point shows its ticker and full asset name, thickens that line and highlights its legend entry. Moving away, resizing or hiding the screen clears the highlight. Real gaps and unavailable assets cannot produce a label. Hover changes neither the data nor the saved zoom and adds no provider requests or subscriptions.
+
+Frontend typecheck, lint and all 359 unit tests pass. All 14 Comparison browser cases pass, including real midpoint/marker pointer hits, preserved native wheel zoom and canvas identity, missing/unavailable observations and hidden cleanup. A one-pixel resize regression initially exposed delayed model-generated crosshair events reactivating hover; activation now requires genuine pointer input, with a guard for recursive style events. The unchanged strengthened case passes after the fix. Hosted results and final packages are tracked in the follow-up pull request.
+
 ## Comparison and Fast history recovery — 2026-11-25
 
 Comparison adds a top-level Daily change screen beside Screener and Predictions. Defaults are four weeks and BTC, ETH, TON, HYPE, ZEN, APT and NEAR; weeks are bounded to 1–104 and selections to 0–20 assets. Each line uses the same closed UTC baseline and cumulative `(close / baselineClose - 1) × 100`, with a genuine 0% first point. Four weeks spans 29 daily observations when complete. Missing baselines are unavailable, later missing/provisional closes remain gaps, and no line is independently rebased or forward-filled. Empty selections remain empty after restart. Private versioned choices are written atomically; corrupt or unsupported saved bytes are preserved.

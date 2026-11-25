@@ -156,6 +156,14 @@ selection. Selected-asset labels use the returned series metadata before catalog
 metadata, so a refreshed market or unavailable asset cannot retain an old source
 label. Empty selections persist and request no daily history.
 
+Comparison line hover reuses the crosshair subscription and public time/price
+coordinates to hit-test real dots and consecutive daily segments. The chart
+library's native hit test also includes transparent gaps and dots-only segments,
+so it cannot establish a visible line hit. Only genuine pointer events activate
+hover; model-only resize/render events clear it, and a guard suppresses recursive
+events emitted by line-style updates. Highlighting changes width without replacing
+data, reconnecting feeds or resetting the viewport.
+
 ## Stale-response protection
 
 Every chart attach/selection change increments its runtime generation. Requests and results

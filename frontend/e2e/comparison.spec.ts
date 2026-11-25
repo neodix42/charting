@@ -190,6 +190,54 @@ test('Comparison accepts twenty saved assets, disables additions at the limit an
  await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets.length)).toBe(20);await expect(page.getByRole('button',{name:'Add comparison asset',exact:true})).toBeDisabled();
 });
 
+test('canvas line hover reveals the asset name and highlights only real observations, then clears on leave and hide',async({page},testInfo)=>{
+ await openTestApp(page);await enter(page);await loaded(page);await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),time=result.baselineTime+14*86400;
+ const read=()=>page.evaluate(time=>(window as any).__testComparisonChart(time),time);
+ const widths=async()=>Object.fromEntries((await read()).series.map((series:any)=>[series.symbol,series.lineWidth]));
+ const original=await widths(),tooltip=panel(page).getByRole('tooltip');
+ const canvas=await chart(page).locator('canvas').first().elementHandle();
+ const viewport=()=>page.evaluate(times=>times.map(time=>(window as any).__testComparisonChart(time).x),[result.baselineTime,result.lastClosedTime]);
+ const initial=await viewport(),bounds=(await chart(page).boundingBox())!;
+ await page.mouse.move(bounds.x+bounds.width/2,bounds.y+200);await page.mouse.wheel(0,-180);
+ await expect.poll(async()=>{const positions=await viewport();return positions[1]-positions[0];}).toBeGreaterThan(initial[1]-initial[0]);
+ await page.mouse.move(0,0);await expect.poll(widths).toEqual(original);const zoomed=await viewport();
+ const moveTo=async(symbol:string,value?:number,betweenObservations=false)=>{
+  await frames(page);const rendered=await read(),bounds=(await chart(page).boundingBox())!;
+  let x=rendered.x,y=rendered.series.find((series:any)=>series.symbol===symbol)?.y;
+  if(value!==undefined){
+   const anchors=rendered.series.map((series:any)=>({y:series.y,value:series.line.find((point:any)=>Number(point.time)===time)?.value})).filter((point:any)=>Number.isFinite(point.y)&&Number.isFinite(point.value));
+   const first=anchors[0],second=anchors.find((point:any)=>point.value!==first.value);
+   expect(first).toBeDefined();expect(second).toBeDefined();y=first.y+(value-first.value)*(second.y-first.y)/(second.value-first.value);
+  }
+  if(betweenObservations){const next=await page.evaluate(time=>(window as any).__testComparisonChart(time),time+86400);x=(x+next.x)/2;y=(y+next.series.find((series:any)=>series.symbol===symbol).y)/2;}
+  expect(Number.isFinite(x)).toBe(true);expect(Number.isFinite(y)).toBe(true);
+  await page.mouse.move(bounds.x+rendered.leftWidth+x,bounds.y+y);
+ };
+ await moveTo('BTC',undefined,true);await expect(tooltip).toContainText('Bitcoin');await expect(tooltip).toContainText('BTC');
+ await expect.poll(async()=>(await widths()).BTC).toBeGreaterThan(original.BTC);
+ expect(Object.entries(await widths()).filter(([symbol])=>symbol!=='BTC').every(([symbol,width])=>width===original[symbol])).toBe(true);
+ expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);
+ const highlighted=await viewport();expect(highlighted[0]).toBeCloseTo(zoomed[0],5);expect(highlighted[1]).toBeCloseTo(zoomed[1],5);
+ await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-hover-bitcoin.png')});
+ await moveTo('ETH');await expect(tooltip).toContainText('Ethereum');await expect(tooltip).not.toContainText('Bitcoin');
+ await expect.poll(async()=>(await widths()).ETH).toBeGreaterThan(original.ETH);expect((await widths()).BTC).toBe(original.BTC);
+ const size=page.viewportSize()!;await page.setViewportSize({width:size.width+1,height:size.height});
+ await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(original);
+ await page.mouse.move(0,0);await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(original);
+ await page.evaluate(()=>(window as any).__testComparisonSeries({BTC:{gaps:[14]},ETH:{error:'Daily source is unavailable'}}));
+ await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await loaded(page,6);await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);
+ const remaining=await widths();expect(remaining.ETH).toBeUndefined();
+ const previous=(symbol:string)=>result.series.find((series:any)=>series.asset.symbol===symbol).points[14].pct;
+ await moveTo('BTC',previous('BTC'));await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(remaining);
+ await moveTo('ETH',previous('ETH'));await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(remaining);
+ await moveTo('HYPE');await expect(tooltip).toContainText('Hyperliquid');await expect.poll(async()=>(await widths()).HYPE).toBeGreaterThan(remaining.HYPE);
+ await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
+ await expect(tooltip).toHaveCount(0);expect(await read()).toBeNull();const hidden=(await calls(page)).data;
+ await page.mouse.move(500,500);await frames(page);expect((await calls(page)).data).toBe(hidden);
+ await enter(page);await loaded(page,6);await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(remaining);
+});
+
 test('Comparison redraws theme in place, applies font changes and fits all controls at 900px',async({page},testInfo)=>{
  await page.setViewportSize({width:900,height:1050});await openTestApp(page);await enter(page);await loaded(page);
  const canvas=chart(page).locator('canvas').first(),handle=await canvas.elementHandle(),before=(await calls(page)).data;
