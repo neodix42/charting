@@ -162,6 +162,14 @@ selection. Selected-asset labels use the returned series metadata before catalog
 metadata, so a refreshed market or unavailable asset cannot retain an old source
 label. Empty selections persist and request no daily history.
 
+The Comparison facade uses `market.HistorySnapshot`, owned by its caller and the
+market service rather than a chart feed. A retained feed can keep its cancelled
+context after its last chart lease closes; that context must not cancel an
+independent Comparison read. Snapshot requests retain shared caches, provider
+epochs, semaphores and pending-request bounds without acquiring a stream lease.
+Ordinary `market.History` retains chart-owned pagination cancellation. Leaving
+Comparison, replacing a request or closing the service still cancels its work.
+
 Comparison line hover reuses the crosshair subscription and public time/price
 coordinates to hit-test real dots and consecutive daily segments. The chart
 library's native hit test also includes transparent gaps and dots-only segments,

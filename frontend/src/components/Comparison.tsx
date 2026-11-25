@@ -76,7 +76,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    {visible&&!suspended&&result&&hasData&&<ComparisonChart result={result} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>}
    {ready&&!view.assets.length&&<div className="comparison-empty"><h2>Add assets to compare</h2><p>Choose assets using Add asset. Your weeks selection will be kept.</p></div>}
    {ready&&!loading&&result&&!hasData&&!loadError&&<div className="comparison-empty"><h2>No comparable daily data</h2><p>Each asset needs a real closing price on {comparisonDate(result.baselineTime)} to share the same starting point.</p></div>}
-   <p className="comparison-note">Percentage change from the starting close, using completed UTC daily candles. Hyperliquid USD-quoted markets are preferred; Binance USDT spot is used when none is available. Quotes are not converted. Source and market are shown per asset. Missing closes remain gaps.</p>
+   <p className="comparison-note">Percentage change from the starting close, using completed UTC daily candles. Hyperliquid is preferred; Binance spot is used when no comparable Hyperliquid market is available. Changes are measured in each asset’s displayed quote currency; quotes are not converted. Missing closes remain gaps.</p>
   </div>
  </section>;
 });

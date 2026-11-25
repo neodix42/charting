@@ -404,7 +404,21 @@ func (s *Service) Instruments(ctx context.Context, provider string) ([]domain.In
 	s.mu.Unlock()
 	return items, nil
 }
+
+// History follows the chart feed's lifetime when that feed exists, so closing
+// its last lease also cancels outstanding chart pagination after the grace.
 func (s *Service) History(ctx context.Context, id string, key domain.FeedKey, from, to int64, limit int) (History, error) {
+	return s.historyRequest(ctx, id, key, from, to, limit, true)
+}
+
+// HistorySnapshot belongs to its caller and the service, independently of any
+// chart displaying the same feed. It shares normal cache, provider pacing and
+// pending-request limits without creating or retaining a streaming lease.
+func (s *Service) HistorySnapshot(ctx context.Context, id string, key domain.FeedKey, from, to int64, limit int) (History, error) {
+	return s.historyRequest(ctx, id, key, from, to, limit, false)
+}
+
+func (s *Service) historyRequest(ctx context.Context, id string, key domain.FeedKey, from, to int64, limit int, chartOwned bool) (History, error) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -419,8 +433,10 @@ func (s *Service) History(ctx context.Context, id string, key domain.FeedKey, fr
 		return History{}, &exchange.Error{Kind: "rateLimited", Message: "Too many pending history requests; retry shortly", RetryAt: s.opts.Now().Add(time.Second).Unix()}
 	}
 	ownerContext := s.ctx
-	if f := s.feeds[key]; f != nil && f.ctx != nil {
-		ownerContext = f.ctx
+	if chartOwned {
+		if f := s.feeds[key]; f != nil && f.ctx != nil {
+			ownerContext = f.ctx
+		}
 	}
 	s.wg.Add(1)
 	s.mu.Unlock()

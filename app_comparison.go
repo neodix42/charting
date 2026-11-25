@@ -23,7 +23,7 @@ func (source comparisonMarketSource) History(ctx context.Context, id string, key
 			return market.History{}, err
 		}
 	}
-	return source.market.History(ctx, id, key, from, to, limit)
+	return source.market.HistorySnapshot(ctx, id, key, from, to, limit)
 }
 
 // Comparison is initialized only when its screen is requested. The existing

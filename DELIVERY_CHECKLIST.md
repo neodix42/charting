@@ -1,5 +1,13 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison DCR request ownership — 2026-11-25
+
+- [x] Reproduce cancelled retained/closing chart contexts and give independent Comparison reads caller/service ownership.
+- [x] Preserve chart pagination cancellation, cache/provider identities, pending/concurrency limits and no-stream lifecycle.
+- [x] Market/Comparison/facade race tests and market vet pass; typecheck/lint, 359 units and all 17 Comparison browser cases pass.
+- [x] Verify public Binance DCRUSDT availability and all 29 real four-week daily closes; disclose the actual selected quote and normal source notice.
+- [ ] Production builds/hosted checks are tracked for the delivery commit; native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison legend visibility — 2026-11-25
 
 - [x] Click/Enter/Space hides or shows both the line and dots; the whole hidden legend entry is grey.

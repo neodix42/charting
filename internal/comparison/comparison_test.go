@@ -258,7 +258,7 @@ func TestUSDQuotedMarketsExcludeCrossPricesAndDiscloseEligibleFallback(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "CROSS") || !strings.Contains(result.Warnings[0], "no eligible USD-quoted Hyperliquid market") {
+	if len(result.Warnings) != 1 || result.Warnings[0] != "CROSS: using Binance spot CROSSUSDT (USDT)" || result.Series[1].Asset.Exchange != "binance" || result.Series[1].Asset.QuoteAsset != "USDT" {
 		t.Fatalf("fallback basis missing: %+v", result.Warnings)
 	}
 	for _, key := range f.historyCalls {

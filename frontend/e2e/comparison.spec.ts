@@ -59,6 +59,25 @@ test('the verified TON rename displays GRAM while keeping canonical selection an
  await reloadTestApp(page);await enter(page);await loaded(page);await expect(selected(page).locator('strong')).toHaveText(['BTC','ETH','HYPE','ZEN','APT','NEAR','TON (GRAM)']);
 });
 
+test('DCR compares Binance spot daily closes without requiring a Hyperliquid market',async({page},testInfo)=>{
+ await page.setViewportSize({width:1600,height:1200});await openTestApp(page);await enter(page);await loaded(page);
+ await add(page,'DCR','Spot');await loaded(page,8);
+ const asset=selected(page).locator('.comparison-asset').filter({has:page.getByText('DCR',{exact:true})});
+ await expect(asset).toContainText('Binance · Spot · USDT');
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),dcr=result.series.find((series:any)=>series.asset.symbol==='DCR');
+ expect(dcr.asset).toMatchObject({symbol:'DCR',name:'Decred',exchange:'binance',market:'spot',nativeId:'DCRUSDT',quoteAsset:'USDT',feedKey:{exchange:'binance',market:'spot',instrument:'DCRUSDT',timeframe:'1d'}});
+ expect(dcr.error).toBe('');expect(dcr.points).toHaveLength(29);expect(dcr.points[0]).toMatchObject({time:result.baselineTime,pct:0});expect(dcr.points.at(-1).time).toBe(result.lastClosedTime);
+ expect(dcr.points.every((point:any)=>Number.isFinite(point.close)&&Number.isFinite(point.pct))).toBe(true);
+ await expect(panel(page)).toContainText('DCR: using Binance spot DCRUSDT (USDT)');
+ await expect(panel(page)).not.toContainText('no eligible USD-quoted Hyperliquid market');await expect(panel(page)).not.toContainText('context canceled');await expect(panel(page).getByRole('alert')).toHaveCount(0);
+ const legend=page.getByLabel('Comparison legend',{exact:true}).getByRole('button',{name:'DCR',exact:true});
+ await expect(legend).toHaveAttribute('title','Binance · Spot · USDT · DCRUSDT');await expect(legend).toHaveAttribute('aria-pressed','true');await expect(legend).toContainText('+4.20%');
+ await frames(page);const before=await calls(page),read=()=>page.evaluate(()=>(window as any).__testComparisonChart().series.find((series:any)=>series.symbol==='DCR'));
+ await legend.click();await expect(legend).toHaveAttribute('aria-pressed','false');await expect.poll(async()=>{const line=await read();return[line.visible,line.dotsVisible];}).toEqual([false,false]);
+ await legend.click();await expect(legend).toHaveAttribute('aria-pressed','true');await expect.poll(async()=>{const line=await read();return[line.visible,line.dotsVisible];}).toEqual([true,true]);expect(await calls(page)).toEqual(before);
+ await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-dcr-binance.png')});
+});
+
 test('refreshed actual sources override stale catalog labels and unavailable assets never retain an old provider',async({page})=>{
  await openTestApp(page);await enter(page);await loaded(page);
  const btc=selected(page).locator('.comparison-asset').filter({has:page.getByText('BTC',{exact:true})});

@@ -1,5 +1,13 @@
 # Implementation status — updated 2026-11-25
 
+## Comparison DCR request ownership — 2026-11-25
+
+The reported `DCR · context canceled` was reproducible independently of quote eligibility. `market.History` bound a read to an existing chart feed's context, which remains cancelled in a retained feed after its last lease closes. It could also cancel a Comparison read when an old chart's grace period ended. `HistorySnapshot` now uses caller/service cancellation through the same bounded helper, and the Comparison facade uses it. Existing chart pagination cancellation remains intact. Shared cache, provider epochs, provider concurrency and pending-work limits remain in place; no extra stream is opened.
+
+The normal Binance notice now identifies the actual market, e.g. `DCR: using Binance spot DCRUSDT (USDT)`. Quote restrictions did not cause the DCR error: public Binance discovery returned DCRUSDT as TRADING and its four-week history returned all 29 completed UTC daily closes through 2026-11-24. Percentage calculations can use any quote, but BTC-relative and USDT-relative changes differ; this repair preserves the existing disclosed USD-related comparison basis.
+
+Both chart-lifetime cases failed with `context canceled` before repair. Focused snapshot race tests, full market race/vet, Comparison race and the root binding facade regressions pass, including real 29-point DCR calculation after chart shutdown, caller/service cancellation, shared cache reuse, no subscriptions, 18 pending slots and two actual concurrent provider calls. Frontend typecheck/lint, all 359 units and all 17 Comparison browser cases pass (36.8 seconds), including DCR selection, actual Binance metadata, common baseline and legend toggles. Evidence: `.tools/verification/comparison-snapshot-*.log` and `comparison-dcr-browser.log`. Production builds and hosted results are tracked for the delivery commit. Native desktop interaction and Windows GUI execution remain unverified; user settings, histories and credentials remain preserved.
+
 ## Comparison legend visibility — 2026-11-25
 
 Each asset name below the Comparison chart is now a pressed toggle button. Hiding greys its name, percentage and marker and hides both its line and daily dots. Showing restores its original colour and data. The chart and logical time range remain intact, hidden geometry cannot produce hover labels, and the zero-percent reference moves to a visible asset. All lines may be hidden while the legend remains usable. Enter and Space work through native buttons.

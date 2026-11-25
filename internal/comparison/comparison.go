@@ -367,7 +367,7 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 			continue
 		}
 		if asset.Exchange == "binance" {
-			result.Warnings = append(result.Warnings, symbol+": using Binance USDT spot because no eligible USD-quoted Hyperliquid market is available; quotes are not converted")
+			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: using Binance spot %s (%s)", symbol, asset.NativeID, asset.QuoteAsset))
 		}
 		workers.Add(1)
 		go func(index int, asset Asset) {

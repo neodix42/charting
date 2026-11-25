@@ -3,12 +3,100 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"cryptodesk/internal/comparison"
+	"cryptodesk/internal/domain"
+	"cryptodesk/internal/exchange"
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/storage"
 )
+
+type comparisonDCRAdapter struct {
+	provider         string
+	streams          *atomic.Int32
+	started, stopped chan struct{}
+}
+
+func (a *comparisonDCRAdapter) Instruments(context.Context) ([]domain.Instrument, error) {
+	base, id, quote, kind := "BTC", "BTC", "USDC", "perpetual"
+	if a.provider == "binance" {
+		base, id, quote, kind = "DCR", "DCRUSDT", "USDT", "spot"
+	}
+	return []domain.Instrument{{NativeID: id, BaseAsset: base, QuoteAsset: quote, Market: kind, Availability: "available", SupportedIntervals: []string{"1d"}}}, nil
+}
+func (a *comparisonDCRAdapter) Stream(ctx context.Context, _ domain.FeedKey, _ func([]domain.Candle, domain.Health)) error {
+	a.streams.Add(1)
+	close(a.started)
+	<-ctx.Done()
+	close(a.stopped)
+	return ctx.Err()
+}
+func (a *comparisonDCRAdapter) History(ctx context.Context, _ domain.FeedKey, from, to int64, _ int) ([]domain.Candle, error) {
+	// Keep the read pending long enough to observe asynchronous cancellation
+	// inherited from the already detached chart in the original implementation.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(100 * time.Millisecond):
+	}
+	bars := []domain.Candle{}
+	for at := from; at < to; at += 86400 {
+		value := 100 + float64((at-from)/86400)
+		bars = append(bars, domain.Candle{Time: at, Open: value, High: value, Low: value, Close: value, Closed: true, Quality: "authoritative"})
+	}
+	return bars, nil
+}
+
+func TestComparisonFacadeLoadsBinanceDCRAfterItsChartHasStopped(t *testing.T) {
+	store, err := storage.Open(filepath.Join(t.TempDir(), "workspace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var streams atomic.Int32
+	started, stopped := make(chan struct{}), make(chan struct{})
+	service := market.New(market.Options{Grace: time.Millisecond, Factory: func(provider string) (exchange.Adapter, error) {
+		return &comparisonDCRAdapter{provider: provider, streams: &streams, started: started, stopped: stopped}, nil
+	}})
+	defer service.Close()
+	key := domain.FeedKey{Exchange: "binance", Market: "spot", Instrument: "DCRUSDT", Timeframe: "1d"}
+	lease, err := service.Attach("dcr-chart", 1, key, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("chart did not start")
+	}
+	service.Detach(lease.LeaseID)
+	select {
+	case <-stopped:
+	case <-time.After(3 * time.Second):
+		t.Fatal("chart did not stop")
+	}
+	app := &App{store: store, market: service, ctx: context.Background()}
+	result, err := app.GetComparisonDailyChanges("dcr-after-chart", comparison.View{Weeks: 4, Assets: []string{"DCR"}})
+	if app.comparison != nil {
+		defer app.comparison.Close()
+	}
+	if err != nil || len(result.Series) != 1 {
+		t.Fatalf("DCR comparison failed: %+v %v", result, err)
+	}
+	series := result.Series[0]
+	if series.Error != "" || len(series.Points) != 29 || series.Asset.FeedKey == nil || *series.Asset.FeedKey != key || series.Asset.QuoteAsset != "USDT" {
+		t.Fatalf("Binance DCR did not load after chart shutdown: %+v", series)
+	}
+	if series.Points[0].Pct == nil || *series.Points[0].Pct != 0 || series.Points[28].Pct == nil || *series.Points[28].Pct < 27.999999 || *series.Points[28].Pct > 28.000001 {
+		t.Fatal("DCR did not retain its common baseline and actual price changes")
+	}
+	if streams.Load() != 1 || service.Diagnostics().ActiveLeases != 0 {
+		t.Fatal("Comparison restarted an unrelated chart stream")
+	}
+}
 
 func TestComparisonFacadeKeepsEmptySavedViewWithoutStartingProviders(t *testing.T) {
 	store, err := storage.Open(filepath.Join(t.TempDir(), "workspace.sqlite"))

@@ -5,9 +5,9 @@ import {comparisonChartDiagnostics,comparisonChartResources} from '../components
 /** Explicit offline browser data only; never installed by the production bridge. */
 export function comparisonBridge():ComparisonBackend {
  const key='cryptodesk-explicit-test-comparison-view';
- const names:Record<string,string>={BTC:'Bitcoin',ETH:'Ethereum',TON:'Gram (formerly Toncoin)',HYPE:'Hyperliquid',ZEN:'Horizen',APT:'Aptos',NEAR:'NEAR Protocol',SOL:'Solana',LTC:'Litecoin'};
+ const names:Record<string,string>={BTC:'Bitcoin',ETH:'Ethereum',TON:'Gram (formerly Toncoin)',HYPE:'Hyperliquid',ZEN:'Horizen',APT:'Aptos',NEAR:'NEAR Protocol',SOL:'Solana',LTC:'Litecoin',DCR:'Decred'};
  const assets:ComparisonAsset[]=Object.entries(names).map(([symbol,name])=>{
-  const fallback=symbol==='ZEN',exchange=fallback?'binance':'hyperliquid',market=fallback?'spot':'perpetual',nativeId=fallback?'ZENUSDT':symbol==='TON'?'GRAM':symbol,quoteAsset=fallback?'USDT':'USDC';
+  const fallback=symbol==='ZEN'||symbol==='DCR',exchange=fallback?'binance':'hyperliquid',market=fallback?'spot':'perpetual',nativeId=fallback?`${symbol}USDT`:symbol==='TON'?'GRAM':symbol,quoteAsset=fallback?'USDT':'USDC';
   return {symbol,...(symbol==='TON'?{displaySymbol:'TON (GRAM)'}:{}),name,exchange,market,nativeId,quoteAsset,feedKey:{exchange,market,instrument:nativeId,timeframe:'1d'}};
  });
  let view:ComparisonView=JSON.parse(sessionStorage.getItem(key)||'null')??defaultComparisonView();
@@ -22,8 +22,9 @@ export function comparisonBridge():ComparisonBackend {
  };
  const makeResult=(requestId:string,value:ComparisonView):ComparisonResult=>{
   const asOf=Math.floor(Date.now()/1000),day=86400,lastClosedTime=Math.floor(asOf/day)*day-day,baselineTime=lastClosedTime-value.weeks*7*day;
-  const slopes=[1,-.5,.25,.75,-.3,.1,.4,.6,-.2];
-  return {requestId,weeks:value.weeks,asOf,baselineTime,lastClosedTime,warnings:[],series:value.assets.map(symbol=>{
+  const slopes=[1,-.5,.25,.75,-.3,.1,.4,.6,-.2,.15];
+  const warnings=value.assets.flatMap(symbol=>{const asset=catalog.assets.find(asset=>asset.symbol===symbol);return asset?.exchange==='binance'?[`${symbol}: using Binance spot ${asset.nativeId} (${asset.quoteAsset})`]:[];});
+  return {requestId,weeks:value.weeks,asOf,baselineTime,lastClosedTime,warnings,series:value.assets.map(symbol=>{
    const asset=catalog.assets.find(asset=>asset.symbol===symbol),override=overrides[symbol]??{};
    if(!asset)return{asset:{symbol,name:symbol,exchange:'',market:'',nativeId:'',quoteAsset:''},error:'No matching asset is available in the verified provider catalog',points:[]};
    const error=override.error||(override.missingBaseline?'The common UTC baseline candle is unavailable; this asset was not rebased':'');
