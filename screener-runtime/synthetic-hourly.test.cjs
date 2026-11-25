@@ -130,12 +130,12 @@ test('legacy observations require matching account, symbol, availability, sessio
     assert.notEqual(await fs.readFile(old.manifest,'utf8'),old.metadata);
   }
 });
-test('legacy empty repairs span positive neighbors in bounded batches while preserving every valid source byte',async t=>{
+test('legacy empty repairs stop before positive neighbors while preserving every valid source byte',async t=>{
   const f=await fixture(t,60),saved=[];
   for(let day=0;day<60;day++)saved.push(await legacyDay(f,{day:START+day*DAY,values:day%2?[[START+day*DAY,42,43,41,42]]:[]}));
   const result=await collect(hourlyBars('btcusd',START,START+60*DAY,f.request,{api:f.api,sdkHistory:f.sdkHistory}));
   assert.equal(result.length,30*24+30);
-  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),[[START,START+28*DAY],[START+28*DAY,START+56*DAY],[START+56*DAY,START+60*DAY]]);
+  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),Array.from({length:30},(_,index)=>[START+index*2*DAY,START+(index*2+1)*DAY]));
   for(let day=0;day<saved.length;day++){
     const old=saved[day];assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
     if(day%2)assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata);
@@ -144,12 +144,25 @@ test('legacy empty repairs span positive neighbors in bounded batches while pres
   const forbid=async()=>{throw Error('Repaired mixed legacy cache was fetched again');};
   assert.deepEqual(await collect(hourlyBars('btcusd',START,START+60*DAY,f.request,{api:f.api,sdkHistory:forbid})),result);
 });
+test('cached positive days never become provider dependencies during neighboring legacy empty repairs',async t=>{
+  const f=await fixture(t,4),cachedDay=START+2*DAY,old=await legacyDay(f,{day:cachedDay,values:[[cachedDay,42,43,41,42]]});
+  await legacyDay(f,{values:[]});await legacyDay(f,{day:START+DAY,values:[]});await legacyDay(f,{day:START+3*DAY,values:[]});
+  const sdkHistory=async(request,fields)=>{
+    if(fields.from<=cachedDay&&fields.to>cachedDay)throw Error('Provider cannot reload the already validated cached day');
+    return f.sdkHistory(request,fields);
+  };
+  const result=await collect(hourlyBars('btcusd',START,START+4*DAY,f.request,{api:f.api,sdkHistory}));
+  assert.equal(result.length,3*24+1);
+  assert.deepEqual(result.filter(row=>row[0]>=cachedDay&&row[0]<cachedDay+DAY),[[cachedDay,42,43,41,42]]);
+  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),[[START,START+2*DAY],[START+3*DAY,START+4*DAY]]);
+  assert.equal(await fs.readFile(old.manifest,'utf8'),old.metadata);assert.equal(await fs.readFile(old.csv,'utf8'),old.text);
+});
 test('mixed legacy recovery failure and cancellation preserve empty and positive neighbors',async t=>{
   for(const canceled of [false,true]){
     const f=await fixture(t,4),saved=[],controller=new AbortController();
     for(let day=0;day<4;day++)saved.push(await legacyDay(f,{day:START+day*DAY,values:day%2?[[START+day*DAY,42,43,41,42]]:[]}));
     const sdkHistory=async(request,fields)=>{
-      assert.equal(fields.from,START);assert.equal(fields.to,START+4*DAY);
+      assert.equal(fields.from,START);assert.equal(fields.to,START+DAY);
       if(!canceled)throw Error('mixed recovery failed');
       const result=await f.sdkHistory(request,fields);controller.abort(Error('mixed recovery canceled'));return result;
     };
@@ -164,7 +177,7 @@ test('legacy repair batches stop before a verified v2 day and reuse it unchanged
   f.requests.length=0;
   for(let day=0;day<10;day++)if(day!==5)await legacyDay(f,{day:START+day*DAY,values:day%2?[[START+day*DAY,42,43,41,42]]:[]});
   await collect(hourlyBars('btcusd',START,START+10*DAY,f.request,options));
-  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),[[START,START+5*DAY],[START+6*DAY,START+10*DAY]]);
+  assert.deepEqual(f.requests.map(r=>[r.from,r.to]),[[START,START+DAY],[START+2*DAY,START+3*DAY],[START+4*DAY,START+5*DAY],[START+6*DAY,START+7*DAY],[START+8*DAY,START+9*DAY]]);
   assert.equal(await fs.readFile(manifest,'utf8'),metadata);
 });
 test('three Fast ratio workers overlap owner publication and share complete BTC/Gold caches without JSON failures',{timeout:5000},async t=>{

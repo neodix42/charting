@@ -109,7 +109,9 @@ async function* hourlyBars(symbol,from,to,request,options={}){
           const batchEnd=Math.min(fetchLastDay,day+BATCH_DAYS*DAY);let missingEnd=day+DAY;
           while(missingEnd<batchEnd){
             const saved=await cached(folder,missingEnd,identity,signal,legacyIdentity);
-            if(saved?.identity===identity)break;
+            // Valid cached observations must not become new SDK dependencies
+            // merely because a neighboring legacy empty day needs recovery.
+            if(saved)break;
             missingEnd+=DAY;
           }
           const start=Math.max(day,firstHour),all=[];
@@ -123,8 +125,7 @@ async function* hourlyBars(symbol,from,to,request,options={}){
           }
           // Validate the entire <=672-row export before publishing any day.
           for(let next=day;next<missingEnd;next+=DAY){
-            // A repair may span legacy positive neighbors to retain bounded
-            // batching. Their validated observations and exact bytes survive.
+            // Retain any valid cache encountered again before publication.
             const value=await cached(folder,next,identity,signal,legacyIdentity)??await publish(folder,next,identity,all.filter(r=>r[0]>=next&&r[0]<next+DAY),signal);
             if(next===day)chunk=value;
           }

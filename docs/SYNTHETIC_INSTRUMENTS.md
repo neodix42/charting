@@ -149,10 +149,11 @@ separately by account/source and symbol. The cache directory/file format remains
 version 1, while source policies and their cache identities are now
 `verified-full-hour-v2` for ratio inputs and `provider-native-h1-v2` for native
 hourly fallback. Exact-identity, checksum-valid **nonempty** legacy days are reused
-without rewriting their manifests or CSVs. Legacy empty days are refetched. A
-repair can span positive legacy neighbors in one 28-day export while preserving
-their exact bytes; it publishes only missing/legacy-empty days and stops before
-verified v2 days. Failed or cancelled recovery preserves old cache files; completed
+without rewriting their manifests or CSVs. Legacy empty days are refetched in
+consecutive missing/legacy-empty batches of at most 28 days. A batch stops before
+every compatible cached day, including a positive legacy day, so reloading a valid
+neighbor cannot become a new provider dependency. It publishes only the requested
+missing/legacy-empty days. Failed or cancelled recovery preserves old cache files; completed
 new manifests are published atomically. Published user histories are not blindly
 rebuilt or discarded by this cache upgrade. Daily caches and output checkpoints
 survive Resume; incomplete days do not certify coverage. The API's wider row limit

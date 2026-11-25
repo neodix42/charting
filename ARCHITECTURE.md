@@ -105,8 +105,10 @@ is not proof of absent history; one instrument-scoped RAM reload may recover a f
 bootstrap within the absolute work deadline. Partial/error/cancelled reads cannot
 publish coverage. Hourly policies `verified-full-hour-v2` and `provider-native-h1-v2`
 use new cache identities; checksum-valid positive legacy days remain read-through,
-while legacy zeros are revalidated in bounded batches without rewriting valid
-neighbors or deleting original files. Shared Node cache ownership is published atomically
+while consecutive missing/legacy-zero days are revalidated in at most 28-day batches.
+Every compatible cached day stops the batch: valid neighbors retain their exact
+bytes without becoming new provider dependencies. Original files are not deleted.
+Shared Node cache ownership is published atomically
 with PID/nonce identity. Only proven-dead, unchanged generations can be retired;
 sibling reaper locks use the same bounded recovery protocol and retain evidence.
 
