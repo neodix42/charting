@@ -9,7 +9,7 @@ import (
 )
 
 // Progress is transient. Queueing a row never invents an actual check attempt,
-// changes its last-checked time, or replaces its previous delivery counters.
+// changes its last-checked time, or replaces its persisted delivery counters.
 type liveAlertProgress struct {
 	percent                   float64
 	phase, asset, state, mode string
@@ -208,6 +208,12 @@ func applyLiveAlertProgress(rows []LiveAlertCheck, values map[string]liveAlertPr
 		if progress, ok := values[rows[i].ConditionID]; ok {
 			rows[i].Progress, rows[i].Phase, rows[i].CurrentAsset = progress.percent, progress.phase, progress.asset
 			rows[i].ProgressState, rows[i].ProgressMode = progress.state, progress.mode
+			// Reset the visible count when this scan is queued, before scope
+			// preparation/worker waits can begin. The prior durable check and
+			// lifetime totals remain intact until a real attempt is recorded.
+			if !progress.started {
+				rows[i].SentAlerts, rows[i].SentAlertsKnown = 0, true
+			}
 		}
 	}
 }

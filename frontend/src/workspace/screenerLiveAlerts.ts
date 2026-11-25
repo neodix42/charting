@@ -13,7 +13,7 @@ export interface LiveAlertOutcome {synthetic?:boolean;simulationBasis?:string;al
 export interface LiveAlertTarget {symbol:string;name:string;category:string;period:string;profitability?:SavedConditionProfitability|null}
 export interface LiveAlertConditionScope {alertId?:string;savedConditionId?:string;conditionId:string;period:string;dataSource?:LiveAlertDataSource;allAssets?:boolean;availableTargets?:LiveAlertTarget[];targets:LiveAlertTarget[];error:string}
 export type LiveAlertProgressState='queued'|'running'|'completed'|'failed'|'cancelled'|'skipped';
-export interface LiveAlertCheck {triggeredAt?:number;durationMs?:number;durationKnown?:boolean;assetsWarmingUp?:number;assetsSkipped?:number;progress?:number;phase?:string;currentAsset?:string;progressState?:LiveAlertProgressState;progressMode?:'manual'|'scheduled';alertId?:string;savedConditionId?:string;conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;sentAlertsKnown?:boolean;lifetimeSentAlerts?:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
+export interface LiveAlertCheck {triggeredAt?:number;durationMs?:number;durationKnown?:boolean;assetsWarmingUp?:number;assetsSkipped?:number;assetsAlreadyProcessed?:number;assetsMissingCandle?:number;progress?:number;phase?:string;currentAsset?:string;progressState?:LiveAlertProgressState;progressMode?:'manual'|'scheduled';alertId?:string;savedConditionId?:string;conditionId:string;name:string;assetsScanned:number;lastChecked:number;nextCheck:number;sentAlerts:number;sentAlertsKnown?:boolean;lifetimeSentAlerts?:number;status:'never'|'running'|'completed'|'failed'|'cancelled';manual:boolean;error:string;timingHint?:string}
 /** Follow the visible alert list even when a compact Stop response orders IDs. */
 export function orderedLiveAlertChecks(entries:LiveAlertDefinition[],checks:LiveAlertCheck[]):LiveAlertCheck[]{
  const byID=new Map(checks.map(check=>[check.alertId??check.conditionId,check]));
@@ -27,10 +27,16 @@ export function liveAlertCheckProgress(check:LiveAlertCheck):{state:string;phase
  return{state,phase:check.phase||(state==='completed'&&check.error?'Completed with errors':state==='completed'&&check.assetsWarmingUp?'Completed; waiting for more history':labels[state])||state,value};
 }
 
-/** Confirmed totals survive retries, manual checks and application restarts. */
+/** Latest-attempt counts remain separate from durable confirmed totals. */
 export function liveAlertSentCount(check:LiveAlertCheck):{text:string;title:string}{
- const total=check.lifetimeSentAlerts??check.sentAlerts;
- return{text:total.toLocaleString('en-US'),title:'Total signals confirmed by at least one recipient for this alert across all checks. A partial recipient batch counts once; retries do not reset this total.'};
+ const known=check.sentAlertsKnown===true||check.status==='never';
+ return{text:known?check.sentAlerts.toLocaleString('en-US'):'—',title:known?'Signals confirmed by at least one recipient during this check. Resets to 0 when a new scan starts. A partial recipient batch counts once.':'The sent count was not recorded for this older check.'};
+}
+
+export function liveAlertAssetCounts(check:LiveAlertCheck):string {
+ const missing=check.assetsMissingCandle??0,otherSkipped=Math.max(0,(check.assetsSkipped??0)-missing);
+ const count=(value:number|undefined,label:string)=>value?`${value.toLocaleString('en-US')} ${value===1?'asset':'assets'} ${label}`:'';
+ return[count(check.assetsAlreadyProcessed,'already checked'),count(missing,'with no candle for requested period'),count(otherSkipped,'skipped'),count(check.assetsWarmingUp,'waiting for more history')].filter(Boolean).join(' · ');
 }
 
 /** Backend elapsed time covers the whole attempt, rather than page-open time. */
@@ -74,7 +80,7 @@ export function mergeLiveAlertsProgress(previous:LiveAlertsInfo|null,next:LiveAl
   checks:next.checks.map(row=>{
    const old=previousRows.get(row.alertId??row.conditionId);
    const enabled=next.config.enabled&&(next.config.alerts?.find(entry=>entry.id===(row.alertId??row.conditionId))?.enabled??true);
-   return old?{...old,...row,...(old.assetsWarmingUp!==undefined||row.assetsWarmingUp!==undefined?{assetsWarmingUp:row.assetsWarmingUp??0}:{}),...(old.lifetimeSentAlerts!==undefined||row.lifetimeSentAlerts!==undefined?{lifetimeSentAlerts:row.lifetimeSentAlerts??0}:{}),nextCheck:enabled?(row.nextCheck||old.nextCheck):0,timingHint:row.timingHint??old.timingHint}:row;
+   return old?{...old,...row,...(row.progressState?{progress:row.progress??0}:{}),...(old.assetsSkipped!==undefined||row.assetsSkipped!==undefined?{assetsSkipped:row.assetsSkipped??0}:{}),...(old.assetsWarmingUp!==undefined||row.assetsWarmingUp!==undefined?{assetsWarmingUp:row.assetsWarmingUp??0}:{}),...(old.assetsAlreadyProcessed!==undefined||row.assetsAlreadyProcessed!==undefined?{assetsAlreadyProcessed:row.assetsAlreadyProcessed??0}:{}),...(old.assetsMissingCandle!==undefined||row.assetsMissingCandle!==undefined?{assetsMissingCandle:row.assetsMissingCandle??0}:{}),...(old.lifetimeSentAlerts!==undefined||row.lifetimeSentAlerts!==undefined?{lifetimeSentAlerts:row.lifetimeSentAlerts??0}:{}),nextCheck:enabled?(row.nextCheck||old.nextCheck):0,timingHint:row.timingHint??old.timingHint}:row;
   })};
 }
 /** A slow evidence read may refresh metadata, but cannot rewind newer live work. */

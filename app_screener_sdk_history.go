@@ -16,6 +16,7 @@ import (
 
 type dukascopyHistoryClient interface {
 	HistoricalSource() (string, bool)
+	Instruments(context.Context) ([]domain.Instrument, error)
 	ExportTicks(context.Context, string, string, int64, int64, string) (int64, error)
 	DownloadHistory(context.Context, domain.FeedKey, int64, int64, int) ([]domain.Candle, error)
 }
@@ -34,20 +35,23 @@ func (p dukascopyScreenerHistory) ExportTicks(ctx context.Context, source, symbo
 }
 
 func (p dukascopyScreenerHistory) ExportCandles(ctx context.Context, source, symbol string, from, to int64, output string) (int64, error) {
+	return p.exportCandles(ctx, source, symbol, from, to, output, false, false)
+}
+
+func (p dukascopyScreenerHistory) ExportHourlyCandles(ctx context.Context, source, symbol string, from, to int64, output string, fullOpenHours bool) (int64, error) {
+	return p.exportCandles(ctx, source, symbol, from, to, output, true, fullOpenHours)
+}
+
+func (p dukascopyScreenerHistory) exportCandles(ctx context.Context, source, symbol string, from, to int64, output string, hourly, fullOpenHours bool) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	const day = int64(86_400_000)
-	if from < 0 || from%day != 0 || to%day != 0 || to <= from || to-from > 366*day || to > time.Now().UTC().Truncate(24*time.Hour).UnixMilli() {
-		return 0, errors.New("SDK candle export requires a bounded closed UTC daily range")
+	step, maximum, timeframe := int64(86_400_000), int64(366), "1d"
+	if hourly {
+		step, maximum, timeframe = 3_600_000, 1000, "1h"
 	}
-	market := "cfd"
-	switch strings.ToLower(symbol) {
-	case "btcusd":
-	case "xauxag":
-		market = "metal"
-	default:
-		return 0, errors.New("SDK native daily export supports BTCUSD and XAUXAG only")
+	if from < 0 || from%step != 0 || to%step != 0 || to <= from || to-from > maximum*step || to > time.Now().UnixMilli()/step*step || hourly && !fullOpenHours && symbol != "btcusd" {
+		return 0, errors.New("SDK candle export requires a bounded closed UTC daily or hourly range")
 	}
 	checkSource := func() error {
 		current, configured := p.client.HistoricalSource()
@@ -59,28 +63,60 @@ func (p dukascopyScreenerHistory) ExportCandles(ctx context.Context, source, sym
 	if err := checkSource(); err != nil {
 		return 0, err
 	}
-	info, err := os.Lstat(output)
-	if !filepath.IsAbs(output) || err != nil || !info.Mode().IsRegular() || info.Size() != 0 || runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
-		return 0, errors.New("SDK output must be an existing empty private regular file")
-	}
-	key := domain.FeedKey{Exchange: "dukascopy", Market: market, Instrument: strings.ToUpper(symbol), Timeframe: "1d"}
-	bars, err := p.client.DownloadHistory(ctx, key, from/1000, to/1000, 1000)
+	// Downloader IDs match the SDK's native identifier, but market identity
+	// comes from the configured account catalog, never a symbol-name guess.
+	items, err := p.client.Instruments(ctx)
 	if err != nil {
 		return 0, err
 	}
 	if err := checkSource(); err != nil {
 		return 0, err
 	}
-	if len(bars) > 366 {
-		return 0, errors.New("SDK daily export exceeded its bounded candle count")
+	key := domain.FeedKey{Exchange: "dukascopy", Timeframe: timeframe}
+	for _, item := range items {
+		if !strings.EqualFold(item.NativeID, symbol) {
+			continue
+		}
+		if key.Instrument != "" {
+			return 0, errors.New("SDK history instrument has an ambiguous account catalog identity")
+		}
+		key.Instrument, key.Market = item.NativeID, item.Market
+	}
+	if key.Instrument == "" || key.Validate() != nil {
+		return 0, errors.New("This history instrument is unavailable in the configured Dukascopy SDK catalog")
+	}
+	info, err := os.Lstat(output)
+	if !filepath.IsAbs(output) || err != nil || !info.Mode().IsRegular() || info.Size() != 0 || runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+		return 0, errors.New("SDK output must be an existing empty private regular file")
+	}
+	var bars []domain.Candle
+	if hourly {
+		client, ok := p.client.(interface {
+			DownloadHourlyHistory(context.Context, domain.FeedKey, int64, int64, int, bool) ([]domain.Candle, error)
+		})
+		if !ok {
+			return 0, errors.New("Configured Dukascopy SDK does not support verified hourly history")
+		}
+		bars, err = client.DownloadHourlyHistory(ctx, key, from/1000, to/1000, 1000, fullOpenHours)
+	} else {
+		bars, err = p.client.DownloadHistory(ctx, key, from/1000, to/1000, 1000)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if err := checkSource(); err != nil {
+		return 0, err
+	}
+	if len(bars) > int(maximum) {
+		return 0, errors.New("SDK candle export exceeded its bounded candle count")
 	}
 	previous := int64(-1)
 	for _, bar := range bars {
 		if err := bar.Validate(); err != nil {
 			return 0, err
 		}
-		if !bar.Closed || bar.Time*1000 < from || (bar.Time+86400)*1000 > to || bar.Time%86400 != 0 || bar.Time <= previous {
-			return 0, errors.New("SDK returned unordered, open or out-of-range daily candles")
+		if !bar.Closed || bar.Time*1000 < from || bar.Time*1000+step > to || bar.Time%(step/1000) != 0 || bar.Time <= previous {
+			return 0, errors.New("SDK returned unordered, open or out-of-range daily or hourly candles")
 		}
 		previous = bar.Time
 	}

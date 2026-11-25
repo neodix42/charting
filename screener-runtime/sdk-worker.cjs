@@ -23,7 +23,9 @@ async function requestSDKChunk(request,fields,options={}){
     const tick=fields.timeframe==='tick'&&fields.to-fields.from===3600000&&transientTickTimeouts.has(error.message);
     const daily=fields.timeframe==='d1'&&Number.isSafeInteger(fields.from)&&Number.isSafeInteger(fields.to)&&fields.from%DAY===0&&fields.to%DAY===0&&
       fields.to>fields.from&&fields.to-fields.from<=366*DAY&&error.message==='JForex native daily download timed out. Completed history is retained; retry to resume.';
-    if(error?.code!=='JFOREX_HISTORY'||(!tick&&!daily)||options.signal?.aborted)throw error;
+    const hourly=['h1','h1-native'].includes(fields.timeframe)&&Number.isSafeInteger(fields.from)&&Number.isSafeInteger(fields.to)&&fields.from%3600000===0&&fields.to%3600000===0&&
+      fields.to>fields.from&&fields.to-fields.from<=1000*3600000&&error.message==='JForex hourly history download timed out. Completed history is retained; retry to resume.';
+    if(error?.code!=='JFOREX_HISTORY'||(!tick&&!daily&&!hourly)||options.signal?.aborted)throw error;
     options.signal?.throwIfAborted();
     options.onRetry?.({symbol:fields.symbol,timeframe:fields.timeframe,from:fields.from,to:fields.to,...(tick?{hour:fields.from}:{}),attempt:2,delayMs:5000});
     // A single retry may consume the SDK's now-warmed chunk. Every retry still
@@ -116,7 +118,7 @@ async function* readSDKCSV(result,timeframe,from,to,signal){
       if(values.some(value=>!Number.isFinite(value))||!Number.isSafeInteger(time)||time<from||time>=to||time<previous||(timeframe!=='tick'&&time===previous))throw Error('JForex exported invalid or unordered history.');
       if(timeframe==='tick'){
         if(prices[0]<=0||prices[1]<=0||prices[2]<0||prices[3]<0)throw Error('JForex exported invalid BID/ASK ticks.');
-      }else if(time%DAY!==0||prices.some(value=>value<=0)||prices[1]<prices[2]||prices[0]<prices[2]||prices[0]>prices[1]||prices[3]<prices[2]||prices[3]>prices[1])throw Error('JForex exported invalid daily OHLC.');
+      }else if(time%(['h1','h1-native'].includes(timeframe)?3600000:DAY)!==0||prices.some(value=>value<=0)||prices[1]<prices[2]||prices[0]<prices[2]||prices[0]>prices[1]||prices[3]<prices[2]||prices[3]>prices[1])throw Error('JForex exported invalid daily or hourly OHLC.');
       if(++count>result.rows)throw Error('JForex export row count does not match its response.');
       previous=time;yield values;
     }
@@ -125,7 +127,8 @@ async function* readSDKCSV(result,timeframe,from,to,signal){
 }
 
 async function sdkNativeDownload(request,options={}){
-  if(request.timeframe!=='d1'||!['btcusd','xauxag'].includes(request.symbol))throw Error('Unsupported native JForex history download.');
+  const fast=request.syntheticSource==='h1-close';
+  if(request.timeframe!=='d1'||!/^[a-z0-9]+$/.test(request.symbol??''))throw Error('Unsupported native JForex history download.');
   const sourceKey=request.providerSession?.sdk?.sourceKey;
   if(!/^[a-f0-9]{64}$/.test(sourceKey??''))throw Error('JForex history source identity is unavailable.');
   const api=options.api??require('dukascopy-node'),signal=options.signal;
@@ -135,7 +138,7 @@ async function sdkNativeDownload(request,options={}){
   const start=Math.max(Math.floor(requestedFrom/DAY)*DAY,Math.floor(earliest/DAY)*DAY);
   let end=Math.floor(Math.min(requestedTo,asOf)/DAY)*DAY;
   if(start>=end)throw Error('No available history in the requested UTC date range.');
-  const identity=createHash('sha256').update(JSON.stringify({version:1,sourceKey,symbol:request.symbol,timeframe:'d1',from:request.from,to:request.to})).digest('hex');
+  const identity=createHash('sha256').update(JSON.stringify({version:1,sourceKey,symbol:request.symbol,timeframe:'d1',from:request.from,to:request.to,...(fast?{syntheticSource:'h1-close'}:{})})).digest('hex');
   const publicIdentity=createHash('sha256').update(JSON.stringify({version:1,kind:'native-public-d1',symbol:request.symbol,from:request.from,to:request.to})).digest('hex');
   const checkpointFile=path.join(path.dirname(request.output),'sdk-checkpoint.json');let saved;
   if(request.resume){
@@ -144,6 +147,7 @@ async function sdkNativeDownload(request,options={}){
     if(saved&&(saved.version!==1||saved.identity!==identity||saved.start!==start||!Number.isSafeInteger(saved.end)||saved.end> end||saved.end<=start||
       !Number.isSafeInteger(saved.next)||saved.next<start||saved.next>saved.end||saved.next%DAY!==0||!Number.isSafeInteger(saved.bytes)||saved.bytes<0||!Number.isSafeInteger(saved.rows)||saved.rows<0||
       (saved.tickFallback!==undefined&&(typeof saved.tickFallback!=='boolean'||saved.tickFallback&&(request.symbol!=='btcusd'||saved.rows===0)))||
+      (saved.hourlyFallback!==undefined&&(typeof saved.hourlyFallback!=='boolean'||saved.hourlyFallback&&(!fast||request.symbol!=='btcusd'||saved.rows===0)))||
       (saved.fallbackUntil!==undefined&&saved.fallbackUntil!==null&&(request.symbol!=='btcusd'||!Number.isSafeInteger(saved.fallbackUntil)||saved.fallbackUntil%DAY!==0||saved.fallbackUntil<=saved.next||saved.fallbackUntil>saved.end||saved.fallbackUntil-saved.next>366*DAY))||
       (saved.rows===0?(saved.bytes!==0||saved.last!==null):(!saved.bytes||!Number.isSafeInteger(saved.last)||saved.last<start||saved.last>=saved.next))))throw Error('Saved native JForex checkpoint belongs to another source or is invalid.');
     if(saved)end=saved.end;
@@ -165,7 +169,7 @@ async function sdkNativeDownload(request,options={}){
   if(start>=end)throw Error('No available history in the requested UTC date range.');
   const emit=options.emit??(event=>process.stdout.write(`${JSON.stringify(event)}\n`));
   const {writeCheckpoint}=require('./worker.cjs');let handle,bytes=saved?.bytes??0,rows=saved?.rows??0,last=saved?.last??null;
-  let next=saved?.next??start,fallbackUntil=saved?.fallbackUntil??null,tickFallback=saved?.tickFallback??false;
+  let next=saved?.next??start,fallbackUntil=saved?.fallbackUntil??null,tickFallback=saved?.tickFallback??false,hourlyFallback=saved?.hourlyFallback??false;
   const append=async row=>{
     if(last!==null&&row[0]<=last)throw Error('JForex daily history overlaps committed candles.');
     const buffer=Buffer.from(`${rows?'':'timestamp,open,high,low,close\n'}${row.join(',')}\n`);let offset=0;
@@ -174,7 +178,7 @@ async function sdkNativeDownload(request,options={}){
   };
   const commit=async cursor=>{
     await handle.sync();signal?.throwIfAborted();next=cursor;
-    if(request.resume)await writeCheckpoint(checkpointFile,{version:1,identity,start,end,next,bytes,rows,last,tickFallback,...(fallbackUntil!==null?{fallbackUntil}: {})});
+    if(request.resume)await writeCheckpoint(checkpointFile,{version:1,identity,start,end,next,bytes,rows,last,tickFallback,...(fast?{hourlyFallback}:{}),...(fallbackUntil!==null?{fallbackUntil}: {})});
   };
   try{
     handle=await fs.open(request.output,'r+');
@@ -197,9 +201,19 @@ async function sdkNativeDownload(request,options={}){
             emit({type:'progress',progress:Math.min(95,(day-start)/(end-start)*95),message:`JForex ${request.symbol} native tick history timed out; retrying the same UTC hour once in 5 seconds. Completed quote hours are retained.`});
             options.onRetry?.(event);
           };
-          const quotes=require('./synthetic-quotes.cjs').sourceQuotes(request.symbol,day,until,request,{...options,onChunk,onRetry,historyRange:{from:day,to}});
-          for await(const bar of require('./synthetic-worker.cjs').nativeBars(quotes,day,until,signal)){
-            await append([bar.timestamp,bar.open,bar.high,bar.low,bar.close]);tickFallback=true;
+          if(fast){
+            const hourly=require('./synthetic-hourly.cjs');
+            const input=hourly.hourlyBars(request.symbol,day,until,request,{...options,native:true,historyRange:{from:day,to},onHourlyDay:event=>{
+              emit({type:'progress',progress:Math.min(95,(day-start)/(end-start)*95),message:`${event.reused?'Reused cached':'Fetched'} native ${request.symbol} H1 OHLC; no ticks downloaded`});options.onHourlyDay?.(event);
+            }});
+            for await(const bar of hourly.aggregateNativeHourly(input,{signal})){
+              await append([bar.timestamp,bar.open,bar.high,bar.low,bar.close]);hourlyFallback=true;
+            }
+          }else{
+            const quotes=require('./synthetic-quotes.cjs').sourceQuotes(request.symbol,day,until,request,{...options,onChunk,onRetry,historyRange:{from:day,to}});
+            for await(const bar of require('./synthetic-worker.cjs').nativeBars(quotes,day,until,signal)){
+              await append([bar.timestamp,bar.open,bar.high,bar.low,bar.close]);tickFallback=true;
+            }
           }
           fallbackUntil=until<to?to:null;await commit(until);
         }
@@ -219,8 +233,9 @@ async function sdkNativeDownload(request,options={}){
     if(!rows)throw Error('Dukascopy returned no rows for this symbol and date range.');
     await handle.sync();const data=await require('./refresh-worker.cjs').scan(request.output,'d1');
     if(data.rows!==rows||data.last!==last)throw Error('JForex checkpoint does not match its CSV.');
-    const provenance={...require('./synthetic-worker.cjs').provenance(request.symbol,false),historySource:'jforex-sdk',volume:'unavailable',
-      observationResolution:tickFallback?'JForex SDK BID daily candles; empty periods derived from native BID ticks':'JForex SDK BID daily candles'};
+    const provenance={...require('./synthetic-worker.cjs').nativeProvenance(request.symbol),historySource:'jforex-sdk',volume:'unavailable',
+      ...(fast?{syntheticSource:'h1-close'}:{}),
+      observationResolution:hourlyFallback?'JForex SDK BID daily candles; empty periods aggregated from native H1 OHLC':tickFallback?'JForex SDK BID daily candles; empty periods derived from native BID ticks':'JForex SDK BID daily candles'};
     emit({type:'done',rows,firstTimestamp:data.first,lastTimestamp:data.last,checksum:data.checksum,coverage:[{from:requestedFrom,to:end}],checkedThrough:end,provenance,
       message:`Saved ${rows.toLocaleString('en-US')} authenticated JForex BID daily candles; volume unavailable`});
     return rows;

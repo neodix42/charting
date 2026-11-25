@@ -261,7 +261,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 				watermark, known := l.state.Watermarks[saved.ID+"/"+pair]
 				l.mu.Unlock()
 				if known && watermark >= expected {
-					run.processedPair(saved.ID, symbol, period)
+					run.alreadyProcessedPair(saved.ID, symbol, period)
 					delete(qualified[saved.ID], pair)
 				} else {
 					basePairs[pair] = true
@@ -427,7 +427,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 			previous, seen := l.state.Watermarks[key]
 			l.mu.Unlock()
 			if seen && latest.timestamp <= previous {
-				run.processedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
+				run.alreadyProcessedPair(saved.ID, s.metadata.Symbol, s.metadata.Timeframe)
 				continue
 			}
 			a.request = copyAnalysisRequest(saved.Request)

@@ -9,15 +9,17 @@ async function requestSDKHistory(request,{symbol,timeframe,from,to}){
   const session=request.providerSession,sourceKey=session?.sdk?.sourceKey,owner=session&&sdkOwners.get(session);
   if(!/^[a-f0-9]{64}$/.test(sourceKey??'')||!owner)throw Error('The configured JForex history source requires the connected app owner pipe.');
   if(owner.sourceKey!==sourceKey)throw Error('JForex source identity changed; restart this job with its matching owner.');
-  if(!sdkSymbols.has(symbol)||!['tick','d1'].includes(timeframe)||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||from<0||to<=from||
-    to-from>(timeframe==='tick'?3600000:366*86400000))throw Error('Invalid bounded JForex history request.');
+  const hourly=['h1','h1-native'].includes(timeframe),step=timeframe==='d1'?86400000:3600000,maximum=timeframe==='tick'?3600000:hourly?1000*3600000:366*86400000;
+  if(!/^[a-z0-9]{1,128}$/.test(symbol??'')||timeframe==='tick'&&!sdkSymbols.has(symbol)||timeframe==='h1-native'&&symbol!=='btcusd'||!['tick','d1','h1','h1-native'].includes(timeframe)||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||from<0||to<=from||from%step||to%step||
+    to-from>maximum)throw Error('Invalid bounded JForex history request.');
   let result;
   try{result=await owner.ask('history',{symbol,timeframe,from,to});}
   catch(error){error.code='JFOREX_HISTORY';throw error;}
   if(typeof result.path!=='string'||!path.isAbsolute(result.path)||!Number.isSafeInteger(result.rows)||result.rows<0||!path.isAbsolute(session.directory))throw Error('Invalid JForex history export response.');
+  if(hourly&&result.sessionPolicy!==(timeframe==='h1'?'verified-full-hour-v1':'provider-native-h1-v1'))throw Error('JForex hourly history did not verify its requested session policy.');
   const info=await fs.lstat(result.path),root=await fs.realpath(session.directory),filename=await fs.realpath(result.path),relative=path.relative(root,filename);
   if(!info.isFile()||info.size>64*1024*1024||!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw Error('JForex history export is outside its owned folder or exceeds 64 MiB.');
-  return {path:result.path,rows:result.rows};
+  return {path:result.path,rows:result.rows,...(hourly?{sessionPolicy:result.sessionPolicy}:{})};
 }
 
 // Use the parent's existing private pipe for the one application-wide pacing

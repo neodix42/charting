@@ -262,4 +262,4 @@ async function* sourceQuotes(symbol,from,to,request,options={}){
     yield* readQuotes(chunk,from,to,signal);
   }
 }
-module.exports={sourceQuotes,HOUR};
+module.exports={sourceQuotes,HOUR,cacheIO:{directory,regular,digest,lock}};

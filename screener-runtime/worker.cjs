@@ -49,6 +49,7 @@ function isEmptyDataSource({url, buffer}) {
 // one source at a time so years of ticks never accumulate in memory. Each
 // source file contains whole UTC aggregation buckets (hour/day/month/year).
 async function download(request, options = {}) {
+  if(request.syntheticSource!==undefined&&!['ticks','h1-close'].includes(request.syntheticSource))throw Error('Unsupported synthetic observation source.');
   if (request.timeframe === 'w1') return require('./weekly-worker.cjs').weeklyDownload(request, options);
   if (request.planFile) return require('./incremental-worker.cjs').extendDownload(request, options);
   const api = options.api || require('dukascopy-node');
@@ -82,7 +83,7 @@ async function download(request, options = {}) {
       return synthetic.syntheticDownload({...request,synthetic:true},options);
     }
   }
-  if(request.providerSession?.sdk&&request.timeframe==='d1'&&['btcusd','xauxag'].includes(request.symbol))return require('./sdk-worker.cjs').sdkNativeDownload(request,options);
+  if(request.providerSession?.sdk&&request.timeframe==='d1')return require('./sdk-worker.cjs').sdkNativeDownload(request,options);
   const emit = options.emit || (event => process.stdout.write(`${JSON.stringify(event)}\n`));
   const requestedBatchSize = request.sourceBatchSize ?? 1;
   if (!Number.isInteger(requestedBatchSize) || requestedBatchSize < 1 || requestedBatchSize > 4) {

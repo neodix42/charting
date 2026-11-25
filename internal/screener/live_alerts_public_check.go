@@ -141,7 +141,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 				pair := asset.Symbol + "/" + period
 				run.expectPair(saved.ID, asset.Symbol, period)
 				if batch.Processed[livePublicClaimKey(saved.ID, source, asset.Symbol, period)] {
-					run.processedPair(saved.ID, asset.Symbol, period)
+					run.alreadyProcessedPair(saved.ID, asset.Symbol, period)
 					continue
 				}
 				failure := publicAlertRequiredHistoryFailure(asset.Symbol, dependencies[saved.ID][period], batch.Failures, indexFailures)
@@ -183,7 +183,7 @@ func (l *LiveAlerts) checkPublicCycle(ctx context.Context, config LiveAlertsConf
 						previous, seen := l.state.Watermarks[key]
 						l.mu.Unlock()
 						if seen && latest.timestamp <= previous {
-							run.processedPair(saved.ID, asset.Symbol, period)
+							run.alreadyProcessedPair(saved.ID, asset.Symbol, period)
 							continue
 						}
 						a.request = copyAnalysisRequest(saved.Request)

@@ -73,7 +73,11 @@ func TestDukascopyRepeatedManualDailyCheckCountsInspectedAssetsWithoutResending(
 			t.Fatal(err)
 		}
 		info := l.Info()
-		if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || !info.Checks[0].Manual || info.Checks[0].AssetsScanned != 5 || info.Checks[0].AssetsSkipped != 0 || info.Checks[0].Error != "" || info.Checks[0].SentAlerts != wantSent || !info.Checks[0].SentAlertsKnown || info.Checks[0].LifetimeSentAlerts != 5 || sends != 5 || info.Sent != 5 || len(info.Recent) != 5 {
+		already := 0
+		if wantSent == 0 {
+			already = 5
+		}
+		if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || !info.Checks[0].Manual || info.Checks[0].AssetsScanned != 5 || info.Checks[0].AssetsAlreadyProcessed != already || info.Checks[0].AssetsMissingCandle != 0 || info.Checks[0].AssetsSkipped != 0 || info.Checks[0].Error != "" || info.Checks[0].SentAlerts != wantSent || !info.Checks[0].SentAlertsKnown || info.Checks[0].LifetimeSentAlerts != 5 || sends != 5 || info.Sent != 5 || len(info.Recent) != 5 {
 			t.Fatalf("inspected daily assets were miscounted or already-processed signals resent: %+v; sends=%d", info.Checks, sends)
 		}
 	}

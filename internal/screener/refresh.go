@@ -334,6 +334,7 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		}
 	}
 	input, _ := json.Marshal(struct {
+		SyntheticSource  string           `json:"syntheticSource,omitempty"`
 		Input            string           `json:"input"`
 		Output           string           `json:"output"`
 		Symbol           string           `json:"symbol"`
@@ -349,7 +350,7 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		ProviderSession  *providerSession `json:"providerSession,omitempty"`
 		HistoryDirectory string           `json:"historyDirectory"`
 		Provenance       *DataProvenance  `json:"provenance,omitempty"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx), HistoryDirectory: directory, Provenance: copyProvenance(metadata.Provenance)})
+	}{SyntheticSource: syntheticSourceFromProvenance(metadata.Provenance), Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx), HistoryDirectory: directory, Provenance: copyProvenance(metadata.Provenance)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work

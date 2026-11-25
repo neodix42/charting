@@ -12,10 +12,9 @@ import (
 	"cryptodesk/internal/domain"
 )
 
-// A manual recheck of an already inspected D1/W1 close must reuse successful
-// data reads, even when the provider could not supply a usable signal candle.
-// These cases mirror inactive spot markets and a listing's incomplete first week.
-func TestManualPublicUnavailableHistoryReusesSuccessfulReadsForSameClose(t *testing.T) {
+// Keep older warm-up reads reusable, while an unavailable latest candle gets a
+// bounded fresh probe rather than being pinned until the next UTC cutoff.
+func TestManualPublicUnavailableHistoryReusesWarmupAndRechecksLatest(t *testing.T) {
 	for _, scenario := range []string{"daily-missing-provisional-prefix", "weekly-missing-provisional-prefix", "weekly-short-listing"} {
 		t.Run(scenario, func(t *testing.T) {
 			m := sourceEnrichmentManager(t, false)
@@ -101,18 +100,28 @@ func TestManualPublicUnavailableHistoryReusesSuccessfulReadsForSameClose(t *test
 			if got := prepare(owner, end); got != initial {
 				t.Fatalf("repeat changed the known outcome:\n%s\n%s", initial, got)
 			}
-			if len(fake.ranges) != calls {
-				t.Fatal("ten-minute manual repeat downloaded retained/unavailable history", fake.ranges[calls:])
+			if scenario == "weekly-short-listing" {
+				if len(fake.ranges) != calls {
+					t.Fatal("complete latest with insufficient older warm-up was downloaded again", fake.ranges[calls:])
+				}
+			} else {
+				requireNarrowPublicLatestRecheck(t, fake.ranges[calls:], end, interval)
 			}
+			calls = len(fake.ranges)
 			owner.Close()
 			owner = newOwner()
 			clock.Add(2 * time.Hour.Milliseconds())
 			if got := prepare(owner, end); got != initial {
 				t.Fatalf("restart changed the known outcome:\n%s\n%s", initial, got)
 			}
-			if len(fake.ranges) != calls {
-				t.Fatal("two-hour restarted manual repeat downloaded retained/unavailable history", fake.ranges[calls:])
+			if scenario == "weekly-short-listing" {
+				if len(fake.ranges) != calls {
+					t.Fatal("restart discarded successful older-history warm-up evidence", fake.ranges[calls:])
+				}
+			} else {
+				requireNarrowPublicLatestRecheck(t, fake.ranges[calls:], end, interval)
 			}
+			calls = len(fake.ranges)
 
 			if period == "d1" {
 				// A changed retained CSV invalidates exact-cutoff read evidence,
@@ -289,7 +298,7 @@ func TestFailedPublicReadDoesNotCreateManualHistoryMemo(t *testing.T) {
 	}
 }
 
-func TestManualCheckCycleUsesRetainedUnavailableDailyAndWeeklyReads(t *testing.T) {
+func TestManualCheckCycleRechecksOnlyUnavailableLatestDailyAndWeekly(t *testing.T) {
 	for _, period := range []string{"d1", "w1"} {
 		t.Run(period, func(t *testing.T) {
 			m := sourceEnrichmentManager(t, false)
@@ -327,11 +336,15 @@ func TestManualCheckCycleUsesRetainedUnavailableDailyAndWeeklyReads(t *testing.T
 			}
 			clock.Add(10 * time.Minute.Milliseconds())
 			check()
-			if len(fake.ranges) != calls {
-				t.Fatal("real manual check path repeated successful unavailable reads", fake.ranges[calls:])
+			interval := int64(86400)
+			if period == "w1" {
+				interval *= 7
 			}
+			requireNarrowPublicLatestRecheck(t, fake.ranges[calls:], end, interval)
+			calls = len(fake.ranges)
 			// Scheduled publication retries must retain their provider freshness
 			// policy rather than inheriting a manual check's reuse preference.
+			clock.Add(liveAlertRetryDelay.Milliseconds())
 			if err := owner.checkCycle(context.Background(), owner.state.Config, clock.Load(), true); !errors.Is(err, errLiveAlertsPendingBar) {
 				t.Fatal("scheduled publication retry lost its missing-candle result", err)
 			}
@@ -342,7 +355,7 @@ func TestManualCheckCycleUsesRetainedUnavailableDailyAndWeeklyReads(t *testing.T
 	}
 }
 
-func TestManualClosedHistoryReusesLegacyMatureMissingCandleEvidence(t *testing.T) {
+func TestManualClosedHistoryExpiresLegacyMatureMissingCandleEvidence(t *testing.T) {
 	for _, period := range []string{"d1", "w1"} {
 		t.Run(period, func(t *testing.T) {
 			m := sourceEnrichmentManager(t, false)
@@ -399,13 +412,22 @@ func TestManualClosedHistoryReusesLegacyMatureMissingCandleEvidence(t *testing.T
 			calls := len(fake.ranges)
 			clock.Add(2 * time.Hour.Milliseconds())
 			prepare(context.WithValue(context.Background(), publicAlertReuseClosedHistoryKey{}, true))
-			if len(fake.ranges) != calls {
-				t.Fatal("manual upgrade recheck ignored mature legacy absence evidence", fake.ranges[calls:])
+			interval := day
+			if period == "w1" {
+				interval *= 7
 			}
+			requireNarrowPublicLatestRecheck(t, fake.ranges[calls:], end, interval)
 			if len(owner.state.Watermarks) != 0 || owner.state.Sent != 0 {
 				t.Fatal("reusing legacy absence invented processed/delivery claims")
 			}
 		})
+	}
+}
+
+func requireNarrowPublicLatestRecheck(t *testing.T, ranges [][2]int64, end, interval int64) {
+	t.Helper()
+	if len(ranges) != 1 || ranges[0][0] < end-interval || ranges[0][1] != end || ranges[0][0] >= ranges[0][1] {
+		t.Fatalf("expired absence must probe only its latest daily/weekly bucket: %v", ranges)
 	}
 }
 

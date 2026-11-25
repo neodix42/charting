@@ -703,6 +703,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	historyReadAt := publicAlertSeriesNow(ctx)
 	cacheableRead := period == "d1" || period == "w1"
 	reuseRead := false
+	recheckLatest := false
 	if preferRetained && cacheableRead {
 		checksum, e := publicAlertBarsChecksum(bars)
 		if e != nil {
@@ -723,6 +724,19 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 			evidence = &publicAlertHistoryReadEvidence{Cutoff: end, Bars: state.BackfillBars, CheckedAt: now.UnixMilli(), Checksum: checksum}
 		}
 		reuseRead = evidence.reusable(end, plan.Bars, checksum, now)
+		if latest, present := bars[end-d]; reuseRead && (!present || latest.Quality != "authoritative") {
+			// A successful read is not proof that an unpublished closing bar
+			// will stay absent. Keep the bounded absence pacing used by ordinary
+			// checks; mature manual-read evidence must not suppress later actual
+			// publication for the remainder of this daily/weekly cutoff.
+			checkedAt := evidence.CheckedAt
+			if state.LatestMissing.valid(end, d, now) {
+				checkedAt = max(checkedAt, state.LatestMissing.CheckedAt)
+			}
+			if now.Sub(time.UnixMilli(checkedAt)) >= publicAlertMissingCandleCooldown(source, asset.Market, end, d, bars) {
+				reuseRead, recheckLatest = false, true
+			}
+		}
 		if reuseRead {
 			report("Reusing saved closed-period history check")
 		}
@@ -751,7 +765,7 @@ func preparePublicAlertSeries(ctx context.Context, adapter exchange.Adapter, wor
 	// Give those one narrow probe on upgrade; a normal one-bar advance retains
 	// its overlap request so provider corrections remain observable.
 	legacyInactive := raw != nil && !hasLatest && authoritativeHistory() && missingCooldown == 30*time.Minute
-	latestOnly := !reuseRead && (missingMemo || legacyInactive)
+	latestOnly := !reuseRead && (recheckLatest || missingMemo || legacyInactive)
 	if !reuseRead && missingMemo && publicAlertSeriesNow(ctx).Sub(time.UnixMilli(state.LatestMissing.CheckedAt)) < missingCooldown {
 		report("Reusing known missing closed candle; waiting to recheck publication")
 		return "", publicAlertMissingCandleError(end, d)

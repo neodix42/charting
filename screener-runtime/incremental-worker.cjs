@@ -114,8 +114,9 @@ async function extendDownload(request,options={}){
     if(normalized.some(name=>!name)||new Set(normalized).size!==normalized.length)throw Error('CSV contains empty or duplicate field names; original kept.');
     for(const name of data.headers)if(!names.has(key(name))){names.add(key(name));headers.push(name);}
     const metadata=source.metadata??{};
-    latestProvenance??=metadata.provenance;
-    provenanceEntries.unshift({value:metadata.provenance,from:data.first,to:Math.min(nextBar(data.last,request.timeframe),plan.asOf)});
+    const priorProvenance=metadata.provenance??(request.providerSession?.sdk&&request.timeframe==='d1'&&normalized.includes('volume')?require('./synthetic-worker.cjs').nativeProvenance(request.symbol):undefined);
+    latestProvenance??=priorProvenance;
+    provenanceEntries.unshift({value:priorProvenance,from:data.first,to:Math.min(nextBar(data.last,request.timeframe),plan.asOf)});
     const valid=metadata.checksum===data.checksum;
     if(metadata.provenance&&!valid)throw Error('Synthetic provenance checksum does not match the existing CSV; original kept.');
     if(valid&&metadata.coverage?.length)covered.push(...metadata.coverage);
@@ -163,7 +164,7 @@ async function extendDownload(request,options={}){
     let rows=0;
     try{
       await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(range.from).toISOString(),to:new Date(range.to).toISOString(),output,resume:true,sourceBatchSize:request.sourceBatchSize??1,asOf:plan.asOf,providerSession:request.providerSession,
-        historyDirectory:request.historyDirectory,syntheticCacheDirectory:request.syntheticCacheDirectory,synthetic:request.synthetic??(request.symbol==='xauxag'&&!names.has('volume')?{kind:'mixed-native-ratio'}:undefined)},
+        historyDirectory:request.historyDirectory,syntheticCacheDirectory:request.syntheticCacheDirectory,hourlyCacheDirectory:request.hourlyCacheDirectory,syntheticSource:request.syntheticSource,synthetic:request.synthetic??(request.symbol==='xauxag'&&!names.has('volume')?{kind:'mixed-native-ratio'}:undefined)},
         {...options,emit:event=>{if(event.type==='done'){rows=event.rows;if(event.provenance){latestProvenance=event.provenance;provenanceEntries.push({value:event.provenance,from:range.from,to:closedBoundary(range.to,request.timeframe)});}}if(event.type==='progress')emit({...event,progress:2+(index+event.progress/100)/snapshot.ranges.length*68});}});
     }catch(error){if(!/Dukascopy returned no rows|No available history in the requested UTC date range/.test(error.message))throw error;}
     if(rows>0)downloaded.push(output);

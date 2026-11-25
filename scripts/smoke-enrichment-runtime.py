@@ -462,6 +462,147 @@ const local={...api,BufferFetcher:class extends api.BufferFetcher{constructor(op
     return report
 
 
+def fast_synthetic_smoke(runtime, node, directory):
+    """Exercise packaged H1 observation history through the real owner protocol."""
+    script = r"""
+const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
+const {EventEmitter}=require('node:events');
+const input=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
+for(const module of ['synthetic-hourly.cjs','synthetic-worker.cjs','sdk-worker.cjs'])require(path.join(input.runtime,module));
+const api=require(path.join(input.runtime,'node_modules','dukascopy-node'));
+const {download}=require(path.join(input.runtime,'worker.cjs'));
+const {enrich}=require(path.join(input.runtime,'enrich-worker.cjs'));
+const {installProviderTransport}=require(path.join(input.runtime,'provider-transport.cjs'));
+const start=Date.UTC(2024,0,1),hour=3600000,day=24*hour,sourceKey='b'.repeat(64),newline=String.fromCharCode(10);
+const csv=rows=>['timestamp,open,high,low,close',...rows.map(row=>row.join(',')),''].join(newline);
+const dailyRow=index=>[start+index*day,5+12*index,16.5+12*index,5+12*index,16.5+12*index];
+(async()=>{
+  const folder=path.join(input.directory,'fast-hourly-probe'),batch=path.join(folder,'sdk-batch');
+  await fs.mkdir(batch,{recursive:true,mode:0o700});
+  await fs.writeFile(path.join(batch,'blocked.json'),JSON.stringify({message:'Earlier public HTTP403 ETH-USD request'}));
+  const session={directory:batch,tokenCache:path.join(folder,'unused-token.json'),rateLimit:true,sdk:{sourceKey}};
+  const output=path.join(folder,'ratio-d1.csv');await fs.writeFile(output,'');
+  const request={symbol:'btcxau',timeframe:'d1',syntheticSource:'h1-close',from:new Date(start).toISOString(),to:new Date(start+60*day).toISOString(),asOf:start+60*day,output,
+    providerSession:session,ownerPipe:true,hourlyCacheDirectory:path.join(folder,'hourly')};
+  let publicFetchers=0,httpRequests=0,nativeEmpty=true;
+  const guard={...api,BufferFetcher:class{constructor(){publicFetchers++;throw Error('Fast packaged probe constructed a public/tick fetcher');}}};
+  const lines=new EventEmitter(),events=[],originalFetch=global.fetch;
+  global.fetch=()=>{httpRequests++;throw Error('Fast packaged probe attempted HTTP');};
+  const transport=installProviderTransport(lines,request,event=>{
+    events.push(event);
+    queueMicrotask(async()=>{
+      try{
+        assert.equal(event.operation,'history');
+        assert.ok(['btcusd','xauusd'].includes(event.symbol),'wrong literal ratio source');
+        assert.ok(['h1','h1-native','d1'].includes(event.timeframe),'fast mode requested ticks');
+        const filename=path.join(batch,`export-${event.requestId}.csv`),rows=[];
+        let sessionPolicy;
+        if(event.timeframe==='d1'){
+          assert.equal(event.symbol,'btcusd');assert.equal(event.from,start);assert.equal(event.to,start+day);
+          if(!nativeEmpty)rows.push([start,50,70,40,60]);
+        }else{
+          assert.equal(event.from%hour,0);assert.equal(event.to%hour,0);
+          assert.ok(event.to>event.from&&event.to-event.from<=28*day,'H1 batch exceeded28days/672hourly rows');
+          assert.ok(event.from>=start&&event.to<=request.asOf,'hourly source looked beyond the closed request');
+          sessionPolicy=event.timeframe==='h1'?'verified-full-hour-v1':'provider-native-h1-v1';
+          if(event.timeframe==='h1-native')assert.equal(event.symbol,'btcusd');
+          for(let time=event.from;time<event.to;time+=hour){
+            const close=event.symbol==='btcusd'?10+(time-start)/hour:2;
+            // Deliberately extreme native highs/lows expose independent OHLC
+            // division. Ratios must use only the paired observed H1 closes.
+            rows.push([time,close-1,close+1000,close/1000,close]);
+          }
+          assert.ok(rows.length<=672);
+        }
+        await fs.writeFile(filename,csv(rows),{mode:0o600});
+        lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId,path:filename,rows:rows.length,...(sessionPolicy?{sessionPolicy}:{})}));
+      }catch(error){lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId,error:error.message}));}
+    });
+  });
+  let report;
+  try{
+    let daily;await download(request,{api:guard,emit:event=>{if(event.type==='done')daily=event;}});
+    const expected=csv(Array.from({length:60},(_,index)=>dailyRow(index)));
+    assert.equal(await fs.readFile(output,'utf8'),expected);assert.equal(daily.rows,60);
+    assert.equal(events.length,6,'sixtydays must require exactlythree28day-or-smaller batches per leg');
+    for(const symbol of ['btcusd','xauusd']){
+      const requests=events.filter(event=>event.symbol===symbol).sort((a,b)=>a.from-b.from);
+      assert.deepEqual(requests.map(event=>[event.timeframe,event.from,event.to]),[
+        ['h1',start,start+28*day],['h1',start+28*day,start+56*day],['h1',start+56*day,start+60*day],
+      ]);
+    }
+    const sampled=value=>{
+      assert.equal(value.syntheticSource,'h1-close');assert.equal(value.historySource,'jforex-sdk');
+      assert.equal(value.maxQuoteAgeMs,hour);assert.equal(value.sessionPolicy,'verified-full-hour-close-v1');
+      assert.equal(value.volume,'unavailable');assert.equal(value.approximate,true);assert.match(value.observationResolution,/H1/);
+      assert.ok(!JSON.stringify(value).includes(sourceKey),'opaque account key leaked into public provenance');
+    };
+    sampled(daily.provenance);
+    const repeated=path.join(folder,'ratio-repeated.csv');await fs.writeFile(repeated,'');
+    await download({...request,output:repeated},{api:guard,emit:()=>{}});
+    assert.equal(events.length,6,'compatible checksummed day cache made another SDK request');
+    assert.equal(await fs.readFile(repeated,'utf8'),expected);
+    const enriched=path.join(folder,'ratio-enriched.csv');
+    await enrich({input:output,output:enriched,indicator:'sma',parameters:{period:3},source:'auto'},{emit:()=>{}});
+    const enrichedRows=(await fs.readFile(enriched,'utf8')).trim().split(newline).map(row=>row.split(','));
+    assert.deepEqual(enrichedRows[0],['timestamp','open','high','low','close','sma_3']);
+    for(let index=0;index<60;index++){
+      assert.deepEqual(enrichedRows[index+1].slice(0,5),dailyRow(index).map(String));
+      assert.equal(enrichedRows[index+1][5],index<2?'':String(16.5+12*(index-1)));
+    }
+    // Derive eight complete Monday weeks using a production D1 download of
+    // the56-day cached subset, so no partial current week can enter this probe.
+    const complete=path.join(folder,'complete-d1.csv');await fs.writeFile(complete,'');let completeDaily;
+    const completeRequest={...request,to:new Date(start+56*day).toISOString(),asOf:start+56*day,output:complete};
+    await download(completeRequest,{api:guard,emit:event=>{if(event.type==='done')completeDaily=event;}});
+    assert.equal(events.length,6);assert.equal(completeDaily.rows,56);sampled(completeDaily.provenance);
+    const info=await fs.stat(complete),plan=path.join(folder,'daily-plan.json');
+    await fs.writeFile(plan,JSON.stringify({version:1,asOf:completeRequest.asOf,inputs:[{input:complete,bytes:info.size,modified:Math.trunc(info.mtimeMs),metadata:{provenance:completeDaily.provenance,checksum:completeDaily.checksum}}]}));
+    const weekly=path.join(folder,'ratio-w1.csv');await fs.writeFile(weekly,'');let week;
+    await download({...completeRequest,timeframe:'w1',output:weekly,dailyPlanFile:plan},{api:guard,emit:event=>{if(event.type==='done')week=event;}});
+    const weeklyExpected=csv(Array.from({length:8},(_,index)=>[start+7*index*day,5+84*index,88.5+84*index,5+84*index,88.5+84*index]));
+    assert.equal(await fs.readFile(weekly,'utf8'),weeklyExpected);assert.equal(week.rows,8);sampled(week.provenance);
+    const weekEnriched=path.join(folder,'ratio-w1-enriched.csv');
+    await enrich({input:weekly,output:weekEnriched,indicator:'sma',parameters:{period:1},source:'auto',timeframe:'w1'},{emit:()=>{}});
+    const weekRows=(await fs.readFile(weekEnriched,'utf8')).trim().split(newline).map(row=>row.split(','));
+    assert.equal(weekRows.length,9);assert.equal(weekRows[0].at(-1),'sma_1');
+    for(const row of weekRows.slice(1))assert.equal(row.at(-1),row[4]);
+    assert.equal(events.length,6,'weekly derivation/enrichment requested provider history');
+    // BTCUSD first tries genuine native D1; a verified empty response alone
+    // enables its same-asset native H1 OHLC fallback, under a separate policy.
+    const native=path.join(folder,'native-btcusd.csv');await fs.writeFile(native,'');let nativeDone;
+    const nativeRequest={...request,symbol:'btcusd',to:new Date(start+day).toISOString(),asOf:start+day,output:native};
+    await download(nativeRequest,{api:guard,emit:event=>{if(event.type==='done')nativeDone=event;}});
+    assert.equal(await fs.readFile(native,'utf8'),csv([[start,9,1033,0.01,33]]));
+    assert.deepEqual(events.slice(6).map(event=>event.timeframe),['d1','h1-native']);
+    assert.equal(nativeDone.provenance.kind,'native');assert.equal(nativeDone.provenance.approximate,false);
+    assert.equal(nativeDone.provenance.syntheticSource,'h1-close');assert.match(nativeDone.provenance.observationResolution,/native H1 OHLC/);
+    nativeEmpty=false;const preferred=path.join(folder,'native-preferred.csv');await fs.writeFile(preferred,'');
+    await download({...nativeRequest,output:preferred},{api:guard,emit:()=>{}});
+    assert.equal(await fs.readFile(preferred,'utf8'),csv([[start,50,70,40,60]]));
+    assert.deepEqual(events.slice(8).map(event=>event.timeframe),['d1'],'available native daily OHLC did not remain preferred');
+    assert.equal(httpRequests,0);assert.equal(publicFetchers,0);
+    assert.equal(events.filter(event=>event.timeframe==='tick').length,0);
+    assert.equal((await fs.readdir(batch)).some(name=>name.startsWith('export-')),false);
+    assert.equal(await fs.readFile(output,'utf8'),expected);assert.equal(await fs.readFile(weekly,'utf8'),weeklyExpected);
+    report={passed:true,ownerPipe:true,dailyRows:60,completeWeeklyRows:8,initialHourlyRequests:6,maxBatchDays:28,maxBatchRows:672,repeatHistoryRequests:0,
+      tickRequests:0,httpRequests,publicFetchers,pairedCloseOHLC:true,nativeOHLCFallback:true,nativeD1Preferred:true,priceEnrichment:true,
+      samplingProvenanceRetained:true,separateNativeSessionPolicy:true,priorHTTPDenialBypassed:true,ownedExportsRemoved:true,originalsPreserved:true,networkRequired:false};
+  }finally{transport.close();global.fetch=originalFetch;}
+  process.stdout.write(JSON.stringify(report));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    result = subprocess.run([str(node), "-e", script],
+                            input=json.dumps({"runtime": str(runtime), "directory": str(directory)}) + "\n",
+                            text=True, capture_output=True, cwd=directory, timeout=45, check=True)
+    report = json.loads(result.stdout)
+    if (not report.get("passed") or report.get("dailyRows") != 60
+            or report.get("completeWeeklyRows") != 8 or report.get("initialHourlyRequests") != 6
+            or report.get("tickRequests") != 0 or report.get("repeatHistoryRequests") != 0):
+        raise ValueError(f"Packaged fast synthetic pipeline did not confirm its result: {result.stdout[:2000]}")
+    return report
+
+
 def smoke(runtime):
     runtime = runtime.resolve()
     node = runtime / ("node.exe" if os.name == "nt" else "node")
@@ -494,6 +635,7 @@ def smoke(runtime):
         incremental = incremental_smoke(runtime, node, directory, output)
         provider = provider_smoke(runtime, node, directory)
         synthetic = synthetic_smoke(runtime, node, directory)
+        synthetic["fastHourly"] = fast_synthetic_smoke(runtime, node, directory)
         return {"passed": True, "runtime": str(runtime), "columns": ["sma_3"], "rows": 4,
                 "warmupBlank": True, "exactValues": True, "originalFieldsPreserved": True,
                 "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar,

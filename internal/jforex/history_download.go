@@ -15,9 +15,9 @@ func (m *Manager) DownloadHistory(ctx context.Context, key domain.FeedKey, from,
 		return nil, err
 	}
 	const day = int64(24 * time.Hour / time.Second)
-	native := key.Instrument == "BTCUSD" && key.Market == "cfd" || key.Instrument == "XAUXAG" && key.Market == "metal"
-	if !native || key.Timeframe != "1d" || from < 0 || to <= from || from%day != 0 || to%day != 0 || to-from > 366*day || to > time.Now().Unix()/day*day || limit < 1 || limit > 1000 {
-		return nil, errors.New("Native JForex downloads require BTCUSD/XAUXAG and at most 366 closed UTC daily candles")
+	nativeMarket := key.Market == "forex" || key.Market == "metal" || key.Market == "cfd"
+	if !nativeMarket || key.Timeframe != "1d" || from < 0 || to <= from || from%day != 0 || to%day != 0 || to-from > 366*day || to > time.Now().Unix()/day*day || limit < 1 || limit > 1000 {
+		return nil, errors.New("Native JForex downloads require at most 366 closed UTC daily candles")
 	}
 	return m.history(ctx, key, from, to, limit, true)
 }

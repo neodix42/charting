@@ -32,7 +32,7 @@ func allSourceRequests(request Request, now time.Time) ([]Request, error) {
 		if len(selected[source]) == 0 {
 			continue
 		}
-		child := Request{DataSource: source, Symbols: selected[source], Timeframe: request.Timeframe, From: request.From, To: request.To, Concurrency: request.Concurrency}
+		child := Request{SyntheticSource: request.SyntheticSource, DataSource: source, Symbols: selected[source], Timeframe: request.Timeframe, From: request.From, To: request.To, Concurrency: request.Concurrency}
 		if err := validateRequest(child, now); err != nil {
 			return nil, err
 		}

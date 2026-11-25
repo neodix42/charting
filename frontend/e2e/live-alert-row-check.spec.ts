@@ -19,7 +19,7 @@ async function open(page:Page,enabled=true){
   (window as any).__testSetAnalysisInfo({active:false,phase:'completed',failed:0,results:[{...file,id:'row-check-result',fileId:file.id,status:'completed',rows:10,matches:2}]});
   const condition=await api.SaveScreenerAnalysisCondition('Shared saved rule',request);
   const alerts=names.map((name,index)=>({id:ids[index],name,conditionId:condition.id,period:['d1','h1','w1'][index],dataSource:index===0?'dukascopy':'hyperliquid',enabled:index!==2}));
-  const checks=alerts.map((entry,index)=>({alertId:entry.id,savedConditionId:condition.id,conditionId:entry.id,name:entry.name,assetsScanned:7+index,lastChecked:Date.UTC(2026,10,8,12),nextCheck:Date.UTC(2026,10,10,12),sentAlerts:2+index,status:'completed',manual:false,error:'',progress:100,progressState:'completed',phase:'Previous completed check'}));
+  const checks=alerts.map((entry,index)=>({alertId:entry.id,savedConditionId:condition.id,conditionId:entry.id,name:entry.name,assetsScanned:7+index,lastChecked:Date.UTC(2026,10,8,12),nextCheck:Date.UTC(2026,10,10,12),sentAlerts:2+index,sentAlertsKnown:true,lifetimeSentAlerts:2+index,status:'completed',manual:false,error:'',progress:100,progressState:'completed',phase:'Previous completed check'}));
   (window as any).__testSetLiveAlertsInfo({config:{enabled,alerts},checks,running:false,status:enabled?'Waiting for next closed bar':'Disabled',sent:9});
  },{names,ids,enabled});
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
@@ -34,6 +34,8 @@ test('row Check now queues only the exact alert, preserving sibling history and 
  await page.evaluate(()=>{const api=window.go!.main!.App!,original=api.CheckScreenerLiveAlert.bind(api);(window as any).__rowCheckCalls=[];api.CheckScreenerLiveAlert=id=>new Promise(resolve=>{(window as any).__rowCheckCalls.push(id);(window as any).__releaseRowCheck=async()=>resolve(await original(id));});});
  await check(page,names[1]).click();
  await expect(progress(page,names[1])).toContainText('Requesting check');await expect(progress(page,names[1])).toContainText('Manual check');
+ await expect(historyRow(page,names[1]).getByRole('cell').nth(4)).toHaveText('0');
+ await expect(historyRow(page,names[0]).getByRole('cell').nth(4)).toHaveText('2');await expect(historyRow(page,names[2]).getByRole('cell').nth(4)).toHaveText('4');
  for(const name of [names[0],names[2]]){await expect(progress(page,name)).toContainText('Previous completed check');await expect(progress(page,name)).not.toContainText('Requesting check');}
  await expect(check(page,names[1])).toBeDisabled();await expect(check(page,names[0])).toBeDisabled();await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeDisabled();
  await check(page,names[1]).evaluate((button:HTMLButtonElement)=>button.click());expect(await page.evaluate(()=>(window as any).__rowCheckCalls)).toEqual([ids[1]]);
@@ -41,7 +43,7 @@ test('row Check now queues only the exact alert, preserving sibling history and 
  await expect.poll(()=>page.evaluate(()=>(window as any).__testLiveAlertCheckRequests())).toEqual([ids[1]]);
  const after=await page.evaluate(()=>(window as any).__testLiveAlertsInfo());
  expect(after.config).toEqual(before.config);expect(after.checks.filter((row:any)=>row.alertId!==ids[1])).toEqual(before.checks.filter((row:any)=>row.alertId!==ids[1]));
- expect(after.checks.find((row:any)=>row.alertId===ids[1])).toMatchObject({progressState:'queued',progressMode:'manual',lastChecked:before.checks[1].lastChecked,sentAlerts:before.checks[1].sentAlerts});
+ expect(after.checks.find((row:any)=>row.alertId===ids[1])).toMatchObject({progressState:'queued',progressMode:'manual',lastChecked:before.checks[1].lastChecked,sentAlerts:0,sentAlertsKnown:true,lifetimeSentAlerts:before.checks[1].lifetimeSentAlerts});
  expect(await page.evaluate(()=>(window as any).__testLiveAlertsChecks())).toBe(0);expect(await page.evaluate(()=>(window as any).__testLiveAlertsWrites())).toEqual([]);
 });
 

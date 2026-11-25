@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import type {LiveAlertCheck,LiveAlertOutcome,LiveAlertsInfo} from '../workspace/screenerLiveAlerts';
-import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertSentCount,liveAlertDuration,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
+import {mergeLiveAlertsProgress,mergeLiveAlertsMetadata,initialLiveAlertsConfig,liveAlertConditionSource,withLiveAlertSource,liveAlertDefinitions,orderedLiveAlertChecks,liveAlertCheckProgress,configWithLiveAlerts,renameConditionAlerts,liveAlertSourceLabel,liveAlertErrorText,visibleLiveAlertCheck,liveAlertAssetCounts,liveAlertSentCount,liveAlertDuration,liveAlertOutcomePresentation,liveAlertBarClose,liveAlertPeriodLabel,defaultLiveAlertSource,liveAlertDataSources,LiveAlertsConfigWriter} from '../workspace/screenerLiveAlerts';
 
 const result=(config:LiveAlertsInfo['config']):LiveAlertsInfo=>({checks:[],savedConditionsRevision:0,conditionScopes:[],config,running:false,lastRun:0,nextRun:0,sent:0,status:'Disabled',assets:[],progress:0,currentAsset:'',recent:[]});
 
@@ -182,14 +182,50 @@ it('presents immature assets as a history wait and clears an omitted zero count 
  expect(row.assetsWarmingUp).toBe(2);
 });
 
+it('explains zero scans without treating previous candles or missing listings as newly scanned assets',()=>{
+ const row:LiveAlertCheck={conditionId:'scope',name:'Markets',assetsScanned:0,assetsAlreadyProcessed:466,assetsMissingCandle:225,assetsSkipped:228,assetsWarmingUp:22,lastChecked:10,nextCheck:100,sentAlerts:0,status:'completed',manual:true,error:''};
+ expect(liveAlertAssetCounts(row)).toBe('466 assets already checked · 225 assets with no candle for requested period · 3 assets skipped · 22 assets waiting for more history');
+ expect(liveAlertAssetCounts({...row,assetsSkipped:225})).not.toContain('skipped');
+ expect(liveAlertAssetCounts({...row,assetsSkipped:1,assetsWarmingUp:0})).not.toContain('skipped');
+ const previous={...result({enabled:true}),checks:[row]},latest={...row};
+ delete latest.assetsAlreadyProcessed;delete latest.assetsMissingCandle;
+ const current={...result({enabled:true}),checks:[latest]};
+ expect(mergeLiveAlertsProgress(previous,current).checks[0]).toMatchObject({assetsAlreadyProcessed:0,assetsMissingCandle:0});
+ expect(mergeLiveAlertsMetadata(current,previous).checks[0]).toMatchObject({assetsAlreadyProcessed:0,assetsMissingCandle:0});
+ expect(liveAlertAssetCounts({...latest,assetsSkipped:undefined,assetsWarmingUp:undefined})).toBe('');
+ expect(row.assetsAlreadyProcessed).toBe(466);expect(row.assetsMissingCandle).toBe(225);
+});
 
-it('keeps confirmed totals visible across legacy records and retry attempts',()=>{
+it('resets omitted zero runtime progress and skipped counts without inventing legacy progress',()=>{
+ const row:LiveAlertCheck={conditionId:'scope',name:'Markets',assetsScanned:0,assetsSkipped:225,assetsMissingCandle:225,progress:100,progressState:'completed',lastChecked:10,nextCheck:100,sentAlerts:0,status:'completed',manual:true,error:''};
+ const previous={...result({enabled:true}),checks:[row]};
+ for(const state of ['queued','running'] as const){
+  const {progress:_progress,assetsSkipped:_skipped,assetsMissingCandle:_missing,...base}=row;
+  const compact={...result({enabled:true}),checks:[{...base,progressState:state}]};
+  for(const merged of [mergeLiveAlertsProgress(previous,compact),mergeLiveAlertsMetadata(compact,previous)]){
+   expect(merged.checks[0]).toMatchObject({progressState:state,progress:0,assetsSkipped:0,assetsMissingCandle:0});
+   expect(liveAlertAssetCounts(merged.checks[0])).toBe('');
+   expect(liveAlertCheckProgress(merged.checks[0]).value).toBe(0);
+  }
+ }
+ const legacy={...row};delete legacy.progressState;delete legacy.progress;
+ expect(mergeLiveAlertsProgress(previous,{...result({enabled:true}),checks:[legacy]}).checks[0].progress).toBe(100);
+ expect(mergeLiveAlertsProgress(null,{...result({enabled:true}),checks:[legacy]}).checks[0]).not.toHaveProperty('progress');
+ expect(row).toMatchObject({progress:100,assetsSkipped:225,assetsMissingCandle:225});
+});
+
+
+it('shows only latest-attempt confirmations without displaying internal lifetime totals',()=>{
  const legacy:LiveAlertCheck={conditionId:'old',name:'Legacy',assetsScanned:1,lastChecked:10,nextCheck:100,sentAlerts:0,sentAlertsKnown:false,lifetimeSentAlerts:37,status:'completed',manual:true,error:''};
- expect(liveAlertSentCount(legacy)).toMatchObject({text:'37'});
+ expect(liveAlertSentCount(legacy)).toMatchObject({text:'—'});
+ expect(liveAlertSentCount(legacy).title).not.toMatch(/lifetime|37/i);
  const running={...legacy,sentAlertsKnown:true,status:'running' as const};
- expect(liveAlertSentCount(running).text).toBe('37');
- expect(liveAlertSentCount({...running,sentAlerts:1,lifetimeSentAlerts:38}).text).toBe('38');
+ expect(liveAlertSentCount(running).text).toBe('0');
+ expect(liveAlertSentCount({...running,sentAlerts:1,lifetimeSentAlerts:38}).text).toBe('1');
+ expect(liveAlertSentCount({...running,sentAlerts:1,lifetimeSentAlerts:38}).title).not.toMatch(/lifetime|38/i);
+ expect(liveAlertSentCount({...running,assetsScanned:0,status:'completed',sentAlerts:0,lifetimeSentAlerts:38}).text).toBe('0');
  expect(liveAlertSentCount({...running,sentAlerts:1}).title).toContain('at least one recipient');
+ expect(liveAlertSentCount({...legacy,sentAlertsKnown:undefined,lifetimeSentAlerts:undefined}).text).toBe('—');
  const metadata={...result({enabled:true}),checks:[{...running,sentAlerts:1,lifetimeSentAlerts:38}]};
  const compact={...result({enabled:true}),checks:[{...running,sentAlerts:0,lifetimeSentAlerts:undefined}]};
  expect(mergeLiveAlertsProgress(metadata,compact).checks[0]).toMatchObject({sentAlerts:0,lifetimeSentAlerts:0});

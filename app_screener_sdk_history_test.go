@@ -19,9 +19,15 @@ type screenerSDKClientFixture struct {
 	calls         int
 	fail          error
 	changeAccount bool
+	items         []domain.Instrument
+	catalogError  error
+	fullOpenHours bool
 }
 
 func (f *screenerSDKClientFixture) HistoricalSource() (string, bool) { return f.source, f.configured }
+func (f *screenerSDKClientFixture) Instruments(context.Context) ([]domain.Instrument, error) {
+	return f.items, f.catalogError
+}
 func (f *screenerSDKClientFixture) ExportTicks(context.Context, string, string, int64, int64, string) (int64, error) {
 	return 0, errors.New("unexpected tick export")
 }
@@ -36,6 +42,10 @@ func (f *screenerSDKClientFixture) DownloadHistory(_ context.Context, key domain
 	}
 	return f.bars, f.fail
 }
+func (f *screenerSDKClientFixture) DownloadHourlyHistory(ctx context.Context, key domain.FeedKey, from, to int64, limit int, full bool) ([]domain.Candle, error) {
+	f.fullOpenHours = full
+	return f.DownloadHistory(ctx, key, from, to, limit)
+}
 func sdkExportTarget(t *testing.T) string {
 	t.Helper()
 	name := filepath.Join(t.TempDir(), "export.csv")
@@ -45,11 +55,13 @@ func sdkExportTarget(t *testing.T) string {
 	return name
 }
 func sdkFixture() *screenerSDKClientFixture {
-	return &screenerSDKClientFixture{source: strings.Repeat("a", 64), configured: true, bars: []domain.Candle{{Time: 1704067200, Open: 5, High: 7, Low: 4, Close: 6, Volume: 123, Closed: true}}}
+	return &screenerSDKClientFixture{source: strings.Repeat("a", 64), configured: true, bars: []domain.Candle{{Time: 1704067200, Open: 5, High: 7, Low: 4, Close: 6, Volume: 123, Closed: true}}, items: []domain.Instrument{
+		{NativeID: "BTCUSD", Market: "cfd"}, {NativeID: "XAUXAG", Market: "metal"}, {NativeID: "0700HKHKD", Market: "cfd"}, {NativeID: "EURUSD", Market: "forex"}, {NativeID: "XAUUSD", Market: "metal"},
+	}}
 }
 
 func TestScreenerSDKNativeExportUsesClosedBidHistoryWithoutInventedVolume(t *testing.T) {
-	for _, symbol := range []string{"btcusd", "xauxag"} {
+	for _, symbol := range []string{"btcusd", "xauxag", "0700hkhkd", "eurusd", "xauusd"} {
 		t.Run(symbol, func(t *testing.T) {
 			fixture := sdkFixture()
 			provider := dukascopyScreenerHistory{client: fixture}
@@ -63,13 +75,53 @@ func TestScreenerSDKNativeExportUsesClosedBidHistoryWithoutInventedVolume(t *tes
 				t.Fatal(string(body), err)
 			}
 			market := "cfd"
-			if symbol == "xauxag" {
+			if symbol == "xauxag" || symbol == "xauusd" {
 				market = "metal"
+			} else if symbol == "eurusd" {
+				market = "forex"
 			}
 			if fixture.key != (domain.FeedKey{Exchange: "dukascopy", Market: market, Instrument: strings.ToUpper(symbol), Timeframe: "1d"}) {
 				t.Fatal(fixture.key)
 			}
 		})
+	}
+}
+func TestScreenerSDKDailyExportRequiresExactAvailableAccountCatalogIdentity(t *testing.T) {
+	for _, kind := range []string{"unavailable", "calculated", "ambiguous", "catalog-error"} {
+		t.Run(kind, func(t *testing.T) {
+			fixture := sdkFixture()
+			symbol := "0700hkhkd"
+			switch kind {
+			case "unavailable":
+				fixture.items = nil
+			case "calculated":
+				symbol = "btcxau"
+			case "ambiguous":
+				fixture.items = append(fixture.items, domain.Instrument{NativeID: "0700HKHKD", Market: "forex"})
+			case "catalog-error":
+				fixture.catalogError = errors.New("SDK account catalog unavailable")
+			}
+			output := sdkExportTarget(t)
+			if _, err := (dukascopyScreenerHistory{client: fixture}).ExportCandles(context.Background(), fixture.source, symbol, 1704067200000, 1704153600000, output); err == nil || fixture.calls != 0 {
+				t.Fatal("unverified native identity reached history", fixture.key, err)
+			}
+			if data, _ := os.ReadFile(output); len(data) != 0 {
+				t.Fatal("rejected catalog identity changed output", string(data))
+			}
+		})
+	}
+}
+func TestScreenerSDKHourlyExportKeepsExplicitNativeAndVerifiedSessionContracts(t *testing.T) {
+	for _, full := range []bool{true, false} {
+		fixture := sdkFixture()
+		if full {
+			fixture.bars = append(fixture.bars, domain.Candle{Time: 1704070800, Open: 6, High: 8, Low: 5, Close: 7, Volume: 1, Closed: true})
+		}
+		output := sdkExportTarget(t)
+		rows, err := (dukascopyScreenerHistory{client: fixture}).ExportHourlyCandles(context.Background(), fixture.source, "btcusd", 1704067200000, 1704074400000, output, full)
+		if err != nil || rows != int64(len(fixture.bars)) || fixture.key.Timeframe != "1h" || fixture.fullOpenHours != full {
+			t.Fatal("hourly native/verified policy lost", rows, fixture.key, fixture.fullOpenHours, err)
+		}
 	}
 }
 func TestScreenerSDKNativeExportRejectsInvalidPeriodsAndSourceChanges(t *testing.T) {

@@ -44,6 +44,9 @@ public final class BridgeResponsivenessTest {
             this(timeout, clock, retryMillis, downloadTimeout, offered, null);
         }
         Fixture(long timeout, LongSupplier clock, long retryMillis, long downloadTimeout, Set<Instrument> offered, BridgeTest.Call synchronousBars) throws Exception {
+            this(timeout, clock, retryMillis, downloadTimeout, offered, synchronousBars, null);
+        }
+        Fixture(long timeout, LongSupplier clock, long retryMillis, long downloadTimeout, Set<Instrument> offered, BridgeTest.Call synchronousBars, IDataService calendar) throws Exception {
             IHistory history = fake(IHistory.class, (method, args) -> switch (method) {
                 case "getBarStart" -> {
                     Period period = (Period) args[0]; long time = (Long) args[1], step = period.getInterval();
@@ -60,7 +63,7 @@ public final class BridgeResponsivenessTest {
                 case "readBars" -> { check(subscribed.contains((Instrument) args[0]), "history waits for actual subscription acknowledgement"); loads.add(new Load(args)); yield null; }
                 default -> null;
             });
-            IDataService service = fake(IDataService.class, (method, args) -> method.equals("isOfflineTime") ? offline.get() : false);
+            IDataService service = calendar != null ? calendar : fake(IDataService.class, (method, args) -> method.equals("isOfflineTime") ? offline.get() : false);
             IContext context = fake(IContext.class, (method, args) -> switch (method) {
                 case "getHistory" -> history;
                 case "getDataService" -> service;

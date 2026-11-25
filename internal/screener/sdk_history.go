@@ -21,6 +21,10 @@ type DukascopyHistoryProvider interface {
 	ExportCandles(ctx context.Context, expectedSourceKey, symbol string, fromMs, toMs int64, output string) (int64, error)
 }
 
+type DukascopyHourlyHistoryProvider interface {
+	ExportHourlyCandles(ctx context.Context, expectedSourceKey, symbol string, fromMs, toMs int64, output string, fullOpenHours bool) (int64, error)
+}
+
 type providerSDKSession struct {
 	SourceKey string `json:"sourceKey"`
 }
@@ -57,11 +61,21 @@ func (r *providerReplies) validateSDKHistoryRequest(event providerEvent) error {
 			return errors.New("Dukascopy SDK ticks require one complete closed UTC hour")
 		}
 	case "d1":
-		if event.Symbol != "btcusd" && event.Symbol != "xauxag" {
+		if _, known := catalogAssets[event.Symbol]; !known || calculatedSynthetic(event.Symbol) {
 			return errors.New("unsupported Dukascopy SDK daily source")
 		}
 		if event.From%sdkHistoryDay != 0 || event.To%sdkHistoryDay != 0 || event.To-event.From > 366*sdkHistoryDay || event.To > now/sdkHistoryDay*sdkHistoryDay {
 			return errors.New("Dukascopy SDK candles require at most 366 complete closed UTC days")
+		}
+	case "h1", "h1-native":
+		if _, known := catalogAssets[event.Symbol]; !known || calculatedSynthetic(event.Symbol) || event.Timeframe == "h1-native" && event.Symbol != "btcusd" {
+			return errors.New("unsupported Dukascopy SDK hourly source")
+		}
+		if _, supported := r.state.history.(DukascopyHourlyHistoryProvider); !supported {
+			return errors.New("configured Dukascopy SDK does not support the hourly history session contract")
+		}
+		if event.From%sdkHistoryHour != 0 || event.To%sdkHistoryHour != 0 || event.To-event.From > 1000*sdkHistoryHour || event.To > now/sdkHistoryHour*sdkHistoryHour {
+			return errors.New("Dukascopy SDK hourly candles require at most 1000 complete closed UTC hours")
 		}
 	default:
 		return errors.New("unsupported Dukascopy SDK history timeframe")
@@ -133,8 +147,10 @@ func (r *providerReplies) exportSDKHistory(event providerEvent) (filename string
 	}
 	if event.Timeframe == "tick" {
 		rows, err = r.state.history.ExportTicks(r.ctx, r.state.SDK.SourceKey, event.Symbol, event.From, event.To, filename)
-	} else {
+	} else if event.Timeframe == "d1" {
 		rows, err = r.state.history.ExportCandles(r.ctx, r.state.SDK.SourceKey, event.Symbol, event.From, event.To, filename)
+	} else {
+		rows, err = r.state.history.(DukascopyHourlyHistoryProvider).ExportHourlyCandles(r.ctx, r.state.SDK.SourceKey, event.Symbol, event.From, event.To, filename, event.Timeframe == "h1")
 	}
 	if err != nil {
 		var providerError *exchange.Error

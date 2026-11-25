@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {initialScreenerView,normalizeScreenerView,ScreenerViewWriter} from '../workspace/screenerView';
+import {initialScreenerView,normalizeScreenerView,ScreenerViewWriter,syntheticSourceLabel} from '../workspace/screenerView';
 
 it('serializes durable Screener choices and flushes the latest symbols, period and category states',async()=>{
  let release!:()=>void;const first=new Promise<void>(resolve=>{release=resolve;});
@@ -38,8 +38,21 @@ it('defaults legacy views to Dukascopy and durably keeps an intentionally empty 
  expect(normalizeScreenerView(legacy).dataSource).toBe('dukascopy');
  const value={...legacy,dataSource:'hyperliquid' as const,hyperliquidSymbols:[],hyperliquidSelectionInitialized:true};
  const persist=vi.fn(async view=>view),writer=new ScreenerViewWriter(persist,()=>{});
- writer.edit(value);await writer.flush();expect(persist).toHaveBeenCalledWith(value);
+ writer.edit(value);await writer.flush();expect(persist).toHaveBeenCalledWith({...value,syntheticSource:'h1-close'});
  expect(value.symbols).toEqual(['btcusd']);
+});
+
+it('defaults new and saved-view submissions to fast observations while preserving selected tick mode and legacy job labels',async()=>{
+ expect(initialScreenerView().syntheticSource).toBe('h1-close');
+ const legacy={...initialScreenerView(),syntheticSource:undefined};
+ expect(normalizeScreenerView(legacy).syntheticSource).toBe('h1-close');
+ expect(legacy.syntheticSource).toBeUndefined();
+ const persist=vi.fn(async value=>value),writer=new ScreenerViewWriter(persist,()=>{});
+ writer.edit({...legacy,syntheticSource:'ticks'});await writer.flush();
+ expect(persist.mock.calls[0][0].syntheticSource).toBe('ticks');
+ expect(syntheticSourceLabel(undefined)).toBe('Tick observations');
+ expect(syntheticSourceLabel('ticks')).toBe('Tick observations');
+ expect(syntheticSourceLabel('h1-close')).toBe('Fast hourly observations');
 });
 
 it('keeps All data sources and both independent selections across durable saves without aliasing',async()=>{

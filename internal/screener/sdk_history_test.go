@@ -55,6 +55,13 @@ func (p *fakeSDKHistory) ExportTicks(ctx context.Context, key, symbol string, fr
 func (p *fakeSDKHistory) ExportCandles(ctx context.Context, key, symbol string, from, to int64, output string) (int64, error) {
 	return p.write(ctx, key, symbol, from, to, output, "d1")
 }
+func (p *fakeSDKHistory) ExportHourlyCandles(ctx context.Context, key, symbol string, from, to int64, output string, full bool) (int64, error) {
+	period := "h1-native"
+	if full {
+		period = "h1"
+	}
+	return p.write(ctx, key, symbol, from, to, output, period)
+}
 func newFakeSDKHistory() *fakeSDKHistory {
 	return &fakeSDKHistory{key: strings.Repeat("a", 64), configured: true}
 }
@@ -118,21 +125,37 @@ func TestSDKHistoryValidatesSourcePeriodsAndClosedBoundsBeforeExport(t *testing.
 	if err := r.validateSDKHistoryRequest(daily); err != nil {
 		t.Fatal(err)
 	}
+	for _, symbol := range []string{"0700hkhkd", "eurusd", "xauusd", "ethusd"} {
+		request := daily
+		request.Symbol = symbol
+		if err := r.validateSDKHistoryRequest(request); err != nil {
+			t.Fatal("actual native catalog daily source rejected", symbol, err)
+		}
+	}
+	for _, period := range []string{"h1", "h1-native"} {
+		request := valid
+		request.Timeframe, request.To = period, request.From+1000*sdkHistoryHour
+		if err := r.validateSDKHistoryRequest(request); err != nil {
+			t.Fatal("bounded hourly contract rejected", period, err)
+		}
+	}
 	for name, change := range map[string]func(*providerEvent){
 		"unknown symbol":     func(e *providerEvent) { e.Symbol = "eurusd" },
 		"uppercase symbol":   func(e *providerEvent) { e.Symbol = "BTCUSD" },
-		"unsupported period": func(e *providerEvent) { e.Timeframe = "h1" },
+		"unsupported period": func(e *providerEvent) { e.Timeframe = "h4" },
 		"misaligned hour":    func(e *providerEvent) { e.From++; e.To++ },
 		"multiple hours":     func(e *providerEvent) { e.To += sdkHistoryHour },
 		"open hour": func(e *providerEvent) {
 			e.From = time.Now().UnixMilli() / sdkHistoryHour * sdkHistoryHour
 			e.To = e.From + sdkHistoryHour
 		},
-		"negative timestamp":    func(e *providerEvent) { e.From = -sdkHistoryHour; e.To = 0 },
-		"reversed range":        func(e *providerEvent) { e.To = e.From },
-		"unsupported daily leg": func(e *providerEvent) { e.Timeframe = "d1"; e.Symbol = "ethusd"; e.To = e.From + sdkHistoryDay },
-		"misaligned daily":      func(e *providerEvent) { e.Timeframe = "d1"; e.To = e.From + sdkHistoryDay - 1 },
-		"oversized daily":       func(e *providerEvent) { e.Timeframe = "d1"; e.To = e.From + 367*sdkHistoryDay },
+		"negative timestamp":   func(e *providerEvent) { e.From = -sdkHistoryHour; e.To = 0 },
+		"reversed range":       func(e *providerEvent) { e.To = e.From },
+		"calculated daily leg": func(e *providerEvent) { e.Timeframe = "d1"; e.Symbol = "btcxau"; e.To = e.From + sdkHistoryDay },
+		"native hourly other":  func(e *providerEvent) { e.Timeframe = "h1-native"; e.Symbol = "xauusd" },
+		"oversized hourly":     func(e *providerEvent) { e.Timeframe = "h1"; e.To = e.From + 1001*sdkHistoryHour },
+		"misaligned daily":     func(e *providerEvent) { e.Timeframe = "d1"; e.To = e.From + sdkHistoryDay - 1 },
+		"oversized daily":      func(e *providerEvent) { e.Timeframe = "d1"; e.To = e.From + 367*sdkHistoryDay },
 		"open daily": func(e *providerEvent) {
 			e.Timeframe = "d1"
 			e.From = time.Now().UnixMilli() / sdkHistoryDay * sdkHistoryDay
@@ -152,6 +175,39 @@ func TestSDKHistoryValidatesSourcePeriodsAndClosedBoundsBeforeExport(t *testing.
 	}
 }
 
+func TestSDKHourlyOwnerRepliesEnforceDistinctVerifiedAndNativePolicies(t *testing.T) {
+	provider := newFakeSDKHistory()
+	provider.export = sdkExportFixture
+	ctx, _ := sdkHistorySession(t, provider)
+	for _, period := range []string{"h1", "h1-native"} {
+		var output bytes.Buffer
+		r := newProviderReplies(ctx, &output, nil)
+		request := sdkTickRequest()
+		request.Timeframe = period
+		if err := r.handle(request); err != nil {
+			t.Fatal(err)
+		}
+		r.wg.Wait()
+		var reply struct {
+			Error, SessionPolicy, Path string
+			Rows                       int64
+		}
+		if err := json.Unmarshal(output.Bytes(), &reply); err != nil {
+			t.Fatal(err)
+		}
+		wanted := "verified-full-hour-v1"
+		if period == "h1-native" {
+			wanted = "provider-native-h1-v1"
+		}
+		if reply.Error != "" || reply.SessionPolicy != wanted || reply.Rows != 1 {
+			t.Fatal("hourly owner contract lost", output.String())
+		}
+		r.close()
+	}
+	if len(provider.calls) != 2 || provider.calls[0].timeframe != "h1" || provider.calls[1].timeframe != "h1-native" {
+		t.Fatal(provider.calls)
+	}
+}
 func TestSDKHistoryOwnerReplyBypassesOnlyHTTPDenialAndCleansExports(t *testing.T) {
 	provider := newFakeSDKHistory()
 	ctx, state := sdkHistorySession(t, provider)
@@ -342,10 +398,14 @@ func TestSDKHistoryShares429AndLiveAlertsDoNotStopOnHTTP403(t *testing.T) {
 }
 
 func sdkExportFixture(_ context.Context, call sdkHistoryCall) (int64, error) {
-	if call.timeframe == "d1" {
+	if call.timeframe == "d1" || call.timeframe == "h1" || call.timeframe == "h1-native" {
 		data := "timestamp,open,high,low,close\n"
 		rows := int64(0)
-		for at := call.from; at < call.to; at += sdkHistoryDay {
+		step := sdkHistoryDay
+		if call.timeframe != "d1" {
+			step = sdkHistoryHour
+		}
+		for at := call.from; at < call.to; at += step {
 			data += fmt.Sprintf("%d,10,12,9,11\n", at)
 			rows++
 		}

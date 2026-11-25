@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -125,7 +126,19 @@ func TestLiveSDKUnderlyingTicksBuildAndSaveSyntheticHistory(t *testing.T) {
 
 type liveSDKHistoryClient struct {
 	dukascopyHistoryClient
-	tickExports atomic.Int64
+	tickExports   atomic.Int64
+	hourlyExports atomic.Int64
+}
+
+func (c *liveSDKHistoryClient) DownloadHourlyHistory(ctx context.Context, key domain.FeedKey, from, to int64, limit int, full bool) ([]domain.Candle, error) {
+	c.hourlyExports.Add(1)
+	client, ok := c.dukascopyHistoryClient.(interface {
+		DownloadHourlyHistory(context.Context, domain.FeedKey, int64, int64, int, bool) ([]domain.Candle, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("the configured SDK client does not support hourly exports")
+	}
+	return client.DownloadHourlyHistory(ctx, key, from, to, limit, full)
 }
 
 func (c *liveSDKHistoryClient) ExportTicks(ctx context.Context, source, symbol string, from, to int64, output string) (int64, error) {

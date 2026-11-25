@@ -100,7 +100,7 @@ test('Analysis rename follows copied alert names before Live Alerts is opened an
   const entry={id:condition.id,conditionId:condition.id,name:condition.name,period:'h1' as const,dataSource:'hyperliquid' as const,enabled:true};
   const config={enabled:true,alerts:[entry,{...entry,id:crypto.randomUUID().replaceAll('-',''),dataSource:'bybit' as const,enabled:false},{...entry,id:crypto.randomUUID().replaceAll('-',''),name:'Custom signal',dataSource:'binance' as const}]};
   await api.ConfigureScreenerLiveAlerts(config);
-  (window as any).__testSetLiveAlertsInfo({sent:9,checks:config.alerts.map((entry,index)=>({alertId:entry.id,savedConditionId:entry.conditionId,conditionId:entry.id,name:entry.name,status:'completed',manual:false,error:'',assetsScanned:index+5,lastChecked:1704067200000,sentAlerts:index+2,nextCheck:0}))});
+  (window as any).__testSetLiveAlertsInfo({sent:9,checks:config.alerts.map((entry,index)=>({alertId:entry.id,savedConditionId:entry.conditionId,conditionId:entry.id,name:entry.name,status:'completed',manual:false,error:'',assetsScanned:index+5,lastChecked:1704067200000,sentAlerts:index+2,sentAlertsKnown:true,nextCheck:0}))});
   return{config,writes:(window as any).__testLiveAlertsWrites().length};
  });
  await page.getByRole('button',{name:'Load condition Copied condition',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Rename',exact:true}).click();

@@ -16,9 +16,10 @@ func downloadKey() domain.FeedKey {
 }
 
 type downloadRequest struct {
-	From, To int64
-	Download bool
-	FeedKey  domain.FeedKey
+	From, To      int64
+	Download      bool
+	FeedKey       domain.FeedKey
+	FullOpenHours *bool
 }
 
 func downloadTrace(t *testing.T, path string) []downloadRequest {
@@ -39,15 +40,17 @@ func downloadTrace(t *testing.T, path string) []downloadRequest {
 }
 
 func TestDownloadHistoryUsesScopedDownloadFlagAndSharesChartCache(t *testing.T) {
-	for _, instrument := range []string{"BTCUSD", "XAUXAG"} {
+	for _, instrument := range []string{"BTCUSD", "XAUXAG", "0700HKHKD", "EURUSD", "XAUUSD"} {
 		t.Run(instrument, func(t *testing.T) {
 			trace := filepath.Join(t.TempDir(), "requests")
 			t.Setenv("CRYPTODESK_JFOREX_DOWNLOAD_TRACE", trace)
 			m, starts := tickExportManager(t, "daily")
 			key := downloadKey()
 			key.Instrument = instrument
-			if instrument == "XAUXAG" {
+			if instrument == "XAUXAG" || instrument == "XAUUSD" {
 				key.Market = "metal"
+			} else if instrument == "EURUSD" {
+				key.Market = "forex"
 			}
 			from, to := exportTestFrom/1000, exportTestFrom/1000+3*86400
 			for _, query := range []func(context.Context, domain.FeedKey, int64, int64, int) ([]domain.Candle, error){m.DownloadHistory, m.History, m.DownloadHistory} {
@@ -96,9 +99,9 @@ func TestDownloadHistoryRejectsNonDownloadRangesBeforeLogin(t *testing.T) {
 			ctx := context.Background()
 			switch kind {
 			case "instrument":
-				key.Instrument, key.Market = "EURUSD", "forex"
+				key.Instrument = ""
 			case "market":
-				key.Market = "metal"
+				key.Market = "spot"
 			case "timeframe":
 				key.Timeframe = "1w"
 			case "negative":

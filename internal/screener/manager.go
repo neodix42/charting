@@ -22,6 +22,7 @@ import (
 )
 
 type Request struct {
+	SyntheticSource  string            `json:"syntheticSource,omitempty"`
 	DataSource       string            `json:"dataSource,omitempty"`
 	Symbols          []string          `json:"symbols"`
 	Timeframe        string            `json:"timeframe"`
@@ -43,19 +44,20 @@ const DefaultConcurrency = 5
 const legacyMaxConcurrency = MaxConcurrency
 
 type Job struct {
-	DataSource string  `json:"dataSource,omitempty"`
-	NativeID   string  `json:"nativeId,omitempty"`
-	Market     string  `json:"market,omitempty"`
-	ID         string  `json:"id"`
-	Symbol     string  `json:"symbol"`
-	Timeframe  string  `json:"timeframe"`
-	From       string  `json:"from"`
-	To         string  `json:"to"`
-	Status     string  `json:"status"`
-	Progress   float64 `json:"progress"`
-	Message    string  `json:"message"`
-	OutputPath string  `json:"outputPath,omitempty"`
-	AsOf       int64   `json:"asOf,omitempty"`
+	SyntheticSource string  `json:"syntheticSource,omitempty"`
+	DataSource      string  `json:"dataSource,omitempty"`
+	NativeID        string  `json:"nativeId,omitempty"`
+	Market          string  `json:"market,omitempty"`
+	ID              string  `json:"id"`
+	Symbol          string  `json:"symbol"`
+	Timeframe       string  `json:"timeframe"`
+	From            string  `json:"from"`
+	To              string  `json:"to"`
+	Status          string  `json:"status"`
+	Progress        float64 `json:"progress"`
+	Message         string  `json:"message"`
+	OutputPath      string  `json:"outputPath,omitempty"`
+	AsOf            int64   `json:"asOf,omitempty"`
 }
 type Info struct {
 	Directory         string   `json:"directory"`
@@ -288,6 +290,9 @@ func checkDirectory(directory string) error {
 }
 
 func validateRequest(request Request, now time.Time) error {
+	if !validSyntheticSource(request.SyntheticSource) {
+		return errors.New("synthetic source must be h1-close or ticks")
+	}
 	if request.DataSource == "all" {
 		_, err := allSourceRequests(request, now)
 		return err
@@ -448,7 +453,11 @@ func (m *Manager) commitDownloadBatch(requests []Request, assets map[string]Inst
 						return m.infoLocked(), err
 					}
 				}
-				jobs = append(jobs, Job{DataSource: request.DataSource, NativeID: assets[symbol].NativeID, Market: assets[symbol].Market, ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
+				mode := ""
+				if _, family := SyntheticDefinitionFor(symbol); request.DataSource == "dukascopy" && family && (period == "d1" || period == "w1") {
+					mode = effectiveSyntheticSource(request.SyntheticSource)
+				}
+				jobs = append(jobs, Job{SyntheticSource: mode, DataSource: request.DataSource, NativeID: assets[symbol].NativeID, Market: assets[symbol].Market, ID: hex.EncodeToString(id[:]), Symbol: symbol, Timeframe: period, From: request.From, To: request.To, AsOf: asOf, Status: "queued", Message: "Waiting for download"})
 			}
 		}
 	}
@@ -717,6 +726,7 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 	// JSON tags in this internal protocol are lowercase; no shell ever interprets
 	// symbols, dates, executable paths or destination directories.
 	input, _ := json.Marshal(struct {
+		SyntheticSource  string           `json:"syntheticSource,omitempty"`
 		Symbol           string           `json:"symbol"`
 		Timeframe        string           `json:"timeframe"`
 		From             string           `json:"from"`
@@ -730,7 +740,7 @@ func (m *Manager) download(ctx context.Context, index int, job Job, directory st
 		AsOf             int64            `json:"asOf"`
 		ProviderSession  *providerSession `json:"providerSession,omitempty"`
 		HistoryDirectory string           `json:"historyDirectory"`
-	}{job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), dailyPlanFile, plan.AsOf, sessionFromContext(ctx), directory})
+	}{effectiveSyntheticSource(job.SyntheticSource), job.Symbol, job.Timeframe, job.From, job.To, partial, sourceBatchSize, true, true, plan.workerFile(jobDirectory), dailyPlanFile, plan.AsOf, sessionFromContext(ctx), directory})
 	cmd := exec.CommandContext(ctx, m.runtime.node, m.runtime.worker)
 	cmd.Dir = filepath.Dir(m.runtime.worker)
 	owner, err := cmd.StdinPipe()

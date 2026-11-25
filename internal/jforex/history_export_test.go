@@ -326,6 +326,7 @@ func TestTickExportBridgeProcess(t *testing.T) {
 			From, To                             int64
 			FeedKey                              domain.FeedKey
 			Download                             bool
+			FullOpenHours                        *bool
 		}
 		if json.Unmarshal(scanner.Bytes(), &request) != nil {
 			os.Exit(2)
@@ -344,6 +345,10 @@ func TestTickExportBridgeProcess(t *testing.T) {
 			if scenario != "legacy" {
 				version["tickHistory"] = tickHistoryCapability
 			}
+			if scenario == "hourly" {
+				version["hourlyHistory"] = "bid-full-open-hour-v1"
+				version["nativeHourlyHistory"] = "bid-native-hour-v1"
+			}
 			respond(request.ID, version)
 		case "connect":
 			respond(request.ID, map[string]any{"connected": true, "instrumentCount": 1})
@@ -356,12 +361,25 @@ func TestTickExportBridgeProcess(t *testing.T) {
 				_, _ = file.Write(append(append([]byte(nil), scanner.Bytes()...), '\n'))
 				_ = file.Close()
 			}
+			if scenario == "hourly" {
+				if request.FeedKey.Timeframe != "1h" || request.Download && request.FullOpenHours == nil {
+					fail(request.ID, "Missing explicit hourly session contract")
+					continue
+				}
+				bars := []domain.Candle{}
+				for at := request.From; at < request.To; at += 3600 {
+					bars = append(bars, cacheBar(at))
+				}
+				respond(request.ID, bars)
+				continue
+			}
 			if scenario == "daily-failure" {
 				fail(request.ID, "JForex native daily download timed out. Completed history is retained; retry to resume.")
 				continue
 			}
 			key := request.FeedKey
-			if !strings.HasPrefix(scenario, "daily") || key.Timeframe != "1d" || !(key.Instrument == "BTCUSD" && key.Market == "cfd" || key.Instrument == "XAUXAG" && key.Market == "metal") || request.Download && (request.From%86400 != 0 || request.To%86400 != 0 || request.To-request.From > 366*86400) {
+			validNative := (key.Instrument == "BTCUSD" || key.Instrument == "0700HKHKD") && key.Market == "cfd" || (key.Instrument == "XAUXAG" || key.Instrument == "XAUUSD") && key.Market == "metal" || key.Instrument == "EURUSD" && key.Market == "forex"
+			if !strings.HasPrefix(scenario, "daily") || key.Timeframe != "1d" || !validNative || request.Download && (request.From%86400 != 0 || request.To%86400 != 0 || request.To-request.From > 366*86400) {
 				fail(request.ID, "Unexpected native daily history request")
 				continue
 			}

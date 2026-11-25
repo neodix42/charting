@@ -63,6 +63,7 @@ public final class Bridge implements AutoCloseable {
     private final long historyTimeoutMillis;
     private final long tickHistoryTimeoutMillis;
     private final ThreadLocal<Boolean> nativeHistoryDownload = ThreadLocal.withInitial(() -> false);
+    private static final String HOURLY_DOWNLOAD_TIMEOUT = "JForex hourly history download timed out. Completed history is retained; retry to resume.";
     private final long historyRetryMillis;
     private final LongSupplier nowMillis;
     private volatile IClient client;
@@ -165,6 +166,10 @@ public final class Bridge implements AutoCloseable {
         if (request.has("op") && "historyTicks".equals(request.get("op").getAsString())) {
             dispatchTickExport(request, reply); return;
         }
+        if (request.has("op") && Set.of("historyCalendar", "historyCandleDiagnostic").contains(request.get("op").getAsString())) {
+            String id = request.has("id") ? request.get("id").getAsString() : "";
+            submitData(() -> reply.accept(handle(request)), message -> reply.accept(failure(id, "timeout", message))); return;
+        }
         if (request.has("op") && request.get("op").getAsString().startsWith("trade")) {
             try { trading.execute(() -> reply.accept(handle(request))); }
             catch (RejectedExecutionException error) { reply.accept(failure(request.has("id") ? request.get("id").getAsString() : "", "restricted", "JForex trading is busy; no order was submitted by this request")); }
@@ -182,7 +187,7 @@ public final class Bridge implements AutoCloseable {
                 finally { nativeHistoryDownload.remove(); }
             };
             Consumer<String> failed = message -> once.accept(failure(id, "timeout", message));
-            if (download) submitData(work, failed, tickHistoryTimeoutMillis, false, NATIVE_DOWNLOAD_TIMEOUT);
+            if (download) submitData(work, failed, tickHistoryTimeoutMillis, false, request.has("fullOpenHours") ? HOURLY_DOWNLOAD_TIMEOUT : NATIVE_DOWNLOAD_TIMEOUT);
             else submitData(work, failed);
         } else reply.accept(handle(request));
     }
@@ -196,11 +201,19 @@ public final class Bridge implements AutoCloseable {
         String instrument = text(key, "instrument", 128), market = text(key, "market", 32);
         long from = optionalLong(request, "from"), to = optionalLong(request, "to");
         long day = 86_400;
-        boolean nativeInstrument = instrument.equals("BTCUSD") && market.equals("cfd") || instrument.equals("XAUXAG") && market.equals("metal");
-        if (!nativeInstrument || !text(key, "exchange", 32).equals("dukascopy") || !text(key, "timeframe", 8).equals("1d")
-                || from < 0 || to <= from || from % day != 0 || to % day != 0 || to - from > 366 * day
-                || to > Math.floorDiv(nowMillis.getAsLong(), day * 1000) * day)
-            throw new Failure("internal", "Native JForex downloads require BTCUSD/XAUXAG and at most 366 closed UTC daily candles");
+        boolean hourly = text(key, "timeframe", 8).equals("1h"), fullOpenHours = false;
+        if (request.has("fullOpenHours")) {
+            if (!request.get("fullOpenHours").isJsonPrimitive() || !request.getAsJsonPrimitive("fullOpenHours").isBoolean())
+                throw new Failure("internal", "Invalid verified hourly history flag");
+            fullOpenHours = request.get("fullOpenHours").getAsBoolean();
+        }
+        long bucket = hourly ? 3_600 : day, maximum = hourly ? 1000 * bucket : 366 * day;
+        boolean nativeInstrument = !instrument.isEmpty() && Set.of("forex", "metal", "cfd").contains(market);
+        if (!nativeInstrument || hourly != request.has("fullOpenHours") || hourly && !fullOpenHours && !(instrument.equals("BTCUSD") && market.equals("cfd"))
+                || !text(key, "exchange", 32).equals("dukascopy") || !text(key, "timeframe", 8).equals(hourly ? "1h" : "1d")
+                || from < 0 || to <= from || from % bucket != 0 || to % bucket != 0 || to - from > maximum
+                || to > Math.floorDiv(nowMillis.getAsLong(), bucket * 1000) * bucket)
+            throw new Failure("internal", "Native JForex downloads require at most 366 closed UTC days or 1000 verified closed UTC hours");
         integer(request, "limit", 1, 1000);
         return true;
     }
@@ -331,9 +344,14 @@ public final class Bridge implements AutoCloseable {
             Object result = switch (op) {
                 case "connect" -> connect(request);
                 case "captcha" -> captcha(request);
-                case "version" -> Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
-                    "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1", "tradePnL", "account-pnl-v1", "tickHistory", "bid-hour-file-v1");
+                case "version" -> {
+                    Map<String, Object> version = new HashMap<>(Map.of("protocol", 1, "sdkVersion", "3.6.51", "javaVersion", Runtime.version().feature(),
+                        "instrumentCatalog", "all-available-v1", "trading", "market-bracket-v1", "tradeEstimates", "account-currency-pnl-v1", "tradeMetrics", "account-metrics-v1", "tradeHistory", "platform-orders-v1", "tradePnL", "account-pnl-v1", "tickHistory", "bid-hour-file-v1"));
+                    version.put("hourlyHistory", "bid-full-open-hour-v1"); version.put("nativeHourlyHistory", "bid-native-hour-v1"); version.put("historicalCalendar", "read-calendar-proof-v1"); yield version;
+                }
                 case "instruments" -> instruments();
+                case "historyCalendar" -> historyCalendar(request);
+                case "historyCandleDiagnostic" -> historyCandleDiagnostic(request);
                 case "tradePreview" -> tradePreview(request);
                 case "tradeEstimate" -> tradeEstimate(request);
                 case "tradeMetrics" -> tradeMetrics(request);
@@ -627,7 +645,7 @@ public final class Bridge implements AutoCloseable {
             boolean currentRequested = separateCurrent(feed.period) && end >= current && from * 1000 <= current;
             long closedEnd = separateCurrent(feed.period) ? Math.min(end, current - feed.period.getInterval()) : end;
             if (nativeHistoryDownload.get())
-                source.addAll(readNativeDownloadBars(history, feed.instrument, from * 1000, closedEnd));
+                source.addAll(readNativeDownloadBars(history, feed.instrument, feed.period, from * 1000, closedEnd, request.has("fullOpenHours") && request.get("fullOpenHours").getAsBoolean()));
             else if (from == 0 || from * 1000 <= closedEnd)
                 source.addAll(readHistoryWindow(history, feed.instrument, feed.period, from * 1000, closedEnd, limit));
             while (currentRequested) {
@@ -658,7 +676,7 @@ public final class Bridge implements AutoCloseable {
         }
     }
 
-    private List<IBar> readNativeDownloadBars(IHistory history, Instrument instrument, long from, long end) throws Exception {
+    private List<IBar> readNativeDownloadBars(IHistory history, Instrument instrument, Period period, long from, long end, boolean fullOpenHours) throws Exception {
         IContext activeContext = context;
         long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis);
         while (activeContext != null && !activeContext.getSubscribedInstruments().contains(instrument)) {
@@ -667,24 +685,232 @@ public final class Bridge implements AutoCloseable {
             Thread.sleep(10);
         }
         if (activeContext == null || closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
+        if (period == Period.ONE_HOUR) return readNativeHourlyDays(history, activeContext, instrument, from, end, fullOpenHours);
         // readBars streams callbacks from the SDK's background cache loader.
         // A download needs the blocking server/cache-loaded collection contract
         // of getBars. Only validated, <=366-day closed native D1 requests reach
         // this bounded worker; quote callbacks and chart reads remain async.
-        List<IBar> bars = history.getBars(instrument, Period.DAILY, OfferSide.BID, Filter.WEEKENDS, from, end);
+        List<IBar> bars = history.getBars(instrument, period, OfferSide.BID, Filter.WEEKENDS, from, end);
         if (closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
-        long day = Period.DAILY.getInterval();
-        if (bars == null || bars.size() > 366 || bars.size() > (end - from) / day + 1)
+        long duration = period.getInterval();
+        if (bars == null || bars.size() > (period == Period.DAILY ? 366 : 1000) || bars.size() > (end - from) / duration + 1)
             throw new Failure("internal", "JForex native daily download exceeded its requested candle bounds");
         long previous = -1;
         for (IBar bar : bars) {
             if (bar == null) throw new Failure("internal", "JForex returned a missing native daily candle");
             validateBar(bar);
-            if (bar.getTime() < from || bar.getTime() > end || bar.getTime() % day != 0 || bar.getTime() <= previous)
+            if (bar.getTime() < from || bar.getTime() > end || bar.getTime() % duration != 0 || bar.getTime() <= previous)
                 throw new Failure("internal", "JForex returned an invalid native daily candle time or ordering");
             previous = bar.getTime();
         }
         return bars;
+    }
+
+    private List<IBar> readNativeHourlyDays(IHistory history, IContext activeContext, Instrument instrument, long from, long end, boolean fullOpenHours) throws Exception {
+        long hour = Period.ONE_HOUR.getInterval(), day = Period.DAILY.getInterval();
+        boolean calendarPending = fullOpenHours && historicalCalendarPending(activeContext.getDataService(), instrument);
+        List<long[]> closures = fullOpenHours && !calendarPending ? verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour) : null;
+        List<IBar> result = new ArrayList<>();
+        for (long cursor = from; cursor <= end;) {
+            if (closing || Thread.currentThread().isInterrupted() || activeContext != context) throw new InterruptedException();
+            long until = Math.min(end + hour, (Math.floorDiv(cursor, day) + 1) * day);
+            boolean openHour = !fullOpenHours || calendarPending || hasFullOpenHour(closures, cursor, until, hour);
+            if (openHour) {
+                // The pinned SDK's multi-day getBars path can silently return
+                // empty spans or carry a prior close across unloaded days.
+                // Bound every SDK read to its UTC source day. Calendar proof
+                // and the outer120s job budget cover the entire export.
+                List<IBar> bars = history.getBars(instrument, Period.ONE_HOUR, OfferSide.BID, Filter.NO_FILTER, cursor, until - hour);
+                if (calendarPending) {
+                    // Subscription acknowledgement can precede SDK calendar
+                    // initialization. A real day load may warm it, but no row
+                    // is accepted until the full historical proof succeeds.
+                    closures = verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour); calendarPending = false;
+                }
+                if (bars == null || bars.size() > (until - cursor) / hour) throw new Failure("internal", "JForex hourly source exceeded its requested day");
+                long previous = -1; int observed =0;
+                for (IBar bar : bars) {
+                    if (bar == null) throw new Failure("internal", "JForex returned a missing hourly candle");
+                    validateBar(bar);
+                    if (bar.getTime() < cursor || bar.getTime() >= until || bar.getTime() % hour !=0 || bar.getTime() <= previous)
+                        throw new Failure("internal", "JForex returned invalid hourly source ordering");
+                    previous = bar.getTime();
+                    // HistoryData manufactures exactly this shape for missing
+                    // observations. Real zero-volume non-flat OHLC survives;
+                    // ambiguous zero-volume flats cannot establish history.
+                    if (bar.getVolume() ==0 && bar.getOpen() == bar.getClose() && bar.getHigh() == bar.getLow()) continue;
+                    if (fullOpenHours && intersectsClosure(closures, bar.getTime(), bar.getTime() + hour)) continue;
+                    result.add(bar); observed++;
+                }
+                if (observed ==0) {
+                    if (closures == null) closures = verifiedHistoricalClosures(activeContext.getDataService(), instrument, from, end + hour);
+                    if (fullOpenHours ? hasFullOpenHour(closures, cursor, until, hour) : !entirelyClosed(closures, cursor, until))
+                        throw new Failure("restricted", "JForex returned no observed hourly candles for an open UTC day; incomplete history was not cached");
+                }
+            }
+            cursor = until;
+        }
+        return result;
+    }
+
+    private static boolean intersectsClosure(List<long[]> closures, long from, long to) {
+        for (long[] closure : closures) if (closure[0] < to && closure[1] > from) return true;
+        return false;
+    }
+    private static boolean hasFullOpenHour(List<long[]> closures, long from, long to, long hour) {
+        for (long cursor = from; cursor < to; cursor += hour) if (!intersectsClosure(closures, cursor, cursor + hour)) return true;
+        return false;
+    }
+
+    private static boolean entirelyClosed(List<long[]> closures, long from, long to) {
+        List<long[]> sorted = new ArrayList<>(closures); sorted.sort(Comparator.comparingLong(value -> value[0]));
+        long covered = from;
+        for (long[] interval : sorted) {
+            if (interval[1] <= covered) continue;
+            if (interval[0] > covered) return false;
+            covered = interval[1]; if (covered >= to) return true;
+        }
+        return false;
+    }
+
+    private static boolean historicalCalendarPending(IDataService service, Instrument instrument) {
+        if (service == null || service.getClass() != com.dukascopy.api.impl.connect.JForexDataService.class) return false;
+        var calendar = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider().getHolidayScheduleService();
+        return calendar != null && (!calendar.hasHolidaysScheduleLoaded(instrument) || calendar.getHolidaySchedule(instrument) == null);
+    }
+
+    // The public API conflates an unloaded calendar with no closures. This
+    // read-only adapter is limited to the checksum-pinned SDK implementation;
+    // its actual READ schedule must be loaded and valid for this historical
+    // range before an empty interval list can mean unrestricted observations.
+    static List<long[]> verifiedHistoricalClosures(IDataService service, Instrument instrument, long from, long to) {
+        if (service == null || service.getClass() != com.dukascopy.api.impl.connect.JForexDataService.class)
+            throw new Failure("restricted", "Verified hourly history requires the pinned JForex historical calendar implementation");
+        var calendar = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider().getHolidayScheduleService();
+        boolean loaded = calendar != null && calendar.hasHolidaysScheduleLoaded(instrument);
+        var schedule = loaded ? calendar.getHolidaySchedule(instrument) : null;
+        if (schedule == null) throw new Failure("restricted", "JForex historical calendar is unavailable for " + instrument.name() + " (loaded=" + loaded + ", readSchedule=false)");
+        List<com.dukascopy.holiday.CustomHolidayScheduleDetail> rules = new ArrayList<>();
+        rules.addAll(schedule.getRegularHourlyHolidayScheduleDetails()); rules.addAll(schedule.getRegularDailyHolidayScheduleDetails());
+        rules.addAll(schedule.getRegularWeeklyHolidayScheduleDetails()); rules.addAll(schedule.getRegularMonthlyHolidayScheduleDetails()); rules.addAll(schedule.getRegularYearlyHolidayScheduleDetails());
+        java.time.Instant start = java.time.Instant.ofEpochMilli(from), finish = java.time.Instant.ofEpochMilli(to);
+        if (rules.isEmpty()) {
+            // In the pinned SDK a custom-only READ schedule lists absolute
+            // closures. HolidayScheduleImpl.isHoliday returns false outside
+            // those dates; these are not opening exceptions in a closed
+            // baseline. A loaded, non-null READ object is required above.
+            for (var rule : schedule.getCustomHolidayScheduleDetails()) {
+                var interval = rule == null ? null : rule.getDetailInterval();
+                if (interval == null || !interval.getStart().isBefore(interval.getEnd()))
+                    throw new Failure("restricted", "JForex historical calendar returned an invalid absolute closure");
+            }
+        } else {
+            List<org.threeten.extra.Interval> validity = rules.stream().map(com.dukascopy.holiday.CustomHolidayScheduleDetail::getDetailInterval)
+                .filter(Objects::nonNull).sorted(Comparator.comparing(org.threeten.extra.Interval::getStart)).toList();
+            java.time.Instant covered = start;
+            for (var interval : validity) {
+                if (interval.getStart().isAfter(covered)) break;
+                if (interval.getEnd().isAfter(covered)) covered = interval.getEnd();
+            }
+            if (covered.isBefore(finish)) throw new Failure("restricted", "JForex historical calendar does not cover the requested dates");
+        }
+        Set<ITimeDomain> domains = service.getOfflineTimeDomains(from, to, instrument);
+        if (domains == null || domains.size() > 10_000) throw new Failure("restricted", "JForex historical calendar returned invalid intervals");
+        List<long[]> result = new ArrayList<>();
+        for (ITimeDomain domain : domains) {
+            if (domain == null || domain.getEnd() <= domain.getStart()) throw new Failure("restricted", "JForex historical calendar returned invalid intervals");
+            result.add(new long[]{domain.getStart(), domain.getEnd()});
+        }
+        return result;
+    }
+
+    private Object historyCalendar(JsonObject request) throws Exception {
+        requireConnected(); Feed feed = feed(request.getAsJsonObject("feedKey"));
+        long from = optionalLong(request, "from"), to = optionalLong(request, "to"), hour = 3600;
+        if (feed.period != Period.ONE_HOUR || from < 0 || to <= from || from % hour != 0 || to % hour != 0 || to - from > 1000 * hour || to > Math.floorDiv(nowMillis.getAsLong(), hour * 1000) * hour)
+            throw new Failure("internal", "Calendar diagnostics require at most1000closed UTC hours");
+        synchronized (instrumentLock) { historyUsers.merge(feed.instrument, 1, Integer::sum); }
+        try {
+            ensureInstrument(feed.instrument);
+            long readyBy = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            Map<String, Object> result;
+            do {
+                if (closing || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                result = historicalCalendarDiagnostic(context.getDataService(), feed.instrument, from * 1000, to * 1000);
+                if (Boolean.TRUE.equals(result.get("loaded"))) break;
+                Thread.sleep(10);
+            } while (System.nanoTime() < readyBy);
+            return result;
+        } finally {
+            synchronized (instrumentLock) { historyUsers.computeIfPresent(feed.instrument, (instrument, count) -> count == 1 ? null : count - 1); releaseInstruments(); }
+        }
+    }
+
+    private Object historyCandleDiagnostic(JsonObject request) throws Exception {
+        requireConnected(); Feed feed = feed(request.getAsJsonObject("feedKey"));
+        long from = optionalLong(request, "from"), to = optionalLong(request, "to"), hour = 3600;
+        String filterName = text(request, "filter", 32);
+        if (feed.period != Period.ONE_HOUR || from < 0 || to <= from || from % hour != 0 || to % hour != 0 || to - from > 1000 * hour || to > Math.floorDiv(nowMillis.getAsLong(), hour * 1000) * hour || !Set.of("WEEKENDS", "NO_FILTER").contains(filterName))
+            throw new Failure("internal", "Hourly diagnostics require bounded closed hours and a supported filter");
+        synchronized (instrumentLock) { historyUsers.merge(feed.instrument, 1, Integer::sum); }
+        try {
+            ensureInstrument(feed.instrument);
+            long readyBy = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(tickHistoryTimeoutMillis);
+            while (!context.getSubscribedInstruments().contains(feed.instrument)) {
+                if (closing || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                if (System.nanoTime() > readyBy) throw new Failure("timeout", HOURLY_DOWNLOAD_TIMEOUT);
+                Thread.sleep(10);
+            }
+            IHistory history = context.getHistory();
+            List<IBar> bars = history.getBars(feed.instrument, Period.ONE_HOUR, OfferSide.BID, Filter.valueOf(filterName), from * 1000, (to - hour) * 1000);
+            if (bars == null || bars.size() > 1000) throw new Failure("internal", "Hourly diagnostic exceeded its bar bounds");
+            int zeroVolume = 0, zeroFlat = 0;
+            for (IBar bar : bars) {
+                validateBar(bar);
+                if (bar.getVolume() ==0) { zeroVolume++; if (bar.getOpen() == bar.getClose() && bar.getHigh() == bar.getLow()) zeroFlat++; }
+            }
+            return Map.of("instrument", feed.instrument.name(), "filter", filterName, "from", from, "to", to, "rows", bars.size(), "zeroVolumeRows", zeroVolume, "zeroFlatRows", zeroFlat,
+                "first", bars.isEmpty() ? 0L : bars.get(0).getTime() / 1000, "last", bars.isEmpty() ? 0L : bars.get(bars.size()-1).getTime() / 1000);
+        } finally {
+            synchronized (instrumentLock) { historyUsers.computeIfPresent(feed.instrument, (instrument, count) -> count == 1 ? null : count - 1); releaseInstruments(); }
+        }
+    }
+
+    static Map<String, Object> historicalCalendarDiagnostic(IDataService service, Instrument instrument, long from, long to) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("instrument", instrument.name()); result.put("from", from); result.put("to", to);
+        boolean supported = service != null && service.getClass() == com.dukascopy.api.impl.connect.JForexDataService.class;
+        result.put("pinnedImplementation", supported);
+        if (!supported) return result;
+        var calendar = ((com.dukascopy.api.impl.connect.JForexDataService) service).getFeedDataProvider().getHolidayScheduleService();
+        boolean loaded = calendar != null && calendar.hasHolidaysScheduleLoaded(instrument);
+        var schedule = loaded ? calendar.getHolidaySchedule(instrument) : null;
+        result.put("loaded", loaded); result.put("readSchedule", schedule != null);
+        if (schedule == null) return result;
+        List<Object> rules = new ArrayList<>();
+        diagnosticRules(rules, "custom", schedule.getCustomHolidayScheduleDetails());
+        diagnosticRules(rules, "hourly", schedule.getRegularHourlyHolidayScheduleDetails()); diagnosticRules(rules, "daily", schedule.getRegularDailyHolidayScheduleDetails());
+        diagnosticRules(rules, "weekly", schedule.getRegularWeeklyHolidayScheduleDetails()); diagnosticRules(rules, "monthly", schedule.getRegularMonthlyHolidayScheduleDetails()); diagnosticRules(rules, "yearly", schedule.getRegularYearlyHolidayScheduleDetails());
+        result.put("rules", rules);
+        List<Object> domains = new ArrayList<>();
+        Set<ITimeDomain> raw = service.getOfflineTimeDomains(from, to, instrument);
+        result.put("closedIntervalCount", raw == null ? -1 : raw.size());
+        if (raw != null) for (ITimeDomain domain : raw) { if (domains.size() ==64) break; domains.add(List.of(domain.getStart(), domain.getEnd())); }
+        result.put("closedIntervals", domains); return result;
+    }
+
+    private static void diagnosticRules(List<Object> result, String kind, Collection<? extends com.dukascopy.holiday.CustomHolidayScheduleDetail> rules) {
+        for (var rule : rules) {
+            if (result.size() == 128) return;
+            var interval = rule.getDetailInterval();
+            Map<String, Object> item = new LinkedHashMap<>(); item.put("kind", kind);
+            item.put("from", interval == null ? "null" : interval.getStart().toString()); item.put("to", interval == null ? "null" : interval.getEnd().toString());
+            item.put("timeZone", rule.getTimezone() == null ? "null" : rule.getTimezone().getId());
+            if (rule instanceof com.dukascopy.holiday.RegularHourlyHolidayScheduleDetail value) { item.put("startMinute", value.getStartMinute()); item.put("endMinute", value.getEndMinute()); }
+            if (rule instanceof com.dukascopy.holiday.RegularDailyHolidayScheduleDetail value) { item.put("startHour", value.getStartHour()); item.put("endHour", value.getEndHour()); }
+            if (rule instanceof com.dukascopy.holiday.RegularWeeklyHolidayScheduleDetail value) { item.put("startDayOfWeek", value.getStartDayOfWeek()); item.put("endDayOfWeek", value.getEndDayOfWeek()); }
+            result.add(item);
+        }
     }
 
     private static BasicFileAttributes tickOutputAttributes(Path path, boolean empty) throws IOException {

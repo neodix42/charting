@@ -100,6 +100,29 @@ test('native BTCUSD SDK candles use closed UTC dates, no volume and an explicit 
   assert.equal((await fs.readFile(state.request.output,'utf8')).split('\n')[0],'timestamp,open,high,low,close');
   assert.equal(state.events.length,1,'available SDK daily bars are preferred without any tick request');
 });
+test('ordinary stock, forex and metal SDK daily histories bypass a saved HTTP denial and report native source provenance',async t=>{
+  for(const symbol of ['0700hkhkd','eurusd','xauusd']){
+    const state=await fixture(t,symbol,start+2*DAY+HOUR),blocked=JSON.stringify({message:'Earlier public HTTP403; no HTTP request allowed'});
+    await fs.writeFile(path.join(state.batch,'blocked.json'),blocked);
+    state.setHandler(event=>{
+      assert.equal(event.symbol,symbol);assert.equal(event.timeframe,'d1');assert.equal(event.to,start+2*DAY);
+      return {rows:2,csv:dailyHeader+`${start},10,12,9,11\n${start+DAY},11,13,10,12\n`};
+    });
+    let done;await download(state.request,{api:offlineAPI,emit:event=>{if(event.type==='done')done=event;}});
+    assert.equal(done.rows,2);assert.equal(done.provenance.kind,'native');assert.equal(done.provenance.numerator,symbol);assert.equal(done.provenance.historySource,'jforex-sdk');assert.equal(done.provenance.volume,'unavailable');
+    assert.equal(state.events.length,1);assert.equal(await fs.readFile(path.join(state.batch,'blocked.json'),'utf8'),blocked);state.closeTransport();
+  }
+});
+test('ordinary stock SDK refresh merges closed candles, replays price fields and preserves original public prices and lineage',async t=>{
+  const state=await fixture(t,'0700hkhkd',start+3*DAY+HOUR),original=`timestamp,open,high,low,close,volume,sma_1\n${start},10,12,9,11,3,11\n${start+DAY},20,22,19,21,4,21\n`;
+  await fs.writeFile(state.request.output,original);
+  state.setHandler(event=>({rows:2,csv:dailyHeader+`${start+DAY},21,23,20,22\n${start+2*DAY},22,24,21,23\n`}));
+  const output=path.join(state.directory,'ordinary-refresh.csv');
+  const done=await require('./refresh-worker.cjs').refresh({...state.request,input:state.request.output,output,from:'2024-01-01'},{api:offlineAPI,now:start+3*DAY+HOUR,emit:()=>{}});
+  assert.equal(done.provenance.kind,'native');assert.equal(done.provenance.historySource,'mixed');assert.equal(done.provenance.volume,'unavailable');assert.equal(done.addedRows,1);assert.equal(done.updatedRows,1);
+  assert.equal(await fs.readFile(output,'utf8'),`timestamp,open,high,low,close,sma_1\n${start},10,12,9,11,11\n${start+DAY},21,23,20,22,22\n${start+2*DAY},22,24,21,23,23\n`);
+  assert.equal(await fs.readFile(state.request.output,'utf8'),original);assert.equal(state.events.length,1);
+});
 test('validated empty native BTCUSD daily history aggregates genuine cached BID ticks without another tick export',async t=>{
   const state=await fixture(t,'btcusd');state.setHandler(ticks);
   await collect(sourceQuotes('btcusd',start,start+DAY,state.request,{api:offlineAPI}));assert.equal(state.events.length,24);

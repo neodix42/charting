@@ -50,5 +50,44 @@ func publicAlertMissingCandleCooldown(source, market string, end, interval int64
 }
 
 func publicAlertMissingCandleError(end, interval int64) error {
-	return fmt.Errorf("%w; requested %s UTC explicitly but the provider returned no closed candle (no stale or synthetic substitution)", errLiveAlertsPendingBar, time.Unix(end-interval, 0).UTC().Format("2006-01-02 15:04"))
+	return &publicAlertMissingCandleIssue{From: end - interval, To: end}
+}
+
+// A successful source read did not publish this requested closing candle. Keep
+// this separate from transport failures, undefined warm-up and provisional data
+// while preserving the existing pending-bar retry classification.
+type publicAlertMissingCandleIssue struct{ From, To int64 }
+
+func (e *publicAlertMissingCandleIssue) Error() string {
+	return fmt.Sprintf("%s; requested %s UTC explicitly but the provider returned no closed candle (no stale or synthetic substitution)", errLiveAlertsPendingBar, time.Unix(e.From, 0).UTC().Format("2006-01-02 15:04"))
+}
+
+func (e *publicAlertMissingCandleIssue) Unwrap() error { return errLiveAlertsPendingBar }
+
+// Only explicit missing-candle leaves qualify. A joined timeout, malformed file
+// or insufficient warm-up must retain its distinct status instead of being
+// presented as a successful empty provider response.
+func publicAlertMissingClosedCandle(err error) bool {
+	if err == nil {
+		return false
+	}
+	if _, ok := err.(*publicAlertMissingCandleIssue); ok {
+		return true
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		children := joined.Unwrap()
+		if len(children) == 0 {
+			return false
+		}
+		for _, child := range children {
+			if !publicAlertMissingClosedCandle(child) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return publicAlertMissingClosedCandle(wrapped.Unwrap())
+	}
+	return false
 }

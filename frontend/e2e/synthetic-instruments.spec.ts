@@ -212,6 +212,56 @@ test('Downloader submits exactly BTCUSD and BTCXAU with daily or weekly choices'
  await expect(page.getByRole('article',{name:'ETHBTC download',exact:true})).toHaveCount(0);
 });
 
+test('synthetic source defaults fast, persists tick preference, labels resumed legacy jobs truthfully and leaves ordinary downloads unchanged',async({page})=>{
+ await openTestApp(page);await installCatalogs(page);await downloader(page);
+ const source=page.getByRole('combobox',{name:'Synthetic history source',exact:true}),period=page.getByRole('combobox',{name:'Download timeframe',exact:true});
+ await expect(source).toHaveCount(0);
+ await page.getByRole('checkbox',{name:'BTCXAU — Bitcoin / Gold',exact:true}).check();
+ await expect(source).toHaveValue('h1-close');await expect(source.locator('option')).toHaveText(['Fast — hourly observations','Tick observations — slow']);
+ await expect(period.locator('option')).toHaveText(['d1','w1']);
+ await expect(page.getByLabel('Synthetic instrument periods',{exact:true})).toContainText('approximate ratios from closed hourly BID observations');
+ await source.selectOption('ticks');
+ await reloadTestApp(page);await installCatalogs(page);await downloader(page);
+ await expect(source).toHaveValue('ticks');
+ await page.getByRole('button',{name:'Download 1 symbol',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toMatchObject({symbols:['btcxau'],timeframe:'d1',syntheticSource:'ticks'});
+ const job=page.getByRole('article',{name:'BTCXAU download',exact:true});
+ await expect(job).toContainText('Tick observations');await expect(source).toBeDisabled();
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
+ await source.selectOption('h1-close');await period.selectOption('w1');
+ await page.getByRole('button',{name:'Download 1 symbol',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__testScreenerRequest())).toMatchObject({timeframe:'w1',syntheticSource:'h1-close'});
+ await expect(job).toHaveCount(2);
+ for(const entry of await job.all())await expect(entry).toContainText('Fast hourly observations');
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
+ await page.evaluate(()=>{const info=(window as any).__testScreener();(window as any).__testSetScreener({active:false,jobs:[{...info.jobs[0],syntheticSource:undefined,status:'failed',message:'Existing tick download'}]});});
+ await expect(job).toHaveCount(1);
+ await expect(job).toContainText('Tick observations');await expect(source).toHaveValue('h1-close');
+ await page.getByRole('button',{name:'Resume downloads',exact:true}).click();
+ await expect(job).toContainText('Tick observations');await expect(job).not.toContainText('Fast hourly observations');
+ await page.getByRole('button',{name:'Cancel downloads',exact:true}).click();
+ await page.getByRole('checkbox',{name:'BTCXAU — Bitcoin / Gold',exact:true}).uncheck();await page.getByRole('checkbox',{name:'EURUSD — Euro vs US Dollar',exact:true}).check();
+ await expect(source).toHaveCount(0);await expect(period.locator('option')).toHaveText(['m1','h1','d1','w1']);
+ await period.selectOption('h1');await page.getByRole('button',{name:'Download 1 symbol',exact:true}).click();
+ const ordinary=await page.evaluate(()=>(window as any).__testScreenerRequest());expect(ordinary).toMatchObject({symbols:['eurusd'],timeframe:'h1'});expect(ordinary).not.toHaveProperty('syntheticSource');
+ await expect(page.getByRole('article',{name:'EURUSD download',exact:true})).not.toContainText('observations');
+});
+
+test('All data sources sends the synthetic preference only to Dukascopy family jobs',async({page})=>{
+ await openTestApp(page);await installCatalogs(page);await downloader(page);
+ await page.getByRole('combobox',{name:'Download data source',exact:true}).selectOption('all');
+ const all=page.getByRole('checkbox',{name:'Select all symbols',exact:true});await expect(all).toBeEnabled();await all.check();await all.uncheck();
+ await page.getByRole('checkbox',{name:'Dukascopy · BTCXAU — Bitcoin / Gold',exact:true}).check();
+ const hyper=page.locator('details.screener-instrument-group').filter({has:page.locator('summary').filter({hasText:'Hyperliquid'})}).first();
+ await hyper.locator('.screener-instrument input').first().check();
+ await expect(page.getByRole('combobox',{name:'Synthetic history source',exact:true})).toHaveValue('h1-close');
+ await expect(page.getByRole('combobox',{name:'Download timeframe',exact:true}).locator('option')).toHaveText(['d1','w1']);
+ await page.getByRole('button',{name:'Download 2 symbols',exact:true}).click();
+ const request=await page.evaluate(()=>(window as any).__testScreenerRequest());expect(request).toMatchObject({dataSource:'all',syntheticSource:'h1-close',sourceSelections:[{dataSource:'dukascopy',symbols:['btcxau']},{dataSource:'hyperliquid'}]});
+ const jobs=await page.evaluate(()=>(window as any).__testScreener().jobs);expect(jobs.filter((job:any)=>job.dataSource==='dukascopy')).toEqual([expect.objectContaining({symbol:'btcxau',syntheticSource:'h1-close'})]);
+ expect(jobs.filter((job:any)=>job.dataSource==='hyperliquid')).toHaveLength(1);expect(jobs.find((job:any)=>job.dataSource==='hyperliquid')).not.toHaveProperty('syntheticSource');
+});
+
 test('Enrichment and Analysis preserve calculated provenance and synthetic-only operand periods',async({page})=>{
  await openTestApp(page);await installCatalogs(page);
  await page.evaluate(file=>{

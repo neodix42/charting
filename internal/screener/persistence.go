@@ -17,6 +17,7 @@ import (
 
 // ViewState is machine-local UI state, deliberately separate from chart exports.
 type ViewState struct {
+	SyntheticSource                 string   `json:"syntheticSource,omitempty"`
 	DataSource                      string   `json:"dataSource,omitempty"`
 	HyperliquidSymbols              []string `json:"hyperliquidSymbols,omitempty"`
 	HyperliquidSelectionInitialized bool     `json:"hyperliquidSelectionInitialized,omitempty"`
@@ -29,9 +30,12 @@ type ViewState struct {
 }
 
 func defaultView() ViewState {
-	return ViewState{Symbols: []string{}, Timeframe: "d1", From: "2010-01-01", To: time.Now().UTC().Format("2006-01-02"), Concurrency: DefaultConcurrency, CollapsedCategories: []string{}}
+	return ViewState{SyntheticSource: "h1-close", Symbols: []string{}, Timeframe: "d1", From: "2010-01-01", To: time.Now().UTC().Format("2006-01-02"), Concurrency: DefaultConcurrency, CollapsedCategories: []string{}}
 }
 func copyView(v ViewState) ViewState {
+	if v.SyntheticSource == "" {
+		v.SyntheticSource = "h1-close"
+	}
 	if v.HyperliquidSymbols != nil {
 		v.HyperliquidSymbols = append([]string{}, v.HyperliquidSymbols...)
 	}
@@ -40,6 +44,9 @@ func copyView(v ViewState) ViewState {
 	return v
 }
 func validateView(v ViewState) error {
+	if !validSyntheticSource(v.SyntheticSource) {
+		return errors.New("unsupported saved synthetic source")
+	}
 	if source := normalizeDataSource(v.DataSource); source != "dukascopy" && source != "hyperliquid" && source != "all" {
 		return errors.New("unsupported saved data source")
 	}
@@ -301,6 +308,9 @@ func (m *Manager) loadDownloads() error {
 	}
 	ids := map[string]bool{}
 	for _, job := range saved.Jobs {
+		if !validSyntheticSource(job.SyntheticSource) {
+			return errors.New("unsupported saved synthetic job source")
+		}
 		id, e := hex.DecodeString(job.ID)
 		if e != nil || len(id) != 16 || ids[job.ID] || len(job.Message) > 4000 || math.IsNaN(job.Progress) || math.IsInf(job.Progress, 0) || job.Progress < 0 || job.Progress > 100 || job.AsOf < 0 || job.AsOf > time.Now().Add(time.Minute).UnixMilli() {
 			return errors.New("invalid saved download job")
@@ -495,7 +505,18 @@ func downloadBatchRequest(jobs []Job, concurrency int) (Request, error) {
 	request.DataSource = first.DataSource
 	request.Timeframe, request.From, request.To = first.Timeframe, first.From, first.To
 	weekly, daily, hourly := false, false, false
+	sourceSeen := false
 	for _, job := range jobs {
+		if !validSyntheticSource(job.SyntheticSource) {
+			return request, errors.New("unsupported saved synthetic job source")
+		}
+		if _, family := SyntheticDefinitionFor(job.Symbol); family && normalizeDataSource(job.DataSource) == "dukascopy" && (job.Timeframe == "d1" || job.Timeframe == "w1") {
+			mode := effectiveSyntheticSource(job.SyntheticSource)
+			if sourceSeen && request.SyntheticSource != mode {
+				return request, errors.New("saved synthetic jobs have inconsistent observation sources")
+			}
+			request.SyntheticSource, sourceSeen = mode, true
+		}
 		weekly = weekly || job.Timeframe == "w1"
 		daily = daily || job.Timeframe == "d1"
 		hourly = hourly || job.Timeframe == "h1"

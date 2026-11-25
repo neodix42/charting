@@ -1,5 +1,5 @@
 import {test,expect,type Locator,type Page} from '@playwright/test';
-import {openTestApp} from './helpers/testApp';
+import {openTestApp,reloadTestApp} from './helpers/testApp';
 
 const names=['Top Bybit','Middle Binance','Bottom Bybit','Disabled Hyperliquid'];
 const previousClose=Date.UTC(2026,10,5,10),currentClose=Date.UTC(2026,10,6,12);
@@ -237,36 +237,85 @@ test('young listings finish without red errors and show a bounded history-wait c
  await expect(row(page,names[0]).getByRole('cell').nth(1)).toHaveText('22');
 });
 
+test('zero-scanned checks distinguish already checked candles, missing candles and history waits without double-counting skipped assets',async({page})=>{
+ await openProgressApp(page);
+ await page.evaluate(()=>{
+  const api=window.go!.main!.App!;
+  for(const method of ['GetScreenerLiveAlerts','GetScreenerLiveAlertsProgress'] as const){
+   const original=api[method].bind(api);
+   api[method]=async()=>{const info=await original();return{...info,checks:info.checks.map(check=>Object.fromEntries(Object.entries(check).filter(([key,value])=>!(['progress','assetsSkipped','assetsMissingCandle','assetsAlreadyProcessed','assetsWarmingUp'].includes(key)&&(value===0||value===undefined))))) as typeof info.checks};};
+  }
+ });
+ await page.evaluate(({currentClose})=>{
+  const checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:true,progressState:'completed',phase:'Completed',progress:100,assetsScanned:0,assetsAlreadyProcessed:index===0?466:0,assetsMissingCandle:index===0?225:0,assetsSkipped:index===0?228:0,assetsWarmingUp:index===0?22:0,sentAlerts:0,sentAlertsKnown:true,error:''}));
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,error:'',status:'Waiting for next closed bar'});
+ },{currentClose});
+ const counts=group(page,names[0]).locator('.live-alert-progress-counts');
+ await expect(counts).toHaveText('466 assets already checked · 225 assets with no candle for requested period · 3 assets skipped · 22 assets waiting for more history');
+ await expect(counts).toHaveAttribute('title',/466 assets already checked.*225 assets with no candle.*3 assets skipped.*22 assets waiting/);
+ await expect(row(page,names[0]).getByRole('cell').nth(1)).toHaveText('0');
+ await expect(row(page,names[0]).getByRole('cell').nth(4)).toHaveText('0');
+ await expect(row(page,names[0]).getByRole('button',{name:/Completed with errors/})).toHaveCount(0);
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo(),checks=info.checks.map(({assetsAlreadyProcessed:_already,assetsMissingCandle:_missing,assetsWarmingUp:_warm,assetsSkipped:_skipped,...old}:any)=>({...old,assetsScanned:2,lastChecked:old.lastChecked+3600000}));
+  (window as any).__testSetLiveAlertsInfo({checks});
+ });
+ await expect(counts).toHaveText('\u00a0');
+ await expect(row(page,names[0]).getByRole('cell').nth(1)).toHaveText('2');
+ for(const state of ['queued','running']){
+  await page.evaluate(state=>{
+   const info=(window as any).__testLiveAlertsInfo(),checks=info.checks.map(({progress:_progress,...old}:any)=>({...old,progressState:state,phase:state}));
+   (window as any).__testSetLiveAlertsInfo({checks});
+  },state);
+  await expect(status(page,names[0])).toHaveText(state);
+  await expect(group(page,names[0]).getByRole('progressbar',{name:`Progress for ${names[0]}`,exact:true})).toHaveAttribute('value','0');
+  await expect(counts).toHaveText('\u00a0');
+ }
+});
 
-test('Sent alerts retains confirmed totals through retries and removes the global lifetime label',async({page})=>{
+
+test('Sent alerts resets immediately for each scan and preserves zero results across restart without displaying lifetime totals',async({page})=>{
  await openProgressApp(page);
  await page.evaluate(({currentClose})=>{
-  const checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:true,progressState:'completed',phase:'Completed',progress:100,sentAlerts:0,sentAlertsKnown:false,lifetimeSentAlerts:index===0?37:old.sentAlerts}));
-  (window as any).__testSetLiveAlertsInfo({checks,sent:52,running:false,error:'',status:'Waiting for next closed bar'});
+  const totals=[11,10,5,6],checks=(window as any).__progressRows.map((old:any,index:number)=>({...old,lastChecked:currentClose,status:'completed',manual:true,progressState:'completed',phase:'Completed',progress:100,sentAlerts:totals[index],sentAlertsKnown:true,lifetimeSentAlerts:totals[index]}));
+  (window as any).__testSetLiveAlertsInfo({checks,sent:32,running:false,error:'',status:'Waiting for next closed bar'});
   const api=window.go!.main!.App!,original=api.CheckScreenerLiveAlerts.bind(api);
-  api.CheckScreenerLiveAlerts=async()=>{
-   await original();const info=(window as any).__testLiveAlertsInfo();
-   const enabled=new Set(info.config.alerts.filter((entry:any)=>entry.enabled).map((entry:any)=>entry.id));
-   const checks=info.checks.map((old:any)=>enabled.has(old.alertId??old.conditionId)?{...old,lastChecked:currentClose+1000,status:'running',manual:true,progressState:'running',phase:'Checking latest closed bars',progress:50,sentAlerts:0,sentAlertsKnown:true}:old);
-   (window as any).__testSetLiveAlertsInfo({checks,running:true,error:'',status:'Checking latest closed bars'});
-   return api.GetScreenerLiveAlerts();
-  };
+  api.CheckScreenerLiveAlerts=()=>new Promise(resolve=>{(window as any).__releaseSentScan=async()=>resolve(await original());});
  },{currentClose});
- const count=row(page,names[0]).getByRole('cell').nth(4);
- await expect(count).toHaveText('37');await expect(count).toHaveAttribute('title',/across all checks/);
- await expect(page.getByText(/Lifetime total:/)).toHaveCount(0);
+ const count=(name:string)=>row(page,name).getByRole('cell').nth(4);
+ await expect(count(names[0])).toHaveText('11');await expect(count(names[1])).toHaveText('10');
+ const noLifetimeTotals=async()=>{
+  await expect(page.locator('.live-alerts')).not.toContainText(/lifetime (total|confirmed)/i);
+  expect(await page.locator('.live-alerts [title]').evaluateAll(elements=>elements.map(element=>element.getAttribute('title')).join('\n'))).not.toMatch(/lifetime (total|confirmed)/i);
+ };
+ await noLifetimeTotals();
  await page.getByRole('button',{name:'Check now',exact:true}).click();
- await expect(count).toHaveText('37');await expect(count).toHaveAttribute('title',/at least one recipient/);
- await expect(page.getByText(/Lifetime total:/)).toHaveCount(0);
- await page.evaluate(()=>{
-  const info=(window as any).__testLiveAlertsInfo();const checks=info.checks.map((old:any)=>({...old,status:'completed',progressState:'completed',progress:100,phase:'Completed',...(old.name==='Top Bybit'?{sentAlerts:1,lifetimeSentAlerts:38}:{})}));
-  (window as any).__testSetLiveAlertsInfo({checks,running:false,sent:53,status:'Waiting for next closed bar'});
- });
- await expect(count).toHaveText('38');await expect(count).toHaveAttribute('title',/across all checks/);
+ await expect(status(page,names[0])).toContainText('Requesting check');
+ for(const name of names.slice(0,3))await expect(count(name)).toHaveText('0');
+ await expect(count(names[3])).toHaveText('6');
+ await page.evaluate(()=>(window as any).__releaseSentScan());
+ await expect(count(names[0])).toHaveText('0');await expect(count(names[0])).toHaveAttribute('title',/during this check/);await noLifetimeTotals();
+ await page.evaluate(({currentClose})=>{
+  const info=(window as any).__testLiveAlertsInfo(),checks=info.checks.map((old:any)=>old.name==='Disabled Hyperliquid'?old:{...old,lastChecked:currentClose+1000,assetsScanned:0,status:'completed',manual:true,progressState:'completed',progress:100,phase:'Completed',sentAlerts:0,sentAlertsKnown:true});
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,sent:32,status:'Waiting for next closed bar'});
+ },{currentClose});
  await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();
+ await expect(count(names[0])).toHaveText('0');await expect(count(names[1])).toHaveText('0');
+ await expect(row(page,names[0]).getByRole('cell').nth(1)).toHaveText('0');
+ await reloadTestApp(page);await page.getByRole('tab',{name:'Screener',exact:true}).click();await page.getByRole('tab',{name:'Live Alerts',exact:true}).click();
+ await expect(count(names[0])).toHaveText('0');await expect(count(names[1])).toHaveText('0');
+ await expect(count(names[0])).not.toHaveAttribute('title',/lifetime|11/i);await expect(count(names[1])).not.toHaveAttribute('title',/lifetime|10/i);await noLifetimeTotals();
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().sent)).toBe(32);
  await page.getByRole('button',{name:'Check now',exact:true}).click();
- await expect(count).toHaveText('38');await expect(count).toHaveAttribute('title',/across all checks/);
- await expect(page.getByText(/Lifetime total:/)).toHaveCount(0);
+ await expect(count(names[0])).toHaveText('0');
+ await page.evaluate(()=>{
+  const info=(window as any).__testLiveAlertsInfo(),checks=info.checks.map((old:any)=>old.name==='Disabled Hyperliquid'?old:{...old,status:'completed',progressState:'completed',progress:100,phase:'Completed',...(old.name==='Top Bybit'?{sentAlerts:1,lifetimeSentAlerts:12}:{})});
+  (window as any).__testSetLiveAlertsInfo({checks,running:false,sent:33,status:'Waiting for next closed bar'});
+ });
+ await expect(count(names[0])).toHaveText('1');await expect(count(names[0])).not.toHaveAttribute('title',/lifetime|12/i);await noLifetimeTotals();
+ await expect(page.getByRole('button',{name:'Check now',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Check now',exact:true}).click();
+ await expect(count(names[0])).toHaveText('0');await expect(count(names[1])).toHaveText('0');await expect(count(names[3])).toHaveText('6');
+ expect(await page.evaluate(()=>(window as any).__testLiveAlertsInfo().sent)).toBe(33);
 });
 
 test('Duration shows total backend elapsed time and trigger, updates through all phases and keeps finished and legacy rows stable',async({page})=>{

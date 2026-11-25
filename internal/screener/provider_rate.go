@@ -286,9 +286,14 @@ func (r *providerReplies) handle(event providerEvent) error {
 			CooldownUntil int64  `json:"cooldownUntil,omitempty"`
 			Path          string `json:"path,omitempty"`
 			Rows          int64  `json:"rows"`
+			SessionPolicy string `json:"sessionPolicy,omitempty"`
 		}{Type: "provider-reply", RequestID: event.RequestID, CooldownUntil: until, Path: exported, Rows: rows}
 		if err != nil {
 			reply.Error = cleanMessage(err.Error())
+		} else if event.Operation == "history" && event.Timeframe == "h1" {
+			reply.SessionPolicy = "verified-full-hour-v1"
+		} else if event.Operation == "history" && event.Timeframe == "h1-native" {
+			reply.SessionPolicy = "provider-native-h1-v1"
 		}
 		r.mu.Lock()
 		_ = json.NewEncoder(r.owner).Encode(reply)

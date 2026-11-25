@@ -61,7 +61,11 @@ func TestHyperliquidManualCheckReusesDownloadedHistoryAndClaimsAcrossRestart(t *
 			t.Fatal(err)
 		}
 		info := owner.Info()
-		if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || info.Checks[0].Error != "" || info.Checks[0].AssetsSkipped != 0 || !info.Checks[0].SentAlertsKnown || info.Checks[0].SentAlerts != wantSent || info.Sent != int64(wantTotal) || len(info.Recent) != wantTotal || len(delivered) != wantTotal {
+		already := 0
+		if wantSent == 0 {
+			already = 1
+		}
+		if len(info.Checks) != 1 || info.Checks[0].Status != "completed" || info.Checks[0].Error != "" || info.Checks[0].AssetsAlreadyProcessed != already || info.Checks[0].AssetsMissingCandle != 0 || info.Checks[0].AssetsSkipped != 0 || !info.Checks[0].SentAlertsKnown || info.Checks[0].SentAlerts != wantSent || info.Sent != int64(wantTotal) || len(info.Recent) != wantTotal || len(delivered) != wantTotal {
 			t.Fatalf("repeat changed delivery or check outcome: checks=%+v lifetime=%d recent=%d delivered=%d", info.Checks, info.Sent, len(info.Recent), len(delivered))
 		}
 	}

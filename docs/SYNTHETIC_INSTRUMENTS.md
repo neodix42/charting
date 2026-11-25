@@ -5,6 +5,14 @@ identities are `btcusd`, `btcxau`, `xauspx`, `ethbtc`, and `xauxag`; existing BT
 XAUXAG identities and files are reused. Chart identifiers use the same uppercase
 symbols. The S&P leg is Dukascopy's **USA500IDXUSD index**, never SPY or another ETF.
 
+| Symbol | Exact display name | Price series |
+|---|---|---|
+| BTCUSD | Bitcoin / US Dollar | Native BTCUSD, with same-asset fallback on validated empty D1 |
+| BTCXAU | Bitcoin / Gold | BTCUSD / XAUUSD |
+| XAUSPX | Gold / S&P 500 Index | XAUUSD / USA500IDXUSD |
+| ETHBTC | Ethereum / Bitcoin | ETHUSD / BTCUSD |
+| XAUXAG | Gold / Silver | Native XAUXAG where available, XAUUSD / XAGUSD elsewhere |
+
 New selections in this category offer D1 and W1. Existing native BTCUSD/XAUXAG
 intraday downloads and saved workspaces remain readable. Other Dukascopy categories
 retain their existing intervals.
@@ -14,29 +22,52 @@ retain their existing intervals.
 BTCUSD uses native Dukascopy BID history. BTCXAU is BTCUSD/XAUUSD, XAUSPX is
 XAUUSD/USA500IDXUSD, ETHBTC is ETHUSD/BTCUSD, and XAUXAG falls back to XAUUSD/XAGUSD
 where native XAUXAG history is unavailable. The pinned provider's native XAUXAG tick
-history starts at 2024-09-17 09:39:43.256 UTC. A range spanning that instant can have
+history starts at 2024-09-17 09:39:43.256 UTC. A tick-mode range spanning that instant can have
 calculated and native observations in the same daily candle. Provenance records the
 native/calculated segments and the pricing convention; the transition is not hidden.
 Provider authentication, transport, rate-limit, or decode failures fail the job and
 preserve published data. They do not authorize synthetic fallback.
 
-Calculated history merges chronologically sorted BID ticks at **identical millisecond
-timestamps**. All updates on both legs at that timestamp are consumed before a ratio
-is observed; the final duplicate update on each leg wins. Open is the first valid
-ratio, high/low are the observed maximum/minimum, and close is the last ratio. Invalid,
-unordered, nonpositive or nonfinite source prices fail rather than fabricate prices.
-No independent source OHLC extrema are divided. D1 boundaries are UTC midnight; W1
-uses the existing D1 aggregation with Monday 00:00 UTC boundaries.
+The Downloader offers two observation modes. **Fast — hourly observations**
+(`h1-close`) is the default for new UI downloads; **Tick observations — slow**
+(`ticks`) preserves the earlier method. The source is an input-resolution choice,
+not an output timeframe: calculated series still expose only D1/W1. A configured
+JForex connection is required for Fast. An omitted legacy API request or saved job
+mode means `ticks`; the saved UI view defaults to Fast and sends it explicitly.
 
-**Calculated OHLC is approximate.** Exact timestamp intersection can omit valid
-asynchronous observations and their extrema, even though its inputs are ticks. The
-resolution is recorded as `simultaneous millisecond BID ticks`, with zero allowed
-quote age and `exact-timestamp-no-carry-v1` session policy. This conservative policy
-carries no quote across a market closure, holiday, weekend, missing quote or session
-boundary. Missing observations remain gaps. A common historical session calendar is
-not inferred from today's trading hours. The calculation module permits a nonzero
-quote age only with an explicit verified common-session token policy; production does
-not enable that mode.
+Fast reads genuine, closed H1 BID candles. Each leg's hour must be open for its
+**entire interval** according to the loaded, actual historical SDK READ calendar.
+A pinned-SDK readiness helper distinguishes an unloaded schedule from a valid
+calendar and supports explicit, loaded custom-only closure schedules. Empty or
+unknown calendar state never proves 24/7 trading. A custom-only loaded READ
+schedule explicitly defines absolute closures against an open baseline; dates
+outside its listed closures are open. This baseline is accepted only from the
+loaded, valid pinned-SDK READ object, never inferred from an empty public list. A
+missing, unready, malformed or insufficiently covered calendar fails the request.
+Today's regular trading hours are not substituted for historical evidence.
+
+Only matching verified hour timestamps produce an observation: numerator close
+divided by denominator close. The first and last sampled ratios become daily
+open and close; their extrema become daily high and low. **All four OHLC values
+are sampled approximations, including open and close.** They are not executable
+prices or exact session-boundary values. Source OHLC extrema are never divided
+independently. No quote is forward-filled across an absent hour, closure, holiday,
+weekend or session boundary. H1 provenance records
+`verified full-session H1 BID close observations`, maximum quote age 3,600,000 ms,
+and session policy `verified-full-hour-close-v1`.
+
+Tick mode merges chronologically sorted BID ticks at **identical millisecond
+timestamps**. Both legs consume all updates at that instant; the final duplicate
+update wins. The first/last valid ratio supplies open/close, and observed extrema
+supply high/low. Its OHLC is also approximate: exact intersection omits asynchronous
+observations and their extrema. Tick provenance records
+`simultaneous millisecond BID ticks`, zero allowed quote age and
+`exact-timestamp-no-carry-v1`; no quote is carried across missing observations.
+Invalid, unordered, nonpositive or nonfinite source prices fail explicitly.
+
+Both methods use UTC-midnight D1 boundaries and existing Monday 00:00 UTC W1
+aggregation. Native/calculated and tick/hourly transitions are recorded rather
+than hidden; retained historical precision is not upgraded by changing a selector.
 
 Synthetic ratio volume is unavailable. Its CSV has no `volume` column; chart transport
 uses `volumeUnavailable` and hides volume. A mixed native/calculated dataset also
@@ -47,26 +78,58 @@ indicators retain the existing recipes, warm-up and refresh behavior.
 
 The normal Downloader queue owns synthetic jobs, cancellation, resume, concurrency
 and progress. W1 queues a D1 prerequisite. With a configured JForex connection,
-the existing authenticated SDK exports the required underlying ticks; BTCXAU requests
-BTCUSD and XAUUSD, never a nonexistent native BTCXAU instrument. Native BTCUSD and
-the available native XAUXAG segment use the SDK's BID daily history. Without a
-configured connection the existing public Dukascopy downloader remains available.
-SDK failures do not silently switch price sources.
+Fast exports the required underlying H1 candles and tick mode exports underlying
+ticks; BTCXAU requests BTCUSD and XAUUSD, never a nonexistent native BTCXAU or an
+unrelated ETHUSD source. Native BTCUSD and the available native XAUXAG segment use
+the SDK's BID daily history first. Configured ordinary Dukascopy D1 downloads also
+use authenticated SDK history. Without a configured connection, tick mode can use
+the existing public downloader. SDK errors never silently switch price sources.
 
-If a successfully validated SDK daily response contains no BTCUSD candles, the
-Downloader builds that native instrument's daily candles from complete UTC-hour
-BTCUSD BID ticks. Cached quote hours are reused first. Open/high/low/close come
-from actual observations of BTCUSD itself; no ratio, copied price or traded volume
-is introduced. The tick-derived origin is recorded, complete days are checkpointed,
-and empty tick days remain gaps. Authentication, transport, invalid-data and other
-errors never authorize this empty-history fallback.
+Fast XAUXAG uses native daily candles from the provider's native **daily**
+availability, independently of the later first-tick timestamp within that date.
+Each native day is preferred when returned; only a successfully decoded empty
+native day permits the H1 ratio fallback. Transport and data errors remain errors.
+
+If a successfully validated SDK daily response contains no BTCUSD candles, Fast
+aggregates **BTCUSD's own H1 OHLC** into daily bars, preserving the native hourly
+open, high, low and close. This same-asset path does not divide ratios or start a
+hidden tick fallback. Tick mode instead aggregates complete UTC-hour BTCUSD BID
+ticks and reuses cached chunks. Provenance distinguishes the fallback source;
+complete days are checkpointed and empty source days remain gaps. Authentication,
+transport, invalid-data and other failures never authorize empty-history fallback.
+For native hourly fallback, an empty day is accepted only when historical READ
+closure intervals cover that entire day. A partly open, open or unverified empty
+day fails before cache publication. Ratio sampling separately requires complete
+open hours. Cold calendar initialization may load one bounded source day, but no
+observation is accepted until the actual historical READ proof succeeds.
+
+Each job freezes its observation mode. Existing jobs without a mode remain ticks
+through restart and Resume, independently of the new saved UI preference. To
+switch unfinished work, cancel it and start a new Fast download. Cancellation
+retains published histories; existing covered ranges and indicator recipes are
+reused rather than replaced. Extending an older tick dataset in Fast mode can
+produce mixed observation precision, which remains explicit in provenance.
 
 The Go owner schedules both paths through the existing shared FIFO limiter and
 concurrency controls. A public HTTP access-denial cooldown does not block a separate
 authenticated SDK request; shared rate-limit deadlines still apply. Credentials stay
 in the existing Go/Java connection, never in the Node worker or its messages. The
 batch freezes its history source and account identity; a changed account stops
-publication, including when all required ticks were already cached.
+publication, including when all required observations were already cached.
+
+Fast H1 exports batch at most **28 UTC days / 672 source bars** per request, through
+the shared SDK request pacer. Within an export, SDK `getBars` reads are limited
+to one UTC source day using `NO_FILTER`: the pinned SDK's multi-day path can
+silently return empty spans or carry a previous close across unloaded days.
+Ambiguous zero-volume flat shapes are excluded; genuine zero-volume non-flat
+observations remain eligible. Actual historical calendar proof precedes accepting
+and caching ratio observations. Unexpected empty days with open hours fail the
+export instead of recording incomplete history as coverage. Validated complete
+days are checksummed and cached
+under `synthetic-hourly-v1`, separately by account/source, symbol and verified-ratio
+versus native-hourly policy. Daily caches and output checkpoints survive Resume;
+incomplete days do not certify coverage. The API's wider row limit does not change
+the worker's 28-day batch bound.
 
 Complete UTC-hour BID chunks are privately cached in `synthetic-quotes-v1` beside
 the provider session cache. SDK chunks live in a separate account/source namespace;
@@ -82,7 +145,7 @@ Slow bulk loads can delay a concurrent native chart backfill; its existing timeo
 and Retry remain visible. Live quote, control and trading callbacks use separate
 paths. Large first-time tick histories still require substantial download time.
 
-Ratio requests are clipped to the later exact tick-availability instant of both
+Tick ratio requests are clipped to the later exact tick-availability instant of both
 legs; dates before any possible common observation require no source fetch. The
 original requested range remains the queue/checkpoint identity.
 
@@ -90,7 +153,7 @@ Compatible published underlying tick CSVs are reused when their saved verified
 coverage ledger and checksum prove the requested hours. A filename or a few rows do
 not establish complete coverage. Disjoint coverage is skipped before hashing or
 streaming irrelevant files. Unverified data cannot suppress a provider request.
-Incremental extension/refresh reuses completed hourly chunks and existing candle
+Incremental extension/refresh reuses completed source chunks/days and existing candle
 coverage. It does not redownload full history on each alert check. Daily checkpoints
 retain committed output and the frozen closed-bar cutoff for resume. Generated CSVs
 use the existing history transaction/publication and enrichment-replay mechanisms;
@@ -100,7 +163,9 @@ SHA-bound metadata stores native, synchronized BID ratio, or mixed provenance,
 observation resolution, pricing and unavailable-volume policy. Calculated data without
 valid provenance cannot be published or accepted by the synthetic chart reader.
 The `historySource` field distinguishes public downloader, JForex SDK and mixed
-source histories. Extending an existing public dataset can produce explicitly mixed
+source histories. `syntheticSource` retains the requested `h1-close`/`ticks` mode even
+when native daily candles suffice, so a future empty-native fallback keeps that
+preference. Actual observation resolution remains independently disclosed. Extending an existing public dataset can produce explicitly mixed
 provenance; existing published rows and enrichment recipes are preserved. Switching
 an unfinished public download to SDK first preserves its old partial and checkpoint
 in a private archive rather than reinterpreting those rows as SDK observations.
@@ -125,7 +190,7 @@ underlying instruments.
 
 Calculated workspace charts read downloaded D1/W1 history. Download the instrument
 in Screener first. Only an active chart polls published files (every 30 seconds);
-opening a chart does not initiate a multi-year tick download. The chart identifies
+opening a chart does not initiate a multi-year history download. The chart identifies
 approximate downloaded closed candles and does not claim a live broker connection.
 Drawings, existing price indicators, navigation and markers use the normal chart
 infrastructure. Native instruments retain their SDK history/stream when available;
@@ -139,12 +204,13 @@ native SDK catalog actually offers the instrument.
 
 ## Runtime delivery and verification
 
-`synthetic-ratio.cjs`, `synthetic-quotes.cjs`, `synthetic-worker.cjs` and `sdk-worker.cjs` are required
+`synthetic-ratio.cjs`, `synthetic-quotes.cjs`, `synthetic-hourly.cjs`,
+`synthetic-worker.cjs` and `sdk-worker.cjs` are required
 development/production runtime modules, copied by the common Linux/Windows bundler
 and included in the runtime integrity manifest. Offline runtime probes use the pinned
 public provider API and an explicit test transport, including the owner-pipe SDK
 export with public HTTP access denied. They do not use account credentials or modify
 user histories. The separate opt-in `sdkhistoryintegration` test copies connection
-settings into a private temporary profile, downloads real underlying ticks and checks
-saved BTCXAU/BTCUSD history without orders or changes to the original profile. See
+settings into a private temporary profile, reads real underlying history and checks
+saved calculated/native history without orders or changes to the original profile. See
 STATUS.md for the checks actually completed and outstanding desktop/live checks.

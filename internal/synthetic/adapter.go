@@ -89,7 +89,7 @@ func decorate(item domain.Instrument, definition screener.SyntheticDefinition, n
 	if definition.Calculated {
 		metadata["synthetic"], metadata["tradable"], metadata["assetType"] = "true", "false", "synthetic"
 		metadata["approximate"], metadata["volumeUnit"], metadata["dataMode"] = "true", "unavailable", "downloaded closed candles"
-		metadata["observationResolution"] = "simultaneous millisecond BID ticks"
+		metadata["observationResolution"] = "Sampled BID ratios; downloaded history records hourly or tick resolution"
 		metadata["sdkSymbol"] = item.BaseAsset + "/" + item.QuoteAsset
 	}
 	if warning != "" {

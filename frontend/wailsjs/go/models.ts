@@ -1142,6 +1142,7 @@ export namespace predictions {
 export namespace screener {
 
 	export class DataProvenance {
+	    syntheticSource?: string;
 	    version: number;
 	    kind: string;
 	    numerator: string;
@@ -1161,6 +1162,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.syntheticSource = source["syntheticSource"];
 	        this.version = source["version"];
 	        this.kind = source["kind"];
 	        this.numerator = source["numerator"];
@@ -2210,6 +2212,7 @@ export namespace screener {
 	}
 
 	export class Job {
+	    syntheticSource?: string;
 	    dataSource?: string;
 	    nativeId?: string;
 	    market?: string;
@@ -2230,6 +2233,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.syntheticSource = source["syntheticSource"];
 	        this.dataSource = source["dataSource"];
 	        this.nativeId = source["nativeId"];
 	        this.market = source["market"];
@@ -2402,6 +2406,7 @@ export namespace screener {
 	}
 
 	export class Request {
+	    syntheticSource?: string;
 	    dataSource?: string;
 	    symbols: string[];
 	    timeframe: string;
@@ -2416,6 +2421,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.syntheticSource = source["syntheticSource"];
 	        this.dataSource = source["dataSource"];
 	        this.symbols = source["symbols"];
 	        this.timeframe = source["timeframe"];
@@ -2542,6 +2548,7 @@ export namespace screener {
 		}
 	}
 	export class ViewState {
+	    syntheticSource?: string;
 	    dataSource?: string;
 	    hyperliquidSymbols?: string[];
 	    hyperliquidSelectionInitialized?: boolean;
@@ -2558,6 +2565,7 @@ export namespace screener {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.syntheticSource = source["syntheticSource"];
 	        this.dataSource = source["dataSource"];
 	        this.hyperliquidSymbols = source["hyperliquidSymbols"];
 	        this.hyperliquidSelectionInitialized = source["hyperliquidSelectionInitialized"];
@@ -2806,6 +2814,8 @@ export namespace screener {
 	    conditionId: string;
 	    name: string;
 	    assetsScanned: number;
+	    assetsAlreadyProcessed?: number;
+	    assetsMissingCandle?: number;
 	    assetsSkipped?: number;
 	    assetsWarmingUp?: number;
 	    lastChecked: number;
@@ -2837,6 +2847,8 @@ export namespace screener {
 	        this.conditionId = source["conditionId"];
 	        this.name = source["name"];
 	        this.assetsScanned = source["assetsScanned"];
+	        this.assetsAlreadyProcessed = source["assetsAlreadyProcessed"];
+	        this.assetsMissingCandle = source["assetsMissingCandle"];
 	        this.assetsSkipped = source["assetsSkipped"];
 	        this.assetsWarmingUp = source["assetsWarmingUp"];
 	        this.lastChecked = source["lastChecked"];

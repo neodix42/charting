@@ -195,7 +195,7 @@ async function refresh(request,options={}) {
       // Each Go file worker fetches its source requests serially; the owner
       // shares request pacing and cooldowns across parallel file workers.
       await (options.download??download)({symbol:request.symbol,timeframe:request.timeframe,from:new Date(from).toISOString(),to:new Date(now).toISOString(),output:downloaded,sourceBatchSize:1,providerSession:request.providerSession,
-        historyDirectory:request.historyDirectory,syntheticCacheDirectory:request.syntheticCacheDirectory,synthetic:request.synthetic??(request.symbol==='xauxag'&&!normalized.includes('volume')?{kind:'mixed-native-ratio'}:undefined),asOf:now},
+        historyDirectory:request.historyDirectory,syntheticCacheDirectory:request.syntheticCacheDirectory,hourlyCacheDirectory:request.hourlyCacheDirectory,syntheticSource:request.syntheticSource,synthetic:request.synthetic??(request.symbol==='xauxag'&&!normalized.includes('volume')?{kind:'mixed-native-ratio'}:undefined),asOf:now},
         {...options,emit:event=>{if(event.type==='done'&&event.provenance)latestProvenance=event.provenance;if(event.type==='progress')report({...event,progress:2+event.progress*0.58});}});
       hasDownloaded=true;
     }catch(error){
@@ -206,7 +206,7 @@ async function refresh(request,options={}) {
   }
   const droppedVolume=normalized.includes('volume')&&latestProvenance?.volume==='unavailable';
   if(droppedVolume){
-    if(requiredFields.map(key).includes('volume'))throw Error('Volume is unavailable for calculated synthetic data; original CSV kept.');
+    if(requiredFields.map(key).includes('volume'))throw Error('Volume is unavailable for this SDK or calculated history; original CSV kept.');
     const index=normalized.indexOf('volume');headers.splice(index,1);normalized.splice(index,1);
     calculations=await Promise.all(recipes.map(recipe=>calculator(recipe,headers,request.timeframe)));
   }
@@ -225,10 +225,12 @@ async function refresh(request,options={}) {
   let handle,rows=0,addedRows=0,updatedRows=0,buffer='',bytes=0,lastProgress=0,firstTimestamp,lastTimestamp;
   const outputChecksum=createHash('sha256');
   const originalNames=scanned.headers.map(key),originalRow=row=>droppedVolume?headers.map(name=>row[originalNames.indexOf(key(name))]??''):[...row];
-  const observedOrigins=[],observedHistorySources=new Set();
+  const observedOrigins=[],observedHistorySources=new Set(),observedProvenances=new Set();
   const origin=(provenance,timestamp)=>{
-    if(request.symbol!=='xauxag'||request.timeframe!=='d1'||!provenance)return;
+    if(!provenance)return;
+    observedProvenances.add(provenance);
     observedHistorySources.add(provenance.historySource??'dukascopy-node');
+    if(request.symbol!=='xauxag'||request.timeframe!=='d1')return;
     const end=Math.min(timestamp+86400000,closed);
     for(const item of provenance.segments??[{from:timestamp,to:end,kind:provenance.kind}]){
       const from=Math.max(timestamp,item.from),to=Math.min(end,item.to);if(from>=to)continue;
@@ -243,7 +245,7 @@ async function refresh(request,options={}) {
     return row;
   };
   const baseKey=row=>JSON.stringify(baseIndexes.map(index=>Number(row[index])));
-  const priorProvenance=request.provenance??(['btcusd','xauxag'].includes(request.symbol)&&originalNames.includes('volume')?require('./synthetic-worker.cjs').provenance(request.symbol,false):undefined);
+  const priorProvenance=request.provenance??(originalNames.includes('volume')&&(['btcusd','xauxag'].includes(request.symbol)||latestProvenance?.historySource==='jforex-sdk')?require('./synthetic-worker.cjs').nativeProvenance(request.symbol):undefined);
   const append=async(row,provenance=priorProvenance)=>{
     while(row.length<headers.length)row.push('');
     const timestamp=Number(row[timestampIndex]);
@@ -293,9 +295,17 @@ async function refresh(request,options={}) {
     const columns=headers.filter(name=>!base.includes(key(name)));
     const synthetic=require('./synthetic-worker.cjs');
     const historySource=observedHistorySources.has('mixed')||observedHistorySources.size>1?'mixed':observedHistorySources.has('jforex-sdk')?'jforex-sdk':undefined;
-    const provenance=synthetic.mergeProvenance(request.symbol,observedOrigins.length?[{value:{...synthetic.provenance(request.symbol,true),...(historySource?{historySource}:{}),segments:observedOrigins},from:initial,to:closed}]:[
+    const used=[...observedProvenances],policies=new Set(used.map(v=>v.sessionPolicy).filter(Boolean)),resolutions=new Set(used.map(v=>v.observationResolution).filter(Boolean));
+    const observationMetadata={
+      ...(used.some(v=>v.syntheticSource==='h1-close')?{syntheticSource:'h1-close'}:{}),
+      maxQuoteAgeMs:Math.max(0,...used.map(v=>v.maxQuoteAgeMs??0)),
+      ...(policies.size?{sessionPolicy:policies.size===1?[...policies][0]:'mixed-verified-bid-observations-v1'}:{}),
+      ...(resolutions.size?{observationResolution:resolutions.size===1?[...resolutions][0]:`Mixed ${[...new Set(used.map(v=>v.observationResolution?.includes('H1')?'H1 BID observations':v.observationResolution?.includes('tick')?'BID tick observations':'native BID candles'))].join(' and ')}`}:{})
+    };
+    const provenance=synthetic.mergeProvenance(request.symbol,observedOrigins.length?[{value:{...synthetic.provenance(request.symbol,true),...observationMetadata,...(historySource?{historySource}:{}),segments:observedOrigins},from:initial,to:closed}]:[
       {value:priorProvenance,from:initial,to:closed},
       {value:latestProvenance,from,to:closed}],normalized.includes('volume'));
+    if(provenance&&historySource)provenance.historySource=historySource;
     const result={type:'done',rows,addedRows,updatedRows,columns,recipes,firstTimestamp,lastTimestamp,checksum:outputChecksum.digest('hex'),checkedThrough:now,coverage:initial<closed?[{from:initial,to:closed}]:[],provenance,message:`Refreshed ${rows.toLocaleString('en-US')} rows: ${addedRows.toLocaleString('en-US')} added, ${updatedRows.toLocaleString('en-US')} updated; ${recipes.length} indicator recipes recalculated`};
     report(result);return result;
   }finally{

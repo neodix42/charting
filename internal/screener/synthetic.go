@@ -44,6 +44,7 @@ func calculatedSynthetic(symbol string) bool {
 // DataProvenance accompanies the actual published dataset, including a native
 // XAUXAG dataset versus a calculated fallback under its same canonical identity.
 type DataProvenance struct {
+	SyntheticSource       string              `json:"syntheticSource,omitempty"`
 	Version               int                 `json:"version"`
 	Kind                  string              `json:"kind"`
 	Numerator             string              `json:"numerator"`
@@ -82,6 +83,9 @@ func validateDataProvenance(value *DataProvenance) error {
 	}
 	if value.HistorySource != "" && value.HistorySource != "dukascopy-node" && value.HistorySource != "jforex-sdk" && value.HistorySource != "mixed" {
 		return errors.New("invalid Dukascopy history source provenance")
+	}
+	if !validSyntheticSource(value.SyntheticSource) {
+		return errors.New("invalid synthetic observation source provenance")
 	}
 	if value.Kind != "mixed-native-ratio" && len(value.Segments) != 0 {
 		return errors.New("segmented synthetic provenance must identify its mixed origins")

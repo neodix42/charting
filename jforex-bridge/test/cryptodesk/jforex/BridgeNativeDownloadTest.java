@@ -17,8 +17,9 @@ public final class BridgeNativeDownloadTest {
         final CompletableFuture<List<IBar>> result = new CompletableFuture<>();
         final AtomicBoolean canceled = new AtomicBoolean();
         NativeLoad(Object[] args) { this.args = args; }
-        void complete() {
-            check(args.length == 6 && args[0] == Instrument.BTCUSD && args[1] == Period.DAILY && args[2] == OfferSide.BID && args[3] == Filter.WEEKENDS
+        void complete() { complete(Instrument.BTCUSD); }
+        void complete(Instrument instrument) {
+            check(args.length == 6 && args[0] == instrument && args[1] == Period.DAILY && args[2] == OfferSide.BID && args[3] == Filter.WEEKENDS
                 && (Long) args[4] == FROM * 1000 && (Long) args[5] == (TO - 86_400) * 1000,
                 "native getBars uses exact SDK native identity, BID, weekend filtering, first/last closed bar starts");
             result.complete(List.of(bar(FROM * 1000, 1, 3, .5, 2), bar((FROM + 86_400) * 1000, 2, 4, 1, 3), bar((TO - 86_400) * 1000, 3, 5, 2, 4)));
@@ -29,18 +30,24 @@ public final class BridgeNativeDownloadTest {
         final Fixture charts;
         final Bridge bridge;
         NativeFixture(long chartTimeout, long downloadTimeout) throws Exception {
-            charts = new Fixture(chartTimeout, () -> (TO + 3_600) * 1000, 2_000, downloadTimeout, Set.of(Instrument.BTCUSD, Instrument.EURUSD), (method, args) -> {
+            this(chartTimeout, downloadTimeout, null);
+        }
+        NativeFixture(long chartTimeout, long downloadTimeout, IDataService calendar) throws Exception {
+            charts = new Fixture(chartTimeout, () -> (TO + 3_600) * 1000, 2_000, downloadTimeout, Set.of(Instrument.BTCUSD, Instrument.EURUSD, Instrument.XAUUSD, Instrument.AAPLUSUSD), (method, args) -> {
                 NativeLoad call = new NativeLoad(args); calls.add(call);
                 try { return call.result.get(); }
                 catch (InterruptedException error) { call.canceled.set(true); throw error; }
-            });
+            }, calendar);
             bridge = charts.bridge;
         }
         NativeLoad load() throws Exception { NativeLoad load = calls.poll(2, TimeUnit.SECONDS); check(load != null, "blocking SDK getBars requested only for native download"); return load; }
         public void close() throws Exception { charts.close(); }
     }
     static JsonObject history(boolean download) {
-        JsonObject request = request("history"), key = feed(Instrument.BTCUSD, "cfd"); key.addProperty("timeframe", "1d");
+        return history(Instrument.BTCUSD, "cfd", download);
+    }
+    static JsonObject history(Instrument instrument, String market, boolean download) {
+        JsonObject request = request("history"), key = feed(instrument, market); key.addProperty("timeframe", "1d");
         request.add("feedKey", key); request.addProperty("from", FROM); request.addProperty("to", TO); request.addProperty("limit", 1000);
         if (download) request.addProperty("download", true); return request;
     }
@@ -48,7 +55,43 @@ public final class BridgeNativeDownloadTest {
         CompletableFuture<JsonObject> reply = new CompletableFuture<>(); f.bridge.dispatch(request, reply::complete); return reply;
     }
     static void failed(JsonObject response, String message) { check(!response.get("ok").getAsBoolean(), message + ": " + response); }
+    static IDataService calendar(boolean loaded, boolean read, long validFrom, long validTo, List<org.threeten.extra.Interval> closed) {
+        com.dukascopy.holiday.RegularWeeklyHolidayScheduleDetail rule = fake(com.dukascopy.holiday.RegularWeeklyHolidayScheduleDetail.class,
+            (method, args) -> method.equals("getDetailInterval") ? org.threeten.extra.Interval.of(java.time.Instant.ofEpochMilli(validFrom), java.time.Instant.ofEpochMilli(validTo)) : null);
+        com.dukascopy.holiday.HolidaySchedule schedule = fake(com.dukascopy.holiday.HolidaySchedule.class, (method, args) ->
+            method.equals("getRegularWeeklyHolidayScheduleDetails") && validFrom < validTo ? List.of(rule) : List.of());
+        return calendarWithSchedule(loaded, read ? schedule : null, closed);
+    }
+    static IDataService calendarWithSchedule(boolean loaded, com.dukascopy.holiday.HolidaySchedule schedule, List<org.threeten.extra.Interval> closed) {
+        return calendarWithScheduleSupplier(loaded, () -> schedule, closed);
+    }
+    static IDataService calendarWithScheduleSupplier(boolean loaded, java.util.function.Supplier<com.dukascopy.holiday.HolidaySchedule> schedule, List<org.threeten.extra.Interval> closed) {
+        var holidays = fake(com.dukascopy.dds2.greed.holiday.ClientHolidayScheduleService.class, (method, args) -> switch(method) {
+            case "hasHolidaysScheduleLoaded" -> loaded;
+            case "getHolidaySchedule" -> schedule.get();
+            case "getHolidayIntervals" -> closed != null ? closed : schedule.get().getHolidayIntervalsSortedAndMerged((Long) args[1], (Long) args[2]);
+            default -> null;
+        });
+        var provider = fake(com.dukascopy.charts.data.datacache.IFeedDataProvider.class, (method, args) -> method.equals("getHolidayScheduleService") ? holidays : null);
+        return new com.dukascopy.api.impl.connect.JForexDataService(provider, new Properties());
+    }
     public static void main(String[] args) throws Exception {
+        // Exercise the pinned provider's real custom-only READ semantics, not
+        // a mock assumption about whether listed dates mean open or closed.
+        var custom = new com.dukascopy.holiday.CustomHolidayScheduleDetailImpl(1, java.time.ZoneOffset.UTC,
+            java.time.LocalDateTime.parse("2025-12-25T00:00:00"), java.time.LocalDateTime.parse("2025-12-25T23:59:00"));
+        var customOnly = new com.dukascopy.holiday.HolidayScheduleImpl.Builder(1).addCustomHolidayScheduleDetail(custom).build();
+        check(customOnly.isHoliday(java.time.Instant.parse("2025-12-25T12:00:00Z").toEpochMilli()), "custom READ dates are actual provider closure intervals");
+        check(!customOnly.isHoliday(FROM * 1000) && customOnly.getHolidayIntervalsSortedAndMerged(FROM * 1000, TO * 1000).isEmpty(),
+            "loaded custom-only READ schedule explicitly reports other historical dates open, without reversing open/closed exceptions");
+        check(customOnly.getRegularHourlyHolidayScheduleDetails().isEmpty() && customOnly.getRegularDailyHolidayScheduleDetails().isEmpty()
+            && customOnly.getRegularWeeklyHolidayScheduleDetails().isEmpty() && customOnly.getRegularMonthlyHolidayScheduleDetails().isEmpty()
+            && customOnly.getRegularYearlyHolidayScheduleDetails().isEmpty(), "custom-only provider proof has no recurring rules");
+        check(Bridge.verifiedHistoricalClosures(calendarWithSchedule(true, customOnly, null), Instrument.BTCUSD, FROM * 1000, TO * 1000).isEmpty(),
+            "a loaded custom-only READ schedule verifies other historical dates, without assuming an unloaded public empty set means24x7");
+        var diagnostic = Bridge.historicalCalendarDiagnostic(calendarWithSchedule(true, customOnly, null), Instrument.BTCUSD, FROM * 1000, TO * 1000);
+        check(Boolean.TRUE.equals(diagnostic.get("loaded")) && Boolean.TRUE.equals(diagnostic.get("readSchedule")) && ((List<?>) diagnostic.get("rules")).size() ==1
+            && diagnostic.get("closedIntervalCount").equals(0), "bounded calendar diagnostic includes only the actual provider schedule and historical interval result");
         try (NativeFixture f = new NativeFixture(75, 2_000)) {
             CompletableFuture<JsonObject> nativeReply = dispatch(f, history(true)); NativeLoad nativeLoad = f.load();
             CompletableFuture<JsonObject> chartReply = dispatch(f, history(false)); Load chartLoad = f.charts.load();
@@ -75,11 +118,121 @@ public final class BridgeNativeDownloadTest {
             check(chart.get(2, TimeUnit.SECONDS).getAsJsonArray("result").isEmpty() && !download.isDone(), "empty background callbacks do not certify a pending server-loaded download");
             server.complete(); check(download.get(2, TimeUnit.SECONDS).getAsJsonArray("result").size() == 3 && f.charts.loads.isEmpty(), "native download uses only its actual getBars collection");
         }
+        for (Instrument instrument : List.of(Instrument.EURUSD, Instrument.XAUUSD, Instrument.AAPLUSUSD)) {
+            try (NativeFixture f = new NativeFixture(50, 1_000)) {
+                CompletableFuture<JsonObject> download = dispatch(f, history(instrument, Bridge.market(instrument), true));
+                f.load().complete(instrument); JsonObject result = download.get(2, TimeUnit.SECONDS);
+                check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").size() == 3 && f.charts.loads.isEmpty(),
+                    "ordinary forex, metal and stock identities use the same bounded server-loaded daily SDK API");
+                await(f.charts.subscribed::isEmpty, "ordinary download releases its subscription reference");
+            }
+        }
+        long hour = 3_600_000, fromMs = FROM * 1000;
+        for (String kind : List.of("holiday", "verified-empty", "unloaded", "no-read", "expired", "native", "custom-only", "custom-closure")) {
+            boolean nativeHours = kind.equals("native"), loaded = !kind.equals("unloaded"), read = !kind.equals("no-read") && !nativeHours;
+            long validFrom = kind.equals("expired") ? fromMs + 365 * 86_400_000L : 0;
+            long validTo = kind.equals("verified-empty") ? validFrom : fromMs + 1000 * 86_400_000L;
+            var closed = kind.equals("holiday") ? List.of(org.threeten.extra.Interval.of(java.time.Instant.ofEpochMilli(fromMs + hour + 1_800_000), java.time.Instant.ofEpochMilli(fromMs + hour + 2_700_000))) : List.<org.threeten.extra.Interval>of();
+            var partialClosure = new com.dukascopy.holiday.CustomHolidayScheduleDetailImpl(2, java.time.ZoneOffset.UTC,
+                java.time.LocalDateTime.parse("2024-01-01T01:30:00"), java.time.LocalDateTime.parse("2024-01-01T01:44:00"));
+            var partialSchedule = new com.dukascopy.holiday.HolidayScheduleImpl.Builder(2).addCustomHolidayScheduleDetail(partialClosure).build();
+            IDataService service = kind.equals("custom-only") ? calendarWithSchedule(true, customOnly, null) : kind.equals("custom-closure") ? calendarWithSchedule(true, partialSchedule, null) : calendar(loaded, read, validFrom, validTo, closed);
+            try (NativeFixture f = new NativeFixture(50, 1_000, service)) {
+                JsonObject query = history(true); query.getAsJsonObject("feedKey").addProperty("timeframe", "1h"); query.addProperty("to", FROM + 3 * 3600); query.addProperty("fullOpenHours", !nativeHours);
+                CompletableFuture<JsonObject> response = dispatch(f, query);
+                if (List.of("unloaded", "no-read", "expired").contains(kind)) {
+                    if (kind.equals("unloaded") || kind.equals("no-read")) f.load().result.complete(List.of(bar(fromMs, 1, 3, .5, 2)));
+                    failed(response.get(2, TimeUnit.SECONDS), "unverified historical calendar fails before quote reads " + kind);
+                    check(f.calls.isEmpty(), "unknown calendar cannot request/certify source data");
+                    await(f.charts.subscribed::isEmpty, "failed calendar source releases subscription"); continue;
+                }
+                NativeLoad request = f.load();
+                check(request.args[1] == Period.ONE_HOUR && request.args[2] == OfferSide.BID && request.args[3] == Filter.NO_FILTER && (Long) request.args[4] == fromMs && (Long) request.args[5] == fromMs + 2 * hour,
+                    "hourly source uses actual bounded native BID buckets");
+                request.result.complete(List.of(bar(fromMs, 1, 3, .5, 2), bar(fromMs + hour, 2, 4, 1, 3), bar(fromMs + 2 * hour, 3, 5, 2, 4)));
+                JsonObject result = response.get(2, TimeUnit.SECONDS);
+                if (List.of("unloaded", "no-read", "expired").contains(kind)) failed(result, "unverified historical calendar fails closed " + kind);
+                else {
+                    check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").size() == (kind.equals("holiday") || kind.equals("custom-closure") ? 2 : 3), "only verified full hours pass, native-only aggregation preserves all provider hours " + kind);
+                    if (kind.equals("holiday") || kind.equals("custom-closure")) check(result.getAsJsonArray("result").get(1).getAsJsonObject().get("time").getAsLong() == FROM + 2 * 3600, "a closure inside one hour removes the complete intersecting source hour");
+                }
+                await(f.charts.subscribed::isEmpty, "hourly source failure or success releases subscription");
+            }
+        }
+        var lateRead = new AtomicReference<com.dukascopy.holiday.HolidaySchedule>();
+        try (NativeFixture f = new NativeFixture(50, 1_000, calendarWithScheduleSupplier(true, lateRead::get, null))) {
+            JsonObject query = history(true); query.getAsJsonObject("feedKey").addProperty("timeframe", "1h"); query.addProperty("to", FROM + 3 * 3600); query.addProperty("fullOpenHours", true);
+            CompletableFuture<JsonObject> response = dispatch(f, query); NativeLoad source = f.load();
+            lateRead.set(customOnly); source.result.complete(List.of(bar(fromMs, 1, 3, .5, 2)));
+            JsonObject result = response.get(2, TimeUnit.SECONDS);
+            check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").size() ==1,
+                "loaded flag published before READ map gets one bounded day warm-up, but source rows require the actual READ proof");
+        }
+        try (NativeFixture f = new NativeFixture(50, 2_000, calendar(true, true, 0, fromMs + 1000 * 86_400_000L, List.of()))) {
+            JsonObject query = history(true); query.getAsJsonObject("feedKey").addProperty("timeframe", "1h"); query.addProperty("fullOpenHours", true);
+            CompletableFuture<JsonObject> response = dispatch(f, query);
+            for (int index =0; index <3; index++) {
+                NativeLoad source = f.load(); long start = fromMs + index * 86_400_000L;
+                check(source.args[3] == Filter.NO_FILTER && (Long) source.args[4] == start && (Long) source.args[5] == start + 23 * hour,
+                    "large exports split into exact UTC source days inside one bounded job");
+                IBar ambiguous = new com.dukascopy.charts.data.datacache.CandleData(start + hour, 2, 2, 2, 2, 0);
+                IBar zeroVolumeObservation = new com.dukascopy.charts.data.datacache.CandleData(start + 23 * hour, 2, 3, 1, 4, 0);
+                source.result.complete(List.of(bar(start, 1, 3, .5, 2), ambiguous, zeroVolumeObservation));
+            }
+            JsonObject result = response.get(2, TimeUnit.SECONDS);
+            check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").size() ==6,
+                "daily SDK reads preserve genuine changing zero-volume observations but never manufacture zero-volume flat gap carry");
+        }
+        for (String kind : List.of("closed", "empty-open", "all-filled")) {
+            var closed = kind.equals("closed") ? List.of(org.threeten.extra.Interval.of(java.time.Instant.ofEpochMilli(fromMs), java.time.Instant.ofEpochMilli(fromMs + 3 * hour -1))) : List.<org.threeten.extra.Interval>of();
+            try (NativeFixture f = new NativeFixture(50, 1_000, calendar(true, true, 0, fromMs + 1000 * 86_400_000L, closed))) {
+                JsonObject query = history(true); query.getAsJsonObject("feedKey").addProperty("timeframe", "1h"); query.addProperty("to", FROM + 3 * 3600); query.addProperty("fullOpenHours", true);
+                CompletableFuture<JsonObject> response = dispatch(f, query);
+                if (kind.equals("closed")) {
+                    JsonObject result = response.get(2, TimeUnit.SECONDS);
+                    check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").isEmpty() && f.calls.isEmpty(), "fully closed calendar range is valid empty coverage without a quote request");
+                } else {
+                    f.load().result.complete(kind.equals("empty-open") ? List.of() : List.of(new com.dukascopy.charts.data.datacache.CandleData(fromMs, 2, 2, 2, 2, 0)));
+                    JsonObject result = response.get(2, TimeUnit.SECONDS); failed(result, "open empty/filler source cannot establish verified coverage");
+                    check(result.getAsJsonObject("error").get("message").getAsString().contains("incomplete history was not cached"), "false empty cannot poison a source manifest");
+                }
+            }
+        }
+        var fullClosedDay = new com.dukascopy.holiday.CustomHolidayScheduleDetailImpl(3, java.time.ZoneOffset.UTC,
+            java.time.LocalDateTime.parse("2024-01-02T00:00:00"), java.time.LocalDateTime.parse("2024-01-02T23:59:00"));
+        var nativeHoliday = new com.dukascopy.holiday.HolidayScheduleImpl.Builder(3).addCustomHolidayScheduleDetail(fullClosedDay).build();
+        try (NativeFixture f = new NativeFixture(50, 2_000, calendarWithSchedule(true, nativeHoliday, null))) {
+            JsonObject query = history(true); query.getAsJsonObject("feedKey").addProperty("timeframe", "1h"); query.addProperty("fullOpenHours", false);
+            CompletableFuture<JsonObject> response = dispatch(f, query);
+            f.load().result.complete(List.of(bar(fromMs, 1, 3, .5, 2)));
+            f.load().result.complete(List.of());
+            f.load().result.complete(List.of(bar(fromMs + 2 * 86_400_000L, 2, 4, 1, 3)));
+            JsonObject result = response.get(2, TimeUnit.SECONDS);
+            check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").size() ==2,
+                "native real/fully closed/real UTC days preserve both real source days without inventing a holiday candle");
+        }
+        for (String kind : List.of("all-closed", "open", "partial", "unverified")) {
+            var closures = new ArrayList<org.threeten.extra.Interval>();
+            if (kind.equals("all-closed")) {
+                // Adjacent and overlapping intervals must form a complete
+                // union; requiring one interval alone would reject real gaps.
+                closures.add(org.threeten.extra.Interval.of(java.time.Instant.ofEpochMilli(fromMs + hour), java.time.Instant.ofEpochMilli(fromMs + 3 * hour -1)));
+                closures.add(org.threeten.extra.Interval.of(java.time.Instant.ofEpochMilli(fromMs), java.time.Instant.ofEpochMilli(fromMs + hour -1)));
+            } else if (kind.equals("partial")) for (int index =0; index<3; index++)
+                closures.add(org.threeten.extra.Interval.of(java.time.Instant.ofEpochMilli(fromMs + index * hour), java.time.Instant.ofEpochMilli(fromMs + index * hour + hour /2)));
+            try (NativeFixture f = new NativeFixture(50, 1_000, calendar(true, !kind.equals("unverified"), 0, fromMs + 1000 * 86_400_000L, closures))) {
+                JsonObject query = history(true); query.getAsJsonObject("feedKey").addProperty("timeframe", "1h"); query.addProperty("to", FROM + 3 * 3600); query.addProperty("fullOpenHours", false);
+                CompletableFuture<JsonObject> response = dispatch(f, query); f.load().result.complete(List.of());
+                JsonObject result = response.get(2, TimeUnit.SECONDS);
+                if (kind.equals("all-closed")) check(result.get("ok").getAsBoolean() && result.getAsJsonArray("result").isEmpty(), "native fully closed union is a verified source gap, never a fabricated candle");
+                else failed(result, "native zero requires full continuous closure proof, not absence of a fully open hour " + kind);
+            }
+        }
         for (String invalid : List.of("instrument", "market", "timeframe", "open", "alignment", "range", "limit", "flag")) {
             try (NativeFixture f = new NativeFixture(50, 1_000)) {
                 JsonObject request = history(true), key = request.getAsJsonObject("feedKey");
                 switch (invalid) {
-                    case "instrument" -> { key.addProperty("instrument", "EURUSD"); key.addProperty("market", "forex"); }
+                    case "instrument" -> key.addProperty("instrument", "BTCXAU");
                     case "market" -> key.addProperty("market", "metal");
                     case "timeframe" -> key.addProperty("timeframe", "1w");
                     case "open" -> request.addProperty("to", TO + 86_400);

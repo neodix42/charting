@@ -12,49 +12,57 @@ import (
 
 // LiveAlertCheck summarizes the latest real attempt for one selected condition.
 // AssetsScanned counts distinct symbols, even when both saved periods are used.
+// AssetsAlreadyProcessed counts existing watermark shortcuts; manual native
+// file inspections can also include those assets in AssetsScanned.
+// AssetsMissingCandle is the distinct-asset subset of AssetsSkipped whose
+// provider returned no closed candle for the requested period.
 // SentAlerts counts signals confirmed for at least one recipient during the
 // latest check, including partial recipient batches. Legacy attempt counts are
 // explicitly unknown; LifetimeSentAlerts preserves their historical total.
 type LiveAlertCheck struct {
-	Progress           float64 `json:"progress,omitempty"`
-	Phase              string  `json:"phase,omitempty"`
-	CurrentAsset       string  `json:"currentAsset,omitempty"`
-	ProgressState      string  `json:"progressState,omitempty"`
-	ProgressMode       string  `json:"progressMode,omitempty"`
-	AlertID            string  `json:"alertId,omitempty"`
-	SavedConditionID   string  `json:"savedConditionId,omitempty"`
-	ConditionID        string  `json:"conditionId"`
-	Name               string  `json:"name"`
-	AssetsScanned      int     `json:"assetsScanned"`
-	AssetsSkipped      int     `json:"assetsSkipped,omitempty"`
-	AssetsWarmingUp    int     `json:"assetsWarmingUp,omitempty"`
-	LastChecked        int64   `json:"lastChecked"`
-	TriggeredAt        int64   `json:"triggeredAt"`
-	DurationMs         int64   `json:"durationMs"`
-	DurationKnown      bool    `json:"durationKnown"`
-	NextCheck          int64   `json:"nextCheck"`
-	SentAlerts         int64   `json:"sentAlerts"`
-	SentAlertsKnown    bool    `json:"sentAlertsKnown"`
-	LifetimeSentAlerts int64   `json:"lifetimeSentAlerts"`
-	Status             string  `json:"status"`
-	Manual             bool    `json:"manual"`
-	Error              string  `json:"error"`
-	TimingHint         string  `json:"timingHint,omitempty"`
+	Progress               float64 `json:"progress,omitempty"`
+	Phase                  string  `json:"phase,omitempty"`
+	CurrentAsset           string  `json:"currentAsset,omitempty"`
+	ProgressState          string  `json:"progressState,omitempty"`
+	ProgressMode           string  `json:"progressMode,omitempty"`
+	AlertID                string  `json:"alertId,omitempty"`
+	SavedConditionID       string  `json:"savedConditionId,omitempty"`
+	ConditionID            string  `json:"conditionId"`
+	Name                   string  `json:"name"`
+	AssetsScanned          int     `json:"assetsScanned"`
+	AssetsSkipped          int     `json:"assetsSkipped,omitempty"`
+	AssetsAlreadyProcessed int     `json:"assetsAlreadyProcessed,omitempty"`
+	AssetsMissingCandle    int     `json:"assetsMissingCandle,omitempty"`
+	AssetsWarmingUp        int     `json:"assetsWarmingUp,omitempty"`
+	LastChecked            int64   `json:"lastChecked"`
+	TriggeredAt            int64   `json:"triggeredAt"`
+	DurationMs             int64   `json:"durationMs"`
+	DurationKnown          bool    `json:"durationKnown"`
+	NextCheck              int64   `json:"nextCheck"`
+	SentAlerts             int64   `json:"sentAlerts"`
+	SentAlertsKnown        bool    `json:"sentAlertsKnown"`
+	LifetimeSentAlerts     int64   `json:"lifetimeSentAlerts"`
+	Status                 string  `json:"status"`
+	Manual                 bool    `json:"manual"`
+	Error                  string  `json:"error"`
+	TimingHint             string  `json:"timingHint,omitempty"`
 }
 
 type liveAlertCheckState struct {
-	AssetsScanned       int    `json:"assetsScanned"`
-	AssetsSkipped       int    `json:"assetsSkipped,omitempty"`
-	AssetsWarmingUp     int    `json:"assetsWarmingUp,omitempty"`
-	LastChecked         int64  `json:"lastChecked"`
-	TriggeredAt         int64  `json:"triggeredAt,omitempty"`
-	DurationMs          *int64 `json:"durationMs,omitempty"`
-	SentAlerts          int64  `json:"sentAlerts"`
-	LastCheckSentAlerts *int64 `json:"lastCheckSentAlerts,omitempty"`
-	CheckID             string `json:"checkId,omitempty"`
-	Status              string `json:"status"`
-	Manual              bool   `json:"manual"`
-	Error               string `json:"error,omitempty"`
+	AssetsScanned          int    `json:"assetsScanned"`
+	AssetsSkipped          int    `json:"assetsSkipped,omitempty"`
+	AssetsAlreadyProcessed int    `json:"assetsAlreadyProcessed,omitempty"`
+	AssetsMissingCandle    int    `json:"assetsMissingCandle,omitempty"`
+	AssetsWarmingUp        int    `json:"assetsWarmingUp,omitempty"`
+	LastChecked            int64  `json:"lastChecked"`
+	TriggeredAt            int64  `json:"triggeredAt,omitempty"`
+	DurationMs             *int64 `json:"durationMs,omitempty"`
+	SentAlerts             int64  `json:"sentAlerts"`
+	LastCheckSentAlerts    *int64 `json:"lastCheckSentAlerts,omitempty"`
+	CheckID                string `json:"checkId,omitempty"`
+	Status                 string `json:"status"`
+	Manual                 bool   `json:"manual"`
+	Error                  string `json:"error,omitempty"`
 	// The original time retains Go's monotonic clock while this process owns
 	// the attempt. It is deliberately absent from the saved file: an interrupted
 	// check has no trustworthy finish instant after restarting the application.
@@ -66,6 +74,8 @@ type liveAlertCheckRun struct {
 	scannedSymbols map[string]map[string]bool
 	skippedSymbols map[string]map[string]bool
 	warmingSymbols map[string]map[string]bool
+	alreadySymbols map[string]map[string]bool
+	missingSymbols map[string]map[string]bool
 	expectedPairs  map[string]map[string]bool
 	processedPairs map[string]map[string]bool
 	failures       map[string]error
@@ -99,7 +109,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 		if err := validateLiveAlertsConfig(LiveAlertsConfig{ConditionIDs: []string{id}}); err != nil {
 			return err
 		}
-		if record.AssetsWarmingUp < 0 || record.AssetsWarmingUp > 20000 || record.AssetsSkipped < 0 || record.AssetsSkipped > 20000 || record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
+		if record.AssetsAlreadyProcessed < 0 || record.AssetsAlreadyProcessed > 20000 || record.AssetsMissingCandle < 0 || record.AssetsMissingCandle > record.AssetsSkipped || record.AssetsWarmingUp < 0 || record.AssetsWarmingUp > 20000 || record.AssetsSkipped < 0 || record.AssetsSkipped > 20000 || record.AssetsScanned < 0 || record.AssetsScanned > 20000 || record.LastChecked <= 0 || record.LastChecked > 253402300799999 || record.SentAlerts < 0 || record.SentAlerts > sent || len(record.Error) > 5000 {
 			return errors.New("invalid Live Alerts condition check counts or timestamp")
 		}
 		if record.LastCheckSentAlerts != nil {
@@ -129,7 +139,7 @@ func validateLiveCheckStates(values map[string]liveAlertCheckState, sent int64) 
 }
 
 func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool, triggers ...time.Time) (*liveAlertCheckRun, error) {
-	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, skippedSymbols: map[string]map[string]bool{}, warmingSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}, checkIDs: map[string]string{}}
+	run := &liveAlertCheckRun{live: l, scannedSymbols: map[string]map[string]bool{}, skippedSymbols: map[string]map[string]bool{}, warmingSymbols: map[string]map[string]bool{}, alreadySymbols: map[string]map[string]bool{}, missingSymbols: map[string]map[string]bool{}, expectedPairs: map[string]map[string]bool{}, processedPairs: map[string]map[string]bool{}, failures: map[string]error{}, checkIDs: map[string]string{}}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.blocked || l.closed {
@@ -150,6 +160,8 @@ func (l *LiveAlerts) beginCheckHistory(config LiveAlertsConfig, manual bool, tri
 		run.scannedSymbols[id] = map[string]bool{}
 		run.skippedSymbols[id] = map[string]bool{}
 		run.warmingSymbols[id] = map[string]bool{}
+		run.alreadySymbols[id] = map[string]bool{}
+		run.missingSymbols[id] = map[string]bool{}
 		run.expectedPairs[id] = map[string]bool{}
 		run.processedPairs[id] = map[string]bool{}
 		var nonce [16]byte
@@ -199,6 +211,25 @@ func (r *liveAlertCheckRun) processedPair(conditionID, symbol, period string) {
 	if pairs, known := r.processedPairs[conditionID]; known && !r.finished {
 		pairs[symbol+"/"+period] = true
 	}
+}
+
+// Only an existing watermark may take this shortcut. A newly evaluated candle
+// uses processedPair instead, so fresh work never inflates the reuse counter.
+func (r *liveAlertCheckRun) alreadyProcessedPair(conditionID, symbol, period string) {
+	if r == nil {
+		return
+	}
+	r.live.mu.Lock()
+	defer r.live.mu.Unlock()
+	symbols, known := r.alreadySymbols[conditionID]
+	state, exists := r.live.state.Checks[conditionID]
+	if !known || r.finished || !exists || state.CheckID != r.checkIDs[conditionID] || state.Status != "running" {
+		return
+	}
+	symbols[symbol] = true
+	r.processedPairs[conditionID][symbol+"/"+period] = true
+	state.AssetsAlreadyProcessed = len(symbols)
+	r.live.state.Checks[conditionID] = state
 }
 
 func (r *liveAlertCheckRun) scanned(conditionID, symbol string) {
@@ -257,6 +288,10 @@ func (r *liveAlertCheckRun) skipped(id, symbol string, err error) {
 		symbols[symbol] = true
 		if state, exists := r.live.state.Checks[id]; exists && state.CheckID == r.checkIDs[id] {
 			state.AssetsSkipped = len(symbols)
+			if state.Status == "running" && publicAlertMissingClosedCandle(err) {
+				r.missingSymbols[id][symbol] = true
+				state.AssetsMissingCandle = len(r.missingSymbols[id])
+			}
 			r.live.state.Checks[id] = state
 		}
 	}
@@ -362,6 +397,8 @@ func (r *liveAlertCheckRun) finish(cycleErr error) error {
 		state.AssetsScanned = len(symbols)
 		state.AssetsSkipped = len(r.skippedSymbols[id])
 		state.AssetsWarmingUp = len(r.warmingSymbols[id])
+		state.AssetsAlreadyProcessed = len(r.alreadySymbols[id])
+		state.AssetsMissingCandle = len(r.missingSymbols[id])
 		finishedAt := l.now()
 		state.LastChecked = finishedAt.UTC().UnixMilli()
 		if !state.triggerTime.IsZero() {
@@ -473,7 +510,7 @@ func liveAlertCheckRows(saved []SavedAnalysisCondition, scopes []LiveAlertCondit
 			continue
 		}
 		state, checked := states[condition.ID]
-		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, AssetsWarmingUp: state.AssetsWarmingUp, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
+		row := LiveAlertCheck{ConditionID: condition.ID, Name: condition.Name, AssetsScanned: state.AssetsScanned, AssetsSkipped: state.AssetsSkipped, AssetsWarmingUp: state.AssetsWarmingUp, AssetsAlreadyProcessed: state.AssetsAlreadyProcessed, AssetsMissingCandle: state.AssetsMissingCandle, LastChecked: state.LastChecked, SentAlerts: state.SentAlerts, Status: state.Status, Manual: state.Manual, Error: liveAlertErrorText(state.Error)}
 		applyLiveAlertSentCounts(&row, state)
 		applyLiveAlertCheckTiming(&row, state, now)
 		if named {
