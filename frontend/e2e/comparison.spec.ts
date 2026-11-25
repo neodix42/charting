@@ -59,6 +59,32 @@ test('the verified TON rename displays GRAM while keeping canonical selection an
  await reloadTestApp(page);await enter(page);await loaded(page);await expect(selected(page).locator('strong')).toHaveText(['BTC','ETH','HYPE','ZEN','APT','NEAR','TON (GRAM)']);
 });
 
+test('refreshed actual sources override stale catalog labels and unavailable assets never retain an old provider',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);
+ const btc=selected(page).locator('.comparison-asset').filter({has:page.getByText('BTC',{exact:true})});
+ const legend=page.getByLabel('Comparison legend',{exact:true}).locator('div').filter({has:page.getByText('BTC',{exact:true})});
+ await expect(btc.locator('small')).toHaveText('Hyperliquid · Perpetual · USDC');
+ const refreshActual=async(unavailable:boolean)=>{
+  await page.evaluate(()=>(window as any).__testComparisonHoldNextData());await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonPending().length)).toBe(1);
+  await page.evaluate(unavailable=>{
+   const fixture=window as any,id=fixture.__testComparisonPending()[0],result=fixture.__testComparisonLastResult();
+   const series=result.series.map((series:any)=>series.asset.symbol!=='BTC'?series:unavailable?
+    {...series,asset:{symbol:'BTC',name:'Bitcoin',exchange:'',market:'',nativeId:'',quoteAsset:''},points:[],error:'No matching asset is available in the verified provider catalog'}:
+    {...series,asset:{...series.asset,exchange:'binance',market:'spot',nativeId:'BTCUSDT',quoteAsset:'USDT',feedKey:{exchange:'binance',market:'spot',instrument:'BTCUSDT',timeframe:'1d'}}});
+   fixture.__testComparisonReleaseData(id,{series});
+  },unavailable);
+ };
+ await refreshActual(false);await loaded(page);
+ await expect(btc.locator('small')).toHaveText('Binance · Spot · USDT');await expect(btc).not.toContainText('Hyperliquid');
+ await expect(legend).toHaveAttribute('title','Binance · Spot · USDT · BTCUSDT');await expect(legend).toContainText('+28.00%');
+ expect((await calls(page)).catalog).toBe(1);
+ await refreshActual(true);await loaded(page,6);
+ await expect(btc.locator('small')).toHaveText('Unavailable');await expect(btc).not.toContainText('Hyperliquid');await expect(btc).not.toContainText('Binance');
+ await expect(legend).toHaveCount(0);await expect(page.getByLabel('Unavailable comparison assets',{exact:true})).toContainText('No matching asset is available');
+ expect((await calls(page)).catalog).toBe(1);
+});
+
 test('weeks edits request the selected period once, validate bounds and restore the saved choice',async({page})=>{
  await openTestApp(page);await enter(page);await loaded(page);
  await panel(page).getByRole('button',{name:'2w',exact:true}).click();await loaded(page);

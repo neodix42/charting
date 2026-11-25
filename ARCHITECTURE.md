@@ -152,7 +152,9 @@ baseline day and `(close / baselineClose - 1) * 100`; unavailable baselines cann
 be rebased individually. Missing daily closes remain explicit gaps. The visible
 screen owns cancellable request IDs and its chart, observers and listeners;
 hidden Comparison charts are disposed and late replies cannot replace a newer
-selection. Empty selections persist and request no daily history.
+selection. Selected-asset labels use the returned series metadata before catalog
+metadata, so a refreshed market or unavailable asset cannot retain an old source
+label. Empty selections persist and request no daily history.
 
 ## Stale-response protection
 
