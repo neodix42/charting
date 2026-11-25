@@ -185,7 +185,7 @@ func (m *Manager) runRefresh(ctx context.Context, directory string, asOf int64, 
 		m.refreshActive, m.refreshCancel = false, nil
 		close(m.refreshDone)
 	}()
-	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	ctx, cleanup, err := withProviderSessionWithHistory(ctx, m.profile, m.dukascopyHistory)
 	if err != nil {
 		m.mu.Lock()
 		for i := range m.refreshJobs {
@@ -278,6 +278,7 @@ type refreshEvent struct {
 	CheckedThrough int64               `json:"checkedThrough"`
 	Coverage       []dataRange         `json:"coverage"`
 	Message        string              `json:"message"`
+	Provenance     *DataProvenance     `json:"provenance,omitempty"`
 }
 
 func (m *Manager) refreshFile(ctx context.Context, index int, directory string, job RefreshJob, legacy []EnrichmentRequest, asOf int64) error {
@@ -346,7 +347,9 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		AsOf             int64            `json:"asOf"`
 		RequiredFields   []string         `json:"requiredFields,omitempty"`
 		ProviderSession  *providerSession `json:"providerSession,omitempty"`
-	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx)})
+		HistoryDirectory string           `json:"historyDirectory"`
+		Provenance       *DataProvenance  `json:"provenance,omitempty"`
+	}{Input: source, Output: output, Symbol: match[1], Timeframe: match[2], From: refreshFrom(match[3], metadata.Coverage), RecipeFile: recipePath, DailyPlanFile: dailyPlanFile, CoverageVerified: metadata.Verified && metadataMatches(metadata, original), CoverageDigest: metadata.Checksum, OwnerPipe: true, AsOf: asOf, RequiredFields: requiredFields, ProviderSession: sessionFromContext(ctx), HistoryDirectory: directory, Provenance: copyProvenance(metadata.Provenance)})
 	cmd := exec.CommandContext(ctx, m.runtime.node, filepath.Join(filepath.Dir(m.runtime.worker), "refresh-worker.cjs"))
 	configureProcess(cmd)
 	cmd.Dir = work
@@ -430,8 +433,8 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		_ = cmd.Cancel()
 	}
 	err = cmd.Wait()
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return sourceErr
 	}
 	if workerError != "" {
 		return errors.New(workerError)
@@ -441,6 +444,12 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 	}
 	if !done {
 		return errors.New("data refresh exited without confirming its rows and indicator recipes")
+	}
+	if err = validateSyntheticDataset(match[1], match[2], result.Provenance); err != nil {
+		return err
+	}
+	if result.Provenance != nil && result.Checksum == "" {
+		return errors.New("synthetic refresh provenance lacks a content checksum")
 	}
 	for _, recipe := range result.Recipes {
 		if _, err = m.validateEnrichment(recipe); err != nil {
@@ -453,8 +462,8 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return sourceErr
 	}
 	for filename, info := range dailyOriginals {
 		if err := unchangedFile(filename, info); err != nil {
@@ -465,13 +474,16 @@ func (m *Manager) refreshFileRequiredProgress(ctx context.Context, index int, di
 		return err
 	}
 	sources := []downloadSource{{Input: source, Name: job.Name, From: match[3], To: match[4], Bytes: original.Size(), Modified: original.ModTime().UnixMilli(), Metadata: metadata}}
-	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough, Coverage: result.Coverage}
+	metadata = fileMetadata{Recipes: result.Recipes, Verified: true, Bytes: outputInfo.Size(), Modified: outputInfo.ModTime().UnixNano(), FirstTimestamp: result.FirstTimestamp, LastTimestamp: result.LastTimestamp, Checksum: result.Checksum, CheckedThrough: result.CheckedThrough, Coverage: result.Coverage, Provenance: copyProvenance(result.Provenance)}
 	// Date filenames express an exclusive upper bound. A refresh runs through
 	// its execution instant, so today's partial range ends at tomorrow's date.
 	to := time.UnixMilli(asOf).UTC().Add(24 * time.Hour).Format("2006-01-02")
 	name, err := canonicalHistoryName(match[1], match[2], match[3], to, sources, metadata)
 	if err != nil {
 		return err
+	}
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return sourceErr
 	}
 	backup, err := publishHistory(directory, name, output, sources, map[string]os.FileInfo{source: original}, metadata)
 	if err != nil {

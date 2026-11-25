@@ -22,6 +22,39 @@ func TestNativeInstrumentValidationKeepsProviderIdentity(t *testing.T) {
 	}
 }
 
+func TestCalculatedDukascopyIntervalsAndWorkspaceCompatibility(t *testing.T) {
+	for _, symbol := range []string{"BTCXAU", "XAUSPX", "ETHBTC", "BTCUSD", "XAUXAG", "EURUSD"} {
+		for _, interval := range Intervals {
+			market := "cfd"
+			if symbol == "XAUXAG" {
+				market = "metal"
+			}
+			if symbol == "EURUSD" {
+				market = "forex"
+			}
+			key := FeedKey{Exchange: "dukascopy", Market: market, Instrument: symbol, Timeframe: interval}
+			valid := !IsCalculatedInstrument("dukascopy", symbol) || interval == "1d" || interval == "1w"
+			if err := key.Validate(); (err == nil) != valid {
+				t.Fatalf("%+v: %v", key, err)
+			}
+			w := NewWorkspace()
+			c := &w.Tabs[0].Charts[0]
+			c.Exchange, c.Market, c.Instrument, c.Timeframe = key.Exchange, key.Market, key.Instrument, key.Timeframe
+			data, _ := json.Marshal(w)
+			decoded, err := DecodeWorkspace(data)
+			if (err == nil) != valid {
+				t.Fatalf("workspace %+v: %v", key, err)
+			}
+			if valid && decoded.Tabs[0].Charts[0].Timeframe != interval {
+				t.Fatal("restored native interval was changed")
+			}
+		}
+	}
+	if IsCalculatedInstrument("binance", "ETHBTC") {
+		t.Fatal("provider-native ETHBTC incorrectly classified")
+	}
+}
+
 func TestFeedAndWorkspaceMarketCompatibility(t *testing.T) {
 	for _, exchange := range []string{"binance", "bybit", "coinbase", "hyperliquid", "unknown"} {
 		for _, market := range []string{"spot", "perpetual", "futures", "", "Spot"} {

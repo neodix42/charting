@@ -196,6 +196,12 @@ func formatScreenerLiveAlert(alert screener.LiveAlert) string {
 	if alert.SavedConditionName != "" {
 		conditionName = alert.SavedConditionName
 	}
+	if alert.Synthetic {
+		source += "\nSynthetic approximate BID observations; no executable broker trade."
+		if alert.SimulationBasis != "" {
+			source += "\n" + alert.SimulationBasis
+		}
+	}
 	return fmt.Sprintf("CryptoDesk Live Alert\nAsset: %s — %s%s\nPeriod: %s\nTime (UTC, bar close): %s%s\nCondition: %s%s\nEntry (signal close): %s\nSL: %s\nTP: %s",
 		symbol, alert.AssetName, source, alert.Timeframe, closed.Format("2006-01-02 15:04:05"), alertName, conditionName,
 		profitability, strconv.FormatFloat(alert.EntryPrice, 'g', -1, 64), level(alert.StopLoss), level(alert.TakeProfit))

@@ -1,3 +1,4 @@
+import {calculatedLabel,isCalculatedSymbol} from '../workspace/syntheticInstruments';
 import {useEffect,useRef,useState} from 'react';
 import {CandlestickSeries,HistogramSeries,LineSeries,LineType,createChart,createSeriesMarkers,type AutoscaleInfoProvider,type IChartApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
 import {isCalendarRange} from '../../../screener-runtime/calendar-ranges.mjs';
@@ -157,6 +158,7 @@ export function ScreenerAnalysisChart({api,selection,onClose,onNavigate}:{api:Sc
  return <div className="modal-backdrop analysis-chart-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}><section className="analysis-chart-modal" ref={dialog} role="dialog" aria-modal="true" aria-label="Analysis match chart">
   <header><div><span className="analysis-eyebrow">MATCH INSPECTION</span><h2>{selection.result.symbol.toUpperCase()||selection.result.name} <span>{selection.result.timeframe}</span></h2><p>{selection.result.name}</p></div><button ref={close} type="button" aria-label="Close analysis chart" onClick={onClose}>×</button></header>
   <nav aria-label="Matching occurrences"><button type="button" disabled={loading||navigating} onClick={()=>void step(-1)}>← Previous match</button><div><strong>Occurrence {selection.occurrence+1} of {data?.totalMatches??selection.result.matches}</strong><span>{data?`Signal bar: ${analysisDate(data.matchTime)}`:'Loading match…'}</span></div><button type="button" disabled={loading||navigating} onClick={()=>void step(1)}>Next match →</button></nav>
+  {(data?.synthetic||selection.result.synthetic||isCalculatedSymbol(selection.result.symbol))&&<p className="analysis-chart-note" aria-label="Synthetic chart provenance">{calculatedLabel}. {data?.simulationBasis||selection.result.simulationBasis||'Synthetic returns are analytical and do not represent an executable position.'} Volume is unavailable.</p>}
   <p className="analysis-chart-note">Closed bars from downloaded files. Previous / Next visits every occurrence, continuing across matching files.</p>
   {error&&<div className="analysis-error" role="alert">{error}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry chart</button></div>}
   {loading&&<p className="analysis-empty" role="status">Loading bars and enriched indicators around this match…</p>}

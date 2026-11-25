@@ -65,7 +65,12 @@ func prepareDownloadPlan(job Job, directory, work string) (downloadPlan, map[str
 			if !metadataMatches(metadata, info) {
 				metadata.Verified = false
 				metadata.Coverage = nil
-				metadata.Checksum = ""
+				// Retain a provenance-bearing content hash for the worker to
+				// reverify. An mtime-only change must not erase the only proof
+				// that retained ratio prices belong to their recorded sources.
+				if metadata.Provenance == nil {
+					metadata.Checksum = ""
+				}
 			}
 			plan.Inputs = append(plan.Inputs, downloadSource{full, name, match[3], match[4], info.Size(), info.ModTime().UnixMilli(), metadata})
 		}
@@ -107,6 +112,9 @@ func prepareDownloadPlan(job Job, directory, work string) (downloadPlan, map[str
 }
 
 func downloadedMetadata(partial string, event workerEvent) (fileMetadata, error) {
+	if err := validateDataProvenance(event.Provenance); err != nil {
+		return fileMetadata{}, err
+	}
 	digest, err := hex.DecodeString(event.Checksum)
 	if err != nil || len(digest) != 32 || event.FirstTimestamp < 0 || event.LastTimestamp < event.FirstTimestamp || len(event.Recipes) > 2000 || len(event.Coverage) > 10000 {
 		return fileMetadata{}, errors.New("downloader returned invalid coverage metadata")
@@ -120,7 +128,7 @@ func downloadedMetadata(partial string, event workerEvent) (fileMetadata, error)
 	if err != nil || !info.Mode().IsRegular() {
 		return fileMetadata{}, errors.New("downloaded CSV is not a regular file")
 	}
-	return fileMetadata{Recipes: event.Recipes, Verified: len(event.Coverage) == 1, Bytes: info.Size(), Modified: info.ModTime().UnixNano(), FirstTimestamp: event.FirstTimestamp, LastTimestamp: event.LastTimestamp, Checksum: event.Checksum, CheckedThrough: event.CheckedThrough, Coverage: event.Coverage}, nil
+	return fileMetadata{Recipes: event.Recipes, Verified: len(event.Coverage) == 1, Bytes: info.Size(), Modified: info.ModTime().UnixNano(), FirstTimestamp: event.FirstTimestamp, LastTimestamp: event.LastTimestamp, Checksum: event.Checksum, CheckedThrough: event.CheckedThrough, Coverage: event.Coverage, Provenance: copyProvenance(event.Provenance)}, nil
 }
 func writeDownloadedMetadata(directory, name, partial string, event workerEvent) error {
 	metadata, err := downloadedMetadata(partial, event)
@@ -157,8 +165,8 @@ func (m *Manager) recordHistoryRenameLocked(directory, name string, sources []do
 func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Job, directory, work, partial string, plan downloadPlan, originals map[string]os.FileInfo, result workerEvent) (string, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if ctx.Err() != nil {
-		return "", "", ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
 	}
 	for filename, original := range originals {
 		if err := unchangedFile(filename, original); err != nil {
@@ -195,6 +203,9 @@ func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Jo
 		if err := checkHistoryFamily(directory, historyPublication{Name: name, Sources: []historyOriginal{{Name: target.Name}}}); err != nil {
 			return "", "", err
 		}
+		if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+			return "", "", sourceErr
+		}
 		if result.Coverage != nil {
 			if err := writeFileMetadata(directory, name, metadata); err != nil {
 				return "", "", err
@@ -216,6 +227,9 @@ func (m *Manager) publishExtendedDownload(ctx context.Context, index int, job Jo
 	}
 	if err := os.Chmod(partial, originals[target.Input].Mode().Perm()); err != nil {
 		return "", "", err
+	}
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return "", "", sourceErr
 	}
 	m.publication[job.ID] = name
 	if !m.saveDownloadsLocked() {

@@ -17,20 +17,23 @@ import (
 )
 
 type DataFile struct {
-	DataSource     string   `json:"dataSource"`
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Symbol         string   `json:"symbol,omitempty"`
-	Description    string   `json:"description"`
-	Category       string   `json:"category"`
-	Timeframe      string   `json:"timeframe,omitempty"`
-	From           string   `json:"from,omitempty"`
-	To             string   `json:"to,omitempty"`
-	FirstTimestamp *int64   `json:"firstTimestamp,omitempty"`
-	LastTimestamp  *int64   `json:"lastTimestamp,omitempty"`
-	Fields         []string `json:"fields"`
-	Bytes          int64    `json:"bytes"`
-	Error          string   `json:"error,omitempty"`
+	DataSource      string          `json:"dataSource"`
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Symbol          string          `json:"symbol,omitempty"`
+	Description     string          `json:"description"`
+	Category        string          `json:"category"`
+	Timeframe       string          `json:"timeframe,omitempty"`
+	From            string          `json:"from,omitempty"`
+	To              string          `json:"to,omitempty"`
+	FirstTimestamp  *int64          `json:"firstTimestamp,omitempty"`
+	LastTimestamp   *int64          `json:"lastTimestamp,omitempty"`
+	Fields          []string        `json:"fields"`
+	Bytes           int64           `json:"bytes"`
+	Error           string          `json:"error,omitempty"`
+	Synthetic       bool            `json:"synthetic,omitempty"`
+	Provenance      *DataProvenance `json:"provenance,omitempty"`
+	SimulationBasis string          `json:"simulationBasis,omitempty"`
 }
 
 type FilePage struct {
@@ -104,6 +107,13 @@ func describeFileName(directory, name string) DataFile {
 	}
 	asset := describeAsset(file.Symbol, name)
 	file.Description, file.Category = asset.description, asset.category
+	if metadata, err := readFileMetadata(directory, name); err == nil {
+		file.Provenance = copyProvenance(metadata.Provenance)
+	} else if _, family := SyntheticDefinitionFor(file.Symbol); family {
+		file.Error = "Synthetic family metadata is invalid: " + cleanMessage(err.Error())
+	}
+	file.Synthetic = syntheticData(file.Symbol, file.Provenance)
+	file.SimulationBasis = syntheticBasis(file.Synthetic)
 	if strings.HasPrefix(file.Symbol, "hyperliquid-") {
 		file.DataSource, file.Category = "hyperliquid", "Hyperliquid"
 		if asset, err := readHyperliquidAsset(directory, file.Symbol); err == nil {

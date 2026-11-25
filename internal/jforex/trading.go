@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode"
 
+	"cryptodesk/internal/domain"
 	"cryptodesk/internal/trading"
 )
 
@@ -81,6 +82,9 @@ type tradeConfirmation struct {
 }
 
 func validateTradeRequest(request TradeRequest) error {
+	if domain.IsCalculatedInstrument("dukascopy", request.Instrument) {
+		return errors.New("calculated synthetic instruments cannot be traded")
+	}
 	if request.Instrument == "" || len(request.Instrument) > 128 || strings.ContainsFunc(request.Instrument, unicode.IsControl) || request.Side != "buy" && request.Side != "sell" {
 		return errors.New("Select a valid Dukascopy instrument and Buy or Sell")
 	}

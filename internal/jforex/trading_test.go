@@ -13,6 +13,16 @@ import (
 func sampleTrade() TradeRequest {
 	return TradeRequest{Instrument: "EURUSD", Side: "buy", Quantity: 1000, StopLoss: 1.09, TakeProfit: 1.12}
 }
+
+func TestCalculatedInstrumentsAreRejectedBeforeBrokerSession(t *testing.T) {
+	for _, symbol := range []string{"BTCXAU", "XAUSPX", "ETHBTC"} {
+		request := sampleTrade()
+		request.Instrument = symbol
+		if err := validateTradeRequest(request); err == nil || !strings.Contains(err.Error(), "synthetic") {
+			t.Fatal(symbol, err)
+		}
+	}
+}
 func TestTradePreviewConfirmationClaimAndDuplicate(t *testing.T) {
 	trace := filepath.Join(t.TempDir(), "trace")
 	t.Setenv("CRYPTODESK_JFOREX_PROTOCOL_TRACE", trace)
@@ -50,11 +60,46 @@ func TestTradeUnknownOutcomeNeverAutomaticallyResubmits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	result, err := m.SubmitTrade(ctx, preview.ID)
-	if err != nil || result.Status != "unknown" {
-		t.Fatal(result, err)
+	type submission struct {
+		result TradeResult
+		err    error
+	}
+	done := make(chan submission, 1)
+	go func() {
+		result, err := m.SubmitTrade(ctx, preview.ID)
+		done <- submission{result, err}
+	}()
+	// Cancel only after the fixture has received the order RPC. A deadline
+	// during intent persistence or capability checks is a known, unsent result
+	// and does not exercise the unknown-outcome/no-resubmission guarantee.
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		operations, readErr := os.ReadFile(trace)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			t.Fatal(readErr)
+		}
+		if strings.Contains(string(operations), "tradeSubmit\n") {
+			break
+		}
+		select {
+		case early := <-done:
+			t.Fatalf("submission ended before the fixture received tradeSubmit: %+v, %v", early.result, early.err)
+		case <-ctx.Done():
+			t.Fatalf("fixture did not receive tradeSubmit: %v; operations=%q", ctx.Err(), operations)
+		case <-poll.C:
+		}
+	}
+	cancel()
+	select {
+	case outcome := <-done:
+		if outcome.err != nil || outcome.result.Status != "unknown" {
+			t.Fatal(outcome.result, outcome.err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("submission did not stop after cancellation")
 	}
 	again, err := m.SubmitTrade(context.Background(), preview.ID)
 	if err != nil || again.Status != "unknown" {

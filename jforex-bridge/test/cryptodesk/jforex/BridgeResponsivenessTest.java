@@ -38,6 +38,12 @@ public final class BridgeResponsivenessTest {
         Fixture(long timeout) throws Exception { this(timeout, System::currentTimeMillis); }
         Fixture(long timeout, LongSupplier clock) throws Exception { this(timeout, clock, 2_000); }
         Fixture(long timeout, LongSupplier clock, long retryMillis) throws Exception {
+            this(timeout, clock, retryMillis, timeout, Set.of(Instrument.EURUSD, Instrument.USDJPY));
+        }
+        Fixture(long timeout, LongSupplier clock, long retryMillis, long downloadTimeout, Set<Instrument> offered) throws Exception {
+            this(timeout, clock, retryMillis, downloadTimeout, offered, null);
+        }
+        Fixture(long timeout, LongSupplier clock, long retryMillis, long downloadTimeout, Set<Instrument> offered, BridgeTest.Call synchronousBars) throws Exception {
             IHistory history = fake(IHistory.class, (method, args) -> switch (method) {
                 case "getBarStart" -> {
                     Period period = (Period) args[0]; long time = (Long) args[1], step = period.getInterval();
@@ -47,7 +53,10 @@ public final class BridgeResponsivenessTest {
                 }
                 case "getBar" -> { blockingCacheReads.incrementAndGet(); long step = ((Period) args[1]).getInterval(); yield bar(System.currentTimeMillis() / step * step, 1.1, 1.13, 1.09, 1.12); }
                 case "getLastTick" -> { blockingCacheReads.incrementAndGet(); yield tick(System.currentTimeMillis(), 1.12); }
-                case "getBars" -> throw new AssertionError("synchronous history must not block bridge commands");
+                case "getBars" -> {
+                    if (synchronousBars == null) throw new AssertionError("synchronous history must not block bridge commands");
+                    yield synchronousBars.invoke(method, args);
+                }
                 case "readBars" -> { check(subscribed.contains((Instrument) args[0]), "history waits for actual subscription acknowledgement"); loads.add(new Load(args)); yield null; }
                 default -> null;
             });
@@ -66,14 +75,14 @@ public final class BridgeResponsivenessTest {
                 case "setSystemListener" -> { listener.set((ISystemListener) args[0]); yield null; }
                 case "connect" -> { connected.set(true); yield null; }
                 case "isConnected" -> connected.get();
-                case "getAvailableInstruments" -> Set.of(Instrument.EURUSD, Instrument.USDJPY);
+                case "getAvailableInstruments" -> offered;
                 case "getSubscribedInstruments" -> new HashSet<>(subscribed);
                 case "unsubscribeInstruments" -> { subscribed.removeAll((Set<Instrument>) args[0]); yield null; }
                 case "startStrategy" -> { strategy.set((IStrategy) args[0]); strategy.get().onStart(context); yield 1L; }
                 case "disconnect" -> { connected.set(false); yield null; }
                 default -> null;
             });
-            bridge = new Bridge(() -> client, events::add, timeout, clock, retryMillis);
+            bridge = new Bridge(() -> client, events::add, timeout, clock, retryMillis, downloadTimeout);
             login();
         }
         void login() {

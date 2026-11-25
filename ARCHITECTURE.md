@@ -73,6 +73,21 @@ Do not send bulk history via high-frequency broadcast events. Use bounded reques
 
 ## Rendering lifecycle
 
+Dukascopy's native and calculated instrument integration is described in
+[Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md). Canonical Screener CSVs and
+SHA-bound provenance feed enrichment, analysis, alerts and the Wails-independent
+`internal/synthetic` chart adapter. Calculated charts do not create broker sessions;
+their active-tab subscription polls atomically published closed history. Both deferred
+production startup and the synchronous initializer install this adapter; its history
+reader waits for Screener readiness only when historical data is requested. The provider
+fetcher, pacing, durable queue and publication infrastructure remain shared. Screener
+receives a Wails-independent history-provider interface before restored downloads
+resume. A configured JForex manager exports bounded underlying tick hours and native
+daily BID candles through the Go-owned private worker pipe; credentials never enter
+Node. The source/account identity is frozen per batch, cached separately, and checked
+again before publication. Public HTTP denial affects the public route only; shared
+rate limiting, cancellation and atomic storage apply to both routes.
+
 Only the active tab creates charts: first launch 1; at maximum 9. Inactive tabs keep state,
 not mounted canvases. Empty grid cells create neither chart instances nor upstream leases.
 Each independent instrument cell gets its own chart instance; an optional volume pane is

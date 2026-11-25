@@ -55,6 +55,9 @@ func historyIDWanted(wanted map[string]bool, id string, aliases []string) bool {
 // the visible CSV list. The worker performs the same bounded ordered merge and
 // indicator replay as incremental downloads; Go alone publishes/removes files.
 func (m *Manager) consolidateHistory(ctx context.Context, directory, name string, legacy map[string][]EnrichmentRequest, progress func(string)) (string, error) {
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return name, sourceErr
+	}
 	match := parseDownloadFilename(directory, name)
 	if match == nil {
 		return name, nil
@@ -146,8 +149,8 @@ func (m *Manager) consolidateHistory(ctx context.Context, directory, name string
 		_ = cmd.Cancel()
 	}
 	err = cmd.Wait()
-	if ctx.Err() != nil {
-		return name, ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return name, sourceErr
 	}
 	if workerError != "" {
 		return name, errors.New(workerError)
@@ -184,8 +187,8 @@ func (m *Manager) consolidateHistory(ctx context.Context, directory, name string
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if ctx.Err() != nil {
-		return name, ctx.Err()
+	if sourceErr := checkSDKHistoryContext(ctx); sourceErr != nil {
+		return name, sourceErr
 	}
 	if _, err = publishHistory(directory, canonical, output, plan.Inputs, originals, metadata); err != nil {
 		return name, err

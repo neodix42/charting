@@ -11,6 +11,7 @@ import (
 	"cryptodesk/internal/domain"
 	"cryptodesk/internal/jforex"
 	"cryptodesk/internal/screener"
+	"cryptodesk/internal/synthetic"
 )
 
 func (a *App) GetDucascopy() jforex.Info { return a.jforex.Info() }
@@ -21,6 +22,9 @@ func (a *App) RefreshDucascopyInstruments(force bool) ([]domain.Instrument, erro
 	items, err := a.jforex.RefreshInstruments(ctx, force)
 	if err == nil && a.market != nil {
 		a.market.InvalidateInstruments("dukascopy")
+	}
+	if err == nil {
+		items = synthetic.Catalog(items, "")
 	}
 	return items, err
 }
@@ -92,6 +96,9 @@ type chartCandleCache struct {
 
 func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
 	if key.Exchange == "dukascopy" {
+		if domain.IsCalculatedInstrument(key.Exchange, key.Instrument) {
+			return []domain.Candle{}, nil
+		}
 		if cache.forex != nil {
 			return cache.forex.CachedCandles(key, from, to, limit)
 		}
@@ -148,8 +155,19 @@ func (cache chartCandleCache) Range(key domain.FeedKey, from, to int64, limit in
 
 func (cache chartCandleCache) Put(key domain.FeedKey, bars []domain.Candle) {
 	if key.Exchange == "dukascopy" {
+		if domain.IsCalculatedInstrument(key.Exchange, key.Instrument) {
+			return
+		}
 		if cache.forex != nil {
-			cache.forex.StoreCandles(key, bars)
+			native := make([]domain.Candle, 0, len(bars))
+			for _, bar := range bars {
+				if !bar.Synthetic && !bar.VolumeUnavailable {
+					native = append(native, bar)
+				}
+			}
+			if len(native) > 0 {
+				cache.forex.StoreCandles(key, native)
+			}
 		}
 		return
 	}

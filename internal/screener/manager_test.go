@@ -12,13 +12,14 @@ import (
 )
 
 type helperRequest struct {
-	Symbol          string `json:"symbol"`
-	Output          string `json:"output"`
-	Input           string `json:"input"`
-	Indicator       string `json:"indicator"`
-	SourceBatchSize int    `json:"sourceBatchSize"`
-	From            string `json:"from"`
-	To              string `json:"to"`
+	Symbol           string `json:"symbol"`
+	Output           string `json:"output"`
+	Input            string `json:"input"`
+	Indicator        string `json:"indicator"`
+	SourceBatchSize  int    `json:"sourceBatchSize"`
+	From             string `json:"from"`
+	To               string `json:"to"`
+	HistoryDirectory string `json:"historyDirectory"`
 }
 
 // The helper is an actual separate process using the production stdin/progress/

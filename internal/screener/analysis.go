@@ -65,22 +65,25 @@ type AnalysisFilter struct {
 	ProfitabilityFilter *int     `json:"profitabilityFilter,omitempty"`
 }
 type AnalysisResult struct {
-	ID           string                     `json:"id"`
-	FileID       string                     `json:"fileId"`
-	Name         string                     `json:"name"`
-	Symbol       string                     `json:"symbol"`
-	Description  string                     `json:"description"`
-	Category     string                     `json:"category"`
-	Timeframe    string                     `json:"timeframe"`
-	Status       string                     `json:"status"`
-	Error        string                     `json:"error,omitempty"`
-	Rows         int64                      `json:"rows"`
-	Matches      int64                      `json:"matches"`
-	AssetMatches int64                      `json:"assetMatches"`
-	AssetFiles   int                        `json:"assetFiles"`
-	FirstTime    int64                      `json:"firstTime,omitempty"`
-	LastTime     int64                      `json:"lastTime,omitempty"`
-	Simulation   *AnalysisSimulationSummary `json:"simulation,omitempty"`
+	ID              string                     `json:"id"`
+	FileID          string                     `json:"fileId"`
+	Name            string                     `json:"name"`
+	Symbol          string                     `json:"symbol"`
+	Description     string                     `json:"description"`
+	Category        string                     `json:"category"`
+	Timeframe       string                     `json:"timeframe"`
+	Status          string                     `json:"status"`
+	Error           string                     `json:"error,omitempty"`
+	Rows            int64                      `json:"rows"`
+	Matches         int64                      `json:"matches"`
+	AssetMatches    int64                      `json:"assetMatches"`
+	AssetFiles      int                        `json:"assetFiles"`
+	FirstTime       int64                      `json:"firstTime,omitempty"`
+	LastTime        int64                      `json:"lastTime,omitempty"`
+	Simulation      *AnalysisSimulationSummary `json:"simulation,omitempty"`
+	Synthetic       bool                       `json:"synthetic,omitempty"`
+	Provenance      *DataProvenance            `json:"provenance,omitempty"`
+	SimulationBasis string                     `json:"simulationBasis,omitempty"`
 }
 type AnalysisInfo struct {
 	DataSource          string                   `json:"dataSource"`
@@ -153,6 +156,9 @@ type AnalysisChart struct {
 	Trade             *AnalysisTradeLevels      `json:"trade,omitempty"`
 	TradeExecution    *AnalysisTradeExecution   `json:"tradeExecution,omitempty"`
 	Signal            *AnalysisSignalLevels     `json:"signal,omitempty"`
+	Synthetic         bool                      `json:"synthetic,omitempty"`
+	Provenance        *DataProvenance           `json:"provenance,omitempty"`
+	SimulationBasis   string                    `json:"simulationBasis,omitempty"`
 }
 type analysisState struct {
 	active                                     bool
@@ -511,6 +517,7 @@ func (m *Manager) analysisFilteredInfoLocked(offset, limit int, filter AnalysisF
 	start := min(offset, len(filtered))
 	info.Results = append(info.Results, filtered[start:start+min(limit, len(filtered)-start)]...)
 	for i := range info.Results {
+		info.Results[i].Provenance = copyProvenance(info.Results[i].Provenance)
 		symbol := info.Results[i].Symbol
 		if info.Results[i].Simulation != nil {
 			summary := *info.Results[i].Simulation
@@ -626,7 +633,7 @@ func (m *Manager) StartAnalysis(request AnalysisRequest) (AnalysisInfo, error) {
 	a := &analysisState{active: true, phase: "indexing", directory: m.directory, work: work, cancel: cancel, done: make(chan struct{}), request: copyAnalysisRequest(request), series: map[string]*analysisSeries{}, matchFiles: map[string]string{}, results: []AnalysisResult{}, indexFiles: indexFiles, cache: newAnalysisRowCache(), asOf: time.Now().UTC().UnixMilli()}
 	for _, file := range files {
 		id := file.ID
-		a.results = append(a.results, AnalysisResult{ID: id, FileID: id, Name: file.Name, Symbol: file.Symbol, Description: file.Description, Category: file.Category, Timeframe: file.Timeframe, Status: "queued"})
+		a.results = append(a.results, AnalysisResult{ID: id, FileID: id, Name: file.Name, Symbol: file.Symbol, Description: file.Description, Category: file.Category, Timeframe: file.Timeframe, Status: "queued", Synthetic: file.Synthetic, Provenance: copyProvenance(file.Provenance), SimulationBasis: file.SimulationBasis})
 	}
 	m.analysis = a
 	m.wg.Add(1)
@@ -1062,7 +1069,7 @@ func (m *Manager) AnalysisChart(resultID string, occurrence, before, after int) 
 	matchTime := int64(binary.LittleEndian.Uint64(b[8:]))
 	start := max(int64(0), matchIndex-int64(before))
 	end := min(s.count, matchIndex+int64(after)+1)
-	chart := AnalysisChart{ResultID: resultID, Name: result.Name, Symbol: result.Symbol, Timeframe: result.Timeframe, Direction: analysisChartDirection(a.request.TradeSimulation), Occurrence: occurrence, TotalMatches: result.Matches, MatchTime: matchTime, MatchIndex: matchIndex, StartIndex: start, Fields: append([]string{}, s.headers...), Bars: []AnalysisBar{}}
+	chart := AnalysisChart{ResultID: resultID, Name: result.Name, Symbol: result.Symbol, Timeframe: result.Timeframe, Direction: analysisChartDirection(a.request.TradeSimulation), Occurrence: occurrence, TotalMatches: result.Matches, MatchTime: matchTime, MatchIndex: matchIndex, StartIndex: start, Fields: append([]string{}, s.headers...), Bars: []AnalysisBar{}, Synthetic: result.Synthetic, Provenance: copyProvenance(result.Provenance), SimulationBasis: result.SimulationBasis}
 	qualified := map[string]*analysisOperandReader{}
 	for _, condition := range compiled {
 		for _, reader := range []*analysisOperandReader{condition.left, condition.right, condition.upper, condition.distance} {

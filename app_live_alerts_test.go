@@ -14,6 +14,15 @@ import (
 	"cryptodesk/internal/telegram"
 )
 
+func TestSyntheticTelegramAlertQualifiesAnalyticalLevels(t *testing.T) {
+	text := formatScreenerLiveAlert(screener.LiveAlert{Symbol: "ethbtc", Timeframe: "d1", Synthetic: true, SimulationBasis: "Ratio changes are analytical and do not model underlying positions."})
+	for _, expected := range []string{"Synthetic approximate BID", "no executable broker trade", "do not model underlying positions"} {
+		if !strings.Contains(text, expected) {
+			t.Fatal("missing synthetic qualification", text)
+		}
+	}
+}
+
 func TestLiveAlertChartDeliveryPreservesSignalAndDoesNotRetryUpload(t *testing.T) {
 	chart := &screener.AnalysisChart{Symbol: "@268", MatchTime: 123}
 	alert := screener.LiveAlert{Symbol: "@268", AssetName: "AAPL/USDC", DataSource: "hyperliquid", Chart: chart}

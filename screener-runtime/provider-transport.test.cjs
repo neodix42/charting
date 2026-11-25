@@ -53,3 +53,11 @@ test('denied permits never send a request and restoring transport removes privat
   await assert.rejects(global.fetch('https://jetta.dukascopy.com/v1/ticks/EUR-USD/2024/1/1/0'),/cooldown/);
   assert.equal(sent,0);control.close();assert.equal(lines.listenerCount('line'),0);
 });
+test('an inherited batch denial is not observed again or allowed to extend the HTTP cooldown',async()=>{
+  const lines=new EventEmitter(),events=[];
+  const control=installProviderTransport(lines,{ownerPipe:true,providerSession:{rateLimit:true}},event=>events.push(event));
+  try{
+    const error=Object.assign(Error('No HTTP request was sent for this job. Earlier batch cause: HTTP 403 ETH-USD'),{code:'DUKASCOPY_BATCH_BLOCKED'});
+    assert.equal(await control.failure(error),error);assert.deepEqual(events,[]);
+  }finally{control.close();}
+});

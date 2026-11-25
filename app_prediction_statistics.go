@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -41,7 +42,11 @@ func (a *App) GetPredictionStatisticsDatasets() ([]predictions.Dataset, error) {
 			if name == "" {
 				name = strings.ToUpper(file.Symbol)
 			}
-			items = append(items, predictions.Dataset{DataSource: source, Market: statisticsAssetMarket(source, file.Category), ID: file.ID, Symbol: file.Symbol,
+			provenance, _ := json.Marshal(file.Provenance)
+			if file.Provenance == nil {
+				provenance = nil
+			}
+			items = append(items, predictions.Dataset{DataSource: source, Market: statisticsAssetMarket(source, file.Category), Category: file.Category, Synthetic: file.Synthetic, Provenance: provenance, ID: file.ID, Symbol: file.Symbol,
 				Name: name, Period: file.Timeframe, Filename: file.Name, Directory: catalog.Directory})
 		}
 	}

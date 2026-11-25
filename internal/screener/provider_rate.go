@@ -71,6 +71,9 @@ func (l *providerLimiter) saveLocked() error {
 func untilUTC(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04:05 UTC") }
 
 func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) error {
+	return l.permitInternal(ctx, waiting, false)
+}
+func (l *providerLimiter) permitInternal(ctx context.Context, waiting func(string), ignoreHTTPDenied bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -104,7 +107,7 @@ func (l *providerLimiter) permit(ctx context.Context, waiting func(string)) erro
 			return err
 		}
 		now := l.timeNow().UnixMilli()
-		if l.state.DeniedTill > now {
+		if !ignoreHTTPDenied && l.state.DeniedTill > now {
 			until := l.state.DeniedTill
 			l.mu.Unlock()
 			return fmt.Errorf("Dukascopy HTTP 403 access-denial cooldown until %s; no request sent. Retry manually after that time. Saved data is retained", untilUTC(until))
@@ -222,19 +225,24 @@ type providerEvent struct {
 	Operation  string `json:"operation,omitempty"`
 	HTTPStatus int    `json:"httpStatus,omitempty"`
 	RetryAfter string `json:"retryAfter,omitempty"`
+	Symbol     string `json:"symbol,omitempty"`
+	Timeframe  string `json:"timeframe,omitempty"`
+	From       int64  `json:"from,omitempty"`
+	To         int64  `json:"to,omitempty"`
 }
 
 // Replies share the existing private owner pipe. Permits run asynchronously so
 // a response carrying Retry-After can pause peers whose permits are waiting.
 type providerReplies struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	state   *providerSession
-	owner   io.Writer
-	mu      sync.Mutex
-	wg      sync.WaitGroup
-	slots   chan struct{}
-	waiting func(string)
+	ctx       context.Context
+	cancel    context.CancelFunc
+	state     *providerSession
+	owner     io.Writer
+	mu        sync.Mutex
+	wg        sync.WaitGroup
+	slots     chan struct{}
+	waiting   func(string)
+	temporary []string
 }
 
 func newProviderReplies(ctx context.Context, owner io.Writer, waiting func(string)) *providerReplies {
@@ -243,8 +251,13 @@ func newProviderReplies(ctx context.Context, owner io.Writer, waiting func(strin
 }
 
 func (r *providerReplies) handle(event providerEvent) error {
-	if r.state == nil || r.state.limiter == nil || event.RequestID == 0 || len(event.RetryAfter) > 128 || (event.Operation != "permit" && event.Operation != "response") || (event.Operation == "response" && (event.HTTPStatus < 100 || event.HTTPStatus > 599)) {
+	if r.state == nil || r.state.limiter == nil || event.RequestID == 0 || len(event.RetryAfter) > 128 || (event.Operation != "permit" && event.Operation != "response" && event.Operation != "history") || (event.Operation == "response" && (event.HTTPStatus < 100 || event.HTTPStatus > 599)) {
 		return errors.New("invalid Dukascopy pacing request")
+	}
+	if event.Operation == "history" {
+		if err := r.validateSDKHistoryRequest(event); err != nil {
+			return err
+		}
 	}
 	select {
 	case r.slots <- struct{}{}:
@@ -257,8 +270,12 @@ func (r *providerReplies) handle(event providerEvent) error {
 		defer func() { <-r.slots }()
 		var err error
 		var until int64
+		var exported string
+		var rows int64
 		if event.Operation == "permit" {
 			err = r.state.limiter.permit(r.ctx, r.waiting)
+		} else if event.Operation == "history" {
+			exported, rows, err = r.exportSDKHistory(event)
 		} else {
 			until, err = r.state.limiter.observe(event.HTTPStatus, event.RetryAfter)
 		}
@@ -267,7 +284,9 @@ func (r *providerReplies) handle(event providerEvent) error {
 			RequestID     uint64 `json:"requestId"`
 			Error         string `json:"error,omitempty"`
 			CooldownUntil int64  `json:"cooldownUntil,omitempty"`
-		}{Type: "provider-reply", RequestID: event.RequestID, CooldownUntil: until}
+			Path          string `json:"path,omitempty"`
+			Rows          int64  `json:"rows"`
+		}{Type: "provider-reply", RequestID: event.RequestID, CooldownUntil: until, Path: exported, Rows: rows}
 		if err != nil {
 			reply.Error = cleanMessage(err.Error())
 		}
@@ -278,4 +297,10 @@ func (r *providerReplies) handle(event providerEvent) error {
 	return nil
 }
 
-func (r *providerReplies) close() { r.cancel(); r.wg.Wait() }
+func (r *providerReplies) close() {
+	r.cancel()
+	r.wg.Wait()
+	for _, filename := range r.temporary {
+		_ = os.Remove(filename)
+	}
+}

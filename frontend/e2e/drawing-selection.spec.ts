@@ -177,7 +177,9 @@ test('horizontal line endpoint handles shorten the full-width line to a saved fi
  expect(nextPreview.points[0].price).toBe(nextPreview.points[1].price);expect(nextPreview.coordinates[0].x).toBeCloseTo(before[0].x,0);
  await page.mouse.up();await flush(page);const resized=await savedDrawings(page);
  expect(resized[0]).toMatchObject({id:original.id,type:'horizontal',points:nextPreview.points});
- await page.reload();await expect.poll(async()=>(await layer(page,chart)).drawings[0]?.points).toEqual(resized[0].points);
+ await page.reload();await expect(chart.getByLabel('OHLCV')).toContainText('61,000.00');
+ await expect.poll(async()=>(await layer(page,chart)).drawings[0]?.points).toEqual(resized[0].points);
+ await chart.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
  // Resized segments retain the existing double-click movement interaction.
  const finite=(await layer(page,chart)).drawings[0],grab=await clientPoint(page,chart,{
   x:(finite.coordinates[0].x+finite.coordinates[1].x)/2,y:finite.coordinates[0].y,

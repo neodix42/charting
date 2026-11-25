@@ -46,25 +46,26 @@ function decimalText({value,scale}){
 }
 
 async function aggregateDaily(input,output,asOf){
-  const source=records(input);let handle,current,rows=0;
+  const source=records(input);let handle,current,rows=0,hasVolume;
   const append=async()=>{
     if(!current)return;
-    await writeAll(handle,line([current.timestamp,current.open,current.high,current.low,current.close,decimalText(current.volume)]));rows++;
+    await writeAll(handle,line([current.timestamp,current.open,current.high,current.low,current.close,...(hasVolume?[decimalText(current.volume)]:[])]));rows++;
   };
   try{
-    const headers=(await source.next()).value.map(key),indexes=fields.map(field=>headers.indexOf(field));
-    handle=await fs.open(output,'wx',0o600);await writeAll(handle,line(fields));
+    const headers=(await source.next()).value.map(key);hasVolume=headers.includes('volume');
+    const selected=fields.filter(field=>field!=='volume'||hasVolume),indexes=selected.map(field=>headers.indexOf(field));
+    handle=await fs.open(output,'wx',0o600);await writeAll(handle,line(selected));
     for await(const row of source){
       const [timestamp,open,high,low,close,volume]=indexes.map(index=>row[index]);
       const time=Number(timestamp);
       if(!Number.isSafeInteger(time)||time%day!==0)throw Error('Daily candle timestamps must start at 00:00 UTC.');
       if(time>asOf)throw Error('Daily CSV contains future timestamps; original kept.');
       const bucket=weekStart(time);
-      if(current?.timestamp!==bucket){await append();current={timestamp:bucket,open,high,low,close,volume:decimal(volume)};}
+      if(current?.timestamp!==bucket){await append();current={timestamp:bucket,open,high,low,close,...(hasVolume?{volume:decimal(volume)}:{})};}
       else{
         if(Number(high)>Number(current.high))current.high=high;
         if(Number(low)<Number(current.low))current.low=low;
-        current.close=close;current.volume=addDecimal(current.volume,decimal(volume));
+        current.close=close;if(hasVolume)current.volume=addDecimal(current.volume,decimal(volume));
       }
     }
     await append();await handle.sync();
@@ -80,20 +81,30 @@ async function weeklyDownload(request,options={}){
   const dailyPlan=await readPlan(request.dailyPlanFile,directory);validatePlan(dailyPlan,asOf);
   const weeklyPlan=options.weeklyPlan??(request.planFile?await readPlan(request.planFile,directory):null);
   if(weeklyPlan)validatePlan(weeklyPlan,asOf);
-  const headers=[...fields],names=new Set(fields),savedRecipes=[];
+  let selectedFields,latestProvenance;const provenanceEntries=[];
+  const savedRecipes=[];
   for(const source of dailyPlan.inputs){
     if(!path.isAbsolute(source.input)||source.input===request.output)throw Error('Invalid daily source path.');
     await unchanged(source);const data=await scan(source.input,'d1');
+    if(source.metadata?.provenance&&source.metadata.checksum!==data.checksum)throw Error('Daily synthetic provenance checksum does not match its CSV; original kept.');
     const normalized=data.headers.map(key);
+    const selected=fields.filter(field=>field!=='volume'||normalized.includes('volume'));
+    if(selectedFields&&selectedFields.length!==selected.length)throw Error('Cannot combine provider volume with unavailable synthetic volume.');
+    selectedFields=selected;latestProvenance??=source.metadata?.provenance;
+    provenanceEntries.unshift({value:source.metadata?.provenance,from:data.first,to:Math.min(data.last+day,asOf)});
     if(normalized.some(name=>!name)||new Set(normalized).size!==normalized.length)throw Error('Daily CSV contains empty or duplicate field names.');
     if(data.last>asOf)throw Error('Daily CSV contains future timestamps; original kept.');
   }
-  const previous=[];
+  const headers=[...selectedFields],names=new Set(selectedFields),previous=[],weeklyProvenance=[];
   for(const source of weeklyPlan?.inputs??[]){
     if(!path.isAbsolute(source.input)||source.input===request.output)throw Error('Invalid weekly source path.');
     await unchanged(source);const data=await scan(source.input,'w1');previous.push(data);
+    if(source.metadata?.provenance&&source.metadata.checksum!==data.checksum)throw Error('Weekly synthetic provenance checksum does not match its CSV; original kept.');
+    const origin=source.metadata?.provenance??(request.symbol==='xauxag'&&data.headers.map(key).includes('volume')
+      ?require('./synthetic-worker.cjs').provenance('xauxag',false):undefined);
+    weeklyProvenance.unshift({value:origin,from:data.first,to:Math.min(data.last+week,asOf)});
     if(data.last>asOf)throw Error('Weekly CSV contains future timestamps; original kept.');
-    for(const name of data.headers)if(!names.has(key(name))){names.add(key(name));headers.push(name);}
+    for(const name of data.headers)if((key(name)!=='volume'||selectedFields.includes('volume'))&&!names.has(key(name))){names.add(key(name));headers.push(name);}
     savedRecipes.push(...(source.metadata?.recipes??[]));
   }
   const recipes=await recipesFor(headers,savedRecipes,request.requiredFields??[],'w1');
@@ -107,7 +118,7 @@ async function weeklyDownload(request,options={}){
     const daily=path.join(scratch,'daily.csv'),aggregated=path.join(scratch,'weekly.csv'),merged=path.join(scratch,'merged.csv');
     const dailyWork=path.join(scratch,'daily'),weeklyWork=path.join(scratch,'weekly');
     await fs.mkdir(dailyWork);await fs.mkdir(weeklyWork);
-    await mergeFiles(dailyPlan.inputs.map(source=>source.input),daily,fields,'d1',dailyWork);
+    await mergeFiles(dailyPlan.inputs.map(source=>source.input),daily,selectedFields,'d1',dailyWork);
     await aggregateDaily(daily,aggregated,asOf);
     emit({type:'progress',progress:60,message:'Merging weekly bars and recalculating weekly indicators'});
     await mergeFiles([aggregated,...(weeklyPlan?.inputs??[]).map(source=>source.input)],merged,headers,'w1',weeklyWork);
@@ -126,7 +137,7 @@ async function weeklyDownload(request,options={}){
     const result=await scan(request.output,'w1');
     // Weekly coverage is local derivation, never a claim of provider queries.
     emit({type:'done',rows,firstTimestamp:result.first,lastTimestamp:result.last,checksum:result.checksum,
-      recipes,columns:headers.filter(name=>!fields.includes(key(name))),coverage:[],checkedThrough:weekStart(asOf),
+      recipes,columns:headers.filter(name=>!fields.includes(key(name))),coverage:[],checkedThrough:weekStart(asOf),provenance:require('./synthetic-worker.cjs').mergeProvenance(request.symbol,[...weeklyProvenance,...provenanceEntries],selectedFields.includes('volume'))??latestProvenance??request.provenance,
       noChange:previous.length===1&&previous[0].checksum===result.checksum,
       message:`Derived ${rows.toLocaleString('en-US')} weekly rows from retained d1 history; daily bars kept; ${recipes.length} indicator recipes recalculated`});
     return rows;
@@ -135,7 +146,7 @@ async function weeklyDownload(request,options={}){
 
 async function weeklyRefresh(request,savedRecipes,scanned,options={}){
   const stat=await fs.stat(request.input),asOf=options.now??request.asOf;
-  const plan={version:1,asOf,inputs:[{input:request.input,bytes:stat.size,modified:Math.trunc(stat.mtimeMs),metadata:{recipes:savedRecipes}}]};
+  const plan={version:1,asOf,inputs:[{input:request.input,bytes:stat.size,modified:Math.trunc(stat.mtimeMs),metadata:{recipes:savedRecipes,provenance:request.provenance,checksum:scanned.checksum}}]};
   const emit=options.emit??(event=>process.stdout.write(`${JSON.stringify(event)}\n`));
   let result;
   await weeklyDownload({...request,asOf},{...options,weeklyPlan:plan,emit:event=>{if(event.type==='done')result=event;else emit(event);}});
@@ -143,13 +154,14 @@ async function weeklyRefresh(request,savedRecipes,scanned,options={}){
   let addedRows=0,updatedRows=0;
   try{
     const oldHeader=(await oldRows.next()).value.map(key),newHeader=(await newRows.next()).value.map(key);
-    const oldIndexes=fields.map(field=>oldHeader.indexOf(field)),newIndexes=fields.map(field=>newHeader.indexOf(field));
+    const selected=fields.filter(field=>field!=='volume'||newHeader.includes('volume'));
+    const oldIndexes=selected.map(field=>oldHeader.indexOf(field)),newIndexes=selected.map(field=>newHeader.indexOf(field));
     let old=await oldRows.next();
     for await(const row of newRows){
       const timestamp=Number(row[newIndexes[0]]);
       while(!old.done&&Number(old.value[oldIndexes[0]])<timestamp)old=await oldRows.next();
       if(old.done||Number(old.value[oldIndexes[0]])!==timestamp)addedRows++;
-      else if(fields.some((_,i)=>Number(old.value[oldIndexes[i]])!==Number(row[newIndexes[i]])))updatedRows++;
+      else if(selected.some((_,i)=>Number(old.value[oldIndexes[i]])!==Number(row[newIndexes[i]])))updatedRows++;
     }
   }finally{await oldRows.return();await newRows.return();}
   result={...result,addedRows,updatedRows,message:`Refreshed ${result.rows} weekly rows from retained d1: ${addedRows} added, ${updatedRows} updated; daily bars kept`};

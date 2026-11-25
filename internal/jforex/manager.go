@@ -534,6 +534,10 @@ func normalizeBars(key domain.FeedKey, bars []domain.Candle) ([]domain.Candle, e
 }
 
 func (m *Manager) History(ctx context.Context, key domain.FeedKey, from, to int64, limit int) ([]domain.Candle, error) {
+	return m.history(ctx, key, from, to, limit, false)
+}
+
+func (m *Manager) history(ctx context.Context, key domain.FeedKey, from, to int64, limit int, download bool) ([]domain.Candle, error) {
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
@@ -582,10 +586,29 @@ func (m *Manager) History(ctx context.Context, key domain.FeedKey, from, to int6
 				return nil, err
 			}
 		}
-		rpc, finish := context.WithTimeout(ctx, 60*time.Second)
+		timeout := 60 * time.Second
+		if download {
+			// Native downloads have a separate 120-second SDK work budget.
+			// Queue time remains bounded by the enclosing five-minute request.
+			timeout = 5 * time.Minute
+		}
+		rpc, finish := context.WithTimeout(ctx, timeout)
 		defer finish()
 		var bars []domain.Candle
-		if err := p.call(rpc, map[string]any{"op": "history", "feedKey": key, "from": start, "to": end, "limit": count}, &bars); err != nil {
+		requestFrom, requestTo := start, end
+		if download {
+			// Earlier chart queries may prove only part of a daily interval.
+			// Fetch complete native buckets but commit/filter only the original
+			// missing span, preserving the cache's independent coverage proofs.
+			const day = int64(86400)
+			requestFrom = start / day * day
+			requestTo = (end + day - 1) / day * day
+		}
+		request := map[string]any{"op": "history", "feedKey": key, "from": requestFrom, "to": requestTo, "limit": count}
+		if download {
+			request["download"] = true
+		}
+		if err := p.call(rpc, request, &bars); err != nil {
 			m.recordError(err)
 			return nil, err
 		}

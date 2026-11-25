@@ -372,6 +372,96 @@ def day_week_smoke(runtime, node, directory):
             "previousWarmupBlank": True, "groupMatchesIndividual": True, "networkRequired": False}
 
 
+def synthetic_smoke(runtime, node, directory):
+    """Exercise only packaged modules and the pinned decoder with offline ticks."""
+    script = r"""
+const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
+const input=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
+for(const module of ['synthetic-ratio.cjs','synthetic-quotes.cjs','synthetic-worker.cjs','sdk-worker.cjs'])require(path.join(input.runtime,module));
+const api=require(path.join(input.runtime,'node_modules','dukascopy-node'));
+const {download}=require(path.join(input.runtime,'worker.cjs'));
+const {enrich}=require(path.join(input.runtime,'enrich-worker.cjs'));
+const start=Date.UTC(2024,0,1),day=86400000;
+let fetches=0;
+const local={...api,BufferFetcher:class extends api.BufferFetcher{constructor(options){super({...options,fetcherFn:async url=>{
+  assert.ok(url.includes('/v1/ticks/'));fetches++;
+  const p=new URL(url).pathname.split('/').slice(-4).map(Number),hour=Date.UTC(p[0],p[1]-1,p[2],p[3]);
+  if(hour!==start)return Buffer.from(JSON.stringify({timestamp:hour,times:[],asks:[],bids:[],askVolumes:[],bidVolumes:[]}));
+  const prices=url.includes('/BTC-USD/')?[10,20,30]:[2,4,5],delta=prices.map((v,i)=>i?v-prices[i-1]:0);
+  return Buffer.from(JSON.stringify({timestamp:hour,multiplier:1,ask:prices[0]+1,bid:prices[0],times:[0,100,100],asks:delta,bids:delta,askVolumes:[1,1,1],bidVolumes:[1,1,1]}));
+}});}}};
+(async()=>{
+  const output=path.join(input.directory,'synthetic-daily.csv');await fs.writeFile(output,'');
+  const request={symbol:'btcxau',timeframe:'d1',from:new Date(start).toISOString(),to:new Date(start+day).toISOString(),asOf:start+day,output,
+    syntheticCacheDirectory:path.join(input.directory,'synthetic-quotes')};
+  let daily;await download(request,{api:local,emit:e=>{if(e.type==='done')daily=e;}});
+  const newline=String.fromCharCode(10),expected=['timestamp,open,high,low,close',`${start},5,6,5,6`,''].join(newline);
+  assert.equal(await fs.readFile(output,'utf8'),expected);assert.equal(daily.provenance.volume,'unavailable');assert.equal(daily.provenance.approximate,true);
+  assert.equal(Object.hasOwn(daily.provenance,'segments'),false);
+  const cached=path.join(input.directory,'synthetic-cached.csv');await fs.writeFile(cached,'');
+  await download({...request,output:cached},{api:{...api,BufferFetcher:class{fetch(){throw Error('Verified synthetic quote cache was refetched');}}},emit:()=>{}});
+  assert.equal(await fs.readFile(cached,'utf8'),expected);
+  const enriched=path.join(input.directory,'synthetic-enriched.csv');
+  await enrich({input:output,output:enriched,indicator:'sma',parameters:{period:1},source:'auto'},{emit:()=>{}});
+  assert.equal(await fs.readFile(enriched,'utf8'),['timestamp,open,high,low,close,sma_1',`${start},5,6,5,6,6`,''].join(newline));
+  const info=await fs.stat(output),plan=path.join(input.directory,'synthetic-daily-plan.json');
+  await fs.writeFile(plan,JSON.stringify({version:1,asOf:request.asOf,inputs:[{input:output,bytes:info.size,modified:Math.trunc(info.mtimeMs),metadata:{provenance:daily.provenance,checksum:daily.checksum}}]}));
+  const weekly=path.join(input.directory,'synthetic-weekly.csv');await fs.writeFile(weekly,'');let week;
+  await download({...request,timeframe:'w1',output:weekly,dailyPlanFile:plan},{api:new Proxy({},{get(){throw Error('Weekly synthetic aggregation reached provider');}}),emit:e=>{if(e.type==='done')week=e;}});
+  assert.equal(await fs.readFile(weekly,'utf8'),expected);assert.equal(week.provenance.volume,'unavailable');
+  const {EventEmitter}=require('node:events'),{installProviderTransport}=require(path.join(input.runtime,'provider-transport.cjs'));
+  const batch=path.join(input.directory,'sdk-batch');await fs.mkdir(batch);
+  await fs.writeFile(path.join(batch,'blocked.json'),JSON.stringify({message:'Earlier public HTTP 403 ETH-USD request'}));
+  const session={directory:batch,tokenCache:path.join(input.directory,'unused-token.json'),rateLimit:true,sdk:{sourceKey:'a'.repeat(64)}};
+  const sdkOutput=path.join(input.directory,'sdk-ratio.csv');await fs.writeFile(sdkOutput,'');
+  const sdkRequest={...request,output:sdkOutput,providerSession:session,ownerPipe:true},lines=new EventEmitter(),sdkEvents=[];
+  const originalFetch=global.fetch;let httpRequests=0;global.fetch=()=>{httpRequests++;throw Error('Packaged SDK probe sent HTTP');};
+  const control=installProviderTransport(lines,sdkRequest,event=>{
+    sdkEvents.push(event);
+    queueMicrotask(async()=>{
+      try{
+        assert.equal(event.operation,'history');assert.ok(['btcusd','xauusd'].includes(event.symbol));
+        const filename=path.join(batch,`export-${event.requestId}.csv`);let csv,rows;
+        if(event.timeframe==='tick'){
+          const bids=event.from===start?(event.symbol==='btcusd'?[10,20,30]:[2,4,5]):[];rows=bids.length;
+          csv=['timestamp,askPrice,bidPrice,askVolume,bidVolume',...bids.map((bid,i)=>`${event.from+i*100},${bid+1},${bid},1,2`),''].join(newline);
+        }else{
+          assert.equal(event.timeframe,'d1');assert.equal(event.symbol,'btcusd');rows=0;
+          csv=['timestamp,open,high,low,close',''].join(newline);
+        }
+        await fs.writeFile(filename,csv,{mode:384});lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId,path:filename,rows}));
+      }catch(error){lines.emit('line',JSON.stringify({type:'provider-reply',requestId:event.requestId,error:error.message}));}
+    });
+  });
+  let sdkReport;
+  try{
+    const guard={...api,BufferFetcher:class{constructor(){throw Error('Packaged SDK probe constructed a public fetcher');}}};let ratio,native;
+    await download(sdkRequest,{api:guard,emit:e=>{if(e.type==='done')ratio=e;}});
+    assert.equal(await fs.readFile(sdkOutput,'utf8'),expected);assert.equal(ratio.provenance.historySource,'jforex-sdk');assert.equal(sdkEvents.length,48);
+    const sdkCached=path.join(input.directory,'sdk-cached.csv');await fs.writeFile(sdkCached,'');
+    await download({...sdkRequest,output:sdkCached},{api:guard,emit:()=>{}});assert.equal(sdkEvents.length,48);
+    const sdkNative=path.join(input.directory,'sdk-native-btcusd.csv');await fs.writeFile(sdkNative,'');
+    await download({...sdkRequest,symbol:'btcusd',output:sdkNative},{api:guard,emit:e=>{if(e.type==='done')native=e;}});
+    assert.equal(await fs.readFile(sdkNative,'utf8'),['timestamp,open,high,low,close',`${start},10,30,10,30`,''].join(newline));
+    assert.equal(native.provenance.historySource,'jforex-sdk');assert.equal(native.provenance.volume,'unavailable');assert.equal(httpRequests,0);
+    assert.equal(native.provenance.kind,'native');assert.equal(native.provenance.approximate,false);assert.match(native.provenance.observationResolution,/derived from native BID ticks/);
+    assert.equal(sdkEvents.length,49,'empty native daily history reuses all24already verified native BTCUSD tick hours');
+    assert.equal((await fs.readdir(batch)).some(name=>name.startsWith('export-')),false);
+    sdkReport={passed:true,historyRequests:sdkEvents.length,tickRequests:48,nativeDailyRequests:1,nativeEmptyDailyFallback:true,nativeTickCacheReuse:true,httpRequests,cachedReuse:true,priorHTTPDenialBypassed:true,ownedExportsRemoved:true};
+  }finally{control.close();global.fetch=originalFetch;}
+  process.stdout.write(JSON.stringify({passed:true,rows:daily.rows,weeklyRows:week.rows,localTransportFetches:fetches,cachedReuse:true,exactBidRatios:true,
+    volumeUnavailable:true,priceEnrichment:true,approximationExplicit:true,originalPreserved:await fs.readFile(output,'utf8')===expected,sdkHistory:sdkReport,networkRequired:false}));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+    result = subprocess.run([str(node), "-e", script],
+                            input=json.dumps({"runtime": str(runtime), "directory": str(directory)}) + "\n",
+                            text=True, capture_output=True, cwd=directory, timeout=30, check=True)
+    report = json.loads(result.stdout)
+    if not report.get("passed") or report.get("rows") != 1 or report.get("weeklyRows") != 1:
+        raise ValueError(f"Packaged synthetic pipeline did not confirm its result: {result.stdout[:2000]}")
+    return report
+
+
 def smoke(runtime):
     runtime = runtime.resolve()
     node = runtime / ("node.exe" if os.name == "nt" else "node")
@@ -403,10 +493,12 @@ def smoke(runtime):
             raise ValueError("Packaged Refresh changed the original raw CSV")
         incremental = incremental_smoke(runtime, node, directory, output)
         provider = provider_smoke(runtime, node, directory)
+        synthetic = synthetic_smoke(runtime, node, directory)
         return {"passed": True, "runtime": str(runtime), "columns": ["sma_3"], "rows": 4,
                 "warmupBlank": True, "exactValues": True, "originalFieldsPreserved": True,
                 "privateNode": str(node), "networkRequired": False, "refresh": refresh, "calendar": calendar,
-                "incremental": incremental, "providerSession": provider, "dayWeekRanges": ranges}
+                "incremental": incremental, "providerSession": provider, "dayWeekRanges": ranges,
+                "syntheticInstruments": synthetic}
 
 
 def main():

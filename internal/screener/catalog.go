@@ -9,11 +9,17 @@ import (
 )
 
 type Instrument struct {
-	NativeID     string `json:"nativeId,omitempty"`
-	Market       string `json:"market,omitempty"`
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	EarliestDate string `json:"earliestDate"`
+	NativeID            string   `json:"nativeId,omitempty"`
+	Market              string   `json:"market,omitempty"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	EarliestDate        string   `json:"earliestDate"`
+	Synthetic           bool     `json:"synthetic,omitempty"`
+	Calculated          bool     `json:"calculated,omitempty"`
+	Category            string   `json:"category,omitempty"`
+	SupportedTimeframes []string `json:"supportedTimeframes,omitempty"`
+	Formula             string   `json:"formula,omitempty"`
+	Note                string   `json:"note,omitempty"`
 }
 type Group struct {
 	Name        string       `json:"name"`
@@ -38,7 +44,7 @@ var catalogData = func() Catalog {
 	if err := json.Unmarshal(catalogJSON, &c); err != nil {
 		panic("invalid embedded Dukascopy catalog: " + err.Error())
 	}
-	return c
+	return withSyntheticCatalog(c)
 }()
 
 var catalogTimeframes = func() map[string]bool {
@@ -84,6 +90,9 @@ func loadCatalog() Catalog {
 	c.Groups = append([]Group{}, catalogData.Groups...)
 	for i := range c.Groups {
 		c.Groups[i].Instruments = append([]Instrument{}, catalogData.Groups[i].Instruments...)
+		for j := range c.Groups[i].Instruments {
+			c.Groups[i].Instruments[j].SupportedTimeframes = append([]string(nil), catalogData.Groups[i].Instruments[j].SupportedTimeframes...)
+		}
 	}
 	return c
 }

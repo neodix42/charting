@@ -398,7 +398,7 @@ func (l *LiveAlerts) checkDukascopyCycle(ctx context.Context, config LiveAlertsC
 		if e != nil {
 			return e
 		}
-		if scheduled {
+		if scheduled || s.metadata.Synthetic {
 			interval, _, _ := liveAlertCalendarPeriod(SavedAnalysisCondition{}, s.metadata.Timeframe)
 			expected := liveAlertPeriodStart(time.UnixMilli(asOf), s.metadata.Timeframe).Add(-interval).UnixMilli()
 			if latest.timestamp != expected {
@@ -606,7 +606,7 @@ func (l *LiveAlerts) refreshSelectedWithFields(ctx context.Context, directory st
 	m.refreshJobs = jobs
 	m.mu.Unlock()
 	l.reportCheckPreparation(ctx, nil, "Preparing provider session")
-	ctx, cleanup, err := withProviderSession(ctx, m.profile)
+	ctx, cleanup, err := withProviderSessionWithHistory(ctx, m.profile, m.dukascopyHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -689,14 +689,18 @@ func liveAlertProviderStopped(ctx context.Context, err error) bool {
 	}
 	if session := sessionFromContext(ctx); session != nil && session.limiter != nil {
 		session.limiter.mu.Lock()
-		stopped := max(session.limiter.state.DeniedTill, session.limiter.state.LimitedTill) > time.Now().UnixMilli()
+		stopped := session.limiter.state.LimitedTill > time.Now().UnixMilli() || session.SDK == nil && session.limiter.state.DeniedTill > time.Now().UnixMilli()
 		session.limiter.mu.Unlock()
 		if stopped {
 			return true
 		}
 	}
 	message := strings.ToLower(err.Error())
-	for _, marker := range []string{"403", "429", "access-denial", "rate-limit", "rate limit", "cooldown"} {
+	markers := []string{"403", "429", "access-denial", "rate-limit", "rate limit", "cooldown"}
+	if session := sessionFromContext(ctx); session != nil && session.SDK != nil {
+		markers = []string{"429", "rate-limit", "rate limit"}
+	}
+	for _, marker := range markers {
 		if strings.Contains(message, marker) {
 			return true
 		}
@@ -825,7 +829,7 @@ func liveAlertFromMatch(saved SavedAnalysisCondition, s *analysisSeries, index i
 	if !ok || !analysisFinite(row.values[position]) {
 		return LiveAlert{}, errors.New("Live Alerts requires a finite closing price")
 	}
-	alert := LiveAlert{ConditionID: saved.ID, ConditionName: saved.Name, Symbol: s.metadata.Symbol, AssetName: s.metadata.Description, Timeframe: s.metadata.Timeframe, Time: row.timestamp, EntryPrice: row.values[position]}
+	alert := LiveAlert{ConditionID: saved.ID, ConditionName: saved.Name, Symbol: s.metadata.Symbol, AssetName: s.metadata.Description, Timeframe: s.metadata.Timeframe, Time: row.timestamp, EntryPrice: row.values[position], Synthetic: s.metadata.Synthetic, Provenance: copyProvenance(s.metadata.Provenance), SimulationBasis: s.metadata.SimulationBasis}
 	liveAlertAttribution(&alert, saved)
 	alert.Profitability, _ = SavedConditionProfitabilityFor(saved, s.metadata.Symbol, s.metadata.Timeframe)
 	config := saved.Request.TradeSimulation
@@ -890,7 +894,7 @@ func (l *LiveAlerts) claimSourceRevision(ctx context.Context, source, conditionI
 		return nil
 	}
 	priorRecent := append([]LiveAlertOutcome{}, l.state.Recent...)
-	l.state.Recent = append([]LiveAlertOutcome{{AlertID: alert.AlertID, AlertName: alert.AlertName, SavedConditionID: alert.SavedConditionID, SavedConditionName: alert.SavedConditionName, ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability)}}, l.state.Recent...)
+	l.state.Recent = append([]LiveAlertOutcome{{AlertID: alert.AlertID, AlertName: alert.AlertName, SavedConditionID: alert.SavedConditionID, SavedConditionName: alert.SavedConditionName, ConditionID: alert.ConditionID, DataSource: alert.DataSource, Market: alert.Market, ConditionName: alert.ConditionName, Symbol: alert.Symbol, AssetName: alert.AssetName, Timeframe: alert.Timeframe, Time: alert.Time, Status: "claimed", Message: "Delivery claimed; interrupted attempts are not sent again automatically.", Profitability: copyLiveProfitability(alert.Profitability), Synthetic: alert.Synthetic, SimulationBasis: alert.SimulationBasis}}, l.state.Recent...)
 	if len(l.state.Recent) > 50 {
 		l.state.Recent = l.state.Recent[:50]
 	}

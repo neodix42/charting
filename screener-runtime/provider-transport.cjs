@@ -1,5 +1,25 @@
 'use strict';
 
+const fs=require('node:fs/promises');
+const path=require('node:path');
+const sdkOwners=new WeakMap();
+const sdkSymbols=new Set(['btcusd','xauusd','xagusd','ethusd','usa500idxusd','xauxag']);
+
+async function requestSDKHistory(request,{symbol,timeframe,from,to}){
+  const session=request.providerSession,sourceKey=session?.sdk?.sourceKey,owner=session&&sdkOwners.get(session);
+  if(!/^[a-f0-9]{64}$/.test(sourceKey??'')||!owner)throw Error('The configured JForex history source requires the connected app owner pipe.');
+  if(owner.sourceKey!==sourceKey)throw Error('JForex source identity changed; restart this job with its matching owner.');
+  if(!sdkSymbols.has(symbol)||!['tick','d1'].includes(timeframe)||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||from<0||to<=from||
+    to-from>(timeframe==='tick'?3600000:366*86400000))throw Error('Invalid bounded JForex history request.');
+  let result;
+  try{result=await owner.ask('history',{symbol,timeframe,from,to});}
+  catch(error){error.code='JFOREX_HISTORY';throw error;}
+  if(typeof result.path!=='string'||!path.isAbsolute(result.path)||!Number.isSafeInteger(result.rows)||result.rows<0||!path.isAbsolute(session.directory))throw Error('Invalid JForex history export response.');
+  const info=await fs.lstat(result.path),root=await fs.realpath(session.directory),filename=await fs.realpath(result.path),relative=path.relative(root,filename);
+  if(!info.isFile()||info.size>64*1024*1024||!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw Error('JForex history export is outside its owned folder or exceeds 64 MiB.');
+  return {path:result.path,rows:result.rows};
+}
+
 // Use the parent's existing private pipe for the one application-wide pacing
 // queue. No proxy, endpoint/header change, or independent worker retry loop.
 function dataURL(value) {
@@ -10,7 +30,8 @@ function dataURL(value) {
 }
 
 function installProviderTransport(lines, request, send = event => process.stdout.write(`${JSON.stringify(event)}\n`)) {
-  if (!request.providerSession?.rateLimit) return {close() {}, async failure(error) { return error; }};
+  if (!request.providerSession?.rateLimit&&!request.providerSession?.sdk) return {close() {}, async failure(error) { return error; }};
+  if(request.providerSession?.sdk&&!/^[a-f0-9]{64}$/.test(request.providerSession.sdk.sourceKey??''))throw Error('Invalid private JForex history source identity.');
   if (!request.ownerPipe) throw Error('Shared Dukascopy pacing requires the app owner pipe.');
   let serial = 0;
   const pending = new Map();
@@ -32,6 +53,7 @@ function installProviderTransport(lines, request, send = event => process.stdout
       send({type: 'provider-request', requestId, operation, ...extra});
     });
   }
+  if(request.providerSession?.sdk)sdkOwners.set(request.providerSession,{ask,sourceKey:request.providerSession.sdk.sourceKey});
   const observe = (status, retryAfter) => ask('response', {httpStatus: status, retryAfter: String(retryAfter ?? '').slice(0, 128)});
   const originalFetch = global.fetch;
   global.fetch = async function(...args) {
@@ -78,6 +100,7 @@ function installProviderTransport(lines, request, send = event => process.stdout
   return {
     async drain() { await Promise.all(observations); },
     async failure(error) {
+      if(['DUKASCOPY_BATCH_BLOCKED','JFOREX_HISTORY'].includes(error?.code))return error;
       if (!/\b(?:HTTP(?: status:)?|status)\s*403\b/i.test(String(error?.message))) return error;
       const result = await observe(403, '');
       return new Error(`${error.message} Next manual attempt after ${new Date(result.cooldownUntil).toISOString().replace(/\.\d{3}Z$/, 'Z')} (saved access-denial cooldown).`);
@@ -88,8 +111,9 @@ function installProviderTransport(lines, request, send = event => process.stdout
       lines.removeListener('line', reply);
       for (const entry of pending.values()) entry.reject(Error('Dukascopy owner pipe closed.'));
       pending.clear();
+      if(sdkOwners.get(request.providerSession)?.ask===ask)sdkOwners.delete(request.providerSession);
     },
   };
 }
 
-module.exports = {dataURL, installProviderTransport};
+module.exports = {dataURL, installProviderTransport,requestSDKHistory};

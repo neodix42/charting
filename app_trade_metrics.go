@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"cryptodesk/internal/domain"
 	"cryptodesk/internal/hyperliquid"
 	"cryptodesk/internal/jforex"
 	"cryptodesk/internal/trading"
@@ -17,6 +18,9 @@ func (a *App) GetTradeMetrics(request trading.Request) (trading.Metrics, error) 
 	result := trading.Metrics{FeedKey: request.FeedKey, Side: request.Side, Quantity: strings.TrimSpace(request.Quantity), Leverage: request.Leverage}
 	if err := request.FeedKey.Validate(); err != nil {
 		return result, err
+	}
+	if domain.IsCalculatedInstrument(request.FeedKey.Exchange, request.FeedKey.Instrument) {
+		return result, errors.New("calculated synthetic instruments have no broker margin or executable quantity")
 	}
 	if request.Side != "buy" && request.Side != "sell" {
 		return result, errors.New("choose Buy or Sell")

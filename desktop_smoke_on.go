@@ -309,7 +309,7 @@ const desktopSmokeJavaScript = `async function(phase) {
   else check(strip.scrollLeft===0&&geometry.add.right<geometry.row.left+geometry.row.width/2,'first-launch plus stays beside the only tab',geometry);
   strip.scrollLeft=previousScroll;return geometry;
  };
- const indicatorDefaults={sma:{period:20},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
+ const indicatorDefaults={sma:{period:200},ema:{period:20},ichimoku:{conversion:9,base:26,spanB:52,displacement:26},macd:{fast:12,slow:26,signal:9}};
  const indicatorNames={sma:'SMA',ema:'EMA',ichimoku:'Ichimoku Cloud',macd:'MACD'};
  const verifyIndicators=(chart,label)=>{const indicators=chart.indicators||[],types=Object.keys(indicatorDefaults);check(indicators.length===4&&indicators.every((indicator,index)=>indicator.type===types[index]&&Object.keys(indicator.parameters).length===Object.keys(indicatorDefaults[indicator.type]).length&&Object.entries(indicatorDefaults[indicator.type]).every(([key,value])=>indicator.parameters[key]===value)&&/^#[0-9a-f]{6}$/i.test(indicator.color)&&(indicator.type==='sma'?indicator.lineWidth===3:indicator.type==='ema'?indicator.lineWidth===1:indicator.lineWidth===undefined))&&new Set(indicators.map(indicator=>indicator.id)).size===4,label,indicators);};
  const verifySharedIndicators=(workspace,label)=>{const charts=workspace.tabs[0].charts,ids=charts.flatMap(chart=>(chart.indicators||[]).map(indicator=>indicator.id));check(charts.map(chart=>chart.indicators?.length||0).join(',')==='5,1,1'&&charts.every(chart=>{const indicator=chart.indicators.at(-1);return indicator.type==='ema'&&indicator.parameters.period===34&&indicator.lineWidth===4&&Object.keys(indicator.parameters).length===1&&/^#[0-9a-f]{6}$/i.test(indicator.color);})&&new Set(ids).size===ids.length,label,charts.map(chart=>chart.indicators));verifyIndicators({...charts[0],indicators:charts[0].indicators.slice(0,4)},'shared action preserves the first chart original four indicators');check(workspace.tabs[1].charts[0].timeframe==='1h'&&!workspace.tabs[1].charts[0].indicators?.length,'shared action leaves the hidden tab unchanged',workspace.tabs[1].charts[0]);};
@@ -788,6 +788,7 @@ const desktopSmokeJavaScript = `async function(phase) {
     await select('[data-testid="chart-cell"] [aria-label="Indicators"]',type);
     await wait(()=>q('[role="dialog"][aria-label="'+name+' parameters"]'),'native '+name+' parameter dialog');
     check(qa('[data-testid="chart-cell"] .indicator-chip').length===before,name+' waits for parameter confirmation',before);
+    if(type==='sma')check(q('[role="dialog"] [aria-label="Period"]').value===String(indicatorDefaults.sma.period),'SMA native default period is 200 bars',q('[role="dialog"] [aria-label="Period"]').value);
     if(type==='sma'||type==='ema'){check(q('[role="dialog"] [aria-label="Line width"]').value==='2',name+' native default width is two pixels');await select('[role="dialog"] [aria-label="Line width"]',type==='sma'?'3':'1');}
     await click('[role="dialog"] button[type="submit"]');
     await wait(()=>!q('[role="dialog"]')&&qa('[data-testid="chart-cell"] .indicator-chip').length===before+1,'apply '+name+' to chart');

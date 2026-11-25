@@ -172,6 +172,7 @@ def run(root, cab=None):
         shutil.copy2(root / "docs/WINDOWS_PORTABLE.md", package / "README-WINDOWS.md")
         (package / "docs").mkdir()
         shutil.copy2(root / "docs/THIRD_PARTY_NOTICES.md", package / "docs/THIRD_PARTY_NOTICES.md")
+        shutil.copy2(root / "docs/SYNTHETIC_INSTRUMENTS.md", package / "docs/SYNTHETIC_INSTRUMENTS.md")
         shutil.copytree(root / "docs/licenses", package / "docs/licenses")
         shutil.copy2(root / "scripts/webview2-runtime.json", package / "webview2-runtime.json")
         manifest = {

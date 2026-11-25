@@ -127,7 +127,9 @@ func TestAnalysisCategorySelectionsRetainNilVersusEmptyAcrossDraftAndNamedSnapsh
 
 func TestAnalysisResultCategoryAndEmptyFiltersApplyBeforePagination(t *testing.T) {
 	m := analysisTestManager(t)
-	crypto := categoryForSymbol(t, "btcusd")
+	// Use the native crypto category's larger inventory for the pagination case;
+	// BTCUSD now belongs to the five-choice Synthetic Instruments family.
+	crypto := categoryForSymbol(t, "ethusd")
 	forex := categoryForSymbol(t, "eurusd")
 	var cryptoInstruments, forexInstruments []Instrument
 	for _, group := range loadCatalog().Groups {

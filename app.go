@@ -21,6 +21,7 @@ import (
 	"cryptodesk/internal/predictions"
 	"cryptodesk/internal/screener"
 	"cryptodesk/internal/storage"
+	"cryptodesk/internal/synthetic"
 	"cryptodesk/internal/telegram"
 	"cryptodesk/internal/trading"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -83,7 +84,11 @@ func (a *App) initializeServices(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	scanner := screener.New(profile)
+	forex := jforex.New(profile)
+	a.mu.Lock()
+	a.jforex = forex
+	a.mu.Unlock()
+	scanner := screener.NewWithDukascopyHistory(profile, dukascopyScreenerHistory{client: forex})
 	a.mu.Lock()
 	a.screener = scanner
 	a.mu.Unlock()
@@ -97,7 +102,6 @@ func (a *App) initializeServices(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	forex := jforex.New(profile)
 	trader := hyperliquid.NewStore(profile)
 	messenger := telegram.NewStore(profile)
 	a.mu.Lock()
@@ -131,7 +135,7 @@ func (a *App) initializeServices(ctx context.Context) error {
 	a.mu.Unlock()
 	feeds := market.New(market.Options{Cache: chartCandleCache{manager: candles, forex: forex, screener: scanner}, Factory: func(provider string) (exchange.Adapter, error) {
 		if provider == "dukascopy" {
-			return forex, nil
+			return synthetic.New(forex, scanner.SyntheticHistory), nil
 		}
 		return exchange.New(provider)
 	}, Emit: func(e market.Event) {
@@ -345,7 +349,7 @@ func (a *App) ListInstruments(provider string) ([]domain.Instrument, error) {
 func (a *App) AttachChart(chartID string, generation int64, key domain.FeedKey, fromSec, toSec int64) (market.Snapshot, error) {
 	// Wait outside the market mutex so retained Hyperliquid history restoration
 	// cannot hold up independent provider charts.
-	if key.Exchange == "hyperliquid" {
+	if key.Exchange == "hyperliquid" || synthetic.IsFamily(key) && (key.Timeframe == "1d" || key.Timeframe == "1w") {
 		if err := a.awaitService("screener"); err != nil {
 			return market.Snapshot{}, err
 		}
@@ -361,7 +365,7 @@ func (a *App) GetFeedSnapshot(leaseID string, afterRevision int64) (market.Snaps
 	return a.market.Snapshot(leaseID)
 }
 func (a *App) GetHistory(requestID string, key domain.FeedKey, fromSec, toSec int64, maxBars int) (market.History, error) {
-	if key.Exchange == "hyperliquid" {
+	if key.Exchange == "hyperliquid" || synthetic.IsFamily(key) && (key.Timeframe == "1d" || key.Timeframe == "1w") {
 		if err := a.awaitService("screener"); err != nil {
 			return market.History{}, err
 		}

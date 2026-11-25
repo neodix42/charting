@@ -52,6 +52,20 @@ func TestTradingFacadeCapabilitiesAndSecretIsolation(t *testing.T) {
 	}
 }
 
+func TestCalculatedDukascopyCannotReachExecutionOrValuation(t *testing.T) {
+	a := &App{}
+	for _, symbol := range []string{"BTCXAU", "XAUSPX", "ETHBTC"} {
+		key := domain.FeedKey{Exchange: "dukascopy", Market: "cfd", Instrument: symbol, Timeframe: "1d"}
+		status, err := a.GetTradingStatus(key)
+		if err != nil || status.Enabled || status.CanBuy || status.CanSell || !strings.Contains(strings.ToLower(status.Error), "synthetic") {
+			t.Fatal(status, err)
+		}
+		if _, err := a.PreviewTrade(trading.Request{FeedKey: key, Side: "buy", Quantity: "1"}); err == nil || !strings.Contains(err.Error(), "synthetic") {
+			t.Fatal("synthetic preview reached provider", err)
+		}
+	}
+}
+
 func TestTradingShutdownDrainsAndRejectsNewWork(t *testing.T) {
 	a := &App{}
 	if err := a.beginTradeWork(); err != nil {
