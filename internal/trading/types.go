@@ -33,6 +33,8 @@ type Preview struct {
 	Side               string         `json:"side"`
 	Quantity           string         `json:"quantity"`
 	EntryPrice         string         `json:"entryPrice"`
+	BidPrice           string         `json:"bidPrice,omitempty"`
+	AskPrice           string         `json:"askPrice,omitempty"`
 	StopLoss           string         `json:"stopLoss"`
 	TakeProfit         string         `json:"takeProfit"`
 	Leverage           float64        `json:"leverage"`
@@ -56,6 +58,8 @@ type Estimate struct {
 	FeedKey            domain.FeedKey `json:"feedKey"`
 	Side               string         `json:"side"`
 	EntryPrice         string         `json:"entryPrice"`
+	BidPrice           string         `json:"bidPrice,omitempty"`
+	AskPrice           string         `json:"askPrice,omitempty"`
 	AccountCurrency    string         `json:"accountCurrency"`
 	ProfitPerPriceUnit string         `json:"profitPerPriceUnit"`
 	ValuationTime      int64          `json:"valuationTime"`

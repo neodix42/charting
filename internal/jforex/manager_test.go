@@ -691,6 +691,12 @@ func TestBridgeHelperProcess(t *testing.T) {
 		return map[string]any{"time": at, "open": 1.1, "high": 1.3, "low": 1.0, "close": 1.1 + float64(revision)/100, "volume": 2.0, "closed": true, "quality": "authoritative", "sourceRevision": revision}
 	}
 	event := func(id string) {
+		if scenario == "quote-health" {
+			_ = encoder.Encode(map[string]any{"event": "health", "subscriptionId": id, "health": map[string]any{"state": "live", "quote": map[string]any{"bid": 1.1001, "ask": 1.1003, "time": int64(1792375200000)}}})
+			_ = encoder.Encode(map[string]any{"event": "bars", "subscriptionId": id, "bars": []any{bar(1792375200, 2)}})
+			_ = encoder.Encode(map[string]any{"event": "health", "subscriptionId": id, "health": map[string]any{"state": "live", "quote": map[string]any{"bid": 1.0, "ask": 1.1, "time": int64(1792375199000)}}})
+			return
+		}
 		if scenario == "stream-long-period" {
 			_ = encoder.Encode(map[string]any{"event": "health", "subscriptionId": id, "health": map[string]any{"state": "live", "reason": "explicit long-period fixture"}})
 			return

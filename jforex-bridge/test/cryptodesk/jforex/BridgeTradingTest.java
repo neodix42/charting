@@ -51,6 +51,7 @@ public final class BridgeTradingTest {
             JsonObject preview=good(bridge,trade("tradePreview",fx,"buy",1000,1.09,1.12)).getAsJsonObject("result");
             check(preview.get("minQuantity").getAsDouble()==1000 && preview.get("quantityStep").getAsDouble()==1000,"FX contracts convert to base units");
             check(preview.get("entryPrice").getAsDouble()==1.1002 && preview.get("accountLeverage").getAsDouble()==100,"Buy uses ask and fixed account leverage");
+            check(preview.get("bidPrice").getAsDouble()==1.1 && preview.get("askPrice").getAsDouble()==1.1002,"review retains both actual quote sides rather than copying side entry");
             check(calls.get()==0,"preview must not submit orders");
             for(JsonObject invalid:List.of(trade("tradePreview",fx,"buy",100,1.09,1.12),trade("tradePreview",fx,"buy",1500,1.09,1.12),trade("tradePreview",fx,"buy",1000,1.2,1.12),trade("tradePreview",fx,"sell",1000,1.09,1.12))){check(!bridge.handle(invalid).get("ok").getAsBoolean(),"invalid trade rejected before submission");}
             JsonObject leverage=trade("tradePreview",fx,"buy",1000,1.09,1.12);leverage.addProperty("leverage",5);check(!bridge.handle(leverage).get("ok").getAsBoolean(),"cannot change account leverage perorder");

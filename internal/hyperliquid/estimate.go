@@ -85,7 +85,7 @@ func (s *Store) Estimate(ctx context.Context, market, native, side string) (Esti
 	if err != nil {
 		return Estimate{}, err
 	}
-	price, observedAt, err := s.quoteWithTime(ctx, v, r)
+	price, observedAt, bid, ask, err := s.quoteBook(ctx, v, r)
 	if err != nil {
 		return Estimate{}, err
 	}
@@ -97,5 +97,5 @@ func (s *Store) Estimate(ctx context.Context, market, native, side string) (Esti
 	if s.settings != v {
 		return Estimate{}, errors.New("Hyperliquid settings changed; refresh the trade estimate")
 	}
-	return Estimate{ReferencePrice: price.String(), AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: observedAt, ValuationError: m.valuationError, MaxLeverage: m.maxLeverage}, nil
+	return Estimate{ReferencePrice: price.String(), BidPrice: bid, AskPrice: ask, AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: observedAt, ValuationError: m.valuationError, MaxLeverage: m.maxLeverage}, nil
 }

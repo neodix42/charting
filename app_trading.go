@@ -141,6 +141,7 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 			return result, err
 		}
 		result.ID, result.EntryPrice, result.Quantity = "hyperliquid:"+preview.ID, preview.ReferencePrice, preview.Request.Quantity
+		result.BidPrice, result.AskPrice = preview.BidPrice, preview.AskPrice
 		result.Leverage, result.Environment, result.ExpiresAt = float64(preview.Request.Leverage), preview.Network, preview.ExpiresAt
 		result.Warnings = append(result.Warnings, preview.Warnings...)
 		result.MaxLeverage = preview.MaxLeverage
@@ -167,6 +168,7 @@ func (a *App) PreviewTrade(request trading.Request) (trading.Preview, error) {
 			return result, err
 		}
 		result.ID, result.EntryPrice = "dukascopy:"+preview.ID, strconv.FormatFloat(preview.EntryPrice, 'f', -1, 64)
+		result.BidPrice, result.AskPrice = tradeQuotePrices(preview.BidPrice, preview.AskPrice)
 		result.Quantity = strconv.FormatFloat(preview.Quantity, 'f', -1, 64)
 		result.Leverage, result.Environment, result.ExpiresAt = preview.AccountLeverage, preview.Environment, preview.ExpiresAt
 		result.Warnings = append(result.Warnings, preview.Message)
@@ -295,6 +297,7 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 			return result, err
 		}
 		result.EntryPrice, result.MaxLeverage = value.ReferencePrice, value.MaxLeverage
+		result.BidPrice, result.AskPrice = value.BidPrice, value.AskPrice
 		result.AccountCurrency, result.ProfitPerPriceUnit, result.ValuationTime, result.ValuationError = value.AccountCurrency, value.ProfitPerPriceUnit, value.ValuationTime, value.ValuationError
 		return result, nil
 	}
@@ -306,6 +309,7 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 		return result, err
 	}
 	result.EntryPrice = strconv.FormatFloat(value.EntryPrice, 'f', -1, 64)
+	result.BidPrice, result.AskPrice = tradeQuotePrices(value.BidPrice, value.AskPrice)
 	result.ReferenceOnly = value.ReferenceOnly
 	result.AccountCurrency, result.ValuationTime, result.ValuationError = value.AccountCurrency, value.ValuationTime, value.ValuationError
 	result.ValuationSource, result.ValuationNotice = value.ValuationSource, value.ValuationNotice
@@ -313,4 +317,12 @@ func (a *App) EstimateTrade(key domain.FeedKey, side string) (trading.Estimate, 
 		result.ProfitPerPriceUnit = strconv.FormatFloat(value.ProfitPerPriceUnit, 'f', -1, 64)
 	}
 	return result, nil
+}
+
+// Missing or invalid optional bid/ask data from an older bridge remains unknown.
+func tradeQuotePrices(bid, ask float64) (string, string) {
+	if bid <= 0 || ask < bid || math.IsNaN(bid) || math.IsNaN(ask) || math.IsInf(bid, 0) || math.IsInf(ask, 0) {
+		return "", ""
+	}
+	return strconv.FormatFloat(bid, 'f', -1, 64), strconv.FormatFloat(ask, 'f', -1, 64)
 }

@@ -28,6 +28,8 @@ type OrderRequest struct {
 }
 type Estimate struct {
 	ReferencePrice     string `json:"referencePrice"`
+	BidPrice           string `json:"bidPrice,omitempty"`
+	AskPrice           string `json:"askPrice,omitempty"`
 	AccountCurrency    string `json:"accountCurrency,omitempty"`
 	ProfitPerPriceUnit string `json:"profitPerPriceUnit,omitempty"`
 	ValuationTime      int64  `json:"valuationTime"`
@@ -44,6 +46,8 @@ type Preview struct {
 	ID                 string       `json:"id"`
 	Request            OrderRequest `json:"request"`
 	ReferencePrice     string       `json:"referencePrice"`
+	BidPrice           string       `json:"bidPrice,omitempty"`
+	AskPrice           string       `json:"askPrice,omitempty"`
 	LimitPrice         string       `json:"limitPrice"`
 	ExpiresAt          int64        `json:"expiresAt"`
 	Network            string       `json:"network"`
@@ -192,6 +196,10 @@ func (s *Store) quote(ctx context.Context, v Settings, r OrderRequest) (decimal.
 	return price, err
 }
 func (s *Store) quoteWithTime(ctx context.Context, v Settings, r OrderRequest) (decimal.Decimal, int64, error) {
+	price, at, _, _, err := s.quoteBook(ctx, v, r)
+	return price, at, err
+}
+func (s *Store) quoteBook(ctx context.Context, v Settings, r OrderRequest) (decimal.Decimal, int64, string, string, error) {
 	var book struct {
 		Time   int64  `json:"time"`
 		Coin   string `json:"coin"`
@@ -200,17 +208,27 @@ func (s *Store) quoteWithTime(ctx context.Context, v Settings, r OrderRequest) (
 		} `json:"levels"`
 	}
 	if err := s.post(ctx, v, "/info", map[string]string{"type": "l2Book", "coin": r.Instrument}, &book); err != nil {
-		return decimal.Zero, 0, err
+		return decimal.Zero, 0, "", "", err
 	}
 	side := 0
 	if r.Side == "buy" {
 		side = 1
 	}
 	if book.Coin != r.Instrument || len(book.Levels) != 2 || len(book.Levels[side]) == 0 || book.Time < s.now().Add(-15*time.Second).UnixMilli() || book.Time > s.now().Add(5*time.Second).UnixMilli() {
-		return decimal.Zero, 0, errors.New("No fresh executable Hyperliquid quote; try again")
+		return decimal.Zero, 0, "", "", errors.New("No fresh executable Hyperliquid quote; try again")
 	}
 	price, err := positive(book.Levels[side][0].Px)
-	return price, book.Time, err
+	// Keep the existing executable-side validation unchanged. Display a pair
+	// only when both actual sides form a valid, uncrossed top of book.
+	bid, ask := "", ""
+	if len(book.Levels[0]) > 0 && len(book.Levels[1]) > 0 {
+		b, be := positive(book.Levels[0][0].Px)
+		a, ae := positive(book.Levels[1][0].Px)
+		if be == nil && ae == nil && a.GreaterThanOrEqual(b) {
+			bid, ask = b.String(), a.String()
+		}
+	}
+	return price, book.Time, bid, ask, err
 }
 func (s *Store) checkInventory(ctx context.Context, v Settings, r OrderRequest, m instrument) error {
 	if r.Market != "spot" || r.Side != "sell" {
@@ -276,7 +294,7 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if r.Market == "spot" && (r.StopLoss != "" || r.TakeProfit != "") {
 		return Preview{}, errors.New("Hyperliquid spot does not support the perpetual TP/SL bracket; clear SL/TP or choose a perpetual market")
 	}
-	reference, valuationTime, err := s.quoteWithTime(ctx, v, r)
+	reference, valuationTime, bid, ask, err := s.quoteBook(ctx, v, r)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -310,7 +328,7 @@ func (s *Store) Preview(ctx context.Context, r OrderRequest) (Preview, error) {
 	if !s.freshObservation(valuationTime) {
 		return Preview{}, errors.New("The entry quote became stale while retrieving account metrics; preview again")
 	}
-	p := Preview{Metrics: metrics, AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: valuationTime, ValuationError: m.valuationError, ID: id, Request: r, ReferencePrice: reference.String(), LimitPrice: cap.String(), ExpiresAt: s.now().Add(60 * time.Second).UnixMilli(), Network: v.Network, AccountAddress: v.AccountAddress, MaxLeverage: m.maxLeverage, Warnings: []string{"Market entry uses an immediate-or-cancel limit capped at 1% slippage; a partial fill is possible."}}
+	p := Preview{Metrics: metrics, AccountCurrency: m.accountCurrency, ProfitPerPriceUnit: profitFactor(m), ValuationTime: valuationTime, ValuationError: m.valuationError, ID: id, Request: r, ReferencePrice: reference.String(), BidPrice: bid, AskPrice: ask, LimitPrice: cap.String(), ExpiresAt: s.now().Add(60 * time.Second).UnixMilli(), Network: v.Network, AccountAddress: v.AccountAddress, MaxLeverage: m.maxLeverage, Warnings: []string{"Market entry uses an immediate-or-cancel limit capped at 1% slippage; a partial fill is possible."}}
 	if r.Market == "perpetual" {
 		p.Warnings = append(p.Warnings, "Leverage uses isolated margin. Existing positions are netted by the exchange. SL/TP trigger on mark price, which can differ from the quoted entry, and reduce-only market execution can slip.")
 	}

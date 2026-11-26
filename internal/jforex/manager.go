@@ -698,6 +698,7 @@ func (m *Manager) Stream(ctx context.Context, key domain.FeedKey, emit func([]do
 	if !subscribed.Subscribed {
 		return errors.New("The JForex bridge did not confirm its subscription")
 	}
+	var latestQuote *domain.Quote
 	for {
 		select {
 		case <-ctx.Done():
@@ -722,6 +723,14 @@ func (m *Manager) Stream(ctx context.Context, key domain.FeedKey, emit func([]do
 			}
 			if len(health.State) > 64 || health.LastMessageAt < 0 || health.LastTradeAt < 0 {
 				return errors.New("The JForex bridge returned invalid feed status")
+			}
+			if health.Quote != nil {
+				quote, quoteErr := streamQuote(health.Quote, latestQuote, time.Now().UnixMilli())
+				if quoteErr != nil {
+					return quoteErr
+				}
+				latestQuote = quote
+				health.Quote = copyStreamQuote(quote)
 			}
 			// SDK bars and connection health are separate records. A history seed
 			// or closed-bar update must preserve the preceding connection/quote

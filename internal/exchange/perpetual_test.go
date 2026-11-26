@@ -402,7 +402,15 @@ func TestMarketSocketsDoNotMixIdenticalSymbolsAndCleanUp(t *testing.T) {
 					t.Fatal("market streams never reconciled")
 				}
 			}
-			if sockets.Load() != 3 || a.Diagnostics().Sockets != 3 {
+			wantSockets := int32(3)
+			if provider == "binance" {
+				wantSockets = 5 // spot plus separate market/public hubs for each derivatives family.
+			}
+			until := time.Now().Add(time.Second)
+			for sockets.Load() < wantSockets && time.Now().Before(until) {
+				time.Sleep(5 * time.Millisecond)
+			}
+			if sockets.Load() != wantSockets || a.Diagnostics().Sockets != int(wantSockets) {
 				t.Fatalf("markets must own separate sockets: %d %+v", sockets.Load(), a.Diagnostics())
 			}
 			cancel()
@@ -413,7 +421,7 @@ func TestMarketSocketsDoNotMixIdenticalSymbolsAndCleanUp(t *testing.T) {
 					t.Fatal("market stream did not cancel")
 				}
 			}
-			until := time.Now().Add(time.Second)
+			until = time.Now().Add(time.Second)
 			for a.Diagnostics().Sockets != 0 && time.Now().Before(until) {
 				time.Sleep(5 * time.Millisecond)
 			}
@@ -435,5 +443,11 @@ func TestDocumentedPerpetualEndpoints(t *testing.T) {
 	}
 	if marketCategory(domain.FeedKey{Market: "perpetual", Instrument: "BTCUSD"}) != "inverse" {
 		t.Fatal("migrated inverse native ID was treated as linear")
+	}
+	if a.quoteSocketFor(domain.FeedKey{Market: "perpetual", Instrument: "BTCUSDT"}).endpoint() != "wss://fstream.binance.com/public/ws" {
+		t.Fatal("Binance linear books must use the public routed endpoint")
+	}
+	if a.quoteSocketFor(domain.FeedKey{Market: "perpetual", Instrument: "BTCUSD_PERP"}).endpoint() != "wss://dstream.binance.com/public/ws" {
+		t.Fatal("Binance inverse books must use the public routed endpoint")
 	}
 }

@@ -91,6 +91,9 @@ func TestSharedProviderSocketAndSubscribeFirstHandover(t *testing.T) {
 				}
 				if msg.Method == "SUBSCRIBE" {
 					for _, topic := range msg.Params {
+						if strings.HasSuffix(topic, "@bookTicker") {
+							continue
+						}
 						interval := strings.TrimPrefix(topic, "btcusdt@kline_")
 						select {
 						case <-subscriptions[interval]:

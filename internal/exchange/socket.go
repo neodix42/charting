@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"context"
+	"cryptodesk/internal/domain"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 
 type wireEvent struct {
 	data          []byte
+	quote         *domain.Quote
+	quoteEpoch    uint64
 	state, reason string
 	err           error
 }
@@ -33,10 +36,12 @@ type socketHub struct {
 	attemptCancel context.CancelFunc
 	active        map[string]bool
 	latestBooks   map[string][]byte
+	latestQuotes  map[string]quoteSnapshot
+	quoteEpoch    uint64
 }
 
 func newSocketHub(a *publicAdapter) *socketHub {
-	return &socketHub{a: a, category: "spot", subs: map[string]map[uint64]chan wireEvent{}, wake: make(chan struct{}, 1), active: map[string]bool{}, latestBooks: map[string][]byte{}}
+	return &socketHub{a: a, category: "spot", subs: map[string]map[uint64]chan wireEvent{}, wake: make(chan struct{}, 1), active: map[string]bool{}, latestBooks: map[string][]byte{}, latestQuotes: map[string]quoteSnapshot{}}
 }
 func (h *socketHub) endpoint() string {
 	switch h.category {
@@ -44,9 +49,23 @@ func (h *socketHub) endpoint() string {
 		return h.a.futuresWS
 	case "inverse":
 		return h.a.inverseWS
+	case "linear-quotes":
+		return binancePublicEndpoint(h.a.futuresWS)
+	case "inverse-quotes":
+		return binancePublicEndpoint(h.a.inverseWS)
 	default:
 		return h.a.ws
 	}
+}
+
+func binancePublicEndpoint(endpoint string) string {
+	if strings.HasSuffix(endpoint, "/market/ws") {
+		return strings.TrimSuffix(endpoint, "/market/ws") + "/public/ws"
+	}
+	if strings.HasSuffix(endpoint, "/ws") {
+		return strings.TrimSuffix(endpoint, "/ws") + "/public/ws"
+	}
+	return endpoint
 }
 func (h *socketHub) readTimeout() time.Duration {
 	if h.a.provider == "binance" && h.category != "spot" {
@@ -66,7 +85,10 @@ func (h *socketHub) subscribe(topic string) (<-chan wireEvent, func()) {
 	if h.active[topic] {
 		ch <- wireEvent{state: "subscribed", reason: "Attached to shared public subscription"}
 		if book := h.latestBooks[topic]; len(book) > 0 {
-			ch <- wireEvent{data: book}
+			ch <- wireEvent{data: book, quoteEpoch: h.quoteEpoch}
+		}
+		if book, ok := h.latestQuotes[topic]; ok {
+			ch <- wireEvent{state: "quote", quote: book.quote, quoteEpoch: h.quoteEpoch}
 		}
 	}
 	if !h.running {
@@ -81,6 +103,7 @@ func (h *socketHub) subscribe(topic string) (<-chan wireEvent, func()) {
 		if len(h.subs[topic]) == 0 {
 			delete(h.subs, topic)
 			delete(h.latestBooks, topic)
+			delete(h.latestQuotes, topic)
 		}
 		if len(h.subs) == 0 && h.attemptCancel != nil {
 			h.attemptCancel()
@@ -108,6 +131,17 @@ func (h *socketHub) topics() []string {
 func (h *socketHub) publish(topic string, e wireEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if e.err != nil || e.state == "connecting" || e.state == "offline" || e.state == "disconnected" || e.state == "reconciling" {
+		if topic == "" {
+			h.quoteEpoch++
+			h.latestBooks = map[string][]byte{}
+			h.latestQuotes = map[string]quoteSnapshot{}
+		} else {
+			delete(h.latestBooks, topic)
+			delete(h.latestQuotes, topic)
+		}
+	}
+	e.quoteEpoch = h.quoteEpoch
 	for key, channels := range h.subs {
 		if topic != "" && key != topic {
 			continue
@@ -116,6 +150,8 @@ func (h *socketHub) publish(topic string, e wireEvent) {
 			select {
 			case ch <- e:
 			default:
+				delete(h.latestBooks, key)
+				delete(h.latestQuotes, key)
 				// Flush bounded backlog and make loss explicit. Consumers repair via REST.
 			drain:
 				for {
@@ -130,6 +166,16 @@ func (h *socketHub) publish(topic string, e wireEvent) {
 		}
 	}
 }
+
+// Candle and quote consumers have independent queues. A quote queued before a
+// transport discontinuity must not become current again after another queue has
+// already observed that discontinuity or a replacement connection.
+func (h *socketHub) currentQuoteEpoch(epoch uint64) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return epoch == h.quoteEpoch
+}
+
 func (h *socketHub) run() {
 	permanent := false
 	defer func() {
@@ -137,7 +183,9 @@ func (h *socketHub) run() {
 		h.running = false
 		h.sockets = 0
 		h.active = map[string]bool{}
+		h.quoteEpoch++
 		h.latestBooks = map[string][]byte{}
+		h.latestQuotes = map[string]quoteSnapshot{}
 		if !permanent && len(h.subs) > 0 {
 			h.running = true
 			go h.run()
@@ -209,7 +257,9 @@ func (h *socketHub) run() {
 		h.mu.Lock()
 		h.sockets = 0
 		h.active = map[string]bool{}
+		h.quoteEpoch++
 		h.latestBooks = map[string][]byte{}
+		h.latestQuotes = map[string]quoteSnapshot{}
 		h.mu.Unlock()
 		if len(h.topics()) == 0 {
 			return
@@ -339,10 +389,25 @@ func (h *socketHub) syncSubscriptions(conn *websocket.Conn, active map[string]bo
 			if subscribe {
 				kind = "subscribe"
 			}
-			if err := conn.WriteJSON(map[string]any{"type": kind, "product_ids": topics, "channel": "market_trades"}); err != nil {
-				return err
+			var trades, quotes []string
+			for _, topic := range topics {
+				if strings.HasPrefix(topic, "ticker.") {
+					quotes = append(quotes, strings.TrimPrefix(topic, "ticker."))
+				} else {
+					trades = append(trades, topic)
+				}
 			}
-			return conn.WriteJSON(map[string]any{"type": kind, "product_ids": topics, "channel": "heartbeats"})
+			for _, channel := range []string{"market_trades", "heartbeats"} {
+				if len(trades) > 0 {
+					if err := conn.WriteJSON(map[string]any{"type": kind, "product_ids": trades, "channel": channel}); err != nil {
+						return err
+					}
+				}
+			}
+			if len(quotes) > 0 {
+				return conn.WriteJSON(map[string]any{"type": kind, "product_ids": quotes, "channel": "ticker"})
+			}
+			return nil
 		case "hyperliquid":
 			method := "unsubscribe"
 			if subscribe {
@@ -395,6 +460,7 @@ func (h *socketHub) route(data []byte) {
 		Event     string          `json:"e"`
 		EventTime int64           `json:"E"`
 		Symbol    string          `json:"s"`
+		BookID    *int64          `json:"u"`
 		Topic     string          `json:"topic"`
 		Sequence  *int64          `json:"sequence_num"`
 		Channel   string          `json:"channel"`
@@ -447,10 +513,14 @@ func (h *socketHub) route(data []byte) {
 	case "binance":
 		if e.Event == "kline" {
 			h.publish(strings.ToLower(e.Symbol)+"@kline_"+e.K.Interval, wireEvent{data: data})
+		} else if e.Symbol != "" && (e.Event == "bookTicker" || e.Event == "" && e.BookID != nil) {
+			h.routeBinanceBook(e.Symbol, data)
 		}
 	case "bybit":
 		if strings.HasPrefix(e.Topic, "kline.") {
 			h.publish(e.Topic, wireEvent{data: data})
+		} else if strings.HasPrefix(e.Topic, "orderbook.1.") {
+			h.routeBybitBook(e.Topic, data)
 		} else {
 			h.publish("", wireEvent{state: "heartbeat"})
 		}
@@ -465,6 +535,8 @@ func (h *socketHub) route(data []byte) {
 			for product := range products {
 				h.publish(product, wireEvent{data: data})
 			}
+		} else if e.Channel == "ticker" {
+			h.routeCoinbaseTicker(data)
 		} else {
 			h.publish("", wireEvent{state: "heartbeat"})
 		}

@@ -1,5 +1,16 @@
 # Release checklist — observed 2026-10-19
 
+## Bid/Ask tickets and chart margin legends — 2026-11-26
+
+- [x] Carry actual provider Bid/Ask through estimates and frozen reviews, preserving execution/risk semantics and honest unavailable states.
+- [x] Show real top-left chart quotes/spread below UTC hours, with precision, source switching, age and invalid/missing-side checks.
+- [x] Use matching public Hyperliquid asset maximum/minimum-margin metadata at bottom right; spot remains fully funded.
+- [x] Reuse shared active subscriptions and verify real quotes on all seven Binance/Bybit/Coinbase market combinations; preserve data and credentials.
+- [x] Java SDK-interface tests and 35 affected ticket/quote/margin browser cases pass; generated models and screenshots reviewed.
+- [x] Complete deterministic/native Go checks, 167 Python, 212 Node and 375 frontend units, typecheck/lint and production frontend/chart builds.
+- [x] Final transport-fencing regression, exchange race/vet and complete cross-layer diff review pass.
+- [ ] Production package/hosted verification is tracked for the delivery commit. Native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison source selection and TON history — 2026-11-26
 
 - [x] Remove routine source notices, expose four public sources and persist exact source/market choices with safe legacy reads.

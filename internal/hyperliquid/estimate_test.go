@@ -192,3 +192,43 @@ func TestLiveHyperliquidValuationReadOnly(t *testing.T) {
 	}
 	t.Logf("actual BTC estimate: entry=%s collateral=%s factor=%s maximum=%dx observed=%s", value.ReferencePrice, value.AccountCurrency, value.ProfitPerPriceUnit, value.MaxLeverage, time.UnixMilli(value.ValuationTime).UTC().Format(time.RFC3339))
 }
+
+func TestEstimateAndPreviewExposeBothActualBookSides(t *testing.T) {
+	store, mock := mockStore(t)
+	mock.bookLevels = json.RawMessage(`[[{"px":"99","sz":"10000"}],[{"px":"101","sz":"10000"}]]`)
+	for _, side := range []string{"buy", "sell"} {
+		value, err := store.Estimate(context.Background(), "perpetual", "BTC", side)
+		expected := "101"
+		if side == "sell" {
+			expected = "99"
+		}
+		if err != nil || value.ReferencePrice != expected || value.BidPrice != "99" || value.AskPrice != "101" {
+			t.Fatalf("wrong real book pair for %s: %+v %v", side, value, err)
+		}
+	}
+	preview, err := store.Preview(context.Background(), baseRequest())
+	if err != nil || preview.BidPrice != "99" || preview.AskPrice != "101" || preview.ReferencePrice != "101" {
+		t.Fatalf("review pair missing or detached from entry snapshot: %+v %v", preview, err)
+	}
+	mock.bookLevels = json.RawMessage(`[[{"px":"109","sz":"10000"}],[{"px":"111","sz":"10000"}]]`)
+	if preview.BidPrice != "99" || preview.AskPrice != "101" || preview.ReferencePrice != "101" {
+		t.Fatal("reviewed pair changed with later book")
+	}
+	if len(mock.actions) != 0 {
+		t.Fatal("quote/review sent an exchange action")
+	}
+}
+
+func TestMissingCounterSideNeverBecomesAnInventedDisplayPair(t *testing.T) {
+	store, mock := mockStore(t)
+	mock.bookLevels = json.RawMessage(`[[],[{"px":"101","sz":"10000"}]]`)
+	value, err := store.Estimate(context.Background(), "perpetual", "BTC", "buy")
+	if err != nil || value.ReferencePrice != "101" || value.BidPrice != "" || value.AskPrice != "" {
+		t.Fatalf("missing bid fabricated or executable-side behaviour changed: %+v %v", value, err)
+	}
+	mock.bookLevels = json.RawMessage(`[[{"px":"102","sz":"10000"}],[{"px":"101","sz":"10000"}]]`)
+	value, err = store.Estimate(context.Background(), "perpetual", "BTC", "sell")
+	if err != nil || value.ReferencePrice != "102" || value.BidPrice != "" || value.AskPrice != "" {
+		t.Fatalf("crossed pair published or side validation changed: %+v %v", value, err)
+	}
+}

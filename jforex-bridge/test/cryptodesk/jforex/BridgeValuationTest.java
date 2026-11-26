@@ -64,6 +64,8 @@ public final class BridgeValuationTest {
             JsonObject login=request("connect");login.addProperty("username","offline");login.addProperty("password","offline");login.addProperty("environment","demo");login.addProperty("cacheDirectory",Files.createTempDirectory("jforex-valuation-").toString());good(bridge,login);
             JsonObject buy=estimate(bridge,Instrument.AAPLUSUSD,"buy"),sell=estimate(bridge,Instrument.AAPLUSUSD,"sell");
             check(buy.get("accountCurrency").getAsString().equals("EUR"),"account currency comes from SDK");near(buy.get("entryPrice").getAsDouble(),100.2,"buy ask");near(sell.get("entryPrice").getAsDouble(),100,"sell bid");
+            near(buy.get("bidPrice").getAsDouble(),100,"buy snapshot actual bid");near(buy.get("askPrice").getAsDouble(),100.2,"buy snapshot actual ask");
+            near(sell.get("bidPrice").getAsDouble(),100,"sell snapshot keeps bid");near(sell.get("askPrice").getAsDouble(),100.2,"sell snapshot also keeps ask");
             near(buy.get("profitPerPriceUnit").getAsDouble(),0.9,"USD-quoted CFD in EUR account");near((95-100.2)*2*buy.get("profitPerPriceUnit").getAsDouble(),-9.36,"CFD units quantity and price movement, no lot or leverage multiplier");
             near(buy.get("expensePerPriceUnit").getAsDouble(),1/1.11,"expenses use costly inverse FX bid while P/L keeps SDK conversion");
             near((100-95)*2*sell.get("profitPerPriceUnit").getAsDouble(),9,"sell target account profit");check(buy.get("valuationTime").getAsLong()==now,"verified quote valuation timestamp");

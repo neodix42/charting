@@ -93,6 +93,8 @@ public final class Bridge implements AutoCloseable {
                         if (start > sub.lastTime) sub.quoteFloor = 0;
                         JsonObject bar = tickCandle(sub, tick, start);
                         sub.lastTickTime = tick.getTime(); sub.lastTime = start; sub.last = bar;
+                        JsonObject observedQuote = tickQuote(tick);
+                        if (observedQuote != null) sub.quote = observedQuote;
                         emitBars(sub, List.of(bar));
                         if (sub.seedError != null) health(sub.id, "reconciling", sub.seedError, tick.getTime());
                         else if (sub.loading) health(sub.id, "reconciling", loadingReason(sub), tick.getTime());
@@ -1901,6 +1903,7 @@ public final class Bridge implements AutoCloseable {
             Map<String, Object> result = tradeValuation(instrument, quote.getTime(), true);
             result.put("instrument", instrument.name()); result.put("side", side);
             result.put("entryPrice", side.equals("buy") ? quote.getAsk() : quote.getBid());
+            result.put("bidPrice", quote.getBid()); result.put("askPrice", quote.getAsk());
             return result;
         } finally { releaseInstruments(); }
     }
@@ -1932,6 +1935,7 @@ public final class Bridge implements AutoCloseable {
         Map<String, Object> result = new HashMap<>();
         result.put("instrument", instrument.name()); result.put("side", side); result.put("quantity", quantity);
         result.put("stopLoss", sl); result.put("takeProfit", tp); result.put("entryPrice", entry);
+        result.put("bidPrice", quote.getBid()); result.put("askPrice", quote.getAsk());
         if (includeValuation) {
             Map<String, Object> metrics = accountMetrics();
             Map<String, Object> valuation = tradeValuation(instrument, quote.getTime());
@@ -2145,6 +2149,12 @@ public final class Bridge implements AutoCloseable {
         }
         output.accept(out);
     }
+    private JsonObject tickQuote(ITick tick) {
+        double bid = tick.getBid(), ask = tick.getAsk(); long at = tick.getTime();
+        if (!Double.isFinite(bid) || !Double.isFinite(ask) || bid <= 0 || ask < bid || at <= 0 || at > nowMillis.getAsLong() + 5_000) return null;
+        JsonObject quote = new JsonObject(); quote.addProperty("bid", bid); quote.addProperty("ask", ask); quote.addProperty("time", at);
+        return quote;
+    }
     private void allHealth(String state, String reason) { for (String id : subscriptions.keySet()) health(id, state, reason, 0); }
     private void health(String id, String state, String reason, long tradeTime) {
         Subscription sub = subscriptions.get(id);
@@ -2153,6 +2163,8 @@ public final class Bridge implements AutoCloseable {
         JsonObject health = new JsonObject(); health.addProperty("state", state); health.addProperty("reason", reason); health.addProperty("lastMessageAt", nowMillis.getAsLong() / 1000);
         long lastTrade = Math.max(tradeTime, sub.lastTickTime);
         if (lastTrade > 0) health.addProperty("lastTradeAt", lastTrade / 1000);
+        JsonObject quote = sub.quote;
+        if (quote != null) health.add("quote", quote.deepCopy());
         out.add("health", health); output.accept(out);
     }
     private void disconnect() {
@@ -2201,7 +2213,7 @@ public final class Bridge implements AutoCloseable {
         public double getClose() { return values.getClose(); } public double getVolume() { return values.getVolume(); }
     }
     static final class Subscription {
-        final String id; final Instrument instrument; final Period period; long lastTime; volatile long lastTickTime; long quoteFloor; JsonObject last;
+        final String id; final Instrument instrument; final Period period; long lastTime; volatile long lastTickTime; long quoteFloor; JsonObject last; volatile JsonObject quote;
         final AtomicLong seedGeneration = new AtomicLong(); volatile DataJob seed; volatile boolean loading; volatile boolean loadingCurrent; volatile String seedError; volatile long historyFrom;
         Future<?> seedRetry; int seedFailures;
         Subscription(String id, Instrument instrument, Period period) { this.id = id; this.instrument = instrument; this.period = period; }

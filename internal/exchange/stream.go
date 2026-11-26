@@ -181,14 +181,25 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 	messages, unsubscribe := a.socketFor(k).subscribe(topic)
 	defer unsubscribe()
 	var quoteMessages <-chan wireEvent
+	var quoteHub *socketHub
 	if a.provider == "hyperliquid" {
 		var unsubscribeQuotes func()
-		quoteMessages, unsubscribeQuotes = a.socketFor(k).subscribe(hyperliquidBookTopic(k.Instrument))
+		quoteHub = a.socketFor(k)
+		quoteMessages, unsubscribeQuotes = quoteHub.subscribe(hyperliquidBookTopic(k.Instrument))
+		defer unsubscribeQuotes()
+	} else if topic := publicQuoteTopic(a.provider, k.Instrument); topic != "" {
+		var unsubscribeQuotes func()
+		quoteHub = a.quoteSocketFor(k)
+		quoteMessages, unsubscribeQuotes = quoteHub.subscribe(topic)
 		defer unsubscribeQuotes()
 	}
 	duration := TimeframeSeconds(k.Timeframe)
 	localRevision := time.Now().UnixMilli()
+	var quoteEpoch uint64
 	send := func(bars []domain.Candle, h domain.Health) {
+		if h.Quote != nil && quoteHub != nil && !quoteHub.currentQuoteEpoch(quoteEpoch) {
+			h.Quote = nil
+		}
 		if a.provider == "coinbase" {
 			localRevision = max(localRevision+1, time.Now().UnixMilli())
 			for i := range bars {
@@ -258,6 +269,23 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 				send(nil, health)
 				continue
 			}
+			if !quoteHub.currentQuoteEpoch(message.quoteEpoch) {
+				continue
+			}
+			if message.state == "quote" {
+				if message.quote == nil {
+					health.Quote = nil
+					if message.reason != "" {
+						health.Reason = message.reason
+					}
+				} else if health.Quote == nil || message.quote.Time >= health.Quote.Time {
+					health.Quote = message.quote
+					quoteEpoch = message.quoteEpoch
+				}
+				health.LastMessageAt = time.Now().Unix()
+				send(nil, health)
+				continue
+			}
 			if len(message.data) == 0 {
 				continue
 			}
@@ -270,6 +298,7 @@ func (a *publicAdapter) Stream(ctx context.Context, k domain.FeedKey, emit func(
 			}
 			if health.Quote == nil || quote.Time >= health.Quote.Time {
 				health.Quote = quote
+				quoteEpoch = message.quoteEpoch
 				health.LastMessageAt = time.Now().Unix()
 				send(nil, health)
 			}

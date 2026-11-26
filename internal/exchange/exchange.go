@@ -308,7 +308,20 @@ func (a *publicAdapter) socketFor(k domain.FeedKey) *socketHub {
 	if a.provider == "hyperliquid" {
 		return a.hub
 	}
+	return a.socketForCategory(marketCategory(k))
+}
+
+func (a *publicAdapter) quoteSocketFor(k domain.FeedKey) *socketHub {
 	category := marketCategory(k)
+	if a.provider == "binance" && category != "spot" {
+		// Binance derivatives route books and candles to distinct public and
+		// market endpoints. Each hub still shares one subscription per symbol.
+		return a.socketForCategory(category + "-quotes")
+	}
+	return a.socketFor(k)
+}
+
+func (a *publicAdapter) socketForCategory(category string) *socketHub {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if h := a.hubs[category]; h != nil {

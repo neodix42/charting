@@ -74,6 +74,26 @@ Do not send bulk history via high-frequency broadcast events. Use bounded reques
 
 ## Rendering lifecycle
 
+Live top-of-book observations travel through `domain.Health.Quote`, separately from
+candles and `LastTradeAt`. Binance bookTicker, Bybit orderbook.1 and Coinbase ticker
+subscriptions are shared by native instrument through the existing category hubs;
+Binance derivatives use a separate shared `/public/ws` hub from candle `/market/ws`.
+JForex forwards the immutable accepted ITick pair, retaining epoch milliseconds on
+heartbeats and closed-market health. Validate prices, identity, ordering and observed
+timestamps; missing sides stay nullable and invalid/disconnected books lose trust.
+Queued quotes are fenced across transport generations. No candle price supplies a
+missing executable side, and quote-only events never modify candles.
+
+ChartCell owns the top-left hours/quote stack without recreating its chart or feed.
+The quote legend computes midpoint spread in basis points, preserves price precision,
+ages observations locally and clears previous-feed data on identity changes. Calculated
+instruments expose no executable book. Hyperliquid's stateless bottom-right overlay
+uses matching public catalog maxLeverage for asset maximum/minimum initial margin;
+it adds no account polling and makes no claim about selected leverage or size-tier
+margin. Ticket estimates and previews carry optional bidPrice/askPrice from the same
+book/tick as their existing side-specific entryPrice. Review freezes the complete
+snapshot; sizing, risk, freshness, confirmation and order submission remain unchanged.
+
 Dukascopy's native and calculated instrument integration is described in
 [Synthetic Instruments](docs/SYNTHETIC_INSTRUMENTS.md). Canonical Screener CSVs and
 SHA-bound provenance feed enrichment, analysis, alerts and the Wails-independent

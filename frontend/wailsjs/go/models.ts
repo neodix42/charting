@@ -3320,6 +3320,14 @@ export namespace hyperliquid {
 export namespace trading {
 
 	export class Preview {
+	    accountLeverage?: number;
+	    weekendLeverage?: number;
+	    instrumentMaxLeverage?: number;
+	    effectiveLeverage?: number;
+	    marginCutUsePercent?: number;
+	    accountEquityStopLoss?: string;
+	    marginPerUnit?: string;
+	    quantityStep?: number;
 	    availableBalance?: string;
 	    availableBalanceCurrency?: string;
 	    availableBalanceError?: string;
@@ -3327,6 +3335,9 @@ export namespace trading {
 	    accountBalance?: string;
 	    equity?: string;
 	    usedMargin?: string;
+	    maximumQuantity?: string;
+	    maximumQuantityError?: string;
+	    maximumQuantityBasis?: string;
 	    riskSizingQuantity?: string;
 	    riskSizingSafeQuantity?: string;
 	    riskSizingLoss?: string;
@@ -3334,9 +3345,6 @@ export namespace trading {
 	    riskSizingCanTarget?: boolean;
 	    riskSizingError?: string;
 	    riskSizingBasis?: string;
-	    maximumQuantity?: string;
-	    maximumQuantityError?: string;
-	    maximumQuantityBasis?: string;
 	    marginRequired?: string;
 	    marginRequiredCurrency?: string;
 	    marginError?: string;
@@ -3351,6 +3359,8 @@ export namespace trading {
 	    side: string;
 	    quantity: string;
 	    entryPrice: string;
+	    bidPrice?: string;
+	    askPrice?: string;
 	    stopLoss: string;
 	    takeProfit: string;
 	    leverage: number;
@@ -3371,6 +3381,14 @@ export namespace trading {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accountLeverage = source["accountLeverage"];
+	        this.weekendLeverage = source["weekendLeverage"];
+	        this.instrumentMaxLeverage = source["instrumentMaxLeverage"];
+	        this.effectiveLeverage = source["effectiveLeverage"];
+	        this.marginCutUsePercent = source["marginCutUsePercent"];
+	        this.accountEquityStopLoss = source["accountEquityStopLoss"];
+	        this.marginPerUnit = source["marginPerUnit"];
+	        this.quantityStep = source["quantityStep"];
 	        this.availableBalance = source["availableBalance"];
 	        this.availableBalanceCurrency = source["availableBalanceCurrency"];
 	        this.availableBalanceError = source["availableBalanceError"];
@@ -3378,6 +3396,9 @@ export namespace trading {
 	        this.accountBalance = source["accountBalance"];
 	        this.equity = source["equity"];
 	        this.usedMargin = source["usedMargin"];
+	        this.maximumQuantity = source["maximumQuantity"];
+	        this.maximumQuantityError = source["maximumQuantityError"];
+	        this.maximumQuantityBasis = source["maximumQuantityBasis"];
 	        this.riskSizingQuantity = source["riskSizingQuantity"];
 	        this.riskSizingSafeQuantity = source["riskSizingSafeQuantity"];
 	        this.riskSizingLoss = source["riskSizingLoss"];
@@ -3385,9 +3406,6 @@ export namespace trading {
 	        this.riskSizingCanTarget = source["riskSizingCanTarget"];
 	        this.riskSizingError = source["riskSizingError"];
 	        this.riskSizingBasis = source["riskSizingBasis"];
-	        this.maximumQuantity = source["maximumQuantity"];
-	        this.maximumQuantityError = source["maximumQuantityError"];
-	        this.maximumQuantityBasis = source["maximumQuantityBasis"];
 	        this.marginRequired = source["marginRequired"];
 	        this.marginRequiredCurrency = source["marginRequiredCurrency"];
 	        this.marginError = source["marginError"];
@@ -3402,6 +3420,8 @@ export namespace trading {
 	        this.side = source["side"];
 	        this.quantity = source["quantity"];
 	        this.entryPrice = source["entryPrice"];
+	        this.bidPrice = source["bidPrice"];
+	        this.askPrice = source["askPrice"];
 	        this.stopLoss = source["stopLoss"];
 	        this.takeProfit = source["takeProfit"];
 	        this.leverage = source["leverage"];
@@ -3526,13 +3546,15 @@ export namespace trading {
 	}
 
 	export class Estimate {
+	    referenceOnly?: boolean;
 	    feedKey: domain.FeedKey;
 	    side: string;
 	    entryPrice: string;
+	    bidPrice?: string;
+	    askPrice?: string;
 	    accountCurrency: string;
 	    profitPerPriceUnit: string;
 	    valuationTime: number;
-	    referenceOnly?: boolean;
 	    valuationError?: string;
 	    valuationSource?: string;
 	    valuationNotice?: string;
@@ -3544,13 +3566,15 @@ export namespace trading {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.referenceOnly = source["referenceOnly"];
 	        this.feedKey = this.convertValues(source["feedKey"], domain.FeedKey);
 	        this.side = source["side"];
 	        this.entryPrice = source["entryPrice"];
+	        this.bidPrice = source["bidPrice"];
+	        this.askPrice = source["askPrice"];
 	        this.accountCurrency = source["accountCurrency"];
 	        this.profitPerPriceUnit = source["profitPerPriceUnit"];
 	        this.valuationTime = source["valuationTime"];
-	        this.referenceOnly = source["referenceOnly"];
 	        this.valuationError = source["valuationError"];
 	        this.valuationSource = source["valuationSource"];
 	        this.valuationNotice = source["valuationNotice"];

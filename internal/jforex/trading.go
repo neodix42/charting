@@ -31,6 +31,8 @@ type TradeEstimate struct {
 	Instrument         string  `json:"instrument"`
 	Side               string  `json:"side"`
 	EntryPrice         float64 `json:"entryPrice"`
+	BidPrice           float64 `json:"bidPrice,omitempty"`
+	AskPrice           float64 `json:"askPrice,omitempty"`
 	AccountCurrency    string  `json:"accountCurrency"`
 	ProfitPerPriceUnit float64 `json:"profitPerPriceUnit"`
 	ValuationTime      int64   `json:"valuationTime"`
@@ -55,6 +57,8 @@ type TradePreview struct {
 	StopLoss           float64       `json:"stopLoss"`
 	TakeProfit         float64       `json:"takeProfit"`
 	EntryPrice         float64       `json:"entryPrice"`
+	BidPrice           float64       `json:"bidPrice,omitempty"`
+	AskPrice           float64       `json:"askPrice,omitempty"`
 	AccountLeverage    float64       `json:"accountLeverage"`
 	MinQuantity        float64       `json:"minQuantity"`
 	QuantityStep       float64       `json:"quantityStep"`
@@ -142,6 +146,7 @@ func (m *Manager) EstimateTrade(ctx context.Context, instrument, side string) (T
 	if estimate.Instrument != instrument || estimate.Side != side || estimate.EntryPrice <= 0 || math.IsNaN(estimate.EntryPrice) || math.IsInf(estimate.EntryPrice, 0) {
 		return TradeEstimate{}, errors.New("The JForex bridge returned an invalid trade estimate")
 	}
+	estimate.BidPrice, estimate.AskPrice = validTradePair(estimate.BidPrice, estimate.AskPrice)
 	normalizeTradeEstimate(&estimate)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -150,6 +155,13 @@ func (m *Manager) EstimateTrade(ctx context.Context, instrument, side string) (T
 	}
 	return estimate, nil
 }
+func validTradePair(bid, ask float64) (float64, float64) {
+	if bid <= 0 || ask < bid || math.IsNaN(bid) || math.IsNaN(ask) || math.IsInf(bid, 0) || math.IsInf(ask, 0) {
+		return 0, 0
+	}
+	return bid, ask
+}
+
 func normalizeTradeEstimate(estimate *TradeEstimate) {
 	now := time.Now().UnixMilli()
 	maxAge := int64(30000)
@@ -206,6 +218,7 @@ func (m *Manager) PreviewTrade(ctx context.Context, request TradeRequest) (Trade
 	if err = process.call(ctx, tradeRPC(request, "tradePreview"), &preview); err != nil {
 		return TradePreview{}, err
 	}
+	preview.BidPrice, preview.AskPrice = validTradePair(preview.BidPrice, preview.AskPrice)
 	if preview.Instrument != request.Instrument || preview.Side != request.Side || preview.Quantity != request.Quantity || preview.StopLoss != request.StopLoss || preview.TakeProfit != request.TakeProfit || preview.EntryPrice <= 0 || math.IsNaN(preview.EntryPrice) || math.IsInf(preview.EntryPrice, 0) || preview.AccountLeverage <= 0 || preview.MinQuantity <= 0 || preview.QuantityStep <= 0 || preview.PriceStep <= 0 {
 		return TradePreview{}, errors.New("The JForex bridge returned an invalid trade preview")
 	}

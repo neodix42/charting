@@ -35,7 +35,7 @@ public final class BridgeTest {
         });
     }
     static ITick tick(long time, double bid) {
-        return fake(ITick.class, (method, args) -> switch (method) { case "getTime" -> time; case "getBid" -> bid; default -> null; });
+        return fake(ITick.class, (method, args) -> switch (method) { case "getTime" -> time; case "getBid" -> bid; case "getAsk" -> bid + 0.0002; default -> null; });
     }
     static void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
     static void await(BooleanSupplier ready, String message) throws Exception {
@@ -151,7 +151,7 @@ public final class BridgeTest {
             JsonObject liveBars = events.stream().filter(event -> event.has("bars")).reduce((first, second) -> second).orElseThrow();
             check(liveBars.getAsJsonArray("bars").size() == 3, "initial subscription publishes real SDK candles");
             JsonObject seededHealth = events.get(events.size() - 1).getAsJsonObject("health");
-            check(!seededHealth.has("lastTradeAt"), "history must not invent a last quote or fetch a blocking tick cache");
+            check(!seededHealth.has("lastTradeAt") && !seededHealth.has("quote"), "history must not invent a last quote or fetch a blocking tick cache");
             strategy.get().onTick(Instrument.EURUSD, tick(now + 1000, 1.14));
             JsonObject current = events.stream().filter(event -> event.has("bars")).reduce((first, second) -> second).orElseThrow().getAsJsonArray("bars").get(0).getAsJsonObject();
             check(!current.get("closed").getAsBoolean() && current.get("open").getAsDouble() == 1.10 && current.get("volume").getAsDouble() == 2.5, "tick uses SDK current OHLCV, preserving opening price and volume");
@@ -159,9 +159,12 @@ public final class BridgeTest {
             heartbeat.invoke(bridge);
             JsonObject pulse = events.get(events.size() - 1).getAsJsonObject("health");
             check(pulse.get("lastTradeAt").getAsLong() == (now + 1000) / 1000, "heartbeat retains last actual quote time");
+            JsonObject top = pulse.getAsJsonObject("quote");
+            check(top != null && top.get("bid").getAsDouble() == 1.14 && top.get("ask").getAsDouble() >= 1.14 && top.get("time").getAsLong() == now + 1000, "heartbeat preserves actual bid/ask and original millisecond observation time");
             offline.set(true); heartbeat.invoke(bridge);
             pulse = events.get(events.size() - 1).getAsJsonObject("health");
             check(pulse.get("state").getAsString().equals("marketClosed") && pulse.get("lastTradeAt").getAsLong() == (now + 1000) / 1000, "market closure preserves last actual quote time without inventing ticks");
+            check(pulse.getAsJsonObject("quote").get("time").getAsLong() == now + 1000, "market closure never refreshes the quote timestamp");
             offline.set(false);
             int before = events.size(); strategy.get().onTick(Instrument.EURUSD, tick(now - 1, 1.13)); check(events.size() == before, "out-of-order ticks cannot rewind candles");
             strategy.get().onBar(Instrument.EURUSD, Period.ONE_MIN, null, bar(now - 60000, 1.08, 1.12, 1.07, 1.11));

@@ -38,7 +38,7 @@ for(const width of [1600,900]){
 }
 
 test('Dukascopy buy loss/profit estimates recalculate immediately for quantity, levels and refreshed entry',async({page})=>{
- await setup(page);await valuation(page,{entryPrice:'100',accountCurrency:'USD',profitPerPriceUnit:'1'});await openOrder(page);await expect(ticket(page).getByLabel('Order valuation')).toContainText('Indicative entry: 100');
+ await setup(page);await valuation(page,{entryPrice:'100',accountCurrency:'USD',profitPerPriceUnit:'1'});await openOrder(page);await expect(ticket(page).getByLabel('Order valuation')).toContainText('Entry for estimates: 100');
  await ticket(page).getByLabel('Order quantity').fill('2');await ticket(page).getByLabel('Order stop loss').fill('95');await ticket(page).getByLabel('Order take profit').fill('110');await expect(sl(page)).toHaveText('-500.00 bps · -10.0000 USD');await expect(tp(page)).toHaveText('+1,000.00 bps · +20.0000 USD');
  const reads=await page.evaluate(()=>(window as any).__testTradeValuationReads());await ticket(page).getByLabel('Order quantity').fill('4');await expect(sl(page)).toHaveText('-500.00 bps · -20.0000 USD');await ticket(page).getByLabel('Order stop loss').fill('98');await expect(sl(page)).toHaveText('-200.00 bps · -8.0000 USD');await ticket(page).getByLabel('Order take profit').fill('115');await expect(tp(page)).toHaveText('+1,500.00 bps · +60.0000 USD');expect(await page.evaluate(()=>(window as any).__testTradeValuationReads())).toBe(reads);
  await valuation(page,{entryPrice:'120'});await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();await expect(sl(page)).toHaveText('-1,833.33 bps · -88.0000 USD');await expect(tp(page)).toHaveText('-416.67 bps · -20.0000 USD');expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
@@ -46,7 +46,7 @@ test('Dukascopy buy loss/profit estimates recalculate immediately for quantity, 
 
 test('sell estimates use EUR conversion and reviewed quote/account values remain frozen until explicitly refreshed',async({page})=>{
  await setup(page);await valuation(page,{entryPrice:'200',accountCurrency:'EUR',profitPerPriceUnit:'0.9'});await openOrder(page,'Sell');await ticket(page).getByLabel('Order quantity').fill('10');await ticket(page).getByLabel('Order stop loss').fill('210');await ticket(page).getByLabel('Order take profit').fill('180');await expect(sl(page)).toHaveText('-500.00 bps · -90.0000 EUR');await expect(tp(page)).toHaveText('+1,000.00 bps · +180.0000 EUR');await ticket(page).getByRole('button',{name:'Review order',exact:true}).click();await expect(ticket(page).getByRole('button',{name:'Confirm Sell at market',exact:true})).toBeEnabled();
- const reads=await page.evaluate(()=>(window as any).__testTradeValuationReads());await page.clock.install();await valuation(page,{entryPrice:'300',accountCurrency:'USD',profitPerPriceUnit:'1'});await page.clock.fastForward(12000);expect(await page.evaluate(()=>(window as any).__testTradeValuationReads())).toBe(reads);await expect(sl(page)).toHaveText('-500.00 bps · -90.0000 EUR');await expect(ticket(page).getByLabel('Review stop loss estimate',{exact:true})).toHaveText('-500.00 bps · -90.0000 EUR');await expect(ticket(page).getByLabel('Review take profit estimate',{exact:true})).toHaveText('+1,000.00 bps · +180.0000 EUR');await expect(ticket(page).getByLabel('Review stop loss estimate').locator('..')).toContainText('210');await expect(ticket(page).getByLabel('Order valuation')).toContainText('Indicative entry: 200');
+ const reads=await page.evaluate(()=>(window as any).__testTradeValuationReads());await page.clock.install();await valuation(page,{entryPrice:'300',accountCurrency:'USD',profitPerPriceUnit:'1'});await page.clock.fastForward(12000);expect(await page.evaluate(()=>(window as any).__testTradeValuationReads())).toBe(reads);await expect(sl(page)).toHaveText('-500.00 bps · -90.0000 EUR');await expect(ticket(page).getByLabel('Review stop loss estimate',{exact:true})).toHaveText('-500.00 bps · -90.0000 EUR');await expect(ticket(page).getByLabel('Review take profit estimate',{exact:true})).toHaveText('+1,000.00 bps · +180.0000 EUR');await expect(ticket(page).getByLabel('Review stop loss estimate').locator('..')).toContainText('210');await expect(ticket(page).getByLabel('Order valuation')).toContainText('Entry for estimates: 200');
  await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();await expect(ticket(page).getByRole('button',{name:'Confirm Sell at market',exact:true})).toHaveCount(0);await expect(sl(page)).toHaveText('+3,000.00 bps · +900.0000 USD');await expect(ticket(page).getByRole('button',{name:'Review order',exact:true})).toBeVisible();
 });
 
@@ -57,7 +57,7 @@ test('editing polls entry/conversion every ten seconds and never substitutes a c
 });
 
 test('pending quote reads do not overlap and old ticket/side results cannot replace a new estimate',async({page})=>{
- await setup(page);await page.clock.install();await page.evaluate(()=>{const api=window.go!.main!.App!,estimate=api.EstimateTrade;(window as any).__quoteReleases=[];(window as any).__quoteStarts=0;api.EstimateTrade=(key,side)=>new Promise(resolve=>{(window as any).__quoteStarts++;(window as any).__quoteReleases.push(async(entry:string)=>resolve({...await estimate(key,side),entryPrice:entry}));});});await openOrder(page);await page.clock.fastForward(30000);expect(await page.evaluate(()=>(window as any).__quoteStarts)).toBe(1);await ticket(page).getByRole('button',{name:'Close market order',exact:true}).click();await openOrder(page,'Sell');await page.evaluate(()=>(window as any).__quoteReleases[1]('200'));await expect(ticket(page).getByLabel('Order valuation')).toContainText('Indicative entry: 200');await page.evaluate(()=>(window as any).__quoteReleases[0]('999'));await expect(ticket(page).getByLabel('Order valuation')).not.toContainText('999');await expect(ticket(page).getByLabel('Order valuation')).toContainText('Indicative entry: 200');
+ await setup(page);await page.clock.install();await page.evaluate(()=>{const api=window.go!.main!.App!,estimate=api.EstimateTrade;(window as any).__quoteReleases=[];(window as any).__quoteStarts=0;api.EstimateTrade=(key,side)=>new Promise(resolve=>{(window as any).__quoteStarts++;(window as any).__quoteReleases.push(async(entry:string)=>resolve({...await estimate(key,side),entryPrice:entry}));});});await openOrder(page);await page.clock.fastForward(30000);expect(await page.evaluate(()=>(window as any).__quoteStarts)).toBe(1);await ticket(page).getByRole('button',{name:'Close market order',exact:true}).click();await openOrder(page,'Sell');await page.evaluate(()=>(window as any).__quoteReleases[1]('200'));await expect(ticket(page).getByLabel('Order valuation')).toContainText('Entry for estimates: 200');await page.evaluate(()=>(window as any).__quoteReleases[0]('999'));await expect(ticket(page).getByLabel('Order valuation')).not.toContainText('999');await expect(ticket(page).getByLabel('Order valuation')).toContainText('Entry for estimates: 200');
  await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();await page.evaluate(()=>window.dispatchEvent(new Event('cryptodesk:trading-configured')));await expect(ticket(page)).toHaveCount(0);await page.evaluate(()=>(window as any).__quoteReleases[2]('888'));await expect(ticket(page)).toHaveCount(0);
 });
 
@@ -86,16 +86,16 @@ async function closedCFD(page:Page,conversion=true){
 
 test('closed CFD estimates use dated last quotes without treating them as executable or losing the independent account balance',async({page})=>{
  await closedCFD(page);const orderValuation=ticket(page).getByLabel('Order valuation',{exact:true});
- await expect(orderValuation).toContainText('Last market quote (reference only): 15');await expect(orderValuation).toContainText('2026-11-20 16:30:00 UTC');
+ await expect(orderValuation).toContainText('Entry for estimates: 15');await expect(orderValuation).toContainText('2026-11-20 16:30:00 UTC');
  await expect(ticket(page).getByLabel('Available balance',{exact:true})).toHaveText('1,104.5500 USD');
  await expect(sl(page)).toHaveText('-666.67 bps · -1,100.0000 USD');await expect(tp(page)).toHaveText('Enter a price to estimate');
  await ticket(page).getByLabel('Order take profit',{exact:true}).fill('16');await expect(tp(page)).toHaveText('+666.67 bps · +1,100.0000 USD');
  await expect(ticket(page).getByRole('button',{name:'Review order',exact:true})).toBeDisabled();
  await ticket(page).locator('form').dispatchEvent('submit');expect(await page.evaluate(()=>(window as any).__testTradeRequests())).toEqual([]);
  await page.clock.fastForward(60000);await expect(sl(page)).toHaveText('-666.67 bps · -1,100.0000 USD');
- await expect(orderValuation).toContainText('Last market quote (reference only)');await expect(orderValuation).toContainText('A fresh executable quote is required');
+ await expect(orderValuation).toContainText('Last Bid / Ask (reference only)');await expect(orderValuation).toContainText('A fresh executable quote is required');
  await valuation(page,{entryPrice:'15.5',profitPerPriceUnit:'1.2',referenceOnly:false,valuationNotice:''});await ticket(page).getByRole('button',{name:'Refresh quote',exact:true}).click();
- await expect(orderValuation).toContainText('Indicative entry: 15.5');await expect(orderValuation).not.toContainText('reference only');
+ await expect(orderValuation).toContainText('Entry for estimates: 15.5');await expect(orderValuation).not.toContainText('reference only');
  await expect(sl(page)).toHaveText('-967.74 bps · -1,800.0000 USD');await expect(ticket(page).getByRole('button',{name:'Review order',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>(window as any).__testTradeSubmissions())).toEqual([]);
 });
@@ -104,5 +104,5 @@ test('a last CFD quote provides bps when FX conversion is missing without using 
  await closedCFD(page,false);await expect(sl(page)).toHaveText('-666.67 bps · Account amount unavailable');
  await expect(ticket(page).getByLabel('Available balance',{exact:true})).toHaveText('1,104.5500 USD');await expect(ticket(page)).toContainText('EUR/USD conversion quote unavailable');
  await expect(ticket(page).getByRole('button',{name:'Review order',exact:true})).toBeDisabled();
- await expect(ticket(page).getByLabel('Order valuation',{exact:true})).toContainText('Last market quote (reference only): 15');
+ await expect(ticket(page).getByLabel('Order valuation',{exact:true})).toContainText('Entry for estimates: 15');
 });
