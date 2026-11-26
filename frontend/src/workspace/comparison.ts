@@ -18,6 +18,9 @@ export const defaultComparisonView=():ComparisonView=>({weeks:4,assets:['BTC','E
 export const copyComparisonView=(value:ComparisonView):ComparisonView=>({weeks:value.weeks,assets:[...value.assets]});
 export const comparisonDate=(time:number)=>new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'2-digit',month:'short',year:'numeric'}).format(new Date(time*1000));
 export const comparisonPercent=(value:number|null|undefined)=>value===null||value===undefined||!Number.isFinite(value)?'—':new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2,signDisplay:'exceptZero'}).format(Math.abs(value)<.005?0:value)+'%';
+/** Prices retain the selected market's quote; no rebasing or conversion. */
+const priceFormat=new Intl.NumberFormat('en-US',{maximumSignificantDigits:21});
+export const comparisonPrice=(value:number|null|undefined,quoteAsset:string)=>typeof value!=='number'||!Number.isFinite(value)||value<=0?'—':priceFormat.format(value)+(quoteAsset?` ${quoteAsset}`:'');
 export const comparisonExchange=(exchange:string)=>({hyperliquid:'Hyperliquid',binance:'Binance',bybit:'Bybit',coinbase:'Coinbase'}[exchange]??exchange);
 export const comparisonIdentity=(asset:ComparisonAsset)=>asset.id||asset.symbol;
 export const comparisonFeedIdentity=(asset:ComparisonAsset)=>{

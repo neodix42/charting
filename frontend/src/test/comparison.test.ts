@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest';
-import {comparisonColor,comparisonDate,comparisonExchange,comparisonFeedIdentity,comparisonIdentity,comparisonOptionName,comparisonSelectionAsset,comparisonSelectionLabel,comparisonSeriesLabel,comparisonSource,comparisonLineData,comparisonPercent,ComparisonViewWriter,copyComparisonView,defaultComparisonView,type ComparisonView} from '../workspace/comparison';
+import {comparisonColor,comparisonDate,comparisonExchange,comparisonFeedIdentity,comparisonIdentity,comparisonOptionName,comparisonSelectionAsset,comparisonSelectionLabel,comparisonSeriesLabel,comparisonSource,comparisonLineData,comparisonPercent,comparisonPrice,ComparisonViewWriter,copyComparisonView,defaultComparisonView,type ComparisonView} from '../workspace/comparison';
 
 describe('Comparison view and chart values',()=>{
  it('defaults to four weeks and exactly the requested seven assets with independent copies',()=>{
@@ -47,6 +47,13 @@ describe('Comparison view and chart values',()=>{
   expect(comparisonPercent(null)).toBe('—');expect(comparisonPercent(undefined)).toBe('—');
   expect(comparisonPercent(0)).toBe('0.00%');expect(comparisonPercent(-.001)).toBe('0.00%');
   expect(comparisonPercent(12.345)).toBe('+12.35%');expect(comparisonPercent(-7.5)).toBe('-7.50%');
+ });
+ it('formats actual daily closes with their own quote and keeps tiny prices distinct from zero',()=>{
+  expect(comparisonPrice(1280,'USDC')).toBe('1,280 USDC');
+  expect(comparisonPrice(42.125,'USD')).toBe('42.125 USD');
+  expect(comparisonPrice(.000000000031,'USDT')).toBe('0.000000000031 USDT');
+  expect(comparisonPrice(1234.5678901234567,'USDC')).toBe('1,234.5678901234567 USDC');
+  for(const value of [null,undefined,0,-1,NaN,Infinity,-Infinity])expect(comparisonPrice(value,'USDT')).toBe('—');
  });
  it('breaks outgoing lines across missing closes without inventing any intermediate values',()=>{
   const points=[{time:0,close:100,pct:0},{time:86400,close:null,pct:null},{time:172800,close:110,pct:10},{time:259200,close:90,pct:-10}];

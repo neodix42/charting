@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-11-26
 
+## Comparison daily close on hover — 2026-11-26
+
+The focused line tooltip now shows its loaded daily close, actual quote currency and UTC crosshair date. Bottom-legend toggles keep their existing name/percentage and add a stable close-price row for that same day, restoring the latest completed day outside hover. Prices come directly from the selected source's stored `ComparisonPoint.close`; no percentage inversion, interpolation, conversion or new provider request is used. Missing/invalid values remain unavailable, including focused tooltips without a valid day. Precision, source identities, visibility, chart instances and zoom are preserved.
+
+Frontend typecheck/lint and **379 unit tests** pass. All **21 Comparison browser cases** pass with additional stored-close, UTC-day, real-pointer, gap, source/quote and tiny-price assertions. Production frontend build passes; hover and 900px layout screenshots were inspected. Midsegment tests read the actual snapped UTC day and require its exact stored close, never an interpolated value. Final package and hosted results are tracked for the delivery commit. Native desktop interaction and Windows GUI execution remain unverified; user data and credentials are unchanged.
+
 ## JForex copied-order identity and saved protection — 2026-11-26
 
 An executable offline test against SDK 3.6.51's actual `PlatformOrderImpl` reproduces a copy-constructor defect: original requested amount becomes zero while native identity, requested amount and partial fill remain. A strict original-quantity check then blocks history/close reconciliation, leaving an old local open row even if the broker state has changed. Recovery now requires exact account/environment, native ID, CryptoDesk label, asset and side, plus a durable confirmed actual fill matching the complete SDK fill history. Go independently validates the witness; arbitrary smaller, changed, invalid or unproven quantities remain rejected. Normal requested-quantity validation, one-use confirmations, uncertain-outcome handling and remaining-position checks remain intact. Strategy-thread checks capture immutable identity before execution rather than comparing a mutable SDK object with itself.

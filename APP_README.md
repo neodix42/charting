@@ -616,6 +616,8 @@ The verified **TON → GRAM** rename is supported by [TON](https://ton.org/), [B
 
 Comparison reuses the normal public market history and candle cache without opening live price subscriptions, broker sessions or trades. Leaving the screen or changing its selection cancels obsolete requests; hidden charts and their listeners are released. Closing an ordinary chart for the same market does not cancel Comparison's request. Refresh requests the current closed daily window. Saved choices live in private, atomic version 2 `<profile>/comparison-view.json`, separately from workspace exports and downloaded CSVs. Valid version 1 choices are read unchanged and upgrade on the next save. Invalid or future saved bytes remain preserved and are reported instead of silently restoring defaults.
 
+Hover a visible line to highlight it and show its asset, **daily close**, actual quote currency and UTC date. The bottom legend shows each asset's close and percentage for the crosshair day, or the latest completed daily close when the pointer leaves. Prices use the loaded native close directly, with no interpolation, currency conversion or additional requests. Missing daily prices show **—**. Legend toggles and chart zoom remain available.
+
 ## Trade history
 
 Trade history contains **History** and **Filtering** subscreens. History keeps the trade table and exchange-status controls. Filtering browses images from all locally recorded platform trades, including trades outside the current table page, without refreshing exchange accounts.

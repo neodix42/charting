@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison hover prices — 2026-11-26
+
+- [x] Reuse exact-day native closes and actual quote currencies in the focused tooltip and bottom legend, without new requests or interpolated values.
+- [x] Preserve precision, missing-day states, source identity, toggles, viewport and chart ownership; frontend typecheck/lint and 379 units pass.
+- [x] All 21 Comparison browser cases and production frontend build pass; hover/900px screenshots reviewed.
+- [ ] Package/hosted results are tracked for the delivery commit. Native desktop and Windows GUI interaction remain unverified.
+
 ## JForex copied-order reconciliation — 2026-11-26
 
 - [x] Reproduce the real SDK copy-constructor defect and recover only exact owned orders with matching durable actual-fill evidence.

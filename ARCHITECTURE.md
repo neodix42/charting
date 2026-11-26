@@ -228,6 +228,13 @@ hover; model-only resize/render events clear it, and a guard suppresses recursiv
 events emitted by line-style updates. Highlighting changes width without replacing
 data, reconnecting feeds or resetting the viewport.
 
+Hover prices and bottom-legend prices read the existing ComparisonPoint.close for
+the exact crosshair UTC day. They preserve the asset's actual quote and numeric
+precision, never derive prices from percentages or interpolate between observations.
+Missing/invalid closes remain unavailable. A pointer without a valid day cannot
+substitute the latest close into a focused tooltip; leaving the plot restores the
+legend's latest completed day. Price labels add no chart listeners or provider work.
+
 Comparison legend buttons control both the line and separate dots series through
 the public `visible` option. Session-only hidden symbols belong to the parent
 screen so refreshes, period changes and hidden-chart disposal retain the choices

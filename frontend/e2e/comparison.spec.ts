@@ -37,6 +37,8 @@ test('Comparison is a fixed Daily change tool with seven common-baseline percent
  for(const series of result.series){expect(series.points).toHaveLength(29);expect(series.points[0]).toMatchObject({time:result.baselineTime,pct:0});expect(series.points.at(-1).time).toBe(result.lastClosedTime);}
  await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('BTC',{exact:true})})).toContainText('+28.00%');
  await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('ETH',{exact:true})})).toContainText('-14.00%');
+ await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button',{name:'BTC',exact:true}).locator('.comparison-legend-price')).toHaveText('Close 1,280 USDC');
+ await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button',{name:'ETH',exact:true}).locator('.comparison-legend-price')).toHaveText('Close 1,720 USDC');
  await expect(panel(page)).toContainText('Latest completed daily close');expect(await page.evaluate(()=>(window as any).__testSubscriptions())).toHaveLength(0);expect(await page.evaluate(()=>(window as any).__testAttachCount())).toBe(before);
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await frames(page);await panel(page).screenshot({path:testInfo.outputPath('comparison-default-seven-assets.png')});
  await page.locator('[data-tab-id]').first().click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});await expect(page.getByTestId('chart-cell')).toHaveCount(1);
@@ -95,18 +97,28 @@ test('all source options remain selectable and same-asset venues have independen
 
  const bybit='bybit|spot|GRAMUSDT',coinbase='coinbase|spot|TON-USD';
  const chosen=await page.evaluate(()=>(window as any).__testComparisonView());expect(chosen.assets).toEqual([...defaults,coinbase,bybit]);
+ // Deliberately independent closes prove price readouts use stored observations,
+ // rather than deriving a price from each venue's percentage curve.
+ await page.evaluate(()=>(window as any).__testComparisonHoldNextData());await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonPending().length)).toBe(1);
+ await page.evaluate(()=>{
+  const fixture=window as any,result=fixture.__testComparisonLastResult(),time=result.baselineTime+14*86400,prices:Record<string,[number,number]>={TON:[7.125,8.25],'coinbase|spot|TON-USD':[42.125,45.5],'bybit|spot|GRAMUSDT':[.000000000031,.000000000042]};
+  fixture.__testComparisonReleaseData(fixture.__testComparisonPending()[0],{series:result.series.map((series:any)=>{const price=prices[series.asset.id];return price?{...series,points:series.points.map((point:any)=>({...point,close:point.time===time?price[0]:point.time===result.lastClosedTime?price[1]:point.close}))}:series;})});
+ });await loaded(page,9);
  const result=await page.evaluate(()=>(window as any).__testComparisonLastResult());expect(result.series.filter((series:any)=>series.asset.symbol==='TON')).toHaveLength(3);
  for(const id of [coinbase,bybit])expect(result.series.find((series:any)=>series.asset.id===id).points[0]).toMatchObject({time:result.baselineTime,pct:0});
  const legend=page.getByLabel('Comparison legend',{exact:true}),button=legend.locator(`[data-comparison-id="${bybit}"]`);
  await expect(button).toContainText('Bybit · Spot · USDT');await expect(legend.locator(`[data-comparison-id="${coinbase}"]`)).toContainText('Coinbase · Spot · USD');
+ await expect(button.locator('.comparison-legend-price')).toHaveText('Close 0.000000000042 USDT');await expect(legend.locator(`[data-comparison-id="${coinbase}"] .comparison-legend-price`)).toHaveText('Close 45.5 USD');await expect(legend.locator('[data-comparison-id="TON"] .comparison-legend-price')).toHaveText('Close 8.25 USDC');
  const read=()=>page.evaluate(()=>(window as any).__testComparisonChart());const before=await calls(page),canvas=await chart(page).locator('canvas').first().elementHandle();
  await button.click();await expect.poll(async()=>Object.fromEntries((await read()).series.filter((series:any)=>series.symbol==='TON').map((series:any)=>[series.id,series.visible]))).toEqual({TON:true,[coinbase]:true,[bybit]:false});
  expect((await read()).series.find((series:any)=>series.id===bybit).dotsVisible).toBe(false);expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);expect(await calls(page)).toEqual(before);
  await button.click();await expect.poll(async()=>(await read()).series.find((series:any)=>series.id===bybit).visible).toBe(true);
  await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);const midpoint=result.baselineTime+14*86400,rendered=await page.evaluate(time=>(window as any).__testComparisonChart(time),midpoint),bounds=(await chart(page).boundingBox())!,venueLine=rendered.series.find((series:any)=>series.id===bybit);
  await page.mouse.move(bounds.x+rendered.leftWidth+rendered.x,bounds.y+venueLine.y);await expect(panel(page).getByRole('tooltip')).toContainText('Bybit · Spot · USDT');
+ await expect(panel(page).getByRole('tooltip')).toContainText('Close 0.000000000031 USDT');await expect(panel(page).getByRole('tooltip')).toContainText(`${comparisonDate(midpoint)} UTC`);await expect(button.locator('.comparison-legend-price')).toHaveText('Close 0.000000000031 USDT');await expect(legend.locator(`[data-comparison-id="${coinbase}"] .comparison-legend-price`)).toHaveText('Close 42.125 USD');await expect(legend.locator('[data-comparison-id="TON"] .comparison-legend-price')).toHaveText('Close 7.125 USDC');
  await expect.poll(async()=>(await read()).hoveredId).toBe(bybit);expect((await read()).series.find((series:any)=>series.id===bybit).lineWidth).toBe(4);expect((await read()).series.filter((series:any)=>series.symbol==='TON'&&series.id!==bybit).every((series:any)=>series.lineWidth===2)).toBe(true);
  await page.mouse.move(0,0);
+ await expect(button.locator('.comparison-legend-price')).toHaveText('Close 0.000000000042 USDT');
 
  await expect(panel(page)).not.toContainText('using Binance spot');await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-ton-three-venues.png')});
  await reloadTestApp(page);await enter(page);await loaded(page,9);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(chosen);await expect(selected(page).locator(`[data-comparison-id="${bybit}"]`)).toContainText('Bybit · Spot · USDT');
@@ -240,7 +252,7 @@ test('catalog and data errors are retryable without inventing prices or overridi
  expect(at(line.line,9)).toMatchObject({value:9,color:'rgba(0, 0, 0, 0)'});expect(at(line.line,10)?.value).toBeUndefined();expect(at(line.line,11)).toMatchObject({value:11});expect(at(line.dots,9)).toMatchObject({value:9});expect(at(line.dots,10)?.value).toBeUndefined();
  const gap=await page.evaluate(time=>(window as any).__testComparisonChart(time),btc.points[10].time),bounds=(await chart(page).boundingBox())!;
  await page.mouse.move(bounds.x+gap.leftWidth+gap.x,bounds.y+200);await expect(panel(page).locator('.comparison-readout')).toContainText(comparisonDate(btc.points[10].time));
- await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('BTC',{exact:true})})).toContainText('—');await page.mouse.move(0,0);
+ const btcLegend=page.getByLabel('Comparison legend',{exact:true}).getByRole('button',{name:'BTC',exact:true});await expect(btcLegend).toContainText('—');await expect(btcLegend.locator('.comparison-legend-price')).toHaveText('Close —');await page.mouse.move(0,0);await expect(btcLegend.locator('.comparison-legend-price')).toHaveText('Close 1,280 USDC');
 });
 
 test('late daily results cannot replace a new period, hiding cancels work and releases every chart resource',async({page})=>{
@@ -341,6 +353,8 @@ test('canvas line hover reveals the asset name and highlights only real observat
  const read=()=>page.evaluate(time=>(window as any).__testComparisonChart(time),time);
  const widths=async()=>Object.fromEntries((await read()).series.map((series:any)=>[series.symbol,series.lineWidth]));
  const original=await widths(),tooltip=panel(page).getByRole('tooltip');
+ const legend=page.getByLabel('Comparison legend',{exact:true}),btcPrice=legend.getByRole('button',{name:'BTC',exact:true}).locator('.comparison-legend-price'),ethPrice=legend.getByRole('button',{name:'ETH',exact:true}).locator('.comparison-legend-price'),beforeCalls=await calls(page);
+ await expect(btcPrice).toHaveText('Close 1,280 USDC');await expect(ethPrice).toHaveText('Close 1,720 USDC');
  const canvas=await chart(page).locator('canvas').first().elementHandle();
  const viewport=()=>page.evaluate(times=>times.map(time=>(window as any).__testComparisonChart(time).x),[result.baselineTime,result.lastClosedTime]);
  const initial=await viewport(),bounds=(await chart(page).boundingBox())!;
@@ -360,16 +374,20 @@ test('canvas line hover reveals the asset name and highlights only real observat
   await page.mouse.move(bounds.x+rendered.leftWidth+x,bounds.y+y);
  };
  await moveTo('BTC',undefined,true);await expect(tooltip).toContainText('Bitcoin');await expect(tooltip).toContainText('BTC');
+ const displayedDay=await panel(page).locator('.comparison-readout').innerText(),day=[time,time+86400].find(value=>displayedDay.startsWith(comparisonDate(value)));expect(day).toBeDefined();
+ const observedClose=day===time?'Close 1,140.0000000000002 USDC':'Close 1,150 USDC';await expect(btcPrice).toHaveText(observedClose);await expect(tooltip).toContainText(observedClose);await expect(tooltip).toContainText(`${comparisonDate(day!)} UTC`);
  await expect.poll(async()=>(await widths()).BTC).toBeGreaterThan(original.BTC);
  expect(Object.entries(await widths()).filter(([symbol])=>symbol!=='BTC').every(([symbol,width])=>width===original[symbol])).toBe(true);
  expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);
  const highlighted=await viewport();expect(highlighted[0]).toBeCloseTo(zoomed[0],5);expect(highlighted[1]).toBeCloseTo(zoomed[1],5);
  await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-hover-bitcoin.png')});
  await moveTo('ETH');await expect(tooltip).toContainText('Ethereum');await expect(tooltip).not.toContainText('Bitcoin');
+ await expect(ethPrice).toHaveText('Close 1,859.9999999999998 USDC');await expect(tooltip).toContainText('Close 1,859.9999999999998 USDC');await expect(tooltip).toContainText(`${comparisonDate(time)} UTC`);
  await expect.poll(async()=>(await widths()).ETH).toBeGreaterThan(original.ETH);expect((await widths()).BTC).toBe(original.BTC);
  const size=page.viewportSize()!;await page.setViewportSize({width:size.width+1,height:size.height});
  await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(original);
  await page.mouse.move(0,0);await expect(tooltip).toHaveCount(0);await expect.poll(widths).toEqual(original);
+ await expect(btcPrice).toHaveText('Close 1,280 USDC');await expect(ethPrice).toHaveText('Close 1,720 USDC');expect(await calls(page)).toEqual(beforeCalls);
  await page.evaluate(()=>(window as any).__testComparisonSeries({BTC:{gaps:[14]},ETH:{error:'Daily source is unavailable'}}));
  await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await loaded(page,6);await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);
  const remaining=await widths();expect(remaining.ETH).toBeUndefined();

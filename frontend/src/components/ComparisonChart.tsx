@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {createChart,LineSeries,LineStyle,type AutoscaleInfo,type IChartApi,type IPriceLine,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
 import type {ComparisonResult} from '../workspace/comparison';
-import {comparisonColor,comparisonDate,comparisonIdentity,comparisonSeriesLabel,comparisonLineData,comparisonPercent,comparisonSource} from '../workspace/comparison';
+import {comparisonColor,comparisonDate,comparisonIdentity,comparisonSeriesLabel,comparisonLineData,comparisonPercent,comparisonPrice,comparisonSource} from '../workspace/comparison';
 import {chartThemeOptions} from '../charts/theme';
 import {getThemePalette} from '../workspace/themes';
 import {chartFontSize,useAppearanceFontSize} from '../workspace/appearance';
@@ -59,7 +59,7 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset}:{result:Comp
      // pointer event or explicit clear finish before processing another hit.
      try{for(const item of plotted)if(item.id===previous||item.id===symbol)item.line.applyOptions({lineWidth:item.id===symbol?4:2});}finally{styling=false;}
     }
-    setFocus(symbol&&point&&host.current?{symbol,x:Math.max(8,Math.min(point.x+chart.priceScale('left').width()+12,host.current.clientWidth-208)),y:Math.max(8,Math.min(point.y+12,host.current.clientHeight-106))}:null);
+    setFocus(symbol&&point&&host.current?{symbol,x:Math.max(8,Math.min(point.x+chart.priceScale('left').width()+12,host.current.clientWidth-248)),y:Math.max(8,Math.min(point.y+12,host.current.clientHeight-160))}:null);
    };
    const updateTheme=()=>{const next=getThemePalette(document.documentElement.dataset.theme??'light');chart.applyOptions({...chartThemeOptions(next),leftPriceScale:{borderColor:next.chartBorder},grid:{vertLines:{visible:false},horzLines:{color:next.chartGrid,style:LineStyle.Dotted}}});zeroLine?.applyOptions({color:next.chartBorder});};
    // Keep visibility updates separate from chart creation and fitContent.
@@ -108,17 +108,18 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset}:{result:Comp
  useEffect(()=>{applyVisibility.current?.(hiddenAssets);},[hiddenAssets,result]);
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(12,fontSize)}});},[fontSize]);
  const date=hover??result.lastClosedTime;
- const focused=focus?usable.find(series=>comparisonIdentity(series.asset)===focus.symbol)?.asset:undefined;
+ const focusedSeries=focus?usable.find(series=>comparisonIdentity(series.asset)===focus.symbol):undefined,focused=focusedSeries?.asset;
+ const focusedPoint=hover===null?undefined:focusedSeries?.points.find(point=>point.time===hover);
  return <div className="comparison-chart">
   <div className="comparison-chart-heading"><div><h2>Change since the start of the period</h2><p>Daily market closes relative to {comparisonDate(result.baselineTime)} · UTC</p></div><button type="button" onClick={()=>chartRef.current?.timeScale().fitContent()}>Show entire period</button></div>
   {error&&<p className="screener-error" role="alert">{error}</p>}
   <div className="comparison-plot-wrap"><div ref={host} className="comparison-plot" data-testid="comparison-chart" data-series-count={usable.length} data-baseline-time={result.baselineTime} aria-label="Daily percentage change since the common starting close"/>
-   {focus&&focused&&<div className="comparison-line-tooltip" role="tooltip" data-asset-symbol={focused.symbol} style={{left:focus.x,top:focus.y,borderColor:comparisonColor(comparisonIdentity(focused))}}><strong>{comparisonSeriesLabel(focused,usable.map(series=>series.asset))}</strong><small>{focused.name}</small><small>{comparisonSource(focused)} · {focused.nativeId}</small></div>}
+   {focus&&focused&&<div className="comparison-line-tooltip" role="tooltip" data-asset-symbol={focused.symbol} style={{left:focus.x,top:focus.y,borderColor:comparisonColor(comparisonIdentity(focused))}}><strong>{comparisonSeriesLabel(focused,usable.map(series=>series.asset))}</strong><small>{focused.name}</small><small className="comparison-tooltip-price">Close {comparisonPrice(focusedPoint?.close,focused.quoteAsset)}</small><small>{hover===null?'Daily close unavailable':`${comparisonDate(hover)} UTC`}</small><small>{comparisonSource(focused)} · {focused.nativeId}</small></div>}
   </div>
   <div className="comparison-legend" aria-label="Comparison legend">{usable.map(series=>{
    const point=series.points.find(point=>point.time===date);
    const id=comparisonIdentity(series.asset),label=comparisonSeriesLabel(series.asset,usable.map(item=>item.asset)),visible=!hiddenAssets.has(id);
-   return <button type="button" key={id} data-comparison-id={id} aria-label={label} aria-pressed={visible} data-highlighted={visible&&focus?.symbol===id} title={`${comparisonSource(series.asset)} · ${series.asset.nativeId}`} onClick={()=>onToggleAsset(id)}><i style={{background:visible?comparisonColor(comparisonIdentity(series.asset)):'var(--muted)'}}/><strong>{label}</strong><span className={(point?.pct??0)<0?'down':'up'}>{comparisonPercent(point?.pct)}</span></button>;
+   return <button type="button" key={id} data-comparison-id={id} aria-label={label} aria-pressed={visible} data-highlighted={visible&&focus?.symbol===id} title={`${comparisonSource(series.asset)} · ${series.asset.nativeId}`} onClick={()=>onToggleAsset(id)}><i style={{background:visible?comparisonColor(comparisonIdentity(series.asset)):'var(--muted)'}}/><strong>{label}</strong><span className={(point?.pct??0)<0?'down':'up'}>{comparisonPercent(point?.pct)}</span><small className="comparison-legend-price">Close {comparisonPrice(point?.close,series.asset.quoteAsset)}</small></button>;
   })}</div>
   <p className="comparison-readout" aria-live="off">{comparisonDate(date)} UTC{hover===null?' · Latest completed daily close':''}</p>
  </div>;
