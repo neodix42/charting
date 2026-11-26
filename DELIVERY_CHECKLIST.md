@@ -7,6 +7,7 @@
 - [x] Label failed/stale status and retained protection as saved/unverified, preserving values and UTC provenance without inventing broker state.
 - [x] Complete Java suite, focused Go race, 378 units and 17 trade-history browser cases pass; fixtures are fictional and user profiles remain unchanged.
 - [x] Full deterministic/native suites, production frontend/chart builds and cross-layer diff review pass.
+- [x] Reproduce the hosted independent-hub test race, retain all sharing assertions and pass 100 race repetitions plus exchange race/vet after waiting for real candle readiness.
 - [ ] Package/hosted results are tracked for the delivery commit. Current broker state, native desktop interaction and Windows GUI execution remain unverified.
 
 ## Bid/Ask tickets and chart margin legends — 2026-11-26

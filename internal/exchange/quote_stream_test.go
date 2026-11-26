@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -116,9 +117,22 @@ func TestNativeQuoteTopicsShareSocketAndNeverCreateTradesOrCandles(t *testing.T)
 		t.Run(test.provider+"-"+test.market+"-"+test.instrument, func(t *testing.T) {
 			var sockets, bookSubscriptions atomic.Int32
 			separateBookEndpoint := test.provider == "binance" && test.market == "perpetual"
+			candleHandshake := make(chan struct{})
+			var releaseHandshake sync.Once
+			releaseCandle := func() { releaseHandshake.Do(func() { close(candleHandshake) }) }
 			upgrader := websocket.Upgrader{}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if websocket.IsWebSocketUpgrade(r) {
+					if separateBookEndpoint && !strings.Contains(r.URL.Path, "/public/ws") {
+						// Public books are independent of the candle transport. Force
+						// them to arrive before its handshake instead of relying on
+						// favorable scheduling between the two provider hubs.
+						select {
+						case <-candleHandshake:
+						case <-r.Context().Done():
+							return
+						}
+					}
 					conn, err := upgrader.Upgrade(w, r, nil)
 					if err != nil {
 						return
@@ -195,6 +209,7 @@ func TestNativeQuoteTopicsShareSocketAndNeverCreateTradesOrCandles(t *testing.T)
 				}
 			}))
 			defer server.Close()
+			defer releaseCandle()
 			generic, _ := New(test.provider)
 			a := generic.(*publicAdapter)
 			a.base, a.futuresBase, a.inverseBase = server.URL, server.URL, server.URL
@@ -223,19 +238,45 @@ func TestNativeQuoteTopicsShareSocketAndNeverCreateTradesOrCandles(t *testing.T)
 				}()
 			}
 			seen := map[string]int64{}
+			ready := map[string]bool{}
+			record := func(value observation) {
+				if value.bars != 0 || value.health.LastTradeAt != 0 {
+					t.Fatal("book fabricated candle or trade", value)
+				}
+				if quote := value.health.Quote; quote != nil && quote.Bid != nil && quote.Ask != nil && *quote.Bid == 100 && *quote.Ask == 101 {
+					seen[value.interval] = quote.Time
+				}
+				if value.health.State == "live" {
+					ready[value.interval] = true
+				}
+			}
 			deadline := time.NewTimer(4 * time.Second)
 			defer deadline.Stop()
 			for len(seen) < 2 {
 				select {
 				case value := <-observations:
-					if value.bars != 0 || value.health.LastTradeAt != 0 {
-						t.Fatal("book fabricated candle or trade", value)
-					}
-					if quote := value.health.Quote; quote != nil && quote.Bid != nil && quote.Ask != nil && *quote.Bid == 100 && *quote.Ask == 101 {
-						seen[value.interval] = quote.Time
-					}
+					record(value)
+				case err := <-done:
+					t.Fatal("stream ended before both book observations", err)
 				case <-deadline.C:
 					t.Fatal("shared top-of-book did not reach both intervals", seen)
+				}
+			}
+			if separateBookEndpoint && (len(ready) != 0 || sockets.Load() != 1 || a.Diagnostics().Sockets != 1) {
+				t.Fatal("books must arrive independently while the candle handshake is blocked", ready, sockets.Load(), a.Diagnostics())
+			}
+			releaseCandle()
+			// Live health follows the interval's candle subscription and initial
+			// history response. Quote delivery alone cannot establish readiness of
+			// Binance derivatives' separate market socket.
+			for len(ready) < 2 {
+				select {
+				case value := <-observations:
+					record(value)
+				case err := <-done:
+					t.Fatal("stream ended before both candle subscriptions became ready", err)
+				case <-deadline.C:
+					t.Fatal("both candle subscriptions did not become ready", ready, a.Diagnostics())
 				}
 			}
 			wantSockets := int32(1)
