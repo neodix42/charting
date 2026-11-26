@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest';
-import {comparisonColor,comparisonDate,comparisonLineData,comparisonPercent,ComparisonViewWriter,copyComparisonView,defaultComparisonView,type ComparisonView} from '../workspace/comparison';
+import {comparisonColor,comparisonDate,comparisonExchange,comparisonFeedIdentity,comparisonIdentity,comparisonOptionName,comparisonSelectionAsset,comparisonSelectionLabel,comparisonSeriesLabel,comparisonSource,comparisonLineData,comparisonPercent,ComparisonViewWriter,copyComparisonView,defaultComparisonView,type ComparisonView} from '../workspace/comparison';
 
 describe('Comparison view and chart values',()=>{
  it('defaults to four weeks and exactly the requested seven assets with independent copies',()=>{
@@ -8,6 +8,39 @@ describe('Comparison view and chart values',()=>{
   expect(defaultComparisonView().assets).toHaveLength(7);
   expect(new Set(value.assets.map(comparisonColor)).size).toBe(7);
   expect(comparisonColor('BTC')).toBe(comparisonColor('BTC'));
+ });
+ it('keeps source identities and labels distinct for the same canonical asset',()=>{
+  const auto={symbol:'TON',displaySymbol:'TON (GRAM)',name:'Toncoin',exchange:'hyperliquid',market:'perpetual',nativeId:'GRAM',quoteAsset:'USDC'};
+  const bybit={...auto,id:'bybit|spot|GRAMUSDT',exchange:'bybit',market:'spot',nativeId:'GRAMUSDT',quoteAsset:'USDT'};
+  const coinbase={...auto,id:'coinbase|spot|TON-USD',displaySymbol:'TON',exchange:'coinbase',market:'spot',nativeId:'TON-USD',quoteAsset:'USD'};
+  expect(comparisonIdentity(auto)).toBe('TON');expect(comparisonIdentity(bybit)).toBe('bybit|spot|GRAMUSDT');
+  expect(comparisonSource(bybit)).toBe('Bybit · Spot · USDT');expect(comparisonSource(coinbase)).toBe('Coinbase · Spot · USD');
+  expect(comparisonExchange('binance')).toBe('Binance');expect(comparisonExchange('hyperliquid')).toBe('Hyperliquid');
+  expect(comparisonOptionName(bybit)).toBe('TON (GRAM) Bybit Spot USDT');
+  expect(comparisonSeriesLabel(auto,[auto])).toBe('TON (GRAM)');
+  expect(comparisonSeriesLabel(bybit,[auto,bybit,coinbase])).toBe('TON (GRAM) · Bybit · Spot · USDT');
+  expect(new Set([auto,bybit,coinbase].map(asset=>comparisonColor(comparisonIdentity(asset)))).size).toBe(3);
+  const copy=copyComparisonView({weeks:26,assets:['TON',bybit.id,coinbase.id]});expect(copy.assets).toEqual(['TON','bybit|spot|GRAMUSDT','coinbase|spot|TON-USD']);
+ });
+ it('recognizes the same native feed through automatic and explicit selection IDs',()=>{
+  const auto={symbol:'TON',exchange:'hyperliquid',market:'perpetual',nativeId:'GRAM',quoteAsset:'USDC',name:'Gram'};
+  const explicit={...auto,id:'hyperliquid|perpetual|GRAM'};
+  expect(comparisonFeedIdentity(auto)).toBe(comparisonFeedIdentity(explicit));
+  expect(comparisonFeedIdentity({...explicit,exchange:'bybit'})).not.toBe(comparisonFeedIdentity(auto));
+  expect(comparisonFeedIdentity({...explicit,market:'spot'})).not.toBe(comparisonFeedIdentity(auto));
+  expect(comparisonFeedIdentity({...explicit,nativeId:'TON'})).not.toBe(comparisonFeedIdentity(auto));
+  expect(comparisonFeedIdentity({...explicit,feedKey:{exchange:'coinbase',market:'spot',instrument:'TON-USD',timeframe:'1d'}})).toBe(JSON.stringify(['coinbase','spot','TON-USD']));
+  expect(comparisonFeedIdentity({...auto,exchange:'',nativeId:''})).toBeUndefined();
+ });
+ it('displays saved market IDs safely without inventing quote or feed metadata',()=>{
+  const saved=comparisonSelectionAsset('hyperliquid|perpetual|xyz%3AaBc');
+  expect(saved).toMatchObject({symbol:'xyz:aBc',nativeId:'xyz:aBc',exchange:'hyperliquid',market:'perpetual',quoteAsset:''});
+  expect(saved?.feedKey).toBeUndefined();expect(comparisonSource(saved!)).toBe('Hyperliquid · Perpetual');
+  expect(comparisonSelectionLabel('coinbase|spot|TON-USD')).toBe('TON-USD');
+  expect(comparisonSelectionLabel('bybit|spot|%E6%B5%8BUSDT')).toBe('测USDT');
+  expect(comparisonSelectionAsset('coinbase|spot|%XX')).toBeUndefined();
+  expect(comparisonSelectionLabel('coinbase|spot|%XX')).toBe('Selected market');
+  expect(comparisonSelectionLabel('BTC')).toBe('BTC');
  });
  it('formats UTC baseline dates and genuine missing/zero/signed percentage values',()=>{
   expect(comparisonDate(Date.UTC(2026,10,24,23,59)/1000)).toBe('24 Nov 2026');

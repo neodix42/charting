@@ -14,11 +14,11 @@ const selected=(page:Page)=>page.getByLabel('Selected comparison assets',{exact:
 async function enter(page:Page){await tab(page).click();await expect(panel(page)).toBeVisible();}
 async function loaded(page:Page,count=7){await expect(chart(page)).toHaveAttribute('data-series-count',String(count));await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:1});}
 async function frames(page:Page){await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));}
-async function add(page:Page,symbol:string,market:'Perpetual'|'Spot'='Perpetual'){
+async function add(page:Page,symbol:string,market:'Perpetual'|'Spot'='Perpetual',exchange=symbol==='DCR'||symbol==='ZEN'||symbol==='XAUT'?'Binance':'Hyperliquid',quote=exchange==='Hyperliquid'?'USDC':exchange==='Coinbase'?'USD':'USDT'){
  await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();
- const picker=page.getByLabel('Comparison assets',{exact:true});await picker.getByRole('button',{name:'All',exact:true}).click();
+ const picker=page.getByLabel('Comparison assets',{exact:true});await picker.getByRole('button',{name:'All',exact:true}).click();await picker.getByRole('button',{name:'All sources',exact:true}).click();
  await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill(symbol);
- await picker.getByRole('button',{name:`${symbol} ${market}`,exact:true}).click();
+ await picker.getByRole('button',{name:`${symbol} ${exchange} ${market} ${quote}`,exact:true}).click();
 }
 
 test('Comparison is a fixed Daily change tool with seven common-baseline percentage lines and explicit venue labels',async({page},testInfo)=>{
@@ -52,9 +52,9 @@ test('the verified TON rename displays GRAM while keeping canonical selection an
  await expect(page.getByLabel('Comparison legend',{exact:true}).getByRole('button').filter({has:page.getByText('TON (GRAM)',{exact:true})})).toHaveAttribute('title','Hyperliquid · Perpetual · USDC · GRAM');
  await page.getByRole('button',{name:'Remove TON from comparison',exact:true}).click();await loaded(page,6);
  await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();const picker=page.getByLabel('Comparison assets',{exact:true});
- await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('GRAM');await expect(picker.locator('.product-list > button')).toHaveCount(1);
- await picker.getByRole('button',{name:'TON (GRAM) Perpetual',exact:true}).click();await loaded(page);
- await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets)).toEqual(['BTC','ETH','HYPE','ZEN','APT','NEAR','TON']);
+ await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('GRAM');await expect(picker.locator('.product-list > button')).toHaveCount(4);
+ await picker.getByRole('button',{name:'TON (GRAM) Hyperliquid Perpetual USDC',exact:true}).click();await loaded(page);
+ await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets)).toEqual(['BTC','ETH','HYPE','ZEN','APT','NEAR','hyperliquid|perpetual|GRAM']);
  expect((await page.evaluate(()=>(window as any).__testComparisonRequests().at(-1).view.assets)).includes('GRAM')).toBe(false);
  await reloadTestApp(page);await enter(page);await loaded(page);await expect(selected(page).locator('strong')).toHaveText(['BTC','ETH','HYPE','ZEN','APT','NEAR','TON (GRAM)']);
 });
@@ -68,7 +68,7 @@ test('DCR compares Binance spot daily closes without requiring a Hyperliquid mar
  expect(dcr.asset).toMatchObject({symbol:'DCR',name:'Decred',exchange:'binance',market:'spot',nativeId:'DCRUSDT',quoteAsset:'USDT',feedKey:{exchange:'binance',market:'spot',instrument:'DCRUSDT',timeframe:'1d'}});
  expect(dcr.error).toBe('');expect(dcr.points).toHaveLength(29);expect(dcr.points[0]).toMatchObject({time:result.baselineTime,pct:0});expect(dcr.points.at(-1).time).toBe(result.lastClosedTime);
  expect(dcr.points.every((point:any)=>Number.isFinite(point.close)&&Number.isFinite(point.pct))).toBe(true);
- await expect(panel(page)).toContainText('DCR: using Binance spot DCRUSDT (USDT)');
+ await expect(panel(page)).not.toContainText('DCR: using Binance');
  await expect(panel(page)).not.toContainText('no eligible USD-quoted Hyperliquid market');await expect(panel(page)).not.toContainText('context canceled');await expect(panel(page).getByRole('alert')).toHaveCount(0);
  const legend=page.getByLabel('Comparison legend',{exact:true}).getByRole('button',{name:'DCR',exact:true});
  await expect(legend).toHaveAttribute('title','Binance · Spot · USDT · DCRUSDT');await expect(legend).toHaveAttribute('aria-pressed','true');await expect(legend).toContainText('+4.20%');
@@ -76,6 +76,67 @@ test('DCR compares Binance spot daily closes without requiring a Hyperliquid mar
  await legend.click();await expect(legend).toHaveAttribute('aria-pressed','false');await expect.poll(async()=>{const line=await read();return[line.visible,line.dotsVisible];}).toEqual([false,false]);
  await legend.click();await expect(legend).toHaveAttribute('aria-pressed','true');await expect.poll(async()=>{const line=await read();return[line.visible,line.dotsVisible];}).toEqual([true,true]);expect(await calls(page)).toEqual(before);
  await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-dcr-binance.png')});
+});
+
+test('all source options remain selectable and same-asset venues have independent curves, toggles and saved identities',async({page},testInfo)=>{
+ await page.setViewportSize({width:1600,height:1200});await openTestApp(page);await enter(page);await loaded(page);
+ await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();const picker=page.getByLabel('Comparison assets',{exact:true});
+ for(const query of ['TON','GRAM']){
+  await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill(query);
+  await expect(picker.getByRole('button',{name:'TON (GRAM) Hyperliquid Perpetual USDC',exact:true})).toHaveCount(0);
+  for(const name of ['TON (GRAM) Bybit Spot USDT','TON (GRAM) Bybit Perpetual USDT','TON Coinbase Spot USD'])await expect(picker.getByRole('button',{name,exact:true})).toHaveCount(1);
+  await expect(picker.locator('.product-list > button')).toHaveCount(3);
+ }
+ const sourceFilter=picker.getByRole('group',{name:'Comparison data source',exact:true});await sourceFilter.getByRole('button',{name:'Coinbase',exact:true}).click();
+ await expect(picker.locator('.product-list > button')).toHaveCount(1);await picker.getByRole('button',{name:'TON Coinbase Spot USD',exact:true}).click();await loaded(page,8);
+ await add(page,'TON (GRAM)','Spot','Bybit');await loaded(page,9);
+ await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();await picker.getByRole('button',{name:'All sources',exact:true}).click();await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('GRAM');
+ await expect(picker.getByRole('button',{name:'TON (GRAM) Hyperliquid Perpetual USDC',exact:true})).toHaveCount(0);await expect(picker.getByRole('button',{name:'TON (GRAM) Bybit Spot USDT',exact:true})).toHaveCount(0);await expect(picker.getByRole('button',{name:'TON Coinbase Spot USD',exact:true})).toHaveCount(0);await expect(picker.getByRole('button',{name:'TON (GRAM) Bybit Perpetual USDT',exact:true})).toHaveCount(1);await picker.getByRole('textbox',{name:'Search instruments',exact:true}).press('Escape');
+
+ const bybit='bybit|spot|GRAMUSDT',coinbase='coinbase|spot|TON-USD';
+ const chosen=await page.evaluate(()=>(window as any).__testComparisonView());expect(chosen.assets).toEqual([...defaults,coinbase,bybit]);
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult());expect(result.series.filter((series:any)=>series.asset.symbol==='TON')).toHaveLength(3);
+ for(const id of [coinbase,bybit])expect(result.series.find((series:any)=>series.asset.id===id).points[0]).toMatchObject({time:result.baselineTime,pct:0});
+ const legend=page.getByLabel('Comparison legend',{exact:true}),button=legend.locator(`[data-comparison-id="${bybit}"]`);
+ await expect(button).toContainText('Bybit · Spot · USDT');await expect(legend.locator(`[data-comparison-id="${coinbase}"]`)).toContainText('Coinbase · Spot · USD');
+ const read=()=>page.evaluate(()=>(window as any).__testComparisonChart());const before=await calls(page),canvas=await chart(page).locator('canvas').first().elementHandle();
+ await button.click();await expect.poll(async()=>Object.fromEntries((await read()).series.filter((series:any)=>series.symbol==='TON').map((series:any)=>[series.id,series.visible]))).toEqual({TON:true,[coinbase]:true,[bybit]:false});
+ expect((await read()).series.find((series:any)=>series.id===bybit).dotsVisible).toBe(false);expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);expect(await calls(page)).toEqual(before);
+ await button.click();await expect.poll(async()=>(await read()).series.find((series:any)=>series.id===bybit).visible).toBe(true);
+ await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);const midpoint=result.baselineTime+14*86400,rendered=await page.evaluate(time=>(window as any).__testComparisonChart(time),midpoint),bounds=(await chart(page).boundingBox())!,venueLine=rendered.series.find((series:any)=>series.id===bybit);
+ await page.mouse.move(bounds.x+rendered.leftWidth+rendered.x,bounds.y+venueLine.y);await expect(panel(page).getByRole('tooltip')).toContainText('Bybit · Spot · USDT');
+ await expect.poll(async()=>(await read()).hoveredId).toBe(bybit);expect((await read()).series.find((series:any)=>series.id===bybit).lineWidth).toBe(4);expect((await read()).series.filter((series:any)=>series.symbol==='TON'&&series.id!==bybit).every((series:any)=>series.lineWidth===2)).toBe(true);
+ await page.mouse.move(0,0);
+
+ await expect(panel(page)).not.toContainText('using Binance spot');await panel(page).locator('.comparison-chart').scrollIntoViewIfNeeded();await frames(page);await panel(page).locator('.comparison-chart').screenshot({path:testInfo.outputPath('comparison-ton-three-venues.png')});
+ await reloadTestApp(page);await enter(page);await loaded(page,9);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(chosen);await expect(selected(page).locator(`[data-comparison-id="${bybit}"]`)).toContainText('Bybit · Spot · USDT');
+});
+
+test('26-week missing TON baseline stays explicit while a selected longer-history source supplies the real window',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonSeries({TON:{missingBaseline:true},'bybit|spot|GRAMUSDT':{gaps:[21,22,23,24,25]}}));await enter(page);await loaded(page,6);
+ await panel(page).getByRole('button',{name:'26w',exact:true}).click();await loaded(page,6);
+ const original=await page.evaluate(()=>(window as any).__testComparisonLastResult());const errors=page.getByLabel('Unavailable comparison assets',{exact:true});
+ await expect(errors).toContainText(comparisonDate(original.baselineTime));await expect(errors).toContainText('02 Jul 2026 UTC');await expect(errors).toContainText('choose another source');
+ expect(original.series.find((series:any)=>series.asset.id==='TON').points).toEqual([]);
+ await add(page,'TON (GRAM)','Spot','Bybit');await loaded(page,7);const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),series=result.series.find((series:any)=>series.asset.id==='bybit|spot|GRAMUSDT');
+ expect(series.points).toHaveLength(183);expect(series.points[0]).toMatchObject({time:original.baselineTime,pct:0});expect(series.points.filter((point:any)=>point.pct===null)).toHaveLength(5);expect(series.asset.nativeId).toBe('GRAMUSDT');
+ await page.getByRole('button',{name:'Remove TON from comparison',exact:true}).click();await loaded(page,7);await expect(errors).toHaveCount(0);await expect(selected(page).locator('[data-comparison-id="bybit|spot|GRAMUSDT"]')).toContainText('Bybit · Spot · USDT');
+});
+
+test('an unavailable automatic provider does not block explicit healthy markets or hide real discovery warnings',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>{const fixture=window as any;fixture.__testComparisonCatalog({assets:[],markets:[{id:'coinbase|spot|TON-USD',symbol:'TON',name:'Toncoin',exchange:'coinbase',market:'spot',nativeId:'TON-USD',quoteAsset:'USD'}],autoError:'Automatic source unavailable: Hyperliquid discovery failed',warnings:['Hyperliquid discovery failed; other source choices remain available']});fixture.__testComparisonSeries({BTC:{error:'Automatic source unavailable: choose an explicit source'}});});
+ await enter(page);await expect(panel(page)).toContainText('Hyperliquid discovery failed');await add(page,'TON','Spot','Coinbase');await loaded(page,1);
+ const result=await page.evaluate(()=>(window as any).__testComparisonLastResult()),series=result.series.find((series:any)=>series.asset.id==='coinbase|spot|TON-USD');expect(series.error).toBe('');expect(series.points).toHaveLength(29);await expect(panel(page)).toContainText('Hyperliquid discovery failed');
+});
+
+test('a saved market missing from discovery keeps a readable venue/native label without exposing its opaque ID',async({page})=>{
+ const id='coinbase|spot|OLD-TOKEN';
+ await page.addInitScript(id=>sessionStorage.setItem('cryptodesk-explicit-test-comparison-view',JSON.stringify({weeks:4,assets:[id]})),id);
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonErrors({catalog:'Public catalog discovery is unavailable'}));await enter(page);
+ const asset=selected(page).locator(`[data-comparison-id="${id}"]`);await expect(asset.locator('strong')).toHaveText('OLD-TOKEN');await expect(asset).toContainText('Coinbase · Spot');await expect(asset).not.toContainText(id);
+ await page.evaluate(()=>{(window as any).__testComparisonErrors({});(window as any).__testComparisonCatalog({assets:[],markets:[],warnings:[]});});await panel(page).getByRole('button',{name:'Retry assets',exact:true}).click();
+ await expect(page.getByLabel('Unavailable comparison assets',{exact:true})).toContainText('OLD-TOKEN');await expect(panel(page)).not.toContainText(id);await expect(chart(page)).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__testComparisonView().assets)).toEqual([id]);
 });
 
 test('refreshed actual sources override stale catalog labels and unavailable assets never retain an old provider',async({page})=>{
@@ -129,11 +190,11 @@ test('asset removal, search and market filters keep per-asset sources and persis
  await page.getByRole('button',{name:'Remove ZEN from comparison',exact:true}).click();
  await page.getByRole('button',{name:'Add comparison asset',exact:true}).click();const picker=page.getByLabel('Comparison assets',{exact:true});
  await picker.getByRole('button',{name:'Spot',exact:true}).click();await picker.getByRole('textbox',{name:'Search instruments',exact:true}).fill('Horizen');
- await expect(picker.locator('.product-list > button')).toHaveCount(1);await picker.getByRole('button',{name:'ZEN Spot',exact:true}).click();
+ await expect(picker.locator('.product-list > button')).toHaveCount(1);await picker.getByRole('button',{name:'ZEN Binance Spot USDT',exact:true}).click();
  await add(page,'SOL');await loaded(page,8);
  await expect(selected(page).locator('.comparison-asset').filter({has:page.getByText('ZEN',{exact:true})})).toContainText('Binance · Spot');
  const symbols=await page.evaluate(()=>(window as any).__testComparisonView().assets);
- for(const symbol of symbols)await page.getByRole('button',{name:`Remove ${symbol} from comparison`,exact:true}).click();
+ for(const id of symbols)await selected(page).locator(`[data-comparison-id=${JSON.stringify(id)}]`).getByRole('button').click();
  await expect(panel(page)).toContainText('Add assets to compare');await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});
  await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonView().assets)).toEqual([]);
  await reloadTestApp(page);await enter(page);await expect(panel(page)).toContainText('Add assets to compare');await expect(selected(page).locator('.comparison-asset')).toHaveCount(0);expect((await calls(page)).data).toBe(0);

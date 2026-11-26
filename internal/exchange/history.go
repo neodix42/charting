@@ -22,9 +22,6 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 	if limit <= 0 || (limit > 1000 && !fullSnapshot) {
 		limit = 300
 	}
-	if a.provider == "coinbase" && k.Timeframe != "1w" && limit > 350 {
-		limit = 350
-	}
 	if to <= 0 {
 		to = time.Now().Unix() + 1
 	}
@@ -44,6 +41,24 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 	}
 	if a.provider == "coinbase" && k.Timeframe == "1w" {
 		return a.coinbaseWeeklyHistory(ctx, k, from, to, time.Now().Unix())
+	}
+	// Coinbase's 350-candle cap applies to each HTTP page, not to the caller's
+	// complete bounded range. Advance by UTC range even through empty pages.
+	if a.provider == "coinbase" && to-from > 350*d {
+		var bars []domain.Candle
+		for cursor := from; cursor < to; {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			end := min(to, cursor+350*d)
+			page, err := a.History(ctx, k, cursor, end, 350)
+			if err != nil {
+				return nil, err
+			}
+			bars = append(bars, page...)
+			cursor = end
+		}
+		return Normalize(bars, d)
 	}
 	// COIN-M permits at most 200 days per REST request. Keep each request
 	// within that window without truncating a user's daily/weekly history page.
@@ -125,9 +140,11 @@ func (a *publicAdapter) History(ctx context.Context, k domain.FeedKey, from, to 
 		}
 	case "coinbase":
 		q.Set("start", strconv.FormatInt(from, 10))
-		q.Set("end", strconv.FormatInt(to, 10))
+		// The provider includes `end`. Sending our exclusive bound can add one
+		// extra candle and drop the oldest requested candle at the page limit.
+		q.Set("end", strconv.FormatInt(to-1, 10))
 		q.Set("granularity", coinbaseIntervals[k.Timeframe])
-		q.Set("limit", strconv.Itoa(limit))
+		q.Set("limit", strconv.Itoa(min(limit, 350)))
 		var payload struct {
 			Candles []struct{ Start, Open, High, Low, Close, Volume string } `json:"candles"`
 		}

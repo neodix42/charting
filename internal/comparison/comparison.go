@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +24,7 @@ type View struct {
 	Assets []string `json:"assets"`
 }
 type Asset struct {
+	ID            string          `json:"id,omitempty"`
 	Symbol        string          `json:"symbol"`
 	DisplaySymbol string          `json:"displaySymbol,omitempty"`
 	Name          string          `json:"name"`
@@ -35,8 +35,10 @@ type Asset struct {
 	FeedKey       *domain.FeedKey `json:"feedKey,omitempty"`
 }
 type Catalog struct {
-	Assets   []Asset  `json:"assets"`
-	Warnings []string `json:"warnings"`
+	Assets    []Asset  `json:"assets"`
+	Markets   []Asset  `json:"markets"`
+	Warnings  []string `json:"warnings"`
+	AutoError string   `json:"autoError,omitempty"`
 }
 type Point struct {
 	Time  int64    `json:"time"`
@@ -114,9 +116,19 @@ func normalizeView(value View) (View, error) {
 	result := View{Weeks: value.Weeks, Assets: make([]string, 0, len(value.Assets))}
 	seen := map[string]bool{}
 	for _, symbol := range value.Assets {
-		symbol = strings.ToUpper(strings.TrimSpace(symbol))
-		if !symbolPattern.MatchString(symbol) || seen[symbol] {
-			return View{}, errors.New("comparison assets must be unique base symbols")
+		symbol = strings.TrimSpace(symbol)
+		if strings.Contains(symbol, "|") {
+			if !validMarketID(symbol) {
+				return View{}, errors.New("comparison source selection is invalid")
+			}
+		} else {
+			symbol = strings.ToUpper(symbol)
+			if !symbolPattern.MatchString(symbol) {
+				return View{}, errors.New("comparison assets must be base symbols or explicit market selections")
+			}
+		}
+		if seen[symbol] {
+			return View{}, errors.New("comparison selections must be unique")
 		}
 		seen[symbol] = true
 		result.Assets = append(result.Assets, symbol)
@@ -137,122 +149,6 @@ func (m *Manager) operation(parent context.Context) (context.Context, context.Ca
 	m.wg.Add(1)
 	return ctx, func() { stop(); cancel(); m.wg.Done() }, nil
 }
-func cloneCatalog(value Catalog) Catalog {
-	result := Catalog{Assets: append([]Asset{}, value.Assets...), Warnings: append([]string{}, value.Warnings...)}
-	for i := range result.Assets {
-		if key := result.Assets[i].FeedKey; key != nil {
-			copy := *key
-			result.Assets[i].FeedKey = &copy
-		}
-	}
-	return result
-}
-func (m *Manager) Catalog(ctx context.Context) (Catalog, error) {
-	ctx, done, err := m.operation(ctx)
-	if err != nil {
-		return Catalog{}, err
-	}
-	defer done()
-	return m.loadCatalog(ctx)
-}
-func (m *Manager) loadCatalog(ctx context.Context) (Catalog, error) {
-	select {
-	case m.catalogGate <- struct{}{}:
-	case <-ctx.Done():
-		return Catalog{}, ctx.Err()
-	}
-	defer func() { <-m.catalogGate }()
-	m.mu.Lock()
-	cached, at := cloneCatalog(m.catalog), m.catalogAt
-	m.mu.Unlock()
-	if !at.IsZero() && m.opts.Now().Sub(at) < time.Minute {
-		return cached, ctx.Err()
-	}
-	if m.opts.Source == nil {
-		return Catalog{}, errors.New("comparison market data is unavailable")
-	}
-	hyper, err := m.opts.Source.Instruments(ctx, "hyperliquid")
-	if err != nil {
-		return Catalog{}, fmt.Errorf("Hyperliquid discovery failed; asset absence cannot be verified: %w", err)
-	}
-	if len(hyper) == 0 {
-		return Catalog{}, errors.New("Hyperliquid returned an empty catalog; asset absence cannot be verified")
-	}
-	for _, item := range hyper {
-		if warning := item.ProviderMetadata["catalogWarning"]; warning != "" {
-			return Catalog{}, fmt.Errorf("Hyperliquid discovery is incomplete; asset absence cannot be verified: %s", warning)
-		}
-	}
-	selected := map[string]Asset{}
-	ranks := map[string]int{}
-	now := m.opts.Now()
-	add := func(item domain.Instrument, provider string, rank int) {
-		base := strings.ToUpper(item.BaseAsset)
-		if !symbolPattern.MatchString(base) || !supportsDaily(item) || !available(item.Availability) {
-			return
-		}
-		if provider == "hyperliquid" && !usdQuote(item.QuoteAsset) {
-			return
-		}
-		key := domain.FeedKey{Exchange: provider, Market: item.Market, Instrument: item.NativeID, Timeframe: "1d"}
-		if key.Validate() != nil {
-			return
-		}
-		candidate := Asset{Symbol: base, Name: assetName(base, item.ProviderMetadata["baseFullName"]), Exchange: provider, Market: item.Market, NativeID: item.NativeID, QuoteAsset: item.QuoteAsset, FeedKey: &key}
-		if renamedToncoin(item, provider, now) {
-			candidate.Symbol, candidate.DisplaySymbol, candidate.Name = "TON", "TON (GRAM)", "Gram (formerly Toncoin)"
-		}
-		symbol := candidate.Symbol
-		old, exists := selected[symbol]
-		if !exists || rank < ranks[symbol] || rank == ranks[symbol] && assetOrder(candidate) < assetOrder(old) {
-			selected[symbol], ranks[symbol] = candidate, rank
-		}
-	}
-	for _, item := range hyper {
-		switch item.Market {
-		case "perpetual":
-			if item.NativeID == item.BaseAsset && !strings.Contains(item.NativeID, ":") {
-				add(item, "hyperliquid", 0)
-			} else if strings.Contains(item.NativeID, ":") && strings.SplitN(item.NativeID, ":", 2)[1] == item.BaseAsset {
-				add(item, "hyperliquid", 2)
-			}
-		case "spot":
-			add(item, "hyperliquid", 1)
-		}
-	}
-	binance, binanceErr := m.opts.Source.Instruments(ctx, "binance")
-	if err := ctx.Err(); err != nil {
-		return Catalog{}, err
-	}
-	result := Catalog{Assets: []Asset{}, Warnings: []string{}}
-	if binanceErr != nil {
-		result.Warnings = append(result.Warnings, "Binance spot discovery is unavailable: "+binanceErr.Error())
-	} else {
-		for _, item := range binance {
-			if item.Market == "spot" && item.QuoteAsset == "USDT" {
-				add(item, "binance", 3)
-			}
-		}
-		for _, item := range binance {
-			if warning := item.ProviderMetadata["catalogWarning"]; warning != "" {
-				result.Warnings = append(result.Warnings, warning)
-				break
-			}
-		}
-	}
-	for _, asset := range selected {
-		result.Assets = append(result.Assets, asset)
-	}
-	sort.Slice(result.Assets, func(i, j int) bool { return result.Assets[i].Symbol < result.Assets[j].Symbol })
-	if len(result.Warnings) == 0 {
-		m.mu.Lock()
-		if ctx.Err() == nil && !m.closed {
-			m.catalog, m.catalogAt = cloneCatalog(result), m.opts.Now()
-		}
-		m.mu.Unlock()
-	}
-	return result, ctx.Err()
-}
 
 // TON was renamed to GRAM at 1:1 in July 2026. Preserve saved TON selections,
 // but disclose the actual ticker and keep requests on the provider's GRAM feed.
@@ -261,7 +157,16 @@ func (m *Manager) loadCatalog(ctx context.Context) (Catalog, error) {
 // This deliberately excludes wrapped tokens and unverified similarly named
 // spot or builder markets; it does not stitch the retired TON price history.
 func renamedToncoin(item domain.Instrument, provider string, now time.Time) bool {
-	if strings.ToUpper(item.BaseAsset) != "GRAM" || now.Before(time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)) {
+	if strings.ToUpper(item.BaseAsset) != "GRAM" {
+		return false
+	}
+	// Bybit explicitly renamed TON to GRAM 1:1 on June 22, 2026. The
+	// provider owns any earlier observations returned under that native symbol.
+	// https://announcements.bybitglobal.com/en/article/bybit-to-support-toncoin-ton-rebrand-and-ticker-change-to-gram-gram--blt617f4bf48950ab77/
+	if provider == "bybit" {
+		return !now.Before(time.Date(2026, 6, 22, 0, 0, 0, 0, time.UTC)) && (item.Market == "spot" || item.Market == "perpetual") && item.NativeID == "GRAMUSDT" && item.QuoteAsset == "USDT"
+	}
+	if now.Before(time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)) {
 		return false
 	}
 	return provider == "hyperliquid" && item.Market == "perpetual" && item.NativeID == "GRAM" ||
@@ -356,19 +261,29 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 	result.Warnings = catalog.Warnings
 	assets := map[string]Asset{}
 	for _, asset := range catalog.Assets {
-		assets[asset.Symbol] = asset
+		assets[asset.ID] = asset
+	}
+	for _, asset := range catalog.Markets {
+		assets[asset.ID] = asset
 	}
 	var workers sync.WaitGroup
 	slots := make(chan struct{}, 4)
-	for i, symbol := range view.Assets {
-		asset, found := assets[symbol]
+	selectedFeeds := map[domain.FeedKey]bool{}
+	for i, selection := range view.Assets {
+		asset, found := assets[selection]
 		if !found {
-			result.Series[i] = Series{Asset: Asset{Symbol: symbol, Name: assetName(symbol, "")}, Points: []Point{}, Error: "No matching asset is available in the verified provider catalog"}
+			message := "No matching market is available in the verified provider catalog; choose another source"
+			if !strings.Contains(selection, "|") && catalog.AutoError != "" {
+				message = catalog.AutoError
+			}
+			result.Series[i] = Series{Asset: unavailableSelection(selection), Points: []Point{}, Error: message}
 			continue
 		}
-		if asset.Exchange == "binance" {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: using Binance spot %s (%s)", symbol, asset.NativeID, asset.QuoteAsset))
+		if selectedFeeds[*asset.FeedKey] {
+			result.Series[i] = Series{Asset: asset, Points: []Point{}, Error: "This source and market is already selected; remove the duplicate"}
+			continue
 		}
+		selectedFeeds[*asset.FeedKey] = true
 		workers.Add(1)
 		go func(index int, asset Asset) {
 			defer workers.Done()
@@ -378,7 +293,7 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 				return
 			}
 			defer func() { <-slots }()
-			result.Series[index] = m.series(ctx, id, asset, from, last)
+			result.Series[index] = m.series(ctx, fmt.Sprintf("%s/%d", id, index), asset, from, last)
 		}(i, asset)
 	}
 	workers.Wait()
@@ -399,7 +314,7 @@ func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last
 	if reused {
 		bars = append([]domain.Candle(nil), cached.Bars...)
 	} else {
-		history, err := m.opts.Source.History(ctx, id+"/"+asset.Symbol, key.Feed, from, last+day, count)
+		history, err := m.opts.Source.History(ctx, id, key.Feed, from, last+day, count)
 		if err != nil {
 			result.Error = err.Error()
 			return result
@@ -430,7 +345,20 @@ func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last
 	}
 	baseline, ok := byTime[from]
 	if !ok {
-		result.Error = "The common UTC baseline candle is unavailable; this asset was not rebased"
+		date := time.Unix(from, 0).UTC().Format("2006-01-02")
+		var earliest int64
+		for at := range byTime {
+			if earliest == 0 || at < earliest {
+				earliest = at
+			}
+		}
+		result.Error = "The common UTC baseline candle on " + date + " is unavailable; this asset was not rebased"
+		if earliest > 0 {
+			result.Error += "; first available daily close in this requested range: " + time.Unix(earliest, 0).UTC().Format("2006-01-02") + " UTC"
+		} else {
+			result.Error += "; no completed daily closes were returned in this requested range"
+		}
+		result.Error += ". Choose another source or a shorter period"
 		return result
 	}
 	complete := true

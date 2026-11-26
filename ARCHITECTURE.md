@@ -136,7 +136,7 @@ so a batched flush crossing a candle boundary retains both bars. [S04, S05]
 ## Comparison ownership
 
 The top-level Comparison screen is separate from saved chart tabs and contains
-Daily change. `internal/comparison` owns validated weeks/base-symbol selections,
+Daily change. `internal/comparison` owns validated weeks/source selections,
 shared UTC baseline calculations and a small bounded cache of complete closed
 pages. `app_comparison.go` is its lazy Wails facade; it delegates catalogs and
 history to the existing market service, so provider pacing, retained candle
@@ -144,23 +144,40 @@ storage and cancellation remain shared. Comparison creates no stream leases,
 broker sessions or trading services. Its private `comparison-view.json` is saved
 atomically with version validation; missing files alone receive defaults.
 
-Catalog selection prefers an exact native Hyperliquid perpetual, then exact-base
-spot, then an exact-base builder perpetual, all quoted in actual USD, USDC, USDT
-or USDH. USDC is preferred among equivalent spot pairs. Binance USDT spot is
-eligible only when complete Hyperliquid discovery proves no eligible USD-quoted
-market; provider failure cannot authorize fallback. Quotes are disclosed and are
-not converted or treated as aliases. TON has one explicitly verified same-asset
-rename to GRAM, supported by [TON](https://ton.org/) and the
-[Binance 1:1 rebranding notice](https://www.binance.com/en/support/announcement/detail/fe307fba935b44698fde4db01e84a7eb).
-The canonical saved TON selection discloses the actual GRAM feed; it does not stitch
-historical markets or accept wrapped/unrelated tokens. All lines use the same fully closed UTC
-baseline day and `(close / baselineClose - 1) * 100`; unavailable baselines cannot
-be rebased individually. Missing daily closes remain explicit gaps. The visible
-screen owns cancellable request IDs and its chart, observers and listeners;
-hidden Comparison charts are disposed and late replies cannot replace a newer
-selection. Selected-asset labels use the returned series metadata before catalog
-metadata, so a refreshed market or unavailable asset cannot retain an old source
-label. Empty selections persist and request no daily history.
+`Catalog.markets` retains each exact eligible provider/market/native instrument
+from independent public Hyperliquid, Binance, Bybit and Coinbase discovery.
+Explicit selections use canonical escaped source IDs, preserve native case and
+Unicode, and resolve only against discovered markets. The same base asset may
+appear on several venues. `Catalog.assets` retains the old bare-symbol automatic
+preference for saved views; incomplete Hyperliquid discovery disables that
+automatic inference while leaving healthy explicit choices usable. Real provider
+warnings remain visible; normal source-selection notices are omitted.
+
+The private version 2 view retains exact selections, accepts valid legacy version
+1 bare choices without rewriting on read and preserves unrecognized saved bytes.
+Chart keys, colours, hover, visibility and selection use source IDs rather than
+base symbols. Source-aware labels distinguish multiple curves for the same asset;
+missing markets retain readable native labels without exposing storage keys or
+inventing availability.
+
+Markets quote actual USD, USDC, USDT or USDH without conversion. Verified
+TON/GRAM identities retain actual native feeds: Hyperliquid/Binance's known
+successors use the existing July 2 guard, Bybit's exact GRAMUSDT Spot/Perpetual
+uses its documented June 22 transition, and Coinbase retains TON-USD. All lines
+use one fully closed UTC baseline and `(close / baselineClose - 1) * 100`.
+Missing baselines return their requested UTC date and first actual close in the
+returned window; they never cause a source change, rebase or application-level
+history stitching. Subsequent missing closes remain gaps.
+
+Coinbase native history sends `end=to-1` to its inclusive API. A caller's bounded
+range up to 1,000 candles is paged in at most 350-candle windows using existing
+HTTP pacing/cancellation and normalization, including empty windows. This avoids
+both a displaced 26-week baseline and truncation of longer Comparison periods.
+
+The visible screen owns cancellable request IDs and its chart, observers and
+listeners; hidden charts are disposed and late replies cannot replace a newer
+selection. Returned source metadata precedes catalog metadata, and empty
+selections persist without requesting history.
 
 The Comparison facade uses `market.HistorySnapshot`, owned by its caller and the
 market service rather than a chart feed. A retained feed can keep its cancelled

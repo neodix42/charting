@@ -229,7 +229,7 @@ func TestRenamedToncoinUsesActualGRAMHistoryAndNeverStitchesMissingBaseline(t *t
 	}
 }
 
-func TestUSDQuotedMarketsExcludeCrossPricesAndDiscloseEligibleFallback(t *testing.T) {
+func TestUSDQuotedMarketsExcludeCrossPricesAndKeepNormalSourcesInMetadata(t *testing.T) {
 	f := source()
 	f.items["hyperliquid"] = []domain.Instrument{
 		item("BTC", "perpetual", "BTC", "USDC"), item("ALT", "spot", "@1", "BTC"), item("ALT", "spot", "@100", "USDC"),
@@ -258,7 +258,7 @@ func TestUSDQuotedMarketsExcludeCrossPricesAndDiscloseEligibleFallback(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Warnings) != 1 || result.Warnings[0] != "CROSS: using Binance spot CROSSUSDT (USDT)" || result.Series[1].Asset.Exchange != "binance" || result.Series[1].Asset.QuoteAsset != "USDT" {
+	if len(result.Warnings) != 0 || result.Series[1].Asset.Exchange != "binance" || result.Series[1].Asset.QuoteAsset != "USDT" {
 		t.Fatalf("fallback basis missing: %+v", result.Warnings)
 	}
 	for _, key := range f.historyCalls {
@@ -278,8 +278,8 @@ func TestHyperFailureNeverAuthorizesBinanceFallback(t *testing.T) {
 				f.errors["hyperliquid"] = errors.New("provider offline")
 			}
 			f.items["binance"] = []domain.Instrument{item("BTC", "spot", "BTCUSDT", "USDT")}
-			_, err := fixture(t, f).DailyChanges(context.Background(), "outage", View{Weeks: 1, Assets: []string{"BTC"}})
-			if err == nil || f.catalogCalls["binance"] != 0 || len(f.historyCalls) != 0 {
+			result, err := fixture(t, f).DailyChanges(context.Background(), "outage", View{Weeks: 1, Assets: []string{"BTC"}})
+			if err != nil || len(result.Series) != 1 || !strings.Contains(result.Series[0].Error, "choose an explicit source") || f.catalogCalls["binance"] != 1 || len(f.historyCalls) != 0 {
 				t.Fatalf("outage fell back: %v %+v", err, f)
 			}
 		})
@@ -508,7 +508,7 @@ func TestViewPersistenceDefaultsOnlyOnMissingAndPreservesCorruption(t *testing.T
 	if st, _ := os.Stat(m.viewPath()); st.Mode().Perm() != 0600 {
 		t.Fatalf("view permission %v", st.Mode())
 	}
-	for _, data := range []string{"{bad", `{"version":2,"view":{"weeks":4,"assets":[]}}`, `{"version":1,"view":{"weeks":0,"assets":[]}}`, `{"version":1,"view":{"weeks":4,"assets":[]},"extra":true}`} {
+	for _, data := range []string{"{bad", `{"version":3,"view":{"weeks":4,"assets":[]}}`, `{"version":1,"view":{"weeks":0,"assets":[]}}`, `{"version":1,"view":{"weeks":4,"assets":[]},"extra":true}`} {
 		if err = os.WriteFile(m.viewPath(), []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}

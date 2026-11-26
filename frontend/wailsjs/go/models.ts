@@ -4172,6 +4172,7 @@ export namespace main {
 export namespace comparison {
 
 	export class Asset {
+	    id?: string;
 	    symbol: string;
 	    displaySymbol?: string;
 	    name: string;
@@ -4187,6 +4188,7 @@ export namespace comparison {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.symbol = source["symbol"];
 	        this.displaySymbol = source["displaySymbol"];
 	        this.name = source["name"];
@@ -4217,7 +4219,9 @@ export namespace comparison {
 	}
 	export class Catalog {
 	    assets: Asset[];
+	    markets: Asset[];
 	    warnings: string[];
+	    autoError?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new Catalog(source);
@@ -4226,7 +4230,9 @@ export namespace comparison {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.assets = this.convertValues(source["assets"], Asset);
+	        this.markets = this.convertValues(source["markets"], Asset);
 	        this.warnings = source["warnings"];
+	        this.autoError = source["autoError"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

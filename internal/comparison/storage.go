@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type savedView struct {
@@ -50,8 +51,15 @@ func (m *Manager) readView() (View, error) {
 	if err = decoder.Decode(&value); err != nil {
 		return View{}, fmt.Errorf("saved Comparison view is invalid; original preserved: %w", err)
 	}
-	if decoder.Decode(new(any)) != io.EOF || value.Version != 1 {
+	if decoder.Decode(new(any)) != io.EOF || value.Version != 1 && value.Version != 2 {
 		return View{}, errors.New("saved Comparison view has an unsupported format; original preserved")
+	}
+	if value.Version == 1 {
+		for _, selection := range value.View.Assets {
+			if strings.Contains(selection, "|") {
+				return View{}, errors.New("saved version 1 Comparison view cannot contain explicit sources; original preserved")
+			}
+		}
 	}
 	view, err := normalizeView(value.View)
 	if err != nil {
@@ -74,7 +82,7 @@ func (m *Manager) SaveView(value View) (View, error) {
 	if _, err = m.readView(); err != nil {
 		return View{}, err
 	}
-	data, err := json.Marshal(savedView{Version: 1, View: view})
+	data, err := json.Marshal(savedView{Version: 2, View: view})
 	if err != nil {
 		return View{}, err
 	}

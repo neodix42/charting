@@ -1,5 +1,14 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison source selection and TON history — 2026-11-26
+
+- [x] Remove routine source notices, expose four public sources and persist exact source/market choices with safe legacy reads.
+- [x] Preserve independent same-asset curves/hover/toggles and prevent duplicate actual-feed selection or requests.
+- [x] Correct Coinbase inclusive end and 350-candle paging; preserve honest baseline errors and native history gaps.
+- [x] Verify real 26-week Coinbase TON 183 closes, Bybit GRAM 178 observations/five gaps and Hyperliquid's genuine July 2 start, with no streams or user-profile changes.
+- [x] Full deterministic/native Go checks, exchange/Comparison/facade race/vet, 362 frontend units and all 21 Comparison browser cases pass; generated models and screenshots reviewed.
+- [ ] Final production packages and hosted results are tracked for the delivery commit; native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison DCR request ownership — 2026-11-25
 
 - [x] Reproduce cancelled retained/closing chart contexts and give independent Comparison reads caller/service ownership.

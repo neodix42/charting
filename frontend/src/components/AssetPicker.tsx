@@ -4,7 +4,7 @@ import type {Exchange,Market} from '../types';
 import './AssetPicker.css';
 import {SYNTHETIC_CATEGORY} from '../workspace/syntheticInstruments';
 
-export interface AssetChoice {id:string;label:string;details:string;market?:Market;category?:string;search:string}
+export interface AssetChoice {id:string;label:string;ariaLabel?:string;details:string;market?:Market;category?:string;search:string}
 export const marketLabel=(market:Market)=>({spot:'Spot',perpetual:'Perpetual',forex:'Forex',metal:'Metal',cfd:'CFD'})[market];
 const filters=(exchange:Exchange):Market[]=>exchange==='dukascopy'?['forex','cfd','metal']:exchange==='hyperliquid'?['perpetual','spot']:[];
 
@@ -29,7 +29,7 @@ export function AssetPicker({exchange,choices,selected,label,buttonLabel='Select
    <div className="picker-search"><input autoFocus aria-label="Search instruments" placeholder="Search asset name or symbol…" value={query} onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')event.preventDefault();}}/><button type="button" aria-label="Close instrument selector" onClick={()=>{setOpen(false);button.current?.focus();}}>×</button></div>
    {markets.length>0&&<div className="picker-market-filters" role="group" aria-label="Market filter"><button type="button" aria-pressed={market===null} onClick={()=>setMarket(null)}>All</button>{markets.map(value=><button key={value} type="button" aria-pressed={market===value} onClick={()=>setMarket(value)}>{marketLabel(value)}</button>)}{exchange==='dukascopy'&&<button type="button" aria-pressed={market==='synthetic'} onClick={()=>setMarket('synthetic')}>{SYNTHETIC_CATEGORY}</button>}</div>}
    {notice}
-   {!choices.length?<p>{loading?'Loading instruments…':empty}</p>:<div className="product-list">{matches.map(choice=><button type="button" key={choice.id} data-asset-id={choice.id} aria-label={`${choice.label}${choice.category===SYNTHETIC_CATEGORY?` ${SYNTHETIC_CATEGORY}`:choice.market?` ${marketLabel(choice.market)}`:''}`} aria-pressed={choice.id===selected} onClick={()=>{onSelect(choice.id);setOpen(false);button.current?.focus();}}><span className="product-details"><strong>{choice.label}</strong><small>{choice.details}</small></span>{choice.market&&<span className={`product-market ${choice.category===SYNTHETIC_CATEGORY?'synthetic':choice.market}`}>{choice.category===SYNTHETIC_CATEGORY?SYNTHETIC_CATEGORY:marketLabel(choice.market)}</span>}</button>)}{!matches.length&&<p>No matching instruments</p>}</div>}
+   {!choices.length?<p>{loading?'Loading instruments…':empty}</p>:<div className="product-list">{matches.map(choice=><button type="button" key={choice.id} data-asset-id={choice.id} aria-label={choice.ariaLabel??`${choice.label}${choice.category===SYNTHETIC_CATEGORY?` ${SYNTHETIC_CATEGORY}`:choice.market?` ${marketLabel(choice.market)}`:''}`} aria-pressed={choice.id===selected} onClick={()=>{onSelect(choice.id);setOpen(false);button.current?.focus();}}><span className="product-details"><strong>{choice.label}</strong><small>{choice.details}</small></span>{choice.market&&<span className={`product-market ${choice.category===SYNTHETIC_CATEGORY?'synthetic':choice.market}`}>{choice.category===SYNTHETIC_CATEGORY?SYNTHETIC_CATEGORY:marketLabel(choice.market)}</span>}</button>)}{!matches.length&&<p>No matching instruments</p>}</div>}
   </div>;
  const portalTarget=placement==='chart'?root.current?.closest('.chart-cell'):null;
  return <div ref={root} className={`asset-selector ${className}`}>
