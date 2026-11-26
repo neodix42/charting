@@ -68,6 +68,7 @@ public final class BridgeTradingTest {
         }
         BridgeValuationTest.run();
         BridgeTradeHistoryTest.run();
+        BridgePartialFillIdentityTest.run();
         System.out.println("JForex trading validation, SDK thread, amount conversion and no-repeat tests passed");
     }
 }

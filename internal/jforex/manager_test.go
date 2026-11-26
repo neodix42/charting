@@ -835,6 +835,9 @@ func TestBridgeHelperProcess(t *testing.T) {
 				select {}
 			}
 			result := TradeResult{Status: "filled", OrderID: "offline-order-1", FilledQuantity: 1000, EntryPrice: 1.1003, ProtectionConfirmed: true}
+			if strings.HasPrefix(scenario, "trade-history-copied-partial") {
+				result.Status, result.FilledQuantity = "partial", 26
+			}
 			if strings.HasPrefix(scenario, "trade-history") {
 				balance := 900.0
 				result.ExecutionMetrics = &TradeMetrics{AccountCurrency: "EUR", Balance: &balance, AccountTime: time.Now().UnixMilli(), AccountNote: "Opening SDK balance snapshot"}
@@ -846,6 +849,18 @@ func TestBridgeHelperProcess(t *testing.T) {
 			var intent string
 			_ = json.Unmarshal(request["intent"], &intent)
 			order := brokerOrder{Intent: intent, OrderID: "offline-order-1", Instrument: tradeRequest.Instrument, Side: tradeRequest.Side, Status: "open", OriginalQuantity: tradeRequest.Quantity, FilledQuantity: tradeRequest.Quantity, RemainingQuantity: tradeRequest.Quantity, EntryPrice: 1.1003, StopLoss: tradeRequest.StopLoss, TakeProfit: tradeRequest.TakeProfit, OpenDate: historyOpenAt}
+			if strings.HasPrefix(scenario, "trade-history-copied-partial") {
+				var witness float64
+				_ = json.Unmarshal(request["knownFilledQuantity"], &witness)
+				if witness != 26 {
+					_ = encoder.Encode(map[string]any{"id": id, "ok": false, "error": map[string]any{"kind": "restricted", "message": "Missing durable fill witness"}})
+					continue
+				}
+				order.OriginalQuantity, order.FilledQuantity, order.RemainingQuantity = 0, 26, 26
+				if strings.HasSuffix(scenario, "-closed") {
+					historyClosed, historyCloseAt = true, time.Now().Add(-time.Second).UnixMilli()
+				}
+			}
 			if op == "tradeHistory" {
 				historyReads++
 				factor, pnl, pips := .9, 12.5, 125.5

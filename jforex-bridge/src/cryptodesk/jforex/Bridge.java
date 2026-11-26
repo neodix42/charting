@@ -2019,9 +2019,35 @@ public final class Bridge implements AutoCloseable {
         double expected = tradeNumber(request, "quantity", false);
         if (!("CD_" + intent).equals(order.getLabel()) || order.getInstrument() != tradeInstrument(request)
                 || order.isLong() != side.equals("buy") || !orderID.isEmpty() && !orderID.equals(order.getId())
-                || !Double.isFinite(order.getOriginalAmount()) || Math.abs(order.getOriginalAmount() * 1_000_000.0 - expected) > Math.max(1e-7, expected * 1e-8))
+                || !ownedOrderQuantity(order, request, expected, orderID))
             throw new Failure("restricted", "The exchange order does not match this platform's local submission");
         return order;
+    }
+    private static boolean sameTradeQuantity(double actual, double expected) {
+        return Double.isFinite(actual) && actual >= 0 && Math.abs(actual - expected) <= Math.max(1e-7, expected * 1e-8);
+    }
+    private static boolean ownedOrderQuantity(IOrder order, JsonObject request, double expected, String orderID) {
+        double original = order.getOriginalAmount() * 1_000_000.0;
+        if (original > 0 && sameTradeQuantity(original, expected)) return true;
+        // The pinned PlatformOrderImpl copy constructor omits originalAmount.
+        // Reconstructed history can also describe only the actual partial fill.
+        // A saved broker-confirmed fill is evidence only for this exact native
+        // order ID; never infer ownership from an arbitrary smaller amount.
+        if (orderID.isEmpty() || !request.has("knownFilledQuantity")) return false;
+        double known = request.get("knownFilledQuantity").getAsDouble();
+        if (!Double.isFinite(known) || known <= 0 || known > expected + Math.max(1e-7, expected * 1e-8)
+                || !Double.isFinite(original) || original < 0 || original != 0 && !sameTradeQuantity(original, known)) return false;
+        List<IFillOrder> fills = order.getFillHistory();
+        if (fills == null || fills.isEmpty()) return false;
+        double filled = 0;
+        for (IFillOrder fill : fills) {
+            double amount = fill.getAmount() * 1_000_000.0;
+            if (!Double.isFinite(amount) || amount <= 0) return false;
+            filled += amount;
+        }
+        double amount = order.getAmount() * 1_000_000.0;
+        return sameTradeQuantity(filled, known) && Double.isFinite(amount) && amount >= 0
+            && amount <= known + Math.max(1e-7, known * 1e-8);
     }
     private Map<String, Object> orderHistorySnapshot(IOrder order, String intent) throws Exception {
         Map<String, Object> result = new HashMap<>();
@@ -2081,12 +2107,15 @@ public final class Bridge implements AutoCloseable {
         if (order.getState() == IOrder.State.CLOSED) return orderHistorySnapshot(order, intent);
         double remaining = tradeNumber(request, "remainingQuantity", false);
         String orderID = order.getId();
+        double expected = tradeNumber(request, "quantity", false);
+        Instrument instrument = order.getInstrument(); boolean longPosition = order.isLong();
         IContext active = context;
         Future<?> closingOrder = active.executeTask(() -> {
             if (closing || context != active || client == null || !client.isConnected()) throw new Failure("offline", "JForex disconnected before closing");
             IOrder current = active.getEngine().getOrderById(orderID);
-            if (current == null || !("CD_" + intent).equals(current.getLabel()) || current.getInstrument() != order.getInstrument() || current.isLong() != order.isLong()
-                    || current.getState() != IOrder.State.FILLED || Math.abs(current.getAmount() * 1_000_000.0 - remaining) > Math.max(1e-7, remaining * 1e-8))
+            if (current == null || !("CD_" + intent).equals(current.getLabel()) || current.getInstrument() != instrument || current.isLong() != longPosition
+                    || !orderID.equals(current.getId()) || !ownedOrderQuantity(current, request, expected, orderID)
+                    || current.getState() != IOrder.State.FILLED || current.getAmount() <= 0 || !sameTradeQuantity(current.getAmount() * 1_000_000.0, remaining))
                 throw new Failure("restricted", "The platform position changed; refresh and review its close again");
             current.close();
             return null;

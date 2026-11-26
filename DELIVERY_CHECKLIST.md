@@ -1,5 +1,14 @@
 # Release checklist — observed 2026-10-19
 
+## JForex copied-order reconciliation — 2026-11-26
+
+- [x] Reproduce the real SDK copy-constructor defect and recover only exact owned orders with matching durable actual-fill evidence.
+- [x] Preserve requested/actual sizes, strict identity/remaining checks, one-use confirmation and unknown-outcome handling; capture immutable strategy-thread identity.
+- [x] Label failed/stale status and retained protection as saved/unverified, preserving values and UTC provenance without inventing broker state.
+- [x] Complete Java suite, focused Go race, 378 units and 17 trade-history browser cases pass; fixtures are fictional and user profiles remain unchanged.
+- [x] Full deterministic/native suites, production frontend/chart builds and cross-layer diff review pass.
+- [ ] Package/hosted results are tracked for the delivery commit. Current broker state, native desktop interaction and Windows GUI execution remain unverified.
+
 ## Bid/Ask tickets and chart margin legends — 2026-11-26
 
 - [x] Carry actual provider Bid/Ask through estimates and frozen reviews, preserving execution/risk semantics and honest unavailable states.

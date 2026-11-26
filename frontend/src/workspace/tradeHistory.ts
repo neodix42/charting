@@ -34,6 +34,25 @@ export function tradeNumber(raw:string|undefined,money=false):string {if(raw===u
 export function tradeMoney(raw:string|undefined,currency:string){return formatCurrencyAmount(raw,currency)??'—';}
 export function tradeDate(value:number,timezone:string){if(!Number.isFinite(value)||value<=0)return '—';return new Intl.DateTimeFormat('en-GB',{timeZone:timezone==='system'?undefined:timezone,year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(value));}
 
+/** checkedAt is the last successful identity/status check, not the latest attempt. */
+export function tradeVerification(row:TradeRecord,now=Date.now(),refreshFailure=''){
+ const terminal=row.status==='closed'&&row.closeDate>0||['filled','cancelled','rejected'].includes(row.status);
+ const checked=Number.isSafeInteger(row.checkedAt)&&row.checkedAt>0&&row.checkedAt<=8640000000000000&&row.checkedAt<=now+5000;
+ const check=checked?`Last successful exchange check: ${new Date(row.checkedAt).toISOString().slice(0,19).replace('T',' ')} UTC.`:'No successful exchange check recorded.';
+ if(terminal)return{unverified:false,label:'',title:check};
+ const failure=row.error||refreshFailure,fresh=checked&&now-row.checkedAt<=30000;
+ if(!failure&&fresh)return{unverified:false,label:'',title:check};
+ return{unverified:true,label:failure||!checked?'Unverified':'Last verified',title:`${failure?`Exchange verification failed: ${failure}.`:'Exchange verification is not current.'} ${check} Saved status and protection may differ from the broker.`};
+}
+
+export function tradeProtectionDisplay(row:TradeRecord,kind:'SL'|'TP',verification=tradeVerification(row)){
+ const source=kind==='SL'?row.stopLossSource:row.takeProfitSource;
+ const basis=source==='submitted'?'At submission':source==='recorded'?'Last recorded':'';
+ const note=[basis,verification.unverified?verification.label:''].filter(Boolean).join(' · ');
+ const title=source==='submitted'?`${kind} requested at submission; the final exchange level is unavailable`:source==='recorded'?`${kind} last recorded before closure; the closed order no longer reports a level`:source==='exchange'?`Broker-reported ${kind} price`:`Recorded ${kind} price`;
+ return{note,title:`${title}. ${verification.title}`};
+}
+
 export function tradeProfitLoss(row:TradeRecord,now=Date.now()){
  const closed=row.status==='closed'&&row.closeDate>0,raw=row.profitLoss;
  const state=closed?row.profitLossState==='closed':['open','closing'].includes(row.profitLossState??'');

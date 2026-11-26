@@ -74,6 +74,19 @@ Do not send bulk history via high-frequency broadcast events. Use bounded reques
 
 ## Rendering lifecycle
 
+JForex platform-order reconciliation normally requires the SDK original amount to
+match the durable requested quantity. The pinned SDK's PlatformOrderImpl copy
+constructor omits originalAmount. A private knownFilledQuantity RPC field carries
+only a previously acknowledged actual fill or successfully verified filled execution
+for that exact journal/native order. Recovery of zero or fill-sized original amounts
+requires exact ID, label, instrument and side plus complete matching fill history;
+Go independently validates the durable witness and returned quantities. Unknown or
+changed exposure remains blocked. Close repeats immutable identity/fill/remaining
+checks on the SDK strategy thread before its existing one-use operation. The true
+SDK original amount stays in snapshots; stored requested size is never replaced.
+Trade-history UI uses last successful checkedAt and refresh failures to distinguish
+saved status/protection from current broker verification, preserving data on errors.
+
 Live top-of-book observations travel through `domain.Health.Quote`, separately from
 candles and `LastTradeAt`. Binance bookTicker, Bybit orderbook.1 and Coinbase ticker
 subscriptions are shared by native instrument through the existing category hubs;

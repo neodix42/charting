@@ -161,3 +161,35 @@ test('Size shows actual opening fills with the original request and retains rema
  await expect(size('PENDING')).toHaveText('— (100)');await expect(size('LEGACY')).toHaveText('2 (—)');
  await reloadTestApp(page);await enter(page);await expect(size('xyz:NATGAS')).toHaveText('58.8 (100)');
 });
+
+test('failed Dukascopy reconciliation labels retained protection and status, then recovers and honors broker removal',async({page})=>{
+ await openTestApp(page);
+ const trade=record({id:'dukascopy:'+'e'.repeat(32),provider:'dukascopy',market:'jforex',instrument:'EURUSD',orderId:'offline-partial-26',size:'26',requestedSize:'500',remainingSize:'26',entryPrice:'1.1003',stopLoss:'1.09',takeProfit:'1.12',stopLossSource:'exchange',takeProfitSource:'exchange',checkedAt:Date.UTC(2026,10,1,12),slAmount:'-0.2678',tpAmount:'0.5122',currency:'EUR',profitLoss:'4',profitLossCurrency:'EUR',profitLossState:'open',profitLossTime:Date.now()});
+ await seed(page,[trade]);
+ await page.evaluate(()=>{window.go!.main!.App!.RefreshTradeHistory=async ids=>ids.map(id=>({id,error:'JForex order does not match the local platform submission',canClose:false,closeReason:'JForex order does not match the local platform submission'})) as any;});
+ await enter(page);const row=panel(page).getByRole('row').filter({hasText:'EURUSD'}),sl=row.getByRole('cell').nth(10),tp=row.getByRole('cell').nth(11),status=row.getByRole('cell').nth(18);
+ await expect(sl).toHaveText('1.09Unverified');await expect(tp).toHaveText('1.12Unverified');await expect(sl).toHaveAttribute('title',/2026-11-01 12:00:00 UTC/);await expect(sl).toHaveAttribute('title',/does not match/);
+ await expect(row.getByRole('cell').nth(6)).toHaveText('26 (500)');await expect(row.getByRole('cell').nth(12)).toHaveText('-0.2678 EURSaved level estimate');await expect(status).toContainText('open (saved)Unverified');await expect(row.locator('.trade-history-pnl')).toHaveText('—');
+ await row.getByRole('radio').check();await expect(close(page)).toBeDisabled();expect(await page.evaluate(()=>(window as any).__testTradeHistoryCloses())).toEqual([]);
+ await page.evaluate(()=>{window.go!.main!.App!.RefreshTradeHistory=async ids=>(window as any).__testTradeHistory().filter((item:TradeRecord)=>ids.includes(item.id));});
+ await seed(page,[{...trade,checkedAt:Date.now(),error:'',canClose:true}]);await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(close(page)).toBeEnabled();await expect(sl).toHaveText('1.09');await expect(status).toHaveText('open');
+ await seed(page,[{...trade,checkedAt:Date.now(),stopLoss:'',stopLossSource:undefined,takeProfit:'',takeProfitSource:undefined,slAmount:'',tpAmount:'',error:'',canClose:true}]);await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(close(page)).toBeEnabled();for(const column of [10,11,12,13])await expect(row.getByRole('cell').nth(column)).toHaveText('—');
+ await reloadTestApp(page);await enter(page);for(const column of [10,11,12,13])await expect(row.getByRole('cell').nth(column)).toHaveText('—');expect(await page.evaluate(()=>(window as any).__testTradeHistoryCloses())).toEqual([]);
+});
+
+test('quiet open verification ages locally while submitted levels keep their requested provenance',async({page})=>{
+ await openTestApp(page);await page.clock.install();const checkedAt=Date.now();
+ await seed(page,[record({checkedAt,stopLossSource:'exchange',takeProfitSource:'exchange'}),record({id:'dukascopy:'+'f'.repeat(32),provider:'dukascopy',instrument:'SUBMITTED',orderId:'D-505',status:'submitted',canClose:false,checkedAt:0,stopLossSource:'submitted',takeProfitSource:'submitted'})]);await enter(page);
+ const row=panel(page).getByRole('row').filter({hasText:'BTC'}),submitted=panel(page).getByRole('row').filter({hasText:'SUBMITTED'});await row.getByRole('radio').check();await expect(close(page)).toBeEnabled();await expect(row.getByRole('cell').nth(10)).toHaveText('60,000');
+ await expect(submitted.getByRole('cell').nth(10)).toHaveText('60,000At submission · Unverified');await expect(submitted.getByRole('cell').nth(18)).toContainText('submitted (saved)Unverified');await expect(submitted.getByRole('cell').nth(10)).toHaveAttribute('title',/No successful exchange check recorded/);
+ await page.clock.fastForward(31000);await expect(row.getByRole('cell').nth(10)).toHaveText('60,000Last verified');await expect(row.getByRole('cell').nth(18)).toHaveText('open (saved)Last verified');await expect(row.getByRole('cell').nth(10)).toHaveAttribute('title',/Last successful exchange check: .* UTC/);await expect(close(page)).toBeDisabled();expect(await page.evaluate(()=>(window as any).__testTradeHistoryCloses())).toEqual([]);
+});
+
+test('whole-refresh errors invalidate open protection trust without erasing saved levels or closed history',async({page})=>{
+ await openTestApp(page);const now=Date.now();await seed(page,[record({checkedAt:now,stopLossSource:'exchange',profitLoss:'5',profitLossCurrency:'USDC',profitLossTime:now,profitLossState:'open'}),record({id:'dukascopy:'+'9'.repeat(32),provider:'dukascopy',instrument:'CLOSED',orderId:'D-909',status:'closed',closeDate:now,remainingSize:'0',canClose:false,stopLossSource:'recorded'})]);await enter(page);
+ const open=panel(page).getByRole('row').filter({hasText:'BTC'}),closed=panel(page).getByRole('row').filter({hasText:'CLOSED'});await open.getByRole('radio').check();await expect(close(page)).toBeEnabled();
+ await page.evaluate(()=>{window.go!.main!.App!.RefreshTradeHistory=async()=>{throw Error('Exchange status refresh unavailable');};});await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect(panel(page).getByRole('alert')).toContainText('Exchange status refresh unavailable');await expect(open.getByRole('cell').nth(10)).toHaveText('60,000Unverified');await expect(open.getByRole('cell').nth(12)).toHaveText('-10.00 USDCSaved level estimate');await expect(open.locator('.trade-history-pnl')).toHaveText('—');await expect(close(page)).toBeDisabled();
+ await expect(closed.getByRole('cell').nth(10)).toHaveText('60,000Last recorded');await expect(closed.getByRole('cell').nth(18)).toContainText('closed');await expect(closed.getByRole('cell').nth(18)).not.toContainText('(saved)');expect(await page.evaluate(()=>(window as any).__testTradeHistoryCloses())).toEqual([]);
+ await page.evaluate(()=>{window.go!.main!.App!.RefreshTradeHistory=async ids=>new Promise(resolve=>(window as any).__completeHistoryRetry=()=>resolve((window as any).__testTradeHistory().filter((item:TradeRecord)=>ids.includes(item.id))));});await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>page.evaluate(()=>typeof(window as any).__completeHistoryRetry)).toBe('function');await expect(open.getByRole('cell').nth(10)).toHaveText('60,000Unverified');await expect(open.locator('.trade-history-pnl')).toHaveText('—');await expect(close(page)).toBeDisabled();
+ await page.evaluate(()=>(window as any).__completeHistoryRetry());await expect(open.getByRole('cell').nth(10)).toHaveText('60,000');await expect(close(page)).toBeEnabled();
+});

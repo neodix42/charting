@@ -162,7 +162,7 @@ func applyBrokerSubmission(j *brokerJournal) {
 	trading.ApplyRisk(r, factor)
 }
 func applyBrokerSnapshot(j *brokerJournal, order brokerOrder) error {
-	if order.Intent != j.ID || order.OrderID == "" || j.History.OrderID != "" && j.History.OrderID != order.OrderID || order.Instrument != j.Request.Instrument || order.Side != j.Request.Side || math.Abs(order.OriginalQuantity-j.Request.Quantity) > math.Max(1e-7, j.Request.Quantity*1e-8) {
+	if order.Intent != j.ID || order.OrderID == "" || j.History.OrderID != "" && j.History.OrderID != order.OrderID || order.Instrument != j.Request.Instrument || order.Side != j.Request.Side || !brokerOriginalQuantityMatches(j, order) {
 		return errors.New("JForex order does not match the local platform submission")
 	}
 	for _, value := range []float64{order.OriginalQuantity, order.FilledQuantity, order.RemainingQuantity, order.EntryPrice, order.StopLoss, order.TakeProfit} {
@@ -377,6 +377,7 @@ func (m *Manager) refreshBroker(ctx context.Context, j *brokerJournal, includeVa
 		request["orderID"] = r.OrderID
 	}
 	request["from"] = j.CreatedAt
+	addBrokerFillWitness(request, j)
 	var order brokerOrder
 	if err = p.call(ctx, request, &order); err != nil {
 		return err
@@ -400,6 +401,7 @@ func (m *Manager) refreshBroker(ctx context.Context, j *brokerJournal, includeVa
 		r.Account = j.Account
 	}
 	r.CheckedAt = time.Now().UnixMilli()
+	r.Error = ""
 	r.CloseReason = "Position is already closed or has not filled"
 	if r.Status == "open" && order.RemainingQuantity > 0 {
 		if submitting {
@@ -542,6 +544,7 @@ func (m *Manager) ConfirmClose(ctx context.Context, token string) (trading.Trade
 	remaining, _ := strconv.ParseFloat(plan.Preview.Quantity, 64)
 	request["remainingQuantity"] = remaining
 	request["from"] = j.CreatedAt
+	addBrokerFillWitness(request, j)
 	var order brokerOrder
 	if err = p.call(ctx, request, &order); err != nil {
 		attempt.Status = "uncertain"
