@@ -20,7 +20,7 @@ export function comparisonBridge():ComparisonBackend {
  ].map(asset=>({...asset,id:marketID(asset),feedKey:{exchange:asset.exchange,market:asset.market,instrument:asset.nativeId,timeframe:'1d'} as FeedKey}));
  let view:ComparisonView=JSON.parse(sessionStorage.getItem(key)||'null')??defaultComparisonView();
  let errors:Partial<Record<'view'|'save'|'catalog'|'data',string>>={},catalog:ComparisonCatalog={assets,markets,warnings:[]};
- let overrides:Record<string,{error?:string;missingBaseline?:boolean;missingBaselineWeeks?:number[];gaps?:number[]}>={};
+ let overrides:Record<string,{error?:string;missingBaseline?:boolean;missingBaselineWeeks?:number[];gaps?:number[];closes?:Record<number,number|null>}>={};
  let saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined,viewGate:Promise<void>|undefined,releaseView:(()=>void)|undefined,holdNext=0,holdNextOverview=0;
  const calls={view:0,save:0,catalog:0,data:0,cancel:0},writes:ComparisonView[]=[],requests:Array<{requestId:string;view:ComparisonView;endTime:number}>=[],overviewRequests:Array<{requestId:string;view:ComparisonView;endTime:number}>=[],cancelled:string[]=[];
  let overviewCalls=0;
@@ -40,8 +40,9 @@ export function comparisonBridge():ComparisonBackend {
    const error=override.error||(missing?`The common UTC baseline candle is unavailable on ${comparisonDate(baselineTime)} UTC; first available daily close: 02 Jul 2026 UTC. This asset was not rebased; choose another source for longer history.`:'');
    const index=Math.max(0,assets.findIndex(item=>item.symbol===symbol)),base=1000*(index+1),slope=slopes[index]+(id.includes('|')&&symbol==='TON'?(asset.exchange==='coinbase'?.03:asset.exchange==='bybit'?.06:0):0);
    const sourceAnchor=master?masterAnchor:initialLastClosedTime-value.weeks*7*day,baselineOffset=(baselineTime-sourceAnchor)/day;
+   const closeAt=(time:number)=>{const sharedOffset=(time-masterAnchor)/day;if(override.closes&&Object.hasOwn(override.closes,sharedOffset))return override.closes[sharedOffset];const offset=(time-sourceAnchor)/day;return master?base+base*offset*slope/100:base*(1+offset*slope/100);};
    return {asset,error,points:error?[]:Array.from({length:value.weeks*7+1},(_,offset)=>{
-    const time=baselineTime+offset*day,observedOffset=(time-sourceAnchor)/day,close=master?base+base*observedOffset*slope/100:base*(1+observedOffset*slope/100),baselineClose=master?base+base*baselineOffset*slope/100:base*(1+baselineOffset*slope/100),pct=offset===0?0:baselineOffset===0?offset*slope:(close/baselineClose-1)*100;
+    const time=baselineTime+offset*day,observedOffset=(time-sourceAnchor)/day,close=closeAt(time),baselineClose=closeAt(baselineTime),pct=close===null||baselineClose===null||!Number.isFinite(baselineClose)||baselineClose<=0?null:offset===0?0:baselineOffset===0&&!override.closes?offset*slope:(close/baselineClose-1)*100;
     const gapOffset=master?observedOffset:offset;
     return override.gaps?.includes(gapOffset)||master&&override.missingBaselineWeeks?.some(weeks=>gapOffset===(12-weeks)*7)?{time,close:null,pct:null}:{time,close,pct};
    })};

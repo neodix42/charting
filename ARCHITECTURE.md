@@ -197,12 +197,17 @@ late results through the existing request generation.
 
 Chart IDs scope diagnostics and cleanup for each mounted instance. Four visible
 charts own eight observers and four crosshair listeners, released when hidden or
-suspended. Each panel has independent zoom and crosshair/price readouts; asset
-selection, legend visibility and source-aware line highlighting are shared.
-The active hover records its owning chart and exact selection ID. Clearing or
-unmounting another chart cannot erase that owner; navigation, suspension, hidden
-assets and owner leave release it. Styling another chart does not create pointer
-input or change its crosshair, data, requests or viewport. The overview uses the full workspace
+suspended. Each panel has independent zoom; asset selection, legend visibility,
+source-aware line highlighting and the UTC cursor date are shared. The active
+cursor records its physical owner, exact UTC day, source selection ID and
+normalized plot height. Public setCrosshairPosition/clearCrosshairPosition APIs
+place a cursor only at a valid loaded and visible day, using each pane's own
+rebased source value or normalized free-pointer height. Bottom legends read
+actual native closes at that shared day; gaps and out-of-range dates remain
+unavailable instead of snapping to another candle. Clearing or unmounting another
+chart cannot erase the physical owner; navigation, suspension, hidden assets and
+owner leave release it. Programmatic/style events cannot become pointer input,
+request data or change viewports. The overview uses the full workspace
 width and remaining height with equal grid rows. Each plot measures its available
 host through ResizeObserver and resizes the existing chart while retaining its
 logical range; intrinsic headers/legends and minimum plot height retain scrolling
@@ -210,6 +215,17 @@ when the window is small. Single chart keeps its existing fixed height. The
 responsive grid has two columns, stacking below 800px. Hover highlighting and
 price/date readouts use the bottom legend; no floating tooltip is rendered.
 Workspace chart/tab capacity and persistence are unaffected.
+
+Third-rise stars use a pure chronological helper over positive finite native
+closes at consecutive UTC daily timestamps. Three strict increases need four
+observations; only the third increase in an observed run is marked. Flat/down,
+gaps, invalid observations and nonchronological data break the run. There is no
+sorting, interpolation, prehistory inference or future inspection. Overview
+calculates signals from the longest valid available panel per exact source and
+filters them to each pane's actual dots, preserving overlap consistency even
+when older baselines are unavailable. Single chart uses its loaded history.
+Small below-dot native marker primitives follow source visibility and lifecycle
+without adding provider requests or changing chart scales.
 
 The main Comparison controls are centered independently of the right-aligned
 date-navigation group; narrow layouts wrap without overlapping. Selected asset

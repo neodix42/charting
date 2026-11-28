@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison global cursor and third-rise stars — 2026-11-28
+
+- [x] Synchronize exact UTC crosshairs and native daily legend prices across all four charts without moving viewports, snapping missing dates or retaining stale ownership.
+- [x] Mark the third consecutive observed rise below its dot with correct reset, chronology, shared-source context, visibility and cleanup behavior.
+- [x] Complete 40 Comparison browser cases, 401 unit tests including 22 signal cases, frontend typecheck/lint/production build, root production Go race checks and visible native-cursor/star screenshot review.
+- [ ] Verify production packages and hosted CI against the delivery commit. Native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison toolbar alignment and shared highlighting — 2026-11-28
 
 - [x] Center main controls horizontally/vertically and selected assets; right-align Prev/Next/Today without overlap in narrow windows.

@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {createChart,LineSeries,LineStyle,type AutoscaleInfo,type IChartApi,type IPriceLine,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
+import {createChart,createSeriesMarkers,CrosshairMode,LineSeries,LineStyle,type AutoscaleInfo,type IChartApi,type IPriceLine,type ISeriesMarkersPluginApi,type MouseEventHandler,type Time,type UTCTimestamp} from 'lightweight-charts';
 import type {ComparisonResult} from '../workspace/comparison';
 import {comparisonColor,comparisonDate,comparisonIdentity,comparisonSeriesLabel,comparisonLineData,comparisonPercent,comparisonPrice,comparisonSource} from '../workspace/comparison';
 import {chartThemeOptions} from '../charts/theme';
@@ -10,6 +10,8 @@ import {errorText} from '../types';
 export const comparisonChartResources={charts:0,observers:0,listeners:0};
 type ChartDiagnostic=(time?:number)=>Record<string,unknown>;
 const diagnosticReaders=new Map<string,ChartDiagnostic>();
+export interface ComparisonCursor {owner:string;time:number;id:string|null;normalizedY:number}
+type CursorPosition=Omit<ComparisonCursor,'owner'>;
 export const comparisonChartDiagnostics={
  read:(time?:number,id?:string)=>{
   const reader=id===undefined?(diagnosticReaders.get('single')??(diagnosticReaders.size===1?diagnosticReaders.values().next().value:undefined)):diagnosticReaders.get(id);
@@ -23,10 +25,10 @@ const hitDistance=(x:number,y:number,ax:number,ay:number,bx=ax,by=ay)=>{
  return Math.hypot(x-ax-t*dx,y-ay-t*dy);
 };
 
-export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='single',title,height=460,fillAvailable=false,highlightedAssetId=null,onHoverAsset}:{result:ComparisonResult;hiddenAssets:ReadonlySet<string>;onToggleAsset:(symbol:string)=>void;chartId?:string;title?:string;height?:number;fillAvailable?:boolean;highlightedAssetId?:string|null;onHoverAsset?:(chartId:string,id:string|null)=>void}){
+export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='single',title,height=460,fillAvailable=false,cursor=null,onCursorChange,riseDays}:{result:ComparisonResult;hiddenAssets:ReadonlySet<string>;onToggleAsset:(symbol:string)=>void;chartId?:string;title?:string;height?:number;fillAvailable?:boolean;cursor?:ComparisonCursor|null;onCursorChange?:(chartId:string,position:CursorPosition|null)=>void;riseDays?:ReadonlyMap<string,readonly number[]>}){
  const host=useRef<HTMLDivElement>(null),chartRef=useRef<IChartApi|null>(null),fontSize=useAppearanceFontSize();
- const applyVisibility=useRef<((hidden:ReadonlySet<string>)=>void)|null>(null),applyHighlight=useRef<((id:string|null)=>void)|null>(null),clearPointer=useRef<(()=>void)|null>(null),hoverCallback=useRef(onHoverAsset);
- useEffect(()=>{hoverCallback.current=onHoverAsset;},[onHoverAsset]);
+ const applyVisibility=useRef<((hidden:ReadonlySet<string>)=>void)|null>(null),applyCursor=useRef<((cursor:ComparisonCursor|null)=>void)|null>(null),applyMarkers=useRef<((days:ReadonlyMap<string,readonly number[]>|undefined)=>void)|null>(null),clearPointer=useRef<(()=>void)|null>(null),cursorCallback=useRef(onCursorChange);
+ useEffect(()=>{cursorCallback.current=onCursorChange;},[onCursorChange]);
  const [error,setError]=useState(''),[hover,setHover]=useState<number|null>(null),[focus,setFocus]=useState<string|null>(null);
  const usable=result.series.filter(series=>!series.error&&series.points.some(point=>point.pct!==null));
  useEffect(()=>{
@@ -38,12 +40,16 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
    layout:{...themeOptions.layout,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:chartFontSize(12,fontSize)},
    leftPriceScale:{visible:true,borderColor:palette.chartBorder},rightPriceScale:{visible:false},
    grid:{vertLines:{visible:false},horzLines:{color:palette.chartGrid,style:LineStyle.Dotted}},
+   // Normal mode preserves the selected ordinate and exact whitespace day.
+   // Magnet mode can silently move a synchronized cursor to another series.
+   crosshair:{...themeOptions.crosshair,mode:CrosshairMode.Normal,doNotSnapToHiddenSeriesIndices:false},
    timeScale:{...themeOptions.timeScale,rightOffset:1,minBarSpacing:.1,timeVisible:false,tickMarkFormatter:(time:Time)=>new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short'}).format(new Date(Number(time)*1000))},
    localization:{timeFormatter:(time:Time)=>comparisonDate(Number(time))}});
   chartRef.current=chart;comparisonChartResources.charts++;
   let resize:ResizeObserver|undefined,theme:MutationObserver|undefined,mouse:MouseEventHandler<Time>|undefined;
   let diagnostic:ChartDiagnostic|undefined;
   let zeroLine:IPriceLine|undefined;
+  const markerPlugins:ISeriesMarkersPluginApi<Time>[]=[];
   try{
    const plotted=usable.map((series,index)=>{
     const line=chart.addSeries(LineSeries,{color:comparisonColor(comparisonIdentity(series.asset)),lineWidth:2,priceScaleId:'left',pointMarkersVisible:true,pointMarkersRadius:3,crosshairMarkerRadius:5,lastValueVisible:false,priceLineVisible:false,
@@ -55,13 +61,16 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
     const dots=chart.addSeries(LineSeries,{color:comparisonColor(comparisonIdentity(series.asset)),priceScaleId:'left',lineVisible:false,pointMarkersVisible:true,pointMarkersRadius:3,crosshairMarkerVisible:false,lastValueVisible:false,priceLineVisible:false,priceFormat:{type:'custom',formatter:(value:number)=>`${Number(value.toFixed(2))}%`,minMove:.01}});
     dots.setData(series.points.map(point=>point.pct===null?{time:point.time as UTCTimestamp}:{time:point.time as UTCTimestamp,value:point.pct}));
     if(index===0)zeroLine=line.createPriceLine({price:0,color:palette.chartBorder,lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
-    return{id:comparisonIdentity(series.asset),symbol:series.asset.symbol,line,dots,visible:true,points:new Map(series.points.filter(point=>point.pct!==null).map(point=>[point.time,point.pct!]))};
+    const markers=createSeriesMarkers(dots,[],{autoScale:false});markerPlugins.push(markers);
+    return{id:comparisonIdentity(series.asset),symbol:series.asset.symbol,line,dots,markers,riseDays:[] as readonly number[],visible:true,points:new Map(series.points.filter(point=>point.pct!==null).map(point=>[point.time,point.pct!]))};
    });
    let zeroOwner:typeof plotted[number]|undefined=plotted[0];
    const times=[...new Set(plotted.flatMap(item=>[...item.points.keys()]))].sort((a,b)=>a-b);
    const xAt=(index:number)=>chart.timeScale().timeToCoordinate(times[index] as UTCTimestamp);
    const lowerX=(x:number)=>{let low=0,high=times.length;while(low<high){const mid=(low+high)>>>1,value=xAt(mid);if(value===null)return times.length;if(value<x)low=mid+1;else high=mid;}return low;};
-   let activeSymbol:string|null=null,pointerId:string|null=null,styling=false;
+   let activeSymbol:string|null=null,pointerId:string|null=null,styling=false,synchronizing=false,currentCursor:ComparisonCursor|null=null;
+   let nativeEvent:{time:number|null;point:{x:number;y:number}|null;physical:boolean}|null=null;
+   let appliedCursor:{requestedTime:number|null;owner:string|null;normalizedY:number|null;visible:boolean;time:number|null;x:number|null;y:number|null;price:number|null;anchorId:string|null;reason:string}={requestedTime:null,owner:null,normalizedY:null,visible:false,time:null,x:null,y:null,price:null,anchorId:null,reason:'inactive'};
    const highlight=(candidate:string|null)=>{
     const symbol=plotted.some(item=>item.id===candidate&&item.visible)?candidate:null;
     if(symbol!==activeSymbol){
@@ -72,15 +81,39 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
     }
     setFocus(symbol);
    };
-   applyHighlight.current=highlight;
-   const publishHover=(id:string|null)=>{pointerId=id;if(hoverCallback.current)hoverCallback.current(chartId,id);else highlight(id);};
-   clearPointer.current=()=>{pointerId=null;setHover(null);if(hoverCallback.current)hoverCallback.current(chartId,null);else highlight(null);};
+   const synchronize=(next:ComparisonCursor|null)=>{
+    currentCursor=next;setHover(next?.time??null);highlight(next?.id??null);
+    appliedCursor={requestedTime:next?.time??null,owner:next?.owner??null,normalizedY:next?.normalizedY??null,visible:false,time:null,x:null,y:null,price:null,anchorId:null,reason:next?'unavailable':'inactive'};
+    const hide=(reason:string)=>{appliedCursor.reason=reason;synchronizing=true;try{chart.clearCrosshairPosition();}finally{synchronizing=false;}};
+    if(!next){hide('inactive');return;}
+    const {time,id,normalizedY}=next,scale=chart.timeScale(),pane=chart.paneSize();
+    if(!Number.isFinite(time)||time%86400!==0||time<result.baselineTime||time>result.lastClosedTime||scale.timeToIndex(time as UTCTimestamp,false)===null){hide('outside-loaded-range');return;}
+    const x=scale.timeToCoordinate(time as UTCTimestamp);
+    // The native API intentionally finds a nearest bar and clamps to its visible
+    // range. Prove exact time and visibility before calling it instead.
+    if(x===null||x<0||x>pane.width){hide('outside-visible-range');return;}
+    const anchor=id?plotted.find(item=>item.id===id&&item.visible&&item.points.has(time)):plotted.find(item=>item.visible&&item.points.has(time));
+    if(!anchor){hide(plotted.some(item=>item.visible)?'missing-observation':'all-hidden');return;}
+    // A hit line follows this pane's own rebased value. Empty-space movement
+    // shares only the plot-height fraction; it never invents a market price.
+    const price=id?anchor.points.get(time)!:anchor.line.coordinateToPrice(normalizedY*pane.height);
+    const y=price===null?null:anchor.line.priceToCoordinate(price);
+    if(price===null||!Number.isFinite(price)||y===null||y<0||y>pane.height){hide('outside-visible-price');return;}
+    synchronizing=true;
+    try{chart.setCrosshairPosition(price,time as UTCTimestamp,anchor.line);}finally{synchronizing=false;}
+    appliedCursor={requestedTime:time,owner:next.owner,normalizedY,visible:true,time,x,y,price,anchorId:anchor.id,reason:'visible'};
+   };
+   applyCursor.current=synchronize;
+   const publishCursor=(position:CursorPosition)=>{pointerId=position.id;const next={owner:chartId,...position};synchronize(next);cursorCallback.current?.(chartId,position);};
+   clearPointer.current=()=>{pointerId=null;if(!currentCursor||currentCursor.owner===chartId)synchronize(null);cursorCallback.current?.(chartId,null);};
+   const updateMarkers=(item:typeof plotted[number])=>item.markers.setMarkers(item.visible?item.riseDays.filter(time=>item.points.has(time)).map(time=>({time:time as UTCTimestamp,position:'belowBar',shape:'circle',size:0,text:'★',color:comparisonColor(item.id),id:`third-rise-${item.id}-${time}`})):[]);
+   applyMarkers.current=days=>{styling=true;try{for(const item of plotted){item.riseDays=days?.get(item.id)??[];updateMarkers(item);}}finally{styling=false;}synchronize(currentCursor);};
    const updateTheme=()=>{const next=getThemePalette(document.documentElement.dataset.theme??'light');chart.applyOptions({...chartThemeOptions(next),leftPriceScale:{borderColor:next.chartBorder},grid:{vertLines:{visible:false},horzLines:{color:next.chartGrid,style:LineStyle.Dotted}}});zeroLine?.applyOptions({color:next.chartBorder});};
    // Keep visibility updates separate from chart creation and fitContent.
    applyVisibility.current=hidden=>{
     highlight(null);styling=true;
     try{
-     for(const item of plotted){const visible=!hidden.has(item.id);if(item.visible!==visible){item.visible=visible;item.line.applyOptions({visible});item.dots.applyOptions({visible});}}
+     for(const item of plotted){const visible=!hidden.has(item.id);if(item.visible!==visible){item.visible=visible;item.line.applyOptions({visible});item.dots.applyOptions({visible});updateMarkers(item);}}
      const nextOwner=plotted.find(item=>item.visible);
      if(nextOwner!==zeroOwner){
       if(zeroOwner&&zeroLine)zeroOwner.line.removePriceLine(zeroLine);
@@ -88,7 +121,7 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
       zeroLine=zeroOwner?.line.createPriceLine({price:0,color:getThemePalette(document.documentElement.dataset.theme??'light').chartBorder,lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false});
      }
     }finally{styling=false;}
-    clearPointer.current?.();
+    clearPointer.current?.();synchronize(currentCursor);
    };
    theme=new MutationObserver(updateTheme);theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});comparisonChartResources.observers++;
    resize=new ResizeObserver(()=>{
@@ -99,15 +132,19 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
     plotWidth=width;plotHeight=nextHeight;
     chart.resize(width,nextHeight);
     if(range)chart.timeScale().setVisibleLogicalRange(range);
-    clearPointer.current?.();
+    clearPointer.current?.();synchronize(currentCursor);
    });resize.observe(host.current);comparisonChartResources.observers++;
    mouse=event=>{
-    if(styling||!event.sourceEvent)return;
-    setHover(typeof event.time==='number'?Number(event.time):null);
+    nativeEvent={time:typeof event.time==='number'?Number(event.time):null,point:event.point?{x:event.point.x,y:event.point.y}:null,physical:!!event.sourceEvent};
+    if(styling||synchronizing)return;
+    if(!event.sourceEvent){synchronize(currentCursor);return;}
     const point=event.point;
-    // Only real pointer input owns shared hover. Model/style events in other
-    // charts must not clear that owner or change their local price readouts.
-    if(!point||point.x<0||point.y<0){clearPointer.current?.();return;}
+    // Only physical input can own the group. Programmatic cursor/style events
+    // may refresh its rendering but never publish another hover or steal it.
+    const pane=chart.paneSize();
+    if(!point||point.x<0||point.y<0||point.x>pane.width||point.y>pane.height){clearPointer.current?.();return;}
+    const time=chart.timeScale().coordinateToTime(point.x);
+    if(typeof time!=='number'){clearPointer.current?.();return;}
     // Native hit testing also hits transparent gaps and dots-only line segments.
     // Test only real dots and adjacent daily segments using public coordinates.
     const radius=6,from=Math.max(0,lowerX(point.x-radius)-1),to=Math.min(times.length,lowerX(point.x+radius)+1);
@@ -121,15 +158,16 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
      if(nextTime-time===86400&&nextValue!==undefined){const nextX=xAt(index+1),nextY=item.line.priceToCoordinate(nextValue);if(nextX!==null&&nextY!==null)candidate=Math.min(candidate,hitDistance(point.x,point.y,x,y,nextX,nextY));}
      if(candidate<=distance){nearest=item.id;distance=candidate;}
     }
-    publishHover(nearest);
+    publishCursor({time:Number(time),id:nearest,normalizedY:point.y/pane.height});
    };
    chart.subscribeCrosshairMove(mouse);comparisonChartResources.listeners++;chart.timeScale().fitContent();
-   if(window.__CRYPTO_TEST__){diagnostic=(time?:number)=>({chartId,height:plotHeight,width:plotWidth,fillAvailable,baselineTime:result.baselineTime,lastClosedTime:result.lastClosedTime,x:time===undefined?null:chart.timeScale().timeToCoordinate(time as UTCTimestamp),leftWidth:chart.priceScale('left').width(),logicalRange:chart.timeScale().getVisibleLogicalRange(),referenceSymbol:zeroOwner?.symbol??null,referenceId:zeroOwner?.id??null,hoveredSymbol:plotted.find(item=>item.id===activeSymbol)?.symbol??null,hoveredId:activeSymbol,pointerId,series:plotted.map(item=>({id:item.id,symbol:item.symbol,line:item.line.data(),dots:item.dots.data(),visible:item.line.options().visible,dotsVisible:item.dots.options().visible,lineWidth:item.line.options().lineWidth,y:time===undefined||!item.points.has(time)?null:item.line.priceToCoordinate(item.points.get(time)!)}))});diagnosticReaders.set(chartId,diagnostic);}
+   if(window.__CRYPTO_TEST__){diagnostic=(time?:number)=>({chartId,height:plotHeight,width:plotWidth,fillAvailable,paneSize:chart.paneSize(),baselineTime:result.baselineTime,lastClosedTime:result.lastClosedTime,x:time===undefined?null:chart.timeScale().timeToCoordinate(time as UTCTimestamp),leftWidth:chart.priceScale('left').width(),logicalRange:chart.timeScale().getVisibleLogicalRange(),referenceSymbol:zeroOwner?.symbol??null,referenceId:zeroOwner?.id??null,hoveredSymbol:plotted.find(item=>item.id===activeSymbol)?.symbol??null,hoveredId:activeSymbol,pointerId,cursor:{...appliedCursor},nativeEvent,series:plotted.map(item=>({id:item.id,symbol:item.symbol,line:item.line.data(),dots:item.dots.data(),markers:item.markers.markers(),visible:item.line.options().visible,dotsVisible:item.dots.options().visible,lineWidth:item.line.options().lineWidth,y:time===undefined||!item.points.has(time)?null:item.line.priceToCoordinate(item.points.get(time)!)}))});diagnosticReaders.set(chartId,diagnostic);}
   }catch(reason){setError(errorText(reason));}
-  return()=>{hoverCallback.current?.(chartId,null);clearPointer.current=null;applyHighlight.current=null;applyVisibility.current=null;if(resize){resize.disconnect();comparisonChartResources.observers--;}if(theme){theme.disconnect();comparisonChartResources.observers--;}if(mouse){chart.unsubscribeCrosshairMove(mouse);comparisonChartResources.listeners--;}if(diagnostic&&diagnosticReaders.get(chartId)===diagnostic)diagnosticReaders.delete(chartId);chart.remove();chartRef.current=null;comparisonChartResources.charts--;};
+  return()=>{cursorCallback.current?.(chartId,null);clearPointer.current=null;applyCursor.current=null;applyMarkers.current=null;applyVisibility.current=null;if(resize){resize.disconnect();comparisonChartResources.observers--;}if(theme){theme.disconnect();comparisonChartResources.observers--;}if(mouse){chart.unsubscribeCrosshairMove(mouse);comparisonChartResources.listeners--;}if(diagnostic&&diagnosticReaders.get(chartId)===diagnostic)diagnosticReaders.delete(chartId);for(const plugin of markerPlugins)plugin.detach();chart.remove();chartRef.current=null;comparisonChartResources.charts--;};
  },[result,chartId,height,fillAvailable]);
  useEffect(()=>{applyVisibility.current?.(hiddenAssets);},[hiddenAssets,result,chartId,height,fillAvailable]);
- useEffect(()=>{applyHighlight.current?.(highlightedAssetId);},[highlightedAssetId,hiddenAssets,result,chartId,height,fillAvailable]);
+ useEffect(()=>{applyMarkers.current?.(riseDays);},[riseDays,result,chartId,height,fillAvailable]);
+ useEffect(()=>{applyCursor.current?.(cursor);},[cursor,hiddenAssets,result,chartId,height,fillAvailable]);
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(12,fontSize)}});},[fontSize]);
  const date=hover??result.lastClosedTime;
  const historical=result.lastClosedTime<Math.floor(result.asOf/86400)*86400-86400;

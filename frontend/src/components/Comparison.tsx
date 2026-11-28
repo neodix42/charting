@@ -1,9 +1,10 @@
-import {forwardRef,useEffect,useImperativeHandle,useRef,useState} from 'react';
+import {forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState} from 'react';
 import type {ComparisonAsset,ComparisonBackend,ComparisonCatalog,ComparisonOverview,ComparisonResult,ComparisonView} from '../workspace/comparison';
 import {comparisonColor,comparisonDate,comparisonExchange,comparisonFeedIdentity,comparisonIdentity,comparisonLabel,comparisonOptionName,comparisonSelectionAsset,comparisonSelectionLabel,comparisonSeriesLabel,comparisonSource,ComparisonViewWriter,copyComparisonView,defaultComparisonView} from '../workspace/comparison';
 import {errorText,type Market} from '../types';
 import {AssetPicker} from './AssetPicker';
-import {ComparisonChart} from './ComparisonChart';
+import {ComparisonChart,type ComparisonCursor} from './ComparisonChart';
+import {comparisonThirdRiseTimes} from '../workspace/comparisonSignals';
 import './Comparison.css';
 
 export interface ComparisonHandle {flush():Promise<void>}
@@ -11,7 +12,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
  const [view,setView]=useState<ComparisonView>(defaultComparisonView),[weeksInput,setWeeksInput]=useState('4'),[ready,setReady]=useState(false),[loading,setLoading]=useState(false),[catalog,setCatalog]=useState<ComparisonCatalog|null>(null),[result,setResult]=useState<ComparisonResult|null>(null);
  const [layout,setLayout]=useState<'overview'|'single'>('overview'),[overview,setOverview]=useState<ComparisonOverview|null>(null),[endTime,setEndTime]=useState(0),[utcRefresh,setUtcRefresh]=useState(0);
  const [viewError,setViewError]=useState(''),[catalogError,setCatalogError]=useState(''),[loadError,setLoadError]=useState(''),[saveError,setSaveError]=useState(''),[reload,setReload]=useState(0),[catalogReload,setCatalogReload]=useState(0),[refresh,setRefresh]=useState(0);
- const [hiddenAssets,setHiddenAssets]=useState<ReadonlySet<string>>(()=>new Set()),[pickerSource,setPickerSource]=useState('all'),[sharedHover,setSharedHover]=useState<{owner:string;id:string}|null>(null);
+ const [hiddenAssets,setHiddenAssets]=useState<ReadonlySet<string>>(()=>new Set()),[pickerSource,setPickerSource]=useState('all'),[sharedCursor,setSharedCursor]=useState<ComparisonCursor|null>(null);
  const mounted=useRef(false),draft=useRef(view),writer=useRef<ComparisonViewWriter|null>(null),epoch=useRef(0),request=useRef<string|null>(null);
  // Pinned historical windows stay fixed when the latest UTC day changes.
  const automaticRefresh=endTime===0?utcRefresh:0;
@@ -40,7 +41,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
  useEffect(()=>{
   if(!visible||suspended||!ready||!catalog)return;
   const version=++epoch.current,id=`comparison-${crypto.randomUUID()}`;request.current=id;setLoadError('');
-  setResult(null);setOverview(null);setSharedHover(null);
+  setResult(null);setOverview(null);setSharedCursor(null);
   if(!view.assets.length){setLoading(false);request.current=null;return;}
   setLoading(true);
   const current=()=>mounted.current&&version===epoch.current;
@@ -56,12 +57,23 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
   const timer=setTimeout(()=>setUtcRefresh(value=>value+1),next-Date.now());return()=>clearTimeout(timer);
  },[visible,suspended,ready,utcRefresh]);
  const edit=(patch:Partial<ComparisonView>)=>{const next={...draft.current,...patch};if(JSON.stringify(next)===JSON.stringify(draft.current))return;draft.current=next;setView(next);writer.current!.edit(next);};
- const toggleAsset=(symbol:string)=>{setSharedHover(null);setHiddenAssets(previous=>{const next=new Set(previous);if(next.has(symbol))next.delete(symbol);else next.add(symbol);return next;});};
- const hoverAsset=(owner:string,id:string|null)=>setSharedHover(previous=>id?(previous?.owner===owner&&previous.id===id?previous:{owner,id}):previous?.owner===owner?null:previous);
- useEffect(()=>{setSharedHover(null);},[visible,suspended,layout]);
+ const toggleAsset=(symbol:string)=>{setSharedCursor(null);setHiddenAssets(previous=>{const next=new Set(previous);if(next.has(symbol))next.delete(symbol);else next.add(symbol);return next;});};
+ const moveCursor=(owner:string,position:Omit<ComparisonCursor,'owner'>|null)=>setSharedCursor(previous=>position?(previous?.owner===owner&&previous.time===position.time&&previous.id===position.id&&previous.normalizedY===position.normalizedY?previous:{owner,...position}):previous?.owner===owner?null:previous);
+ useEffect(()=>{setSharedCursor(null);},[visible,suspended,layout]);
  const weeks=Number(weeksInput),invalidWeeks=!Number.isInteger(weeks)||weeks<1||weeks>104;
  const markets=catalog?.markets??catalog?.assets??[];
  const results=layout==='overview'?overview?.panels??[]:result?[result]:[];
+ const riseDays=useMemo(()=>{
+  const days=new Map<string,readonly number[]>();
+  // A recently listed asset may have no twelve-week baseline. Use its longest
+  // valid context, then share those exact dates across overlapping windows.
+  const panels=layout==='overview'?[...(overview?.panels??[])].sort((a,b)=>b.weeks-a.weeks):result?[result]:[];
+  for(const panel of panels)for(const series of panel.series){
+   const id=comparisonIdentity(series.asset);
+   if(!days.has(id)&&!series.error&&series.points.some(point=>point.pct!==null))days.set(id,comparisonThirdRiseTimes(series.points));
+  }
+  return days;
+ },[layout,overview,result]);
  const day=86400,latestClosedTime=Math.floor(Date.now()/86400000)*day-day,through=endTime||results[0]?.lastClosedTime||latestClosedTime;
  const navigationDisabled=!ready||suspended||!view.assets.length,firstPossibleEnd=(layout==='overview'?12:view.weeks)*7*day;
  const advanceDate=()=>setEndTime(value=>{
@@ -98,13 +110,13 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    {loadError&&<p className="screener-error" role="alert">{loadError} <button type="button" onClick={()=>setRefresh(value=>value+1)}>Retry daily data</button></p>}
    {layout==='single'&&!!seriesErrors.length&&<ul className="comparison-series-errors" aria-label="Unavailable comparison assets">{seriesErrors.map(series=><li key={comparisonIdentity(series.asset)}><strong>{comparisonSeriesLabel(series.asset,result?.series.map(item=>item.asset)??[])}</strong> · {series.error}</li>)}</ul>}
    {layout==='single'&&result?.warnings.filter(warning=>!catalog?.warnings.includes(warning)).map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
-   {layout==='single'&&visible&&!suspended&&result&&hasData&&<ComparisonChart result={result} highlightedAssetId={sharedHover?.id??null} onHoverAsset={hoverAsset} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>}
+   {layout==='single'&&visible&&!suspended&&result&&hasData&&<ComparisonChart result={result} cursor={sharedCursor} onCursorChange={moveCursor} riseDays={riseDays} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>}
    {layout==='overview'&&visible&&!suspended&&overview&&<div className="comparison-grid" aria-label="Comparison periods">{overview.panels.map(panel=>{
     const errors=panel.series.filter(series=>series.error),available=panel.series.some(series=>!series.error&&series.points.some(point=>point.pct!==null));
     return <section className="comparison-panel" key={panel.weeks} data-comparison-weeks={panel.weeks} aria-label={`${panel.weeks}-week comparison`}>
      {!!errors.length&&<ul className="comparison-series-errors" aria-label="Unavailable comparison assets">{errors.map(series=><li key={comparisonIdentity(series.asset)}><strong>{comparisonSeriesLabel(series.asset,panel.series.map(item=>item.asset))}</strong> · {series.error}</li>)}</ul>}
      {panel.warnings.filter(warning=>!catalog?.warnings.includes(warning)).map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
-     {available?<ComparisonChart chartId={`weeks-${panel.weeks}`} title={`${panel.weeks} weeks`} fillAvailable result={panel} highlightedAssetId={sharedHover?.id??null} onHoverAsset={hoverAsset} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>:<div className="comparison-empty"><h2>{panel.weeks} weeks</h2><p>No comparable daily data. Each asset needs a real closing price on {comparisonDate(panel.baselineTime)} UTC.</p></div>}
+     {available?<ComparisonChart chartId={`weeks-${panel.weeks}`} title={`${panel.weeks} weeks`} fillAvailable result={panel} cursor={sharedCursor} onCursorChange={moveCursor} riseDays={riseDays} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>:<div className="comparison-empty"><h2>{panel.weeks} weeks</h2><p>No comparable daily data. Each asset needs a real closing price on {comparisonDate(panel.baselineTime)} UTC.</p></div>}
     </section>;
    })}</div>}
    {ready&&!view.assets.length&&<div className="comparison-empty"><h2>Add assets to compare</h2><p>Choose assets using Add asset. Your weeks selection will be kept.</p></div>}
