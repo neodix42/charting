@@ -11,7 +11,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
  const [view,setView]=useState<ComparisonView>(defaultComparisonView),[weeksInput,setWeeksInput]=useState('4'),[ready,setReady]=useState(false),[loading,setLoading]=useState(false),[catalog,setCatalog]=useState<ComparisonCatalog|null>(null),[result,setResult]=useState<ComparisonResult|null>(null);
  const [layout,setLayout]=useState<'overview'|'single'>('overview'),[overview,setOverview]=useState<ComparisonOverview|null>(null),[endTime,setEndTime]=useState(0),[utcRefresh,setUtcRefresh]=useState(0);
  const [viewError,setViewError]=useState(''),[catalogError,setCatalogError]=useState(''),[loadError,setLoadError]=useState(''),[saveError,setSaveError]=useState(''),[reload,setReload]=useState(0),[catalogReload,setCatalogReload]=useState(0),[refresh,setRefresh]=useState(0);
- const [hiddenAssets,setHiddenAssets]=useState<ReadonlySet<string>>(()=>new Set()),[pickerSource,setPickerSource]=useState('all');
+ const [hiddenAssets,setHiddenAssets]=useState<ReadonlySet<string>>(()=>new Set()),[pickerSource,setPickerSource]=useState('all'),[sharedHover,setSharedHover]=useState<{owner:string;id:string}|null>(null);
  const mounted=useRef(false),draft=useRef(view),writer=useRef<ComparisonViewWriter|null>(null),epoch=useRef(0),request=useRef<string|null>(null);
  // Pinned historical windows stay fixed when the latest UTC day changes.
  const automaticRefresh=endTime===0?utcRefresh:0;
@@ -40,7 +40,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
  useEffect(()=>{
   if(!visible||suspended||!ready||!catalog)return;
   const version=++epoch.current,id=`comparison-${crypto.randomUUID()}`;request.current=id;setLoadError('');
-  setResult(null);setOverview(null);
+  setResult(null);setOverview(null);setSharedHover(null);
   if(!view.assets.length){setLoading(false);request.current=null;return;}
   setLoading(true);
   const current=()=>mounted.current&&version===epoch.current;
@@ -56,7 +56,9 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
   const timer=setTimeout(()=>setUtcRefresh(value=>value+1),next-Date.now());return()=>clearTimeout(timer);
  },[visible,suspended,ready,utcRefresh]);
  const edit=(patch:Partial<ComparisonView>)=>{const next={...draft.current,...patch};if(JSON.stringify(next)===JSON.stringify(draft.current))return;draft.current=next;setView(next);writer.current!.edit(next);};
- const toggleAsset=(symbol:string)=>setHiddenAssets(previous=>{const next=new Set(previous);if(next.has(symbol))next.delete(symbol);else next.add(symbol);return next;});
+ const toggleAsset=(symbol:string)=>{setSharedHover(null);setHiddenAssets(previous=>{const next=new Set(previous);if(next.has(symbol))next.delete(symbol);else next.add(symbol);return next;});};
+ const hoverAsset=(owner:string,id:string|null)=>setSharedHover(previous=>id?(previous?.owner===owner&&previous.id===id?previous:{owner,id}):previous?.owner===owner?null:previous);
+ useEffect(()=>{setSharedHover(null);},[visible,suspended,layout]);
  const weeks=Number(weeksInput),invalidWeeks=!Number.isInteger(weeks)||weeks<1||weeks>104;
  const markets=catalog?.markets??catalog?.assets??[];
  const results=layout==='overview'?overview?.panels??[]:result?[result]:[];
@@ -76,14 +78,18 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    {viewError&&<p className="screener-error" role="alert">{viewError} <button type="button" onClick={()=>setReload(value=>value+1)}>Retry saved choices</button></p>}
    {saveError&&<p className="screener-error" role="alert">Could not save Comparison choices: {saveError} <button type="button" onClick={()=>void writer.current!.flush().catch(()=>{})}>Retry saving</button></p>}
    <div className="comparison-controls">
-    <div className="comparison-quick-weeks comparison-date-navigation" role="group" aria-label="Comparison date navigation"><button type="button" disabled={navigationDisabled||through-day<firstPossibleEnd} onClick={()=>setEndTime(value=>(value||through)-day)}>Prev</button><button type="button" disabled={navigationDisabled} onClick={()=>{if(endTime===0)setRefresh(value=>value+1);else setEndTime(0);}}>Today</button><button type="button" disabled={navigationDisabled||endTime===0||endTime>=latestClosedTime} onClick={advanceDate}>Next</button></div>
-    <span className="comparison-end-date">Through {comparisonDate(through)} UTC</span>
+    <div className="comparison-main-controls">
     <div className="comparison-quick-weeks" role="group" aria-label="Comparison layout"><button type="button" aria-pressed={layout==='overview'} disabled={suspended} onClick={()=>setLayout('overview')}>Four charts</button><button type="button" aria-pressed={layout==='single'} disabled={suspended} onClick={()=>setLayout('single')}>Single chart</button></div>
     {layout==='single'&&<><label>Weeks<input type="number" aria-label="Comparison weeks" min={1} max={104} step={1} value={weeksInput} disabled={!ready||suspended} onChange={event=>setWeeksInput(event.target.value)} onBlur={()=>{if(!invalidWeeks&&weeks!==view.weeks)edit({weeks});}} onKeyDown={event=>{if(event.key==='Enter'&&!invalidWeeks&&weeks!==view.weeks){edit({weeks});event.currentTarget.blur();}}}/></label>
     <div className="comparison-quick-weeks" aria-label="Common comparison periods">{[1,2,4,8,12,26,52].map(value=><button type="button" key={value} aria-pressed={view.weeks===value} disabled={!ready||suspended} onClick={()=>{setWeeksInput(String(value));edit({weeks:value});}}>{value}w</button>)}</div></>}
     <AssetPicker exchange="hyperliquid" active={visible} choices={choices} selected="" label="Add asset" buttonLabel="Add comparison asset" panelLabel="Comparison assets" title={view.assets.length>=20?'Up to 20 assets can be compared':'Choose an exchange, market and quote for each asset'} notice={<div className="picker-market-filters" role="group" aria-label="Comparison data source"><button type="button" aria-pressed={pickerSource==='all'} onClick={()=>setPickerSource('all')}>All sources</button>{['hyperliquid','binance','bybit','coinbase'].map(source=><button type="button" key={source} aria-pressed={pickerSource===source} disabled={!markets.some(asset=>asset.exchange===source)} onClick={()=>setPickerSource(source)}>{comparisonExchange(source)}</button>)}</div>} loading={!catalog&&!catalogError} disabled={!ready||suspended||view.assets.length>=20} empty={catalogError?'Asset list unavailable':'All available assets are already selected'} onSelect={symbol=>edit({assets:[...draft.current.assets,symbol]})}/>
     <button type="button" disabled={!ready||loading||suspended||!view.assets.length||layout==='single'&&invalidWeeks} onClick={()=>{if(layout==='single'&&weeks!==view.weeks)edit({weeks});else setRefresh(value=>value+1);}}>Refresh</button>
-    {loading&&<span className="muted" role="status">Loading daily closes…</span>}
+    </div>
+    <div className="comparison-date-controls">
+     <div className="comparison-quick-weeks comparison-date-navigation" role="group" aria-label="Comparison date navigation"><button type="button" disabled={navigationDisabled||through-day<firstPossibleEnd} onClick={()=>setEndTime(value=>(value||through)-day)}>Prev</button><button type="button" disabled={navigationDisabled||endTime===0||endTime>=latestClosedTime} onClick={advanceDate}>Next</button><button type="button" disabled={navigationDisabled} onClick={()=>{if(endTime===0)setRefresh(value=>value+1);else setEndTime(0);}}>Today</button></div>
+     <span className="comparison-end-date">Through {comparisonDate(through)} UTC</span>
+    </div>
+    {loading&&<span className="muted comparison-toolbar-status" role="status">Loading daily closes…</span>}
     {layout==='single'&&invalidWeeks&&<p className="comparison-input-error" role="alert">Choose a whole number from 1 to 104 weeks.</p>}
    </div>
    <div className="comparison-assets" aria-label="Selected comparison assets">{view.assets.map(symbol=>{const asset=sourceFor(symbol);return <div className="comparison-asset" key={symbol} data-comparison-id={symbol}><i style={{background:comparisonColor(symbol)}}/><div><strong>{asset?comparisonLabel(asset):comparisonSelectionLabel(symbol)}</strong><small>{asset?comparisonSource(asset):catalogError?'Source unavailable':'Resolving source…'}</small></div><button type="button" aria-label={`Remove ${symbol.includes('|')?(asset?comparisonOptionName(asset):comparisonSelectionLabel(symbol)):symbol} from comparison`} disabled={!ready||suspended} onClick={()=>edit({assets:draft.current.assets.filter(value=>value!==symbol)})}>×</button></div>;})}</div>
@@ -93,13 +99,13 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    {loadError&&<p className="screener-error" role="alert">{loadError} <button type="button" onClick={()=>setRefresh(value=>value+1)}>Retry daily data</button></p>}
    {layout==='single'&&!!seriesErrors.length&&<ul className="comparison-series-errors" aria-label="Unavailable comparison assets">{seriesErrors.map(series=><li key={comparisonIdentity(series.asset)}><strong>{comparisonSeriesLabel(series.asset,result?.series.map(item=>item.asset)??[])}</strong> · {series.error}</li>)}</ul>}
    {layout==='single'&&result?.warnings.filter(warning=>!catalog?.warnings.includes(warning)).map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
-   {layout==='single'&&visible&&!suspended&&result&&hasData&&<ComparisonChart result={result} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>}
+   {layout==='single'&&visible&&!suspended&&result&&hasData&&<ComparisonChart result={result} highlightedAssetId={sharedHover?.id??null} onHoverAsset={hoverAsset} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>}
    {layout==='overview'&&visible&&!suspended&&overview&&<div className="comparison-grid" aria-label="Comparison periods">{overview.panels.map(panel=>{
     const errors=panel.series.filter(series=>series.error),available=panel.series.some(series=>!series.error&&series.points.some(point=>point.pct!==null));
     return <section className="comparison-panel" key={panel.weeks} data-comparison-weeks={panel.weeks} aria-label={`${panel.weeks}-week comparison`}>
      {!!errors.length&&<ul className="comparison-series-errors" aria-label="Unavailable comparison assets">{errors.map(series=><li key={comparisonIdentity(series.asset)}><strong>{comparisonSeriesLabel(series.asset,panel.series.map(item=>item.asset))}</strong> · {series.error}</li>)}</ul>}
      {panel.warnings.filter(warning=>!catalog?.warnings.includes(warning)).map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
-     {available?<ComparisonChart chartId={`weeks-${panel.weeks}`} title={`${panel.weeks} weeks`} fillAvailable result={panel} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>:<div className="comparison-empty"><h2>{panel.weeks} weeks</h2><p>No comparable daily data. Each asset needs a real closing price on {comparisonDate(panel.baselineTime)} UTC.</p></div>}
+     {available?<ComparisonChart chartId={`weeks-${panel.weeks}`} title={`${panel.weeks} weeks`} fillAvailable result={panel} highlightedAssetId={sharedHover?.id??null} onHoverAsset={hoverAsset} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>:<div className="comparison-empty"><h2>{panel.weeks} weeks</h2><p>No comparable daily data. Each asset needs a real closing price on {comparisonDate(panel.baselineTime)} UTC.</p></div>}
     </section>;
    })}</div>}
    {ready&&!view.assets.length&&<div className="comparison-empty"><h2>Add assets to compare</h2><p>Choose assets using Add asset. Your weeks selection will be kept.</p></div>}

@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison toolbar alignment and shared highlighting — 2026-11-28
+
+- [x] Center main controls horizontally/vertically and selected assets; right-align Prev/Next/Today without overlap in narrow windows.
+- [x] Verify source-aware shared line highlighting, owner cleanup, local readouts, hidden/missing assets and preserved chart instances/zoom/provider calls, including keyboard hiding.
+- [x] Complete 37 Comparison browser cases, 379 frontend unit tests, typecheck/lint/production build, root production Go race checks and screenshot review.
+- [ ] Verify production packages and hosted CI against the delivery commit. Native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison window fill and daily navigation — 2026-11-28
 
 - [x] Implement measured full-window overview plots, shared UTC Prev/Today/Next controls, strict completed-day bounds and unchanged private View settings.

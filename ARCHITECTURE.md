@@ -197,8 +197,12 @@ late results through the existing request generation.
 
 Chart IDs scope diagnostics and cleanup for each mounted instance. Four visible
 charts own eight observers and four crosshair listeners, released when hidden or
-suspended. Each panel has independent zoom/hover; asset selection and legend
-visibility are shared. The overview uses the full workspace
+suspended. Each panel has independent zoom and crosshair/price readouts; asset
+selection, legend visibility and source-aware line highlighting are shared.
+The active hover records its owning chart and exact selection ID. Clearing or
+unmounting another chart cannot erase that owner; navigation, suspension, hidden
+assets and owner leave release it. Styling another chart does not create pointer
+input or change its crosshair, data, requests or viewport. The overview uses the full workspace
 width and remaining height with equal grid rows. Each plot measures its available
 host through ResizeObserver and resizes the existing chart while retaining its
 logical range; intrinsic headers/legends and minimum plot height retain scrolling
@@ -206,6 +210,11 @@ when the window is small. Single chart keeps its existing fixed height. The
 responsive grid has two columns, stacking below 800px. Hover highlighting and
 price/date readouts use the bottom legend; no floating tooltip is rendered.
 Workspace chart/tab capacity and persistence are unaffected.
+
+The main Comparison controls are centered independently of the right-aligned
+date-navigation group; narrow layouts wrap without overlapping. Selected asset
+chips are centered below the toolbar. These positions are presentation state and
+do not change the saved view or workspace navigation.
 
 `Catalog.markets` retains each exact eligible provider/market/native instrument
 from independent public Hyperliquid, Binance, Bybit and Coinbase discovery.
