@@ -93,7 +93,6 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
     {layout==='single'&&invalidWeeks&&<p className="comparison-input-error" role="alert">Choose a whole number from 1 to 104 weeks.</p>}
    </div>
    <div className="comparison-assets" aria-label="Selected comparison assets">{view.assets.map(symbol=>{const asset=sourceFor(symbol);return <div className="comparison-asset" key={symbol} data-comparison-id={symbol}><i style={{background:comparisonColor(symbol)}}/><div><strong>{asset?comparisonLabel(asset):comparisonSelectionLabel(symbol)}</strong><small>{asset?comparisonSource(asset):catalogError?'Source unavailable':'Resolving source…'}</small></div><button type="button" aria-label={`Remove ${symbol.includes('|')?(asset?comparisonOptionName(asset):comparisonSelectionLabel(symbol)):symbol} from comparison`} disabled={!ready||suspended} onClick={()=>edit({assets:draft.current.assets.filter(value=>value!==symbol)})}>×</button></div>;})}</div>
-   {layout==='overview'&&<p className="comparison-note">Selected assets and legend visibility apply to all four charts.</p>}
    {catalogError&&<p className="screener-error" role="alert">{catalogError} <button type="button" onClick={()=>setCatalogReload(value=>value+1)}>Retry assets</button></p>}
    {catalog?.warnings.map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
    {loadError&&<p className="screener-error" role="alert">{loadError} <button type="button" onClick={()=>setRefresh(value=>value+1)}>Retry daily data</button></p>}
