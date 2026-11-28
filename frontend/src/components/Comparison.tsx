@@ -121,7 +121,6 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    })}</div>}
    {ready&&!view.assets.length&&<div className="comparison-empty"><h2>Add assets to compare</h2><p>Choose assets using Add asset. Your weeks selection will be kept.</p></div>}
    {layout==='single'&&ready&&!loading&&result&&!hasData&&!loadError&&<div className="comparison-empty"><h2>No comparable daily data</h2><p>Each asset needs a real closing price on {comparisonDate(result.baselineTime)} to share the same starting point.</p></div>}
-   <p className="comparison-note">Percentage change from the starting close, using completed UTC daily candles. Choose markets from Hyperliquid, Binance, Bybit and Coinbase. Each line uses its selected exchange and market. Changes are measured in the displayed quote currency; quotes are not converted. Missing closes remain gaps.</p>
   </div>
  </section>;
 });
