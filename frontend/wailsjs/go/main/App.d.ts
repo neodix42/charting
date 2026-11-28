@@ -247,7 +247,11 @@ export function GetComparisonCatalog():Promise<comparison.Catalog>;
 
 export function GetComparisonDailyChanges(arg1:string,arg2:comparison.View):Promise<comparison.Result>;
 
+export function GetComparisonDailyChangesAt(arg1:string,arg2:comparison.View,arg3:number):Promise<comparison.Result>;
+
 export function GetComparisonOverview(arg1:string,arg2:comparison.View):Promise<comparison.Overview>;
+
+export function GetComparisonOverviewAt(arg1:string,arg2:comparison.View,arg3:number):Promise<comparison.Overview>;
 
 export function GetComparisonView():Promise<comparison.View>;
 

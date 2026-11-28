@@ -6,6 +6,7 @@ import {comparisonChartDiagnostics,comparisonChartResources} from '../components
 /** Explicit offline browser data only; never installed by the production bridge. */
 export function comparisonBridge():ComparisonBackend {
  const key='cryptodesk-explicit-test-comparison-view';
+ const initialLastClosedTime=Math.floor(Date.now()/86400000)*86400-86400,masterAnchor=initialLastClosedTime-84*86400;
  const names:Record<string,string>={BTC:'Bitcoin',ETH:'Ethereum',TON:'Gram (formerly Toncoin)',HYPE:'Hyperliquid',ZEN:'Horizen',APT:'Aptos',NEAR:'NEAR Protocol',SOL:'Solana',LTC:'Litecoin',DCR:'Decred',XAUT:'Tether Gold'};
  const assets:ComparisonAsset[]=Object.entries(names).map(([symbol,name])=>{
   const fallback=symbol==='ZEN'||symbol==='DCR'||symbol==='XAUT',exchange=fallback?'binance':'hyperliquid',market=fallback?'spot':'perpetual',nativeId=fallback?`${symbol}USDT`:symbol==='TON'?'GRAM':symbol,quoteAsset=fallback?'USDT':'USDC';
@@ -21,7 +22,7 @@ export function comparisonBridge():ComparisonBackend {
  let errors:Partial<Record<'view'|'save'|'catalog'|'data',string>>={},catalog:ComparisonCatalog={assets,markets,warnings:[]};
  let overrides:Record<string,{error?:string;missingBaseline?:boolean;missingBaselineWeeks?:number[];gaps?:number[]}>={};
  let saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined,viewGate:Promise<void>|undefined,releaseView:(()=>void)|undefined,holdNext=0,holdNextOverview=0;
- const calls={view:0,save:0,catalog:0,data:0,cancel:0},writes:ComparisonView[]=[],requests:Array<{requestId:string;view:ComparisonView}>=[],overviewRequests:Array<{requestId:string;view:ComparisonView}>=[],cancelled:string[]=[];
+ const calls={view:0,save:0,catalog:0,data:0,cancel:0},writes:ComparisonView[]=[],requests:Array<{requestId:string;view:ComparisonView;endTime:number}>=[],overviewRequests:Array<{requestId:string;view:ComparisonView;endTime:number}>=[],cancelled:string[]=[];
  let overviewCalls=0;
  const pending=new Map<string,{result:ComparisonResult;resolve:(value:ComparisonResult)=>void}>();
  const pendingOverview=new Map<string,{result:ComparisonOverview;resolve:(value:ComparisonOverview)=>void}>();
@@ -29,8 +30,8 @@ export function comparisonBridge():ComparisonBackend {
  const validate=(value:ComparisonView)=>{
   if(!Number.isInteger(value.weeks)||value.weeks<1||value.weeks>104||!Array.isArray(value.assets)||value.assets.length>20||new Set(value.assets).size!==value.assets.length||value.assets.some(id=>!/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(id)&&!(/^(binance|bybit|coinbase|hyperliquid)\|(spot|perpetual)\|[^|]+$/.test(id)&&id.length<=512)))throw Error('Invalid Comparison choices');
  };
- const makeResult=(requestId:string,value:ComparisonView,master=false):ComparisonResult=>{
-  const asOf=Math.floor(Date.now()/1000),day=86400,lastClosedTime=Math.floor(asOf/day)*day-day,baselineTime=lastClosedTime-value.weeks*7*day;
+ const makeResult=(requestId:string,value:ComparisonView,master=false,endTime=0):ComparisonResult=>{
+  const asOf=Math.floor(Date.now()/1000),day=86400,lastClosedTime=endTime||Math.floor(asOf/day)*day-day,baselineTime=lastClosedTime-value.weeks*7*day;
   const slopes=[1,-.5,.25,.75,-.3,.1,.4,.6,-.2,.15,.05];
   return {requestId,weeks:value.weeks,asOf,baselineTime,lastClosedTime,warnings:[],series:value.assets.map(id=>{
    const found=[...(catalog.markets??[]),...catalog.assets].find(asset=>comparisonIdentity(asset)===id),asset=found?{...found,id}:undefined,symbol=asset?.symbol??id,override=overrides[id]??{};
@@ -38,16 +39,18 @@ export function comparisonBridge():ComparisonBackend {
    const missing=!master&&(override.missingBaseline||override.missingBaselineWeeks?.includes(value.weeks));
    const error=override.error||(missing?`The common UTC baseline candle is unavailable on ${comparisonDate(baselineTime)} UTC; first available daily close: 02 Jul 2026 UTC. This asset was not rebased; choose another source for longer history.`:'');
    const index=Math.max(0,assets.findIndex(item=>item.symbol===symbol)),base=1000*(index+1),slope=slopes[index]+(id.includes('|')&&symbol==='TON'?(asset.exchange==='coinbase'?.03:asset.exchange==='bybit'?.06:0):0);
+   const sourceAnchor=master?masterAnchor:initialLastClosedTime-value.weeks*7*day,baselineOffset=(baselineTime-sourceAnchor)/day;
    return {asset,error,points:error?[]:Array.from({length:value.weeks*7+1},(_,offset)=>{
-    const time=baselineTime+offset*day,pct=offset===0?0:offset*slope;
-    return override.gaps?.includes(offset)||master&&override.missingBaselineWeeks?.some(weeks=>offset===(12-weeks)*7)?{time,close:null,pct:null}:{time,close:master?base+base*offset*slope/100:base*(1+pct/100),pct};
+    const time=baselineTime+offset*day,observedOffset=(time-sourceAnchor)/day,close=master?base+base*observedOffset*slope/100:base*(1+observedOffset*slope/100),baselineClose=master?base+base*baselineOffset*slope/100:base*(1+baselineOffset*slope/100),pct=offset===0?0:baselineOffset===0?offset*slope:(close/baselineClose-1)*100;
+    const gapOffset=master?observedOffset:offset;
+    return override.gaps?.includes(gapOffset)||master&&override.missingBaselineWeeks?.some(weeks=>gapOffset===(12-weeks)*7)?{time,close:null,pct:null}:{time,close,pct};
    })};
   })};
  };
  // One master history supplies every panel's identical real daily closes.
  // Only the strict UTC baseline and resulting percentages change per period.
- const makeOverview=(requestId:string,value:ComparisonView):ComparisonOverview=>{
-  const master=makeResult(requestId,{weeks:12,assets:value.assets},true);
+ const makeOverview=(requestId:string,value:ComparisonView,endTime=0):ComparisonOverview=>{
+  const master=makeResult(requestId,{weeks:12,assets:value.assets},true,endTime);
   return{requestId,panels:[2,4,8,12].map(weeks=>{
    const baselineTime=master.lastClosedTime-weeks*7*86400;
    return{...master,weeks,baselineTime,series:master.series.map(series=>{
@@ -57,6 +60,19 @@ export function comparisonBridge():ComparisonBackend {
     return{...series,error,points:error?[]:points.map(point=>({...point,pct:point.close===null?null:point.time===baselineTime?0:(point.close/baseline!-1)*100}))};
    })};
   })};
+ };
+ const validateEnd=(endTime:number)=>{const latest=Math.floor(Date.now()/86400000)*86400-86400;if(!Number.isSafeInteger(endTime)||endTime<0||endTime!==0&&(endTime%86400!==0||endTime>latest))throw Error('Choose a fully closed UTC day');};
+ const getDaily=async(requestId:string,value:ComparisonView,endTime=0)=>{
+  calls.data++;validate(value);validateEnd(endTime);requests.push({requestId,view:copyComparisonView(value),endTime});if(errors.data)throw Error(errors.data);
+  const result=makeResult(requestId,value,false,endTime);
+  if(holdNext>0){holdNext--;return new Promise<ComparisonResult>(resolve=>{pending.set(requestId,{result,resolve});});}
+  lastResult=result;return structuredClone(result);
+ };
+ const getOverview=async(requestId:string,value:ComparisonView,endTime=0)=>{
+  overviewCalls++;validate(value);validateEnd(endTime);overviewRequests.push({requestId,view:copyComparisonView(value),endTime});if(errors.data)throw Error(errors.data);
+  const result=makeOverview(requestId,value,endTime);
+  if(holdNextOverview>0){holdNextOverview--;return new Promise<ComparisonOverview>(resolve=>{pendingOverview.set(requestId,{result,resolve});});}
+  lastOverview=result;return structuredClone(result);
  };
  Object.assign(window,{
   __testComparisonView:()=>copyComparisonView(view),__testComparisonCalls:()=>({...calls}),__testComparisonWrites:()=>structuredClone(writes),__testComparisonRequests:()=>structuredClone(requests),__testComparisonCancelled:()=>[...cancelled],__testComparisonLastResult:()=>structuredClone(lastResult),__testComparisonLastOverview:()=>structuredClone(lastOverview),__testComparisonChartResources:()=>({...comparisonChartResources}),__testComparisonChart:(time?:number,id?:string)=>comparisonChartDiagnostics.read(time,id),__testComparisonCharts:(time?:number)=>comparisonChartDiagnostics.readAll(time),
@@ -78,18 +94,10 @@ export function comparisonBridge():ComparisonBackend {
   async GetComparisonView(){calls.view++;const value=copyComparisonView(view);if(viewGate)await viewGate;if(errors.view)throw Error(errors.view);return value;},
   async SaveComparisonView(value){calls.save++;validate(value);const next=copyComparisonView(value);if(saveGate)await saveGate;if(errors.save)throw Error(errors.save);view=next;writes.push(copyComparisonView(next));sessionStorage.setItem(key,JSON.stringify(view));return copyComparisonView(view);},
   async GetComparisonCatalog(){calls.catalog++;if(errors.catalog)throw Error(errors.catalog);return structuredClone(catalog);},
-  async GetComparisonDailyChanges(requestId,value){
-   calls.data++;validate(value);requests.push({requestId,view:copyComparisonView(value)});if(errors.data)throw Error(errors.data);
-   const result=makeResult(requestId,value);
-   if(holdNext>0){holdNext--;return new Promise(resolve=>{pending.set(requestId,{result,resolve});});}
-   lastResult=result;return structuredClone(result);
-  },
-  async GetComparisonOverview(requestId,value){
-   overviewCalls++;validate(value);overviewRequests.push({requestId,view:copyComparisonView(value)});if(errors.data)throw Error(errors.data);
-   const result=makeOverview(requestId,value);
-   if(holdNextOverview>0){holdNextOverview--;return new Promise(resolve=>{pendingOverview.set(requestId,{result,resolve});});}
-   lastOverview=result;return structuredClone(result);
-  },
+  GetComparisonDailyChanges:getDaily,
+  GetComparisonDailyChangesAt:getDaily,
+  GetComparisonOverview:getOverview,
+  GetComparisonOverviewAt:getOverview,
   async CancelComparisonRequest(requestId){calls.cancel++;cancelled.push(requestId);},
  };
 }

@@ -14,7 +14,9 @@ export interface ComparisonBackend {
  SaveComparisonView(view:ComparisonView):Promise<ComparisonView>;
  GetComparisonCatalog():Promise<ComparisonCatalog>;
  GetComparisonDailyChanges(requestId:string,view:ComparisonView):Promise<ComparisonResult>;
+ GetComparisonDailyChangesAt(requestId:string,view:ComparisonView,endTime:number):Promise<ComparisonResult>;
  GetComparisonOverview(requestId:string,view:ComparisonView):Promise<ComparisonOverview>;
+ GetComparisonOverviewAt(requestId:string,view:ComparisonView,endTime:number):Promise<ComparisonOverview>;
  CancelComparisonRequest(requestId:string):Promise<void>;
 }
 export const defaultComparisonView=():ComparisonView=>({weeks:4,assets:['BTC','ETH','TON','HYPE','ZEN','APT','NEAR']});

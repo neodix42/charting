@@ -470,8 +470,16 @@ export function GetComparisonDailyChanges(arg1, arg2) {
   return window['go']['main']['App']['GetComparisonDailyChanges'](arg1, arg2);
 }
 
+export function GetComparisonDailyChangesAt(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetComparisonDailyChangesAt'](arg1, arg2, arg3);
+}
+
 export function GetComparisonOverview(arg1, arg2) {
   return window['go']['main']['App']['GetComparisonOverview'](arg1, arg2);
+}
+
+export function GetComparisonOverviewAt(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetComparisonOverviewAt'](arg1, arg2, arg3);
 }
 
 export function GetComparisonView() {

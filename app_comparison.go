@@ -87,6 +87,20 @@ func (a *App) GetComparisonOverview(requestID string, view comparison.View) (com
 	}
 	return manager.Overview(ctx, requestID, view)
 }
+func (a *App) GetComparisonOverviewAt(requestID string, view comparison.View, endTime int64) (comparison.Overview, error) {
+	manager, ctx, err := a.comparisonService()
+	if err != nil {
+		return comparison.Overview{}, err
+	}
+	return manager.OverviewAt(ctx, requestID, view, endTime)
+}
+func (a *App) GetComparisonDailyChangesAt(requestID string, view comparison.View, endTime int64) (comparison.Result, error) {
+	manager, ctx, err := a.comparisonService()
+	if err != nil {
+		return comparison.Result{}, err
+	}
+	return manager.DailyChangesAt(ctx, requestID, view, endTime)
+}
 func (a *App) CancelComparisonRequest(requestID string) {
 	a.mu.Lock()
 	manager := a.comparison

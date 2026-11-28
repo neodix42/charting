@@ -14,6 +14,13 @@ const calls=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonCalls
 const charts=(page:Page,time?:number)=>page.evaluate(time=>(window as any).__testComparisonCharts(time),time);
 const pending=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonPendingOverview());
 const legend=(page:Page,weeks:number,symbol:string)=>region(page,weeks).getByLabel('Comparison legend',{exact:true}).getByRole('button',{name:symbol,exact:true});
+const navigate=(page:Page,name:'Prev'|'Today'|'Next')=>page.getByRole('group',{name:'Comparison date navigation',exact:true}).getByRole('button',{name,exact:true});
+const groupRequests=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonOverviewRequests());
+async function through(page:Page,endTime:number,checkLatestDelivery=true){
+ if(checkLatestDelivery)await expect.poll(async()=>(await overview(page))?.panels.map((item:any)=>item.lastClosedTime)).toEqual(periods.map(()=>endTime));
+ for(const weeks of periods)await expect(plot(page,weeks)).toHaveAttribute('data-baseline-time',String(endTime-weeks*7*day));
+ await expect(panel(page).locator('.comparison-end-date')).toContainText(`${comparisonDate(endTime)} UTC`);
+}
 async function frames(page:Page){await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));}
 async function enter(page:Page){await page.getByRole('tab',{name:'Comparison',exact:true}).click();await expect(panel(page)).toBeVisible();}
 async function loaded(page:Page,counts=[7,7,7,7]){
@@ -67,7 +74,7 @@ test('each overview chart owns its hover and viewport while visibility toggles a
  await expect.poll(async()=>{const item=(await charts(page,time)).find((value:any)=>value.chartId==='weeks-2');return item.logicalRange.to-item.logicalRange.from;}).toBeLessThan(before[0].logicalRange.to-before[0].logicalRange.from);
  await page.mouse.move(0,0);await frames(page);const zoomed=await charts(page,time);for(const item of zoomed.filter((value:any)=>value.chartId!=='weeks-2'))expect(item.logicalRange).toEqual(before.find((value:any)=>value.chartId===item.chartId).logicalRange);
  const rendered=zoomed.find((item:any)=>item.chartId==='weeks-2'),line=rendered.series.find((item:any)=>item.symbol==='BTC'),hoverBounds=(await plot(page,2).boundingBox())!;expect(Number.isFinite(line.y)).toBe(true);
- await page.mouse.move(hoverBounds.x+rendered.leftWidth+rendered.x,hoverBounds.y+line.y);await expect(region(page,2).getByRole('tooltip')).toContainText(`${comparisonDate(time)} UTC`);await expect(region(page,2).getByRole('tooltip')).toContainText('Close 1,770 USDC');
+ await page.mouse.move(hoverBounds.x+rendered.leftWidth+rendered.x,hoverBounds.y+line.y);await expect(region(page,2).getByRole('tooltip')).toHaveCount(0);await expect(legend(page,2,'BTC')).toHaveAttribute('data-highlighted','true');await expect(region(page,2).locator('.comparison-readout')).toContainText(`${comparisonDate(time)} UTC`);await expect(legend(page,2,'BTC').locator('.comparison-legend-price')).toHaveText('Close 1,770 USDC');
  for(const weeks of [4,8,12]){await expect(region(page,weeks).getByRole('tooltip')).toHaveCount(0);await expect(region(page,weeks).locator('.comparison-readout')).toContainText('Latest completed daily close');await expect(legend(page,weeks,'BTC').locator('.comparison-legend-price')).toHaveText('Close 1,840 USDC');}
  await region(page,2).screenshot({path:testInfo.outputPath('comparison-overview-independent-hover.png')});
  await legend(page,4,'BTC').click();for(const weeks of periods)await expect(legend(page,weeks,'BTC')).toHaveAttribute('aria-pressed','false');
@@ -115,6 +122,7 @@ test('settings and navigation cancel a grouped refresh, release all four charts 
 
 test('an intentionally empty shared selection stays empty without provider work in either layout or after reload',async({page})=>{
  await saved(page,13,[]);await openTestApp(page);await enter(page);await expect(panel(page)).toContainText('Add assets to compare');expect(await groupCalls(page)).toBe(0);expect((await calls(page)).data).toBe(0);expect(await resources(page)).toEqual({charts:0,observers:0,listeners:0});
+ for(const name of ['Prev','Today','Next'] as const)await expect(navigate(page,name)).toBeDisabled();
  await layout(page,'Single chart').click();await expect(page.getByRole('spinbutton',{name:'Comparison weeks',exact:true})).toHaveValue('13');await layout(page,'Four charts').click();await expect(page.getByTestId('comparison-chart')).toHaveCount(0);expect(await groupCalls(page)).toBe(0);expect((await calls(page)).data).toBe(0);
  await reloadTestApp(page);await enter(page);await expect(panel(page)).toContainText('Add assets to compare');expect(await groupCalls(page)).toBe(0);await add(page,'BTC');await loaded(page,[1,1,1,1]);expect(await groupCalls(page)).toBe(1);
  const remove=page.getByLabel('Selected comparison assets',{exact:true}).getByRole('button',{name:/^Remove .* from comparison$/});await remove.click();await expect(panel(page)).toContainText('Add assets to compare');await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});expect(await groupCalls(page)).toBe(1);
@@ -130,4 +138,53 @@ test('one UTC rollover refresh advances all four cutoffs together and stops sche
  await page.clock.fastForward(16000);await expect.poll(()=>groupCalls(page)).toBe(2);await loaded(page);const after=await overview(page);
  for(const [index,item] of after.panels.entries()){expect(item.lastClosedTime).toBe(before.panels[index].lastClosedTime+day);expect(item.baselineTime).toBe(before.panels[index].baselineTime+day);}expect(new Set(after.panels.map((item:any)=>item.asOf)).size).toBe(1);expect((await calls(page)).data).toBe(0);expect((await calls(page)).save).toBe(0);
  await page.getByRole('tab',{name:'Screener',exact:true}).click();await expect.poll(()=>resources(page)).toEqual({charts:0,observers:0,listeners:0});await page.clock.fastForward(86410000);await frames(page);expect(await groupCalls(page)).toBe(2);expect(await charts(page)).toEqual([]);
+});
+
+test('overview fills wide and tall windows while resize preserves chart instances, zoom and provider work',async({page},testInfo)=>{
+ await page.setViewportSize({width:1920,height:1440});await openTestApp(page);await enter(page);await loaded(page);await frames(page);
+ const grid=panel(page).locator('.comparison-grid'),firstBounds=(await grid.boundingBox())!;expect(firstBounds.width).toBeGreaterThan(1800);expect(firstBounds.y+firstBounds.height).toBeGreaterThan(1320);expect(firstBounds.x+firstBounds.width).toBeLessThanOrEqual(1920);
+ const result=await overview(page),time=result.panels[0].lastClosedTime-7*day,initial=await charts(page,time),canvases=await Promise.all(periods.map(weeks=>plot(page,weeks).locator('canvas').first().elementHandle()));
+ for(const item of initial){expect(item.fillAvailable).toBe(true);expect(item.height).toBeGreaterThan(260);}for(const weeks of periods)await expect(region(page,weeks).getByLabel('Comparison legend',{exact:true})).toBeInViewport({ratio:1});
+ const bounds=(await plot(page,2).boundingBox())!;await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);await page.mouse.wheel(0,-180);await expect.poll(async()=>{const item=(await charts(page,time)).find((value:any)=>value.chartId==='weeks-2');return item.logicalRange.to-item.logicalRange.from;}).toBeLessThan(initial[0].logicalRange.to-initial[0].logicalRange.from);await page.mouse.move(0,0);await frames(page);
+ const zoomed=await charts(page,time),before=await calls(page),groups=await groupCalls(page);await page.screenshot({path:testInfo.outputPath('comparison-overview-fill-1920x1440.png')});
+ await page.setViewportSize({width:1920,height:1800});await expect.poll(async()=>(await charts(page,time)).every((item:any)=>item.height>initial.find((old:any)=>old.chartId===item.chartId).height+100)).toBe(true);
+ await page.setViewportSize({width:2200,height:1800});await frames(page);expect((await grid.boundingBox())!.width).toBeGreaterThan(firstBounds.width+200);
+ const resized=await charts(page,time);for(const item of resized){const old=zoomed.find((value:any)=>value.chartId===item.chartId);expect(item.logicalRange.from).toBeCloseTo(old.logicalRange.from,5);expect(item.logicalRange.to).toBeCloseTo(old.logicalRange.to,5);}for(const canvas of canvases)expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);expect(await calls(page)).toEqual(before);expect(await groupCalls(page)).toBe(groups);expect(await resources(page)).toEqual({charts:4,observers:8,listeners:4});
+ await page.screenshot({path:testInfo.outputPath('comparison-overview-fill-2200x1800.png')});
+ await page.setViewportSize({width:900,height:700});await frames(page);for(const weeks of periods){expect((await plot(page,weeks).boundingBox())!.height).toBeGreaterThanOrEqual(179);const item=region(page,weeks).getByLabel('Comparison legend',{exact:true});await item.scrollIntoViewIfNeeded();await expect(item).toBeInViewport({ratio:1});}expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(900);expect(await groupCalls(page)).toBe(groups);for(const canvas of canvases)expect(await canvas!.evaluate(element=>element.isConnected)).toBe(true);await page.screenshot({path:testInfo.outputPath('comparison-overview-minimum-scroll.png')});
+});
+
+test('Prev, Today and Next shift every fixed window by one real UTC day without changing saved choices',async({page})=>{
+ await page.clock.install({time:Date.UTC(2026,10,28,10)});await openTestApp(page);await enter(page);await loaded(page);const initial=await overview(page),latest=initial.panels[0].lastClosedTime,view=await page.evaluate(()=>(window as any).__testComparisonView());
+ await expect(navigate(page,'Next')).toBeDisabled();const prevBounds=(await navigate(page,'Prev').boundingBox())!,layoutBounds=(await layout(page,'Four charts').boundingBox())!,refreshBounds=(await panel(page).getByRole('button',{name:'Refresh',exact:true}).boundingBox())!;expect(prevBounds.x).toBeLessThan(layoutBounds.x);expect(prevBounds.x).toBeLessThan(refreshBounds.x);
+ await navigate(page,'Prev').click();await through(page,latest-day);await expect(navigate(page,'Next')).toBeEnabled();expect((await groupRequests(page)).at(-1).endTime).toBe(latest-day);
+ const previous=await overview(page);for(const item of previous.panels){const old=initial.panels.find((value:any)=>value.weeks===item.weeks);expect(item.baselineTime).toBe(old.baselineTime-day);for(const series of item.series){const oldSeries=old.series.find((value:any)=>value.asset.id===series.asset.id);const baseline=series.points[0];expect(baseline.pct).toBe(0);for(const point of series.points){const oldPoint=oldSeries.points.find((value:any)=>value.time===point.time);if(oldPoint)expect(point.close).toBe(oldPoint.close);expect(point.pct).toBeCloseTo((point.close/baseline.close-1)*100,10);}}await expect(legend(page,item.weeks,'BTC').locator('.comparison-legend-price')).toHaveText('Close 1,830 USDC');await expect(region(page,item.weeks).locator('.comparison-readout')).toContainText('Final daily close in this window');}
+ await layout(page,'Single chart').click();await expect(page.getByTestId('comparison-chart')).toHaveCount(1);await expect(page.getByTestId('comparison-chart')).toHaveAttribute('data-baseline-time',String(latest-day-view.weeks*7*day));await expect(panel(page).locator('.comparison-end-date')).toContainText(`${comparisonDate(latest-day)} UTC`);expect(await page.evaluate(()=>(window as any).__testComparisonRequests().at(-1).endTime)).toBe(latest-day);expect(await page.evaluate(()=>(window as any).__testComparisonLastResult().lastClosedTime)).toBe(latest-day);await expect(panel(page).locator('.comparison-readout')).toContainText('Final daily close in this window');
+ await layout(page,'Four charts').click();await loaded(page);await through(page,latest-day);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(view);
+ await navigate(page,'Prev').click();await through(page,latest-2*day);await navigate(page,'Next').click();await through(page,latest-day);await navigate(page,'Next').click();await through(page,latest);await expect(navigate(page,'Next')).toBeDisabled();expect((await groupRequests(page)).at(-1).endTime).toBe(0);for(const weeks of periods)await expect(region(page,weeks).locator('.comparison-readout')).toContainText('Latest completed daily close');
+ await navigate(page,'Prev').click();await through(page,latest-day);const groups=await groupCalls(page);await navigate(page,'Today').click();await through(page,latest);expect(await groupCalls(page)).toBe(groups+1);await expect(navigate(page,'Next')).toBeDisabled();expect((await groupRequests(page)).at(-1).endTime).toBe(0);
+ await navigate(page,'Today').click();await expect.poll(()=>groupCalls(page)).toBe(groups+2);expect(await page.evaluate(()=>(window as any).__testComparisonView())).toEqual(view);expect((await calls(page)).save).toBe(0);
+});
+
+test('historical end days stay pinned over UTC rollover until Today resumes following new closed days',async({page})=>{
+ await page.clock.install({time:Date.UTC(2026,10,28,23,59,50)});await openTestApp(page);await enter(page);await loaded(page);const initial=await overview(page),latest=initial.panels[0].lastClosedTime;
+ await navigate(page,'Prev').click();await through(page,latest-day);const groups=await groupCalls(page);await page.clock.fastForward(11000);await frames(page);expect(await groupCalls(page)).toBe(groups);await through(page,latest-day);
+ // Click before the 00:00:05 refresh: yesterday is now historical, so Next
+ // must select that exact day rather than jumping directly to the new latest.
+ await navigate(page,'Next').click();await through(page,latest);expect((await groupRequests(page)).at(-1).endTime).toBe(latest);await expect(navigate(page,'Next')).toBeEnabled();const pinned=await groupCalls(page);await page.clock.fastForward(5000);await frames(page);expect(await groupCalls(page)).toBe(pinned);await through(page,latest);
+ await panel(page).getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>groupCalls(page)).toBe(pinned+1);await through(page,latest);expect((await groupRequests(page)).at(-1).endTime).toBe(latest);await expect(legend(page,2,'BTC').locator('.comparison-legend-price')).toHaveText('Close 1,840 USDC');
+ await navigate(page,'Today').click();await through(page,latest+day);await expect(navigate(page,'Next')).toBeDisabled();await expect(legend(page,2,'BTC').locator('.comparison-legend-price')).toHaveText('Close 1,850 USDC');const following=await groupCalls(page);
+ await page.clock.fastForward(86400000);await expect.poll(()=>groupCalls(page)).toBe(following+1);await through(page,latest+2*day);expect((await groupRequests(page)).at(-1).endTime).toBe(0);await expect(legend(page,2,'BTC').locator('.comparison-legend-price')).toHaveText('Close 1,860 USDC');expect((await calls(page)).save).toBe(0);
+});
+
+test('out-of-order day navigation responses are cancelled and cannot replace the current endpoint',async({page})=>{
+ await page.clock.install({time:Date.UTC(2026,10,28,10)});await openTestApp(page);await enter(page);await loaded(page);const initial=await overview(page),latest=initial.panels[0].lastClosedTime;
+ await page.evaluate(()=>(window as any).__testComparisonHoldNextOverview());await navigate(page,'Prev').click();await expect.poll(async()=>(await pending(page)).length).toBe(1);const first=(await pending(page))[0];expect((await groupRequests(page)).at(-1).endTime).toBe(latest-day);
+ await page.evaluate(()=>(window as any).__testComparisonHoldNextOverview());await navigate(page,'Prev').click();await expect.poll(async()=>(await pending(page)).length).toBe(2);const second=(await pending(page)).find((id:string)=>id!==first)!;expect((await groupRequests(page)).at(-1).endTime).toBe(latest-2*day);
+ await navigate(page,'Next').click();await through(page,latest-day);const groups=await groupCalls(page);await expect.poll(()=>page.evaluate(()=>(window as any).__testComparisonCancelled())).toEqual(expect.arrayContaining([first,second]));
+ await page.evaluate(({first,second,panels})=>{const fixture=window as any;fixture.__testComparisonReleaseOverview(second);fixture.__testComparisonReleaseOverview(first,{panels});},{first,second,panels:initial.panels});await frames(page);
+ // The transport deliberately records the last stale delivery; only the
+ // rendered endpoint/baselines prove that production rejected that response.
+ await through(page,latest-day,false);expect(await groupCalls(page)).toBe(groups);await expect(navigate(page,'Next')).toBeEnabled();
+ await navigate(page,'Today').click();await through(page,latest);await expect(navigate(page,'Next')).toBeDisabled();expect((await groupRequests(page)).at(-1).endTime).toBe(0);expect((await calls(page)).save).toBe(0);
 });

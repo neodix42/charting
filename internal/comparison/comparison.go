@@ -225,7 +225,13 @@ func assetName(symbol, name string) string {
 }
 
 func (m *Manager) DailyChanges(parent context.Context, id string, value View) (Result, error) {
-	panels, err := m.calculatePeriods(parent, id, value, []int{value.Weeks})
+	return m.DailyChangesAt(parent, id, value, 0)
+}
+
+// DailyChangesAt pins the last included UTC daily candle, or uses the latest
+// closed candle when endTime is zero. Navigation is not a saved View setting.
+func (m *Manager) DailyChangesAt(parent context.Context, id string, value View, endTime int64) (Result, error) {
+	panels, err := m.calculatePeriods(parent, id, value, []int{value.Weeks}, endTime)
 	if err != nil {
 		return Result{}, err
 	}
@@ -236,20 +242,46 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 // Each panel still requires its own exact UTC baseline; a missing older candle
 // must not suppress a valid shorter history or move that panel's starting day.
 func (m *Manager) Overview(parent context.Context, id string, value View) (Overview, error) {
-	panels, err := m.calculatePeriods(parent, id, value, []int{2, 4, 8, 12})
+	return m.OverviewAt(parent, id, value, 0)
+}
+
+// OverviewAt shifts every panel to the same historical last candle without
+// changing their lengths, source choices or independently required baselines.
+func (m *Manager) OverviewAt(parent context.Context, id string, value View, endTime int64) (Overview, error) {
+	panels, err := m.calculatePeriods(parent, id, value, []int{2, 4, 8, 12}, endTime)
 	if err != nil {
 		return Overview{}, err
 	}
 	return Overview{RequestID: id, Panels: panels}, nil
 }
 
-func (m *Manager) calculatePeriods(parent context.Context, id string, value View, periods []int) ([]Result, error) {
+func (m *Manager) calculatePeriods(parent context.Context, id string, value View, periods []int, endTime int64) ([]Result, error) {
 	view, err := normalizeView(value)
 	if err != nil {
 		return nil, err
 	}
 	if len(id) == 0 || len(id) > 96 {
 		return nil, errors.New("comparison request identity is required and must be at most 96 bytes")
+	}
+	// Capture the clock once before request ownership changes. Invalid date
+	// navigation must not cancel an otherwise healthy in-flight snapshot.
+	now := m.opts.Now().UTC().Unix()
+	latest := now - now%day - day
+	if endTime < 0 || endTime%day != 0 || endTime > latest {
+		return nil, errors.New("comparison end date must be a completed UTC day at or before the latest closed candle")
+	}
+	last := latest
+	if endTime != 0 {
+		last = endTime
+	}
+	maxWeeks := 0
+	for _, weeks := range periods {
+		if weeks > maxWeeks {
+			maxWeeks = weeks
+		}
+	}
+	if last < int64(maxWeeks*7)*day {
+		return nil, errors.New("comparison date range cannot extend before 1970-01-01 UTC")
 	}
 	ctx, done, err := m.operation(parent)
 	if err != nil {
@@ -272,14 +304,8 @@ func (m *Manager) calculatePeriods(parent context.Context, id string, value View
 		}
 		m.mu.Unlock()
 	}()
-	now := m.opts.Now().UTC().Unix()
-	last := now - now%day - day
 	results := make([]Result, len(periods))
-	maxWeeks := 0
 	for index, weeks := range periods {
-		if weeks > maxWeeks {
-			maxWeeks = weeks
-		}
 		results[index] = Result{RequestID: id, Weeks: weeks, BaselineTime: last - int64(weeks*7)*day, LastClosedTime: last, AsOf: now, Series: make([]Series, len(view.Assets)), Warnings: []string{}}
 	}
 	if len(view.Assets) == 0 {

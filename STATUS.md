@@ -1,5 +1,11 @@
 # Implementation status — updated 2026-11-28
 
+## Comparison window fill and daily navigation — 2026-11-28
+
+The four-panel overview fills the available width and remaining window height. Plots resize in place with independent viewports, retain readable minimum heights and scroll with their legends when necessary. Prev/Today/Next controls move all fixed-length windows together by UTC day, stop at completed data and preserve historical selections across midnight. The selected ending date is shared with Single chart and remains session state; private saved assets/weeks are unchanged. Hover retains line highlighting and actual daily prices/date in the bottom legend without a floating tooltip.
+
+Verification passed: all 34 Comparison browser cases, 379 frontend unit tests, TypeScript, lint, production frontend build, 167 Python tests, 212 Node runtime tests, catalog checks, full Go race/bindings/native/production tests and vet. Tests cover shared UTC endpoints and native close consistency, rapid/stale navigation, midnight before scheduled refresh, pinned-history refresh isolation, Single/Overview selection, saved settings, full-window resize without chart recreation or zoom loss, minimum-window scrolling, strict legend visibility and hover without a floating tooltip. Screenshots at 1920×1440, 2200×1800, 900px and the fallback font were inspected. A subpixel scroll-rounding issue was reproduced and corrected with scoped legend scroll margins while retaining strict viewport assertions. Evidence is in ignored `.tools/verification/comparison-navigation-fluid/`, `comparison-fluid-full-test.log` and `comparison-fluid-native-go.log`. Production packaging and hosted results are tracked for the delivery commit. User data and credentials are preserved. Native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison four-panel default — 2026-11-28
 
 Comparison now defaults to a two-column overview ordered 2w/4w then 8w/12w, with compact independently zoomable charts, hover prices and shared asset visibility. Below 800px the panels stack. Single chart retains custom 1–104-week controls and saved settings without changing the private view schema; layout starts in four-chart mode on a new app session. Per-chart diagnostics and cleanup replace the previous singleton reader, preserving single-chart test access.

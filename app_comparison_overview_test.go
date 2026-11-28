@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"math"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -90,5 +92,78 @@ func TestComparisonOverviewFacadeSharesNativeSourceSnapshotAcrossFourPanels(t *t
 	saved, err := app.GetComparisonView()
 	if err != nil || saved.Weeks != 26 {
 		t.Fatal("overview overwrote saved single-period choice", saved, err)
+	}
+}
+
+func TestComparisonDateNavigationFacadePinsProviderRangesWithoutSavingDates(t *testing.T) {
+	store, err := storage.Open(filepath.Join(t.TempDir(), "workspace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	windows := make(chan overviewHistoryWindow, 8)
+	reads := make(chan domain.FeedKey, 8)
+	var streams atomic.Int32
+	service := market.New(market.Options{Factory: func(provider string) (exchange.Adapter, error) {
+		return &comparisonOverviewAdapter{comparisonVenueAdapter: &comparisonVenueAdapter{provider: provider, reads: reads, streams: &streams}, windows: windows}, nil
+	}})
+	defer service.Close()
+	now := func() time.Time { return time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC) }
+	app := &App{store: store, market: service, ctx: context.Background()}
+	app.comparison = comparison.NewWithOptions(comparison.Options{Profile: store.Directory(), Source: comparisonMarketSource{market: service}, Now: now})
+	defer app.comparison.Close()
+	view := comparison.View{Weeks: 26, Assets: []string{"coinbase|spot|TON-USD"}}
+	if _, err = app.SaveComparisonView(view); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(store.Directory(), "comparison-view.json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC).Unix()
+	past := latest - 86400
+	previous, err := app.GetComparisonOverviewAt("previous-day", view, past)
+	if err != nil || len(previous.Panels) != 4 {
+		t.Fatal(previous, err)
+	}
+	for _, panel := range previous.Panels {
+		if panel.LastClosedTime != past || panel.BaselineTime != past-int64(panel.Weeks*7)*86400 || panel.AsOf != now().Unix() || panel.Series[0].Asset.ID != view.Assets[0] || panel.Series[0].Error != "" {
+			t.Fatal("facade ignored historical end date or changed source", panel)
+		}
+	}
+	request := <-windows
+	if request.from != past-84*86400 || request.to != past+86400 || request.limit != 85 || request.key.Exchange != "coinbase" {
+		t.Fatal("wrong historical provider window", request)
+	}
+	today, err := app.GetComparisonOverview("today", view)
+	if err != nil || today.Panels[0].LastClosedTime != latest {
+		t.Fatal(today, err)
+	}
+	request = <-windows
+	if request.from != latest-84*86400 || request.to != latest+86400 || request.limit != 85 {
+		t.Fatal("Today did not resolve latest closed UTC range", request)
+	}
+	same, err := app.GetComparisonOverviewAt("next-to-latest", view, latest)
+	if err != nil || same.Panels[0].LastClosedTime != latest || len(windows) != 0 {
+		t.Fatal("Next re-requested an already visited current range", same, err)
+	}
+	single, err := app.GetComparisonDailyChangesAt("single-previous-day", view, past)
+	if err != nil || single.Weeks != 26 || single.LastClosedTime != past || single.BaselineTime != past-182*86400 || single.Series[0].Error != "" {
+		t.Fatal(single, err)
+	}
+	request = <-windows
+	if request.from != past-182*86400 || request.to != past+86400 || request.limit != 183 {
+		t.Fatal("Single navigation changed saved period duration", request)
+	}
+	if _, err = app.GetComparisonOverviewAt("future", view, latest+86400); err == nil {
+		t.Fatal("facade accepted an unclosed future day")
+	}
+	if _, err = app.GetComparisonDailyChangesAt("unaligned", view, past+1); err == nil {
+		t.Fatal("facade accepted a non-UTC date boundary")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) || len(windows) != 0 || len(reads) != 3 || streams.Load() != 0 || service.Diagnostics().ActiveLeases != 0 {
+		t.Fatal("navigation rewrote settings, repeated source requests or opened streams", err)
 	}
 }

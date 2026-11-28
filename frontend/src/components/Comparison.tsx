@@ -9,10 +9,12 @@ import './Comparison.css';
 export interface ComparisonHandle {flush():Promise<void>}
 export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visible:boolean;suspended?:boolean}>(function Comparison({api,visible,suspended=false},ref){
  const [view,setView]=useState<ComparisonView>(defaultComparisonView),[weeksInput,setWeeksInput]=useState('4'),[ready,setReady]=useState(false),[loading,setLoading]=useState(false),[catalog,setCatalog]=useState<ComparisonCatalog|null>(null),[result,setResult]=useState<ComparisonResult|null>(null);
- const [layout,setLayout]=useState<'overview'|'single'>('overview'),[overview,setOverview]=useState<ComparisonOverview|null>(null);
+ const [layout,setLayout]=useState<'overview'|'single'>('overview'),[overview,setOverview]=useState<ComparisonOverview|null>(null),[endTime,setEndTime]=useState(0),[utcRefresh,setUtcRefresh]=useState(0);
  const [viewError,setViewError]=useState(''),[catalogError,setCatalogError]=useState(''),[loadError,setLoadError]=useState(''),[saveError,setSaveError]=useState(''),[reload,setReload]=useState(0),[catalogReload,setCatalogReload]=useState(0),[refresh,setRefresh]=useState(0);
  const [hiddenAssets,setHiddenAssets]=useState<ReadonlySet<string>>(()=>new Set()),[pickerSource,setPickerSource]=useState('all');
  const mounted=useRef(false),draft=useRef(view),writer=useRef<ComparisonViewWriter|null>(null),epoch=useRef(0),request=useRef<string|null>(null);
+ // Pinned historical windows stay fixed when the latest UTC day changes.
+ const automaticRefresh=endTime===0?utcRefresh:0;
  if(!writer.current)writer.current=new ComparisonViewWriter(async value=>{const saved=await api.SaveComparisonView(value);if(mounted.current)setSaveError('');return saved;},reason=>{if(mounted.current)setSaveError(errorText(reason));});
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++;if(request.current)void api.CancelComparisonRequest(request.current).catch(()=>{});};},[]);
  useImperativeHandle(ref,()=>({flush:async()=>{
@@ -42,21 +44,29 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
   if(!view.assets.length){setLoading(false);request.current=null;return;}
   setLoading(true);
   const current=()=>mounted.current&&version===epoch.current;
-  const pending=layout==='overview'?api.GetComparisonOverview(id,copyComparisonView(view)).then(value=>{if(current())setOverview(value);}):api.GetComparisonDailyChanges(id,copyComparisonView(view)).then(value=>{if(current())setResult(value);});
+  const selection=copyComparisonView(view);
+  const pending=layout==='overview'?(endTime===0?api.GetComparisonOverview(id,selection):api.GetComparisonOverviewAt(id,selection,endTime)).then(value=>{if(current())setOverview(value);}):(endTime===0?api.GetComparisonDailyChanges(id,selection):api.GetComparisonDailyChangesAt(id,selection,endTime)).then(value=>{if(current())setResult(value);});
   void pending.then(()=>{if(current())setLoading(false);}).catch(reason=>{if(current()){setLoadError(errorText(reason));setLoading(false);}}).finally(()=>{if(request.current===id)request.current=null;});
   return()=>{epoch.current++;if(request.current===id)request.current=null;void api.CancelComparisonRequest(id).catch(()=>{});};
- },[visible,suspended,ready,catalog,view,layout,refresh,api]);
+ },[visible,suspended,ready,catalog,view,layout,refresh,automaticRefresh,endTime,api]);
  useEffect(()=>{
   if(!visible||suspended||!ready)return;
   // Closed daily observations change only after the next UTC day boundary.
   const next=(Math.floor(Date.now()/86400000)+1)*86400000+5000;
-  const timer=setTimeout(()=>setRefresh(value=>value+1),next-Date.now());return()=>clearTimeout(timer);
- },[visible,suspended,ready,refresh]);
+  const timer=setTimeout(()=>setUtcRefresh(value=>value+1),next-Date.now());return()=>clearTimeout(timer);
+ },[visible,suspended,ready,utcRefresh]);
  const edit=(patch:Partial<ComparisonView>)=>{const next={...draft.current,...patch};if(JSON.stringify(next)===JSON.stringify(draft.current))return;draft.current=next;setView(next);writer.current!.edit(next);};
  const toggleAsset=(symbol:string)=>setHiddenAssets(previous=>{const next=new Set(previous);if(next.has(symbol))next.delete(symbol);else next.add(symbol);return next;});
  const weeks=Number(weeksInput),invalidWeeks=!Number.isInteger(weeks)||weeks<1||weeks>104;
  const markets=catalog?.markets??catalog?.assets??[];
  const results=layout==='overview'?overview?.panels??[]:result?[result]:[];
+ const day=86400,latestClosedTime=Math.floor(Date.now()/86400000)*day-day,through=endTime||results[0]?.lastClosedTime||latestClosedTime;
+ const navigationDisabled=!ready||suspended||!view.assets.length,firstPossibleEnd=(layout==='overview'?12:view.weeks)*7*day;
+ const advanceDate=()=>setEndTime(value=>{
+  // A click can cross UTC midnight before the scheduled daily refresh runs.
+  const latest=Math.floor(Date.now()/86400000)*day-day;
+  return value===0||value+day>=latest?0:value+day;
+ });
  const sourceFor=(id:string):ComparisonAsset|undefined=>{const asset=results.flatMap(panel=>panel.series).find(series=>comparisonIdentity(series.asset)===id)?.asset??[...markets,...(catalog?.assets??[])].find(asset=>comparisonIdentity(asset)===id);return asset?(asset.symbol===id&&id.includes('|')?{...asset,symbol:comparisonSelectionLabel(id)}:asset):comparisonSelectionAsset(id);};
  const selected=new Set(view.assets),selectedFeeds=new Set(view.assets.map(id=>sourceFor(id)).filter((asset):asset is ComparisonAsset=>!!asset).map(comparisonFeedIdentity).filter(id=>id!==undefined)),choices=markets.filter(asset=>!selected.has(comparisonIdentity(asset))&&!selectedFeeds.has(comparisonFeedIdentity(asset)??'')&&(pickerSource==='all'||asset.exchange===pickerSource)).map(asset=>({id:comparisonIdentity(asset),label:comparisonLabel(asset),ariaLabel:comparisonOptionName(asset),market:asset.market as Market,details:`${asset.name} · ${comparisonSource(asset)} · ${asset.nativeId}`,search:`${asset.symbol} ${asset.symbol==='TON'?'GRAM Toncoin':''} ${asset.name} ${asset.nativeId} ${asset.exchange}`}));
  const seriesErrors=result?.series.filter(series=>series.error)??[],hasData=result?.series.some(series=>!series.error&&series.points.some(point=>point.pct!==null));
@@ -66,6 +76,8 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
    {viewError&&<p className="screener-error" role="alert">{viewError} <button type="button" onClick={()=>setReload(value=>value+1)}>Retry saved choices</button></p>}
    {saveError&&<p className="screener-error" role="alert">Could not save Comparison choices: {saveError} <button type="button" onClick={()=>void writer.current!.flush().catch(()=>{})}>Retry saving</button></p>}
    <div className="comparison-controls">
+    <div className="comparison-quick-weeks comparison-date-navigation" role="group" aria-label="Comparison date navigation"><button type="button" disabled={navigationDisabled||through-day<firstPossibleEnd} onClick={()=>setEndTime(value=>(value||through)-day)}>Prev</button><button type="button" disabled={navigationDisabled} onClick={()=>{if(endTime===0)setRefresh(value=>value+1);else setEndTime(0);}}>Today</button><button type="button" disabled={navigationDisabled||endTime===0||endTime>=latestClosedTime} onClick={advanceDate}>Next</button></div>
+    <span className="comparison-end-date">Through {comparisonDate(through)} UTC</span>
     <div className="comparison-quick-weeks" role="group" aria-label="Comparison layout"><button type="button" aria-pressed={layout==='overview'} disabled={suspended} onClick={()=>setLayout('overview')}>Four charts</button><button type="button" aria-pressed={layout==='single'} disabled={suspended} onClick={()=>setLayout('single')}>Single chart</button></div>
     {layout==='single'&&<><label>Weeks<input type="number" aria-label="Comparison weeks" min={1} max={104} step={1} value={weeksInput} disabled={!ready||suspended} onChange={event=>setWeeksInput(event.target.value)} onBlur={()=>{if(!invalidWeeks&&weeks!==view.weeks)edit({weeks});}} onKeyDown={event=>{if(event.key==='Enter'&&!invalidWeeks&&weeks!==view.weeks){edit({weeks});event.currentTarget.blur();}}}/></label>
     <div className="comparison-quick-weeks" aria-label="Common comparison periods">{[1,2,4,8,12,26,52].map(value=><button type="button" key={value} aria-pressed={view.weeks===value} disabled={!ready||suspended} onClick={()=>{setWeeksInput(String(value));edit({weeks:value});}}>{value}w</button>)}</div></>}
@@ -87,7 +99,7 @@ export const Comparison=forwardRef<ComparisonHandle,{api:ComparisonBackend;visib
     return <section className="comparison-panel" key={panel.weeks} data-comparison-weeks={panel.weeks} aria-label={`${panel.weeks}-week comparison`}>
      {!!errors.length&&<ul className="comparison-series-errors" aria-label="Unavailable comparison assets">{errors.map(series=><li key={comparisonIdentity(series.asset)}><strong>{comparisonSeriesLabel(series.asset,panel.series.map(item=>item.asset))}</strong> · {series.error}</li>)}</ul>}
      {panel.warnings.filter(warning=>!catalog?.warnings.includes(warning)).map(warning=><p className="comparison-warning" key={warning} role="status">{warning}</p>)}
-     {available?<ComparisonChart chartId={`weeks-${panel.weeks}`} title={`${panel.weeks} weeks`} height={220} result={panel} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>:<div className="comparison-empty"><h2>{panel.weeks} weeks</h2><p>No comparable daily data. Each asset needs a real closing price on {comparisonDate(panel.baselineTime)} UTC.</p></div>}
+     {available?<ComparisonChart chartId={`weeks-${panel.weeks}`} title={`${panel.weeks} weeks`} fillAvailable result={panel} hiddenAssets={hiddenAssets} onToggleAsset={toggleAsset}/>:<div className="comparison-empty"><h2>{panel.weeks} weeks</h2><p>No comparable daily data. Each asset needs a real closing price on {comparisonDate(panel.baselineTime)} UTC.</p></div>}
     </section>;
    })}</div>}
    {ready&&!view.assets.length&&<div className="comparison-empty"><h2>Add assets to compare</h2><p>Choose assets using Add asset. Your weeks selection will be kept.</p></div>}

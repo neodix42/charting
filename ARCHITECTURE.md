@@ -187,11 +187,25 @@ One group request owns cancellation, avoiding the single-request manager's
 supersession of independent per-panel requests. Settings keep their existing
 version 2 shape; layout and shared visibility remain session state.
 
+OverviewAt/DailyChangesAt accept an absolute UTC final-candle start, with zero
+selecting the latest completed day. A single captured clock validates dates and
+pre-epoch range bounds before request ownership changes. Existing APIs delegate
+to zero, preserving callers and the private View schema. Prev/Next move fixed
+windows one day, Today resumes the latest cutoff, and pinned dates do not issue
+new history requests at UTC rollover. Navigation cancels obsolete work and fences
+late results through the existing request generation.
+
 Chart IDs scope diagnostics and cleanup for each mounted instance. Four visible
 charts own eight observers and four crosshair listeners, released when hidden or
-suspended. Each panel has independent zoom/hover and a compact height; asset
-selection and legend visibility are shared. The responsive grid has two columns,
-stacking below 800px. Workspace chart/tab capacity and persistence are unaffected.
+suspended. Each panel has independent zoom/hover; asset selection and legend
+visibility are shared. The overview uses the full workspace
+width and remaining height with equal grid rows. Each plot measures its available
+host through ResizeObserver and resizes the existing chart while retaining its
+logical range; intrinsic headers/legends and minimum plot height retain scrolling
+when the window is small. Single chart keeps its existing fixed height. The
+responsive grid has two columns, stacking below 800px. Hover highlighting and
+price/date readouts use the bottom legend; no floating tooltip is rendered.
+Workspace chart/tab capacity and persistence are unaffected.
 
 `Catalog.markets` retains each exact eligible provider/market/native instrument
 from independent public Hyperliquid, Binance, Bybit and Coinbase discovery.

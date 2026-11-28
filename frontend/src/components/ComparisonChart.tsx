@@ -23,16 +23,17 @@ const hitDistance=(x:number,y:number,ax:number,ay:number,bx=ax,by=ay)=>{
  return Math.hypot(x-ax-t*dx,y-ay-t*dy);
 };
 
-export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='single',title,height=460}:{result:ComparisonResult;hiddenAssets:ReadonlySet<string>;onToggleAsset:(symbol:string)=>void;chartId?:string;title?:string;height?:number}){
+export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='single',title,height=460,fillAvailable=false}:{result:ComparisonResult;hiddenAssets:ReadonlySet<string>;onToggleAsset:(symbol:string)=>void;chartId?:string;title?:string;height?:number;fillAvailable?:boolean}){
  const host=useRef<HTMLDivElement>(null),chartRef=useRef<IChartApi|null>(null),fontSize=useAppearanceFontSize();
  const applyVisibility=useRef<((hidden:ReadonlySet<string>)=>void)|null>(null);
- const [error,setError]=useState(''),[hover,setHover]=useState<number|null>(null),[focus,setFocus]=useState<{symbol:string;x:number;y:number}|null>(null);
+ const [error,setError]=useState(''),[hover,setHover]=useState<number|null>(null),[focus,setFocus]=useState<string|null>(null);
  const usable=result.series.filter(series=>!series.error&&series.points.some(point=>point.pct!==null));
  useEffect(()=>{
   if(!host.current||!usable.length)return;
   setError('');setHover(null);setFocus(null);
   const palette=getThemePalette(document.documentElement.dataset.theme??'light'),themeOptions=chartThemeOptions(palette);
-  const chart=createChart(host.current,{...themeOptions,width:Math.max(280,host.current.clientWidth),height,
+  let plotWidth=Math.max(280,host.current.clientWidth),plotHeight=fillAvailable?Math.max(180,host.current.clientHeight):height;
+  const chart=createChart(host.current,{...themeOptions,width:plotWidth,height:plotHeight,
    layout:{...themeOptions.layout,fontFamily:'Inter, Ubuntu, system-ui, sans-serif',fontSize:chartFontSize(12,fontSize)},
    leftPriceScale:{visible:true,borderColor:palette.chartBorder},rightPriceScale:{visible:false},
    grid:{vertLines:{visible:false},horzLines:{color:palette.chartGrid,style:LineStyle.Dotted}},
@@ -60,14 +61,14 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
    const xAt=(index:number)=>chart.timeScale().timeToCoordinate(times[index] as UTCTimestamp);
    const lowerX=(x:number)=>{let low=0,high=times.length;while(low<high){const mid=(low+high)>>>1,value=xAt(mid);if(value===null)return times.length;if(value<x)low=mid+1;else high=mid;}return low;};
    let activeSymbol:string|null=null,styling=false;
-   const highlight=(symbol:string|null,point?:{x:number;y:number})=>{
+   const highlight=(symbol:string|null)=>{
     if(symbol!==activeSymbol){
      const previous=activeSymbol;activeSymbol=symbol;styling=true;
      // Style updates synchronously emit another crosshair event. Let the real
      // pointer event or explicit clear finish before processing another hit.
      try{for(const item of plotted)if(item.id===previous||item.id===symbol)item.line.applyOptions({lineWidth:item.id===symbol?4:2});}finally{styling=false;}
     }
-    setFocus(symbol&&point&&host.current?{symbol,x:Math.max(8,Math.min(point.x+chart.priceScale('left').width()+12,host.current.clientWidth-248)),y:Math.max(8,Math.min(point.y+12,host.current.clientHeight-160))}:null);
+    setFocus(symbol);
    };
    const updateTheme=()=>{const next=getThemePalette(document.documentElement.dataset.theme??'light');chart.applyOptions({...chartThemeOptions(next),leftPriceScale:{borderColor:next.chartBorder},grid:{vertLines:{visible:false},horzLines:{color:next.chartGrid,style:LineStyle.Dotted}}});zeroLine?.applyOptions({color:next.chartBorder});};
    // Keep visibility updates separate from chart creation and fitContent.
@@ -85,7 +86,16 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
     setHover(null);
    };
    theme=new MutationObserver(updateTheme);theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});comparisonChartResources.observers++;
-   resize=new ResizeObserver(()=>{if(host.current)chart.resize(Math.max(280,host.current.clientWidth),height);highlight(null);});resize.observe(host.current);comparisonChartResources.observers++;
+   resize=new ResizeObserver(()=>{
+    if(!host.current)return;
+    const width=Math.max(280,host.current.clientWidth),nextHeight=fillAvailable?Math.max(180,host.current.clientHeight):height;
+    if(width===plotWidth&&nextHeight===plotHeight)return;
+    const range=chart.timeScale().getVisibleLogicalRange();
+    plotWidth=width;plotHeight=nextHeight;
+    chart.resize(width,nextHeight);
+    if(range)chart.timeScale().setVisibleLogicalRange(range);
+    highlight(null);
+   });resize.observe(host.current);comparisonChartResources.observers++;
    mouse=event=>{
     if(styling)return;
     setHover(typeof event.time==='number'?Number(event.time):null);
@@ -106,29 +116,27 @@ export function ComparisonChart({result,hiddenAssets,onToggleAsset,chartId='sing
      if(nextTime-time===86400&&nextValue!==undefined){const nextX=xAt(index+1),nextY=item.line.priceToCoordinate(nextValue);if(nextX!==null&&nextY!==null)candidate=Math.min(candidate,hitDistance(point.x,point.y,x,y,nextX,nextY));}
      if(candidate<=distance){nearest=item.id;distance=candidate;}
     }
-    highlight(nearest,point);
+    highlight(nearest);
    };
    chart.subscribeCrosshairMove(mouse);comparisonChartResources.listeners++;chart.timeScale().fitContent();
-   if(window.__CRYPTO_TEST__){diagnostic=(time?:number)=>({chartId,height,baselineTime:result.baselineTime,lastClosedTime:result.lastClosedTime,x:time===undefined?null:chart.timeScale().timeToCoordinate(time as UTCTimestamp),leftWidth:chart.priceScale('left').width(),logicalRange:chart.timeScale().getVisibleLogicalRange(),referenceSymbol:zeroOwner?.symbol??null,referenceId:zeroOwner?.id??null,hoveredSymbol:plotted.find(item=>item.id===activeSymbol)?.symbol??null,hoveredId:activeSymbol,series:plotted.map(item=>({id:item.id,symbol:item.symbol,line:item.line.data(),dots:item.dots.data(),visible:item.line.options().visible,dotsVisible:item.dots.options().visible,lineWidth:item.line.options().lineWidth,y:time===undefined||!item.points.has(time)?null:item.line.priceToCoordinate(item.points.get(time)!)}))});diagnosticReaders.set(chartId,diagnostic);}
+   if(window.__CRYPTO_TEST__){diagnostic=(time?:number)=>({chartId,height:plotHeight,width:plotWidth,fillAvailable,baselineTime:result.baselineTime,lastClosedTime:result.lastClosedTime,x:time===undefined?null:chart.timeScale().timeToCoordinate(time as UTCTimestamp),leftWidth:chart.priceScale('left').width(),logicalRange:chart.timeScale().getVisibleLogicalRange(),referenceSymbol:zeroOwner?.symbol??null,referenceId:zeroOwner?.id??null,hoveredSymbol:plotted.find(item=>item.id===activeSymbol)?.symbol??null,hoveredId:activeSymbol,series:plotted.map(item=>({id:item.id,symbol:item.symbol,line:item.line.data(),dots:item.dots.data(),visible:item.line.options().visible,dotsVisible:item.dots.options().visible,lineWidth:item.line.options().lineWidth,y:time===undefined||!item.points.has(time)?null:item.line.priceToCoordinate(item.points.get(time)!)}))});diagnosticReaders.set(chartId,diagnostic);}
   }catch(reason){setError(errorText(reason));}
   return()=>{applyVisibility.current=null;if(resize){resize.disconnect();comparisonChartResources.observers--;}if(theme){theme.disconnect();comparisonChartResources.observers--;}if(mouse){chart.unsubscribeCrosshairMove(mouse);comparisonChartResources.listeners--;}if(diagnostic&&diagnosticReaders.get(chartId)===diagnostic)diagnosticReaders.delete(chartId);chart.remove();chartRef.current=null;comparisonChartResources.charts--;};
- },[result,chartId,height]);
- useEffect(()=>{applyVisibility.current?.(hiddenAssets);},[hiddenAssets,result,chartId,height]);
+ },[result,chartId,height,fillAvailable]);
+ useEffect(()=>{applyVisibility.current?.(hiddenAssets);},[hiddenAssets,result,chartId,height,fillAvailable]);
  useEffect(()=>{chartRef.current?.applyOptions({layout:{fontSize:chartFontSize(12,fontSize)}});},[fontSize]);
  const date=hover??result.lastClosedTime;
- const focusedSeries=focus?usable.find(series=>comparisonIdentity(series.asset)===focus.symbol):undefined,focused=focusedSeries?.asset;
- const focusedPoint=hover===null?undefined:focusedSeries?.points.find(point=>point.time===hover);
- return <div className="comparison-chart">
+ const historical=result.lastClosedTime<Math.floor(result.asOf/86400)*86400-86400;
+ return <div className={`comparison-chart${fillAvailable?' comparison-chart-fluid':''}`}>
   <div className="comparison-chart-heading"><div><h2>{title??'Change since the start of the period'}</h2><p>Daily market closes relative to {comparisonDate(result.baselineTime)} · UTC</p></div><button type="button" onClick={()=>chartRef.current?.timeScale().fitContent()}>Show entire period</button></div>
   {error&&<p className="screener-error" role="alert">{error}</p>}
-  <div className="comparison-plot-wrap"><div ref={host} className="comparison-plot" style={{height}} data-testid="comparison-chart" data-comparison-chart-id={chartId} data-series-count={usable.length} data-baseline-time={result.baselineTime} aria-label="Daily percentage change since the common starting close"/>
-   {focus&&focused&&<div className="comparison-line-tooltip" role="tooltip" data-asset-symbol={focused.symbol} style={{left:focus.x,top:focus.y,borderColor:comparisonColor(comparisonIdentity(focused))}}><strong>{comparisonSeriesLabel(focused,usable.map(series=>series.asset))}</strong><small>{focused.name}</small><small className="comparison-tooltip-price">Close {comparisonPrice(focusedPoint?.close,focused.quoteAsset)}</small><small>{hover===null?'Daily close unavailable':`${comparisonDate(hover)} UTC`}</small><small>{comparisonSource(focused)} · {focused.nativeId}</small></div>}
+  <div className="comparison-plot-wrap"><div ref={host} className="comparison-plot" style={fillAvailable?undefined:{height}} data-testid="comparison-chart" data-comparison-chart-id={chartId} data-fill-available={fillAvailable} data-series-count={usable.length} data-baseline-time={result.baselineTime} aria-label="Daily percentage change since the common starting close"/>
   </div>
   <div className="comparison-legend" aria-label="Comparison legend">{usable.map(series=>{
    const point=series.points.find(point=>point.time===date);
    const id=comparisonIdentity(series.asset),label=comparisonSeriesLabel(series.asset,usable.map(item=>item.asset)),visible=!hiddenAssets.has(id);
-   return <button type="button" key={id} data-comparison-id={id} aria-label={label} aria-pressed={visible} data-highlighted={visible&&focus?.symbol===id} title={`${comparisonSource(series.asset)} · ${series.asset.nativeId}`} onClick={()=>onToggleAsset(id)}><i style={{background:visible?comparisonColor(comparisonIdentity(series.asset)):'var(--muted)'}}/><strong>{label}</strong><span className={(point?.pct??0)<0?'down':'up'}>{comparisonPercent(point?.pct)}</span><small className="comparison-legend-price">Close {comparisonPrice(point?.close,series.asset.quoteAsset)}</small></button>;
+   return <button type="button" key={id} data-comparison-id={id} aria-label={label} aria-pressed={visible} data-highlighted={visible&&focus===id} title={`${comparisonSource(series.asset)} · ${series.asset.nativeId}`} onClick={()=>onToggleAsset(id)}><i style={{background:visible?comparisonColor(comparisonIdentity(series.asset)):'var(--muted)'}}/><strong>{label}</strong><span className={(point?.pct??0)<0?'down':'up'}>{comparisonPercent(point?.pct)}</span><small className="comparison-legend-price">Close {comparisonPrice(point?.close,series.asset.quoteAsset)}</small></button>;
   })}</div>
-  <p className="comparison-readout" aria-live="off">{comparisonDate(date)} UTC{hover===null?' · Latest completed daily close':''}</p>
+  <p className="comparison-readout" aria-live="off">{comparisonDate(date)} UTC{hover===null?historical?' · Final daily close in this window':' · Latest completed daily close':''}</p>
  </div>;
 }

@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison window fill and daily navigation — 2026-11-28
+
+- [x] Implement measured full-window overview plots, shared UTC Prev/Today/Next controls, strict completed-day bounds and unchanged private View settings.
+- [x] Remove floating hover tooltips while retaining highlighted lines and bottom-legend price/date readouts.
+- [x] Complete 34 Comparison browser cases, 379 frontend unit tests, typecheck/lint/build, 167 Python and 212 Node tests, catalog consistency and Go race/bindings/native/production tests/vet. Inspect wide, tall, small-window and fallback-font layouts.
+- [ ] Verify production packages and hosted CI against the delivery commit. Native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison four-panel default — 2026-11-28
 
 - [x] Add default 2w/4w then 8w/12w grid, independent chart diagnostics/zoom/hover, shared assets/visibility and responsive stacking.
