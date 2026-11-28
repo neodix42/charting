@@ -177,6 +177,22 @@ storage and cancellation remain shared. Comparison creates no stream leases,
 broker sessions or trading services. Its private `comparison-view.json` is saved
 atomically with version validation; missing files alone receive defaults.
 
+Comparison defaults to a four-panel overview, ordered 2/4 weeks then 8/12 weeks.
+The grouped Overview API captures one cutoff/catalog/source selection, reads each
+asset's maximum 12-week range once through existing cache and provider limits,
+and builds four independently rebased Results. Missing long-window baselines do
+not discard valid shorter-window observations; provider/validation errors remain
+explicit. Single-chart DailyChanges retains its 1–104-week API and saved View.
+One group request owns cancellation, avoiding the single-request manager's
+supersession of independent per-panel requests. Settings keep their existing
+version 2 shape; layout and shared visibility remain session state.
+
+Chart IDs scope diagnostics and cleanup for each mounted instance. Four visible
+charts own eight observers and four crosshair listeners, released when hidden or
+suspended. Each panel has independent zoom/hover and a compact height; asset
+selection and legend visibility are shared. The responsive grid has two columns,
+stacking below 800px. Workspace chart/tab capacity and persistence are unaffected.
+
 `Catalog.markets` retains each exact eligible provider/market/native instrument
 from independent public Hyperliquid, Binance, Bybit and Coinbase discovery.
 Explicit selections use canonical escaped source IDs, preserve native case and

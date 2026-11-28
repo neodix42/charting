@@ -1,4 +1,10 @@
-# Implementation status — updated 2026-11-26
+# Implementation status — updated 2026-11-28
+
+## Comparison four-panel default — 2026-11-28
+
+Comparison now defaults to a two-column overview ordered 2w/4w then 8w/12w, with compact independently zoomable charts, hover prices and shared asset visibility. Below 800px the panels stack. Single chart retains custom 1–104-week controls and saved settings without changing the private view schema; layout starts in four-chart mode on a new app session. Per-chart diagnostics and cleanup replace the previous singleton reader, preserving single-chart test access.
+
+The grouped API reads each asset's maximum range once at one UTC cutoff, resolves source selection once and calculates each baseline independently. Missing long-window baselines leave valid shorter periods usable. Existing provider pacing/cache/cancellation and real-data validation remain in place. Verification passed: all 30 Comparison browser cases (21 existing, nine overview), all 379 frontend unit tests, TypeScript, lint, production frontend build, 167 Python and 212 Node runtime tests, catalog consistency, Go race tests including native/production bindings and vet. Desktop/900px screenshots, independent hover/zoom, shared visibility, cancellation, UTC rollover and zero-resource cleanup were checked. Production packages and hosted CI are tracked against the delivery commit. User data, workspaces and credentials are preserved. Native desktop and Windows GUI interaction remain unverified.
 
 ## Comparison daily close on hover — 2026-11-26
 

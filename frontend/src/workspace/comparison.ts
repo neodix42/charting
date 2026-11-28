@@ -7,11 +7,14 @@ export interface ComparisonCatalog {assets:ComparisonAsset[];markets?:Comparison
 export interface ComparisonPoint {time:number;close:number|null;pct:number|null}
 export interface ComparisonSeries {asset:ComparisonAsset;points:ComparisonPoint[];error:string}
 export interface ComparisonResult {requestId:string;weeks:number;baselineTime:number;lastClosedTime:number;asOf:number;series:ComparisonSeries[];warnings:string[]}
+export interface ComparisonOverview {requestId:string;panels:ComparisonResult[]}
+export const COMPARISON_OVERVIEW_WEEKS=[2,4,8,12] as const;
 export interface ComparisonBackend {
  GetComparisonView():Promise<ComparisonView>;
  SaveComparisonView(view:ComparisonView):Promise<ComparisonView>;
  GetComparisonCatalog():Promise<ComparisonCatalog>;
  GetComparisonDailyChanges(requestId:string,view:ComparisonView):Promise<ComparisonResult>;
+ GetComparisonOverview(requestId:string,view:ComparisonView):Promise<ComparisonOverview>;
  CancelComparisonRequest(requestId:string):Promise<void>;
 }
 export const defaultComparisonView=():ComparisonView=>({weeks:4,assets:['BTC','ETH','TON','HYPE','ZEN','APT','NEAR']});

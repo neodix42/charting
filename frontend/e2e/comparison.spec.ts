@@ -11,7 +11,7 @@ const weeks=(page:Page)=>page.getByRole('spinbutton',{name:'Comparison weeks',ex
 const calls=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonCalls());
 const resources=(page:Page)=>page.evaluate(()=>(window as any).__testComparisonChartResources());
 const selected=(page:Page)=>page.getByLabel('Selected comparison assets',{exact:true});
-async function enter(page:Page){await tab(page).click();await expect(panel(page)).toBeVisible();}
+async function enter(page:Page){await tab(page).click();await expect(panel(page)).toBeVisible();await page.getByRole('group',{name:'Comparison layout',exact:true}).getByRole('button',{name:'Single chart',exact:true}).click();}
 async function loaded(page:Page,count=7){await expect(chart(page)).toHaveAttribute('data-series-count',String(count));await expect.poll(()=>resources(page)).toEqual({charts:1,observers:2,listeners:1});}
 async function frames(page:Page){await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));}
 async function add(page:Page,symbol:string,market:'Perpetual'|'Spot'='Perpetual',exchange=symbol==='DCR'||symbol==='ZEN'||symbol==='XAUT'?'Binance':'Hyperliquid',quote=exchange==='Hyperliquid'?'USDC':exchange==='Coinbase'?'USD':'USDT'){

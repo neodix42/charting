@@ -60,6 +60,12 @@ type Result struct {
 	Warnings       []string `json:"warnings"`
 }
 
+// Overview contains independently rebased panels from one source snapshot.
+type Overview struct {
+	RequestID string   `json:"requestId"`
+	Panels    []Result `json:"panels"`
+}
+
 // Source is implemented by the application's existing shared market service.
 type Source interface {
 	Instruments(context.Context, string) ([]domain.Instrument, error)
@@ -219,16 +225,35 @@ func assetName(symbol, name string) string {
 }
 
 func (m *Manager) DailyChanges(parent context.Context, id string, value View) (Result, error) {
-	view, err := normalizeView(value)
+	panels, err := m.calculatePeriods(parent, id, value, []int{value.Weeks})
 	if err != nil {
 		return Result{}, err
 	}
+	return panels[0], nil
+}
+
+// Overview resolves sources and obtains their largest closed daily range once.
+// Each panel still requires its own exact UTC baseline; a missing older candle
+// must not suppress a valid shorter history or move that panel's starting day.
+func (m *Manager) Overview(parent context.Context, id string, value View) (Overview, error) {
+	panels, err := m.calculatePeriods(parent, id, value, []int{2, 4, 8, 12})
+	if err != nil {
+		return Overview{}, err
+	}
+	return Overview{RequestID: id, Panels: panels}, nil
+}
+
+func (m *Manager) calculatePeriods(parent context.Context, id string, value View, periods []int) ([]Result, error) {
+	view, err := normalizeView(value)
+	if err != nil {
+		return nil, err
+	}
 	if len(id) == 0 || len(id) > 96 {
-		return Result{}, errors.New("comparison request identity is required and must be at most 96 bytes")
+		return nil, errors.New("comparison request identity is required and must be at most 96 bytes")
 	}
 	ctx, done, err := m.operation(parent)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 	defer done()
 	ctx, cancel := context.WithCancel(ctx)
@@ -249,16 +274,24 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 	}()
 	now := m.opts.Now().UTC().Unix()
 	last := now - now%day - day
-	from := last - int64(view.Weeks*7)*day
-	result := Result{RequestID: id, Weeks: view.Weeks, BaselineTime: from, LastClosedTime: last, AsOf: now, Series: make([]Series, len(view.Assets)), Warnings: []string{}}
+	results := make([]Result, len(periods))
+	maxWeeks := 0
+	for index, weeks := range periods {
+		if weeks > maxWeeks {
+			maxWeeks = weeks
+		}
+		results[index] = Result{RequestID: id, Weeks: weeks, BaselineTime: last - int64(weeks*7)*day, LastClosedTime: last, AsOf: now, Series: make([]Series, len(view.Assets)), Warnings: []string{}}
+	}
 	if len(view.Assets) == 0 {
-		return result, ctx.Err()
+		return results, ctx.Err()
 	}
 	catalog, err := m.loadCatalog(ctx)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
-	result.Warnings = catalog.Warnings
+	for index := range results {
+		results[index].Warnings = append([]string{}, catalog.Warnings...)
+	}
 	assets := map[string]Asset{}
 	for _, asset := range catalog.Assets {
 		assets[asset.ID] = asset
@@ -266,21 +299,26 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 	for _, asset := range catalog.Markets {
 		assets[asset.ID] = asset
 	}
+	setError := func(index int, asset Asset, message string) {
+		for panel := range results {
+			results[panel].Series[index] = Series{Asset: cloneAssets([]Asset{asset})[0], Points: []Point{}, Error: message}
+		}
+	}
 	var workers sync.WaitGroup
 	slots := make(chan struct{}, 4)
 	selectedFeeds := map[domain.FeedKey]bool{}
-	for i, selection := range view.Assets {
+	for index, selection := range view.Assets {
 		asset, found := assets[selection]
 		if !found {
 			message := "No matching market is available in the verified provider catalog; choose another source"
 			if !strings.Contains(selection, "|") && catalog.AutoError != "" {
 				message = catalog.AutoError
 			}
-			result.Series[i] = Series{Asset: unavailableSelection(selection), Points: []Point{}, Error: message}
+			setError(index, unavailableSelection(selection), message)
 			continue
 		}
 		if selectedFeeds[*asset.FeedKey] {
-			result.Series[i] = Series{Asset: asset, Points: []Point{}, Error: "This source and market is already selected; remove the duplicate"}
+			setError(index, asset, "This source and market is already selected; remove the duplicate")
 			continue
 		}
 		selectedFeeds[*asset.FeedKey] = true
@@ -293,17 +331,27 @@ func (m *Manager) DailyChanges(parent context.Context, id string, value View) (R
 				return
 			}
 			defer func() { <-slots }()
-			result.Series[index] = m.series(ctx, fmt.Sprintf("%s/%d", id, index), asset, from, last)
-		}(i, asset)
+			series := m.seriesForPeriods(ctx, fmt.Sprintf("%s/%d", id, index), asset, last-int64(maxWeeks*7)*day, last, periods)
+			for panel := range results {
+				results[panel].Series[index] = series[panel]
+			}
+		}(index, asset)
 	}
 	workers.Wait()
 	if err := ctx.Err(); err != nil {
-		return Result{}, err
+		return nil, err
 	}
-	return result, nil
+	return results, nil
 }
-func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last int64) Series {
-	result := Series{Asset: asset, Points: []Point{}}
+
+func (m *Manager) seriesForPeriods(ctx context.Context, id string, asset Asset, from, last int64, periods []int) []Series {
+	results := make([]Series, len(periods))
+	fail := func(message string) []Series {
+		for index := range results {
+			results[index] = Series{Asset: cloneAssets([]Asset{asset})[0], Points: []Point{}, Error: message}
+		}
+		return results
+	}
 	key := pageKey{Feed: *asset.FeedKey, From: from, To: last + day}
 	count := int((last-from)/day + 1)
 	m.mu.Lock()
@@ -316,14 +364,12 @@ func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last
 	} else {
 		history, err := m.opts.Source.History(ctx, id, key.Feed, from, last+day, count)
 		if err != nil {
-			result.Error = err.Error()
-			return result
+			return fail(err.Error())
 		}
 		bars = history.Bars
 	}
 	if err := ctx.Err(); err != nil {
-		result.Error = err.Error()
-		return result
+		return fail(err.Error())
 	}
 	byTime := map[int64]domain.Candle{}
 	for _, bar := range bars {
@@ -331,24 +377,51 @@ func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last
 			continue
 		}
 		if bar.Time%day != 0 || bar.Validate() != nil {
-			result.Error = "Provider returned an invalid daily candle"
-			return result
+			return fail("Provider returned an invalid daily candle")
 		}
 		if _, exists := byTime[bar.Time]; exists {
-			result.Error = "Provider returned duplicate daily candles"
-			return result
+			return fail("Provider returned duplicate daily candles")
 		}
 		if !bar.Closed || bar.Quality != "authoritative" {
 			continue
 		}
 		byTime[bar.Time] = bar
 	}
+	complete := len(byTime) == count
+	for index, weeks := range periods {
+		results[index] = seriesFromCloses(cloneAssets([]Asset{asset})[0], byTime, last-int64(weeks*7)*day, last)
+		if results[index].Error != "" {
+			complete = false
+		}
+	}
+	if complete && !reused {
+		m.mu.Lock()
+		if ctx.Err() == nil && !m.closed {
+			if len(m.pages) >= 40 {
+				var oldest pageKey
+				var oldestAt time.Time
+				for key, page := range m.pages {
+					if oldestAt.IsZero() || page.At.Before(oldestAt) {
+						oldest, oldestAt = key, page.At
+					}
+				}
+				delete(m.pages, oldest)
+			}
+			m.pages[key] = page{Bars: append([]domain.Candle(nil), bars...), At: m.opts.Now()}
+		}
+		m.mu.Unlock()
+	}
+	return results
+}
+
+func seriesFromCloses(asset Asset, byTime map[int64]domain.Candle, from, last int64) Series {
+	result := Series{Asset: asset, Points: []Point{}}
 	baseline, ok := byTime[from]
 	if !ok {
 		date := time.Unix(from, 0).UTC().Format("2006-01-02")
 		var earliest int64
 		for at := range byTime {
-			if earliest == 0 || at < earliest {
+			if at >= from && at <= last && (earliest == 0 || at < earliest) {
 				earliest = at
 			}
 		}
@@ -361,10 +434,9 @@ func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last
 		result.Error += ". Choose another source or a shorter period"
 		return result
 	}
-	complete := true
-	for ts := from; ts <= last; ts += day {
-		point := Point{Time: ts}
-		if bar, ok := byTime[ts]; ok {
+	for at := from; at <= last; at += day {
+		point := Point{Time: at}
+		if bar, ok := byTime[at]; ok {
 			price, pct := bar.Close, (bar.Close/baseline.Close-1)*100
 			if math.IsNaN(pct) || math.IsInf(pct, 0) {
 				result.Points = []Point{}
@@ -372,27 +444,8 @@ func (m *Manager) series(ctx context.Context, id string, asset Asset, from, last
 				return result
 			}
 			point.Close, point.Pct = &price, &pct
-		} else {
-			complete = false
 		}
 		result.Points = append(result.Points, point)
-	}
-	if complete && !reused {
-		m.mu.Lock()
-		if ctx.Err() == nil && !m.closed {
-			if len(m.pages) >= 40 {
-				var oldest pageKey
-				var oldestAt time.Time
-				for k, v := range m.pages {
-					if oldestAt.IsZero() || v.At.Before(oldestAt) {
-						oldest, oldestAt = k, v.At
-					}
-				}
-				delete(m.pages, oldest)
-			}
-			m.pages[key] = page{Bars: append([]domain.Candle(nil), bars...), At: m.opts.Now()}
-		}
-		m.mu.Unlock()
 	}
 	return result
 }

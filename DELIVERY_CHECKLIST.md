@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison four-panel default — 2026-11-28
+
+- [x] Add default 2w/4w then 8w/12w grid, independent chart diagnostics/zoom/hover, shared assets/visibility and responsive stacking.
+- [x] Retain custom single-chart controls and the existing saved-view schema without rewriting user selections.
+- [x] Verify grouped history/cutoff/baseline behavior, cancellation and resource cleanup with Go race tests, 30 Comparison browser cases, 379 frontend unit tests, typecheck/lint/build, 167 Python and 212 Node tests, catalog checks and native/production Go tests/vet.
+- [ ] Verify production packages and hosted CI against the delivery commit. Native desktop and Windows GUI interaction remain unverified.
+
 ## Comparison hover prices — 2026-11-26
 
 - [x] Reuse exact-day native closes and actual quote currencies in the focused tooltip and bottom legend, without new requests or interpolated values.
