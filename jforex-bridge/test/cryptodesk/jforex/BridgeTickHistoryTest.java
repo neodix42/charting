@@ -86,6 +86,54 @@ public final class BridgeTickHistoryTest {
     }
     static void failed(JsonObject response, String reason) { check(!response.get("ok").getAsBoolean(), reason + ": " + response); }
 
+    static void queuedHistoryBudget() throws Exception {
+        CountDownLatch occupied = new CountDownLatch(2), unblock = new CountDownLatch(1);
+        CountDownLatch timerEntered = new CountDownLatch(1), releaseTimers = new CountDownLatch(1);
+        AtomicInteger queuedReads = new AtomicInteger();
+        try (Fixture f = new Fixture(values -> {
+            if (queuedReads.incrementAndGet() <= 2) {
+                occupied.countDown();
+                // A native cache load may finish after the outer deadline.
+                while (unblock.getCount() != 0) try { unblock.await(); } catch (InterruptedException ignored) { }
+            }
+            return List.of(quote(FROM, 2, 1, 1, 1));
+        }, 50, 200)) {
+            try {
+                var field = Bridge.class.getDeclaredField("deadlines"); field.setAccessible(true);
+                ScheduledThreadPoolExecutor timers = (ScheduledThreadPoolExecutor) field.get(f.bridge);
+                // Start the 200 ms deadlines normally, but let both workers
+                // reach the SDK before a busy runner can deliver them.
+                timers.execute(() -> {
+                    timerEntered.countDown();
+                    try { releaseTimers.await(); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+                });
+                check(timerEntered.await(2, TimeUnit.SECONDS), "fixture deadline scheduler is held before dispatch");
+                CompletableFuture<JsonObject> first = f.dispatch(f.export()), second = f.dispatch(f.export());
+                check(occupied.await(2, TimeUnit.SECONDS), "both bounded SDK workers entered; first=" + first.getNow(null)
+                    + ", second=" + second.getNow(null) + ", SDK reads=" + queuedReads.get());
+                CompletableFuture<JsonObject> queued = f.dispatch(f.export());
+                releaseTimers.countDown();
+                for (JsonObject response : List.of(first.get(2, TimeUnit.SECONDS), second.get(2, TimeUnit.SECONDS))) {
+                    failed(response, "stalled hour has explicit timeout");
+                    JsonObject error = response.getAsJsonObject("error");
+                    check(error.get("kind").getAsString().equals("timeout")
+                        && error.get("message").getAsString().contains("JForex tick history loading timed out")
+                        && error.get("message").getAsString().contains("Completed quote hours are retained"), "stalled tick timeout stays typed and resumable: " + response);
+                }
+                // This same-executor sentinel runs after a full queued budget.
+                // A submission-started deadline must have fired before it.
+                timers.schedule(() -> { }, 200, TimeUnit.MILLISECONDS).get(2, TimeUnit.SECONDS);
+                check(!queued.isDone() && queuedReads.get() == 2, "queued hour does not spend its SDK budget before executor entry");
+                unblock.countDown(); JsonObject result = queued.get(2, TimeUnit.SECONDS);
+                check(result.get("ok").getAsBoolean() && result.getAsJsonObject("result").get("rows").getAsLong() == 1 && queuedReads.get() == 3,
+                    "queued hour succeeds when workers resume, with no duplicate SDK attempts or fabricated rows");
+                check(Files.readString(f.output).equals("timestamp,askPrice,bidPrice,askVolume,bidVolume\n" + FROM + ",2.0,1.0,1.0,1.0\n"),
+                    "only the successful queued read publishes the exact one-row file");
+                await(f.subscribed::isEmpty, "stalled and queued loads release every subscription reference");
+            } finally { releaseTimers.countDown(); unblock.countDown(); }
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         try (Fixture f = new Fixture(values -> List.of(quote(FROM, 11, 10, 0, 2), quote(FROM, 12, 11, 3, 4), quote(TO - 1, 13, 12, 5, 6)), 5_000)) {
             JsonObject result = f.finish(f.export());
@@ -147,27 +195,7 @@ public final class BridgeTickHistoryTest {
             check(result.get("ok").getAsBoolean() && result.getAsJsonObject("result").get("rows").getAsLong() == 1,
                 "slow successful SDK tick hour is exported exactly once");
         } finally { finishSlow.countDown(); }
-        CountDownLatch occupied = new CountDownLatch(2), unblock = new CountDownLatch(1);
-        AtomicInteger queuedReads = new AtomicInteger();
-        try (Fixture f = new Fixture(values -> {
-            if (queuedReads.incrementAndGet() <= 2) {
-                occupied.countDown();
-                // A native cache load may finish after the outer deadline.
-                while (unblock.getCount() != 0) try { unblock.await(); } catch (InterruptedException ignored) { }
-            }
-            return List.of(quote(FROM, 2, 1, 1, 1));
-        }, 50, 200)) {
-            CompletableFuture<JsonObject> first = f.dispatch(f.export()), second = f.dispatch(f.export());
-            check(occupied.await(2, TimeUnit.SECONDS), "both bounded SDK workers entered");
-            CompletableFuture<JsonObject> queued = f.dispatch(f.export());
-            failed(first.get(2, TimeUnit.SECONDS), "first stalled hour has explicit timeout");
-            failed(second.get(2, TimeUnit.SECONDS), "second stalled hour has explicit timeout");
-            check(!queued.isDone() && queuedReads.get() == 2, "queued hour does not spend its SDK budget before executor entry");
-            unblock.countDown(); JsonObject result = queued.get(2, TimeUnit.SECONDS);
-            check(result.get("ok").getAsBoolean() && result.getAsJsonObject("result").get("rows").getAsLong() == 1 && queuedReads.get() == 3,
-                "queued hour succeeds when workers resume, with no duplicate SDK attempts or fabricated rows");
-            await(f.subscribed::isEmpty, "stalled and queued loads release every subscription reference");
-        } finally { unblock.countDown(); }
+        queuedHistoryBudget();
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         try (Fixture f = new Fixture(values -> {
             entered.countDown();
