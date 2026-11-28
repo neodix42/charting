@@ -489,3 +489,19 @@ export function GetComparisonView() {
 export function SaveComparisonView(arg1) {
   return window['go']['main']['App']['SaveComparisonView'](arg1);
 }
+
+export function GetComparisonSnapshotDirectory() {
+  return window['go']['main']['App']['GetComparisonSnapshotDirectory']();
+}
+
+export function ConfigureComparisonSnapshotDirectory(arg1) {
+  return window['go']['main']['App']['ConfigureComparisonSnapshotDirectory'](arg1);
+}
+
+export function ChooseComparisonSnapshotDirectory() {
+  return window['go']['main']['App']['ChooseComparisonSnapshotDirectory']();
+}
+
+export function ExportComparisonSnapshots(arg1) {
+  return window['go']['main']['App']['ExportComparisonSnapshots'](arg1);
+}

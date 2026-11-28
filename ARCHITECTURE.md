@@ -168,6 +168,20 @@ so a batched flush crossing a candle boundary retains both bars. [S04, S05]
 
 ## Comparison ownership
 
+`internal/comparison/snapshot.go` exports immutable copies of the loaded Results
+through `app_comparison.go`, without catalog/history calls or new market leases.
+Single mode publishes one table; overview validates the same cutoff and ordered
+assets across exactly 2/4/8/12-week Results. TSV rows preserve displayed cumulative
+percentages, the UTC baseline and genuine missing values (`NA`); hidden assets
+remain included and duplicate tickers receive source-qualified column names.
+Settings owns an independently versioned, bounded, private
+`comparison-snapshots.json`; invalid/future bytes remain untouched. The default
+destination is `<profile>/snapshots`. Folder changes do not move files. Tables
+are validated before writing, staged and synced privately, then published using
+atomic no-clobber hard links, with numbered collisions and batch rollback on
+failure. Unsupported destination filesystems fail explicitly. View persistence
+and provider/history ownership are unchanged.
+
 The top-level Comparison screen is separate from saved chart tabs and contains
 Daily change. `internal/comparison` owns validated weeks/source selections,
 shared UTC baseline calculations and a small bounded cache of complete closed

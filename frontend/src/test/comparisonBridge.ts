@@ -19,7 +19,7 @@ export function comparisonBridge():ComparisonBackend {
   {symbol:'TON',name:'Toncoin',exchange:'coinbase',market:'spot',nativeId:'TON-USD',quoteAsset:'USD'},
  ].map(asset=>({...asset,id:marketID(asset),feedKey:{exchange:asset.exchange,market:asset.market,instrument:asset.nativeId,timeframe:'1d'} as FeedKey}));
  let view:ComparisonView=JSON.parse(sessionStorage.getItem(key)||'null')??defaultComparisonView();
- let errors:Partial<Record<'view'|'save'|'catalog'|'data',string>>={},catalog:ComparisonCatalog={assets,markets,warnings:[]};
+ let errors:Partial<Record<'view'|'save'|'catalog'|'data'|'snapshot',string>>={},catalog:ComparisonCatalog={assets,markets,warnings:[]};
  let overrides:Record<string,{error?:string;missingBaseline?:boolean;missingBaselineWeeks?:number[];gaps?:number[];closes?:Record<number,number|null>}>={};
  let saveGate:Promise<void>|undefined,releaseSave:(()=>void)|undefined,viewGate:Promise<void>|undefined,releaseView:(()=>void)|undefined,holdNext=0,holdNextOverview=0;
  const calls={view:0,save:0,catalog:0,data:0,cancel:0},writes:ComparisonView[]=[],requests:Array<{requestId:string;view:ComparisonView;endTime:number}>=[],overviewRequests:Array<{requestId:string;view:ComparisonView;endTime:number}>=[],cancelled:string[]=[];
@@ -91,7 +91,12 @@ export function comparisonBridge():ComparisonBackend {
   __testComparisonReleaseData:(id:string,patch:Partial<ComparisonResult>={})=>{const item=pending.get(id);if(!item)throw Error('No held Comparison request');pending.delete(id);lastResult={...item.result,...structuredClone(patch)};item.resolve(structuredClone(lastResult));},
   __testComparisonReleaseOverview:(id:string,patch:Partial<ComparisonOverview>={})=>{const item=pendingOverview.get(id);if(!item)throw Error('No held Comparison overview request');pendingOverview.delete(id);lastOverview={...item.result,...structuredClone(patch)};item.resolve(structuredClone(lastOverview));},
  });
+ let snapshotDirectory=sessionStorage.getItem('comparison-snapshot-directory')||'/explicit-test/snapshots';
  return {
+  async GetComparisonSnapshotDirectory(){return snapshotDirectory;},
+  async ConfigureComparisonSnapshotDirectory(directory){snapshotDirectory=directory.trim()||'/explicit-test/snapshots';sessionStorage.setItem('comparison-snapshot-directory',snapshotDirectory);return snapshotDirectory;},
+  async ChooseComparisonSnapshotDirectory(){throw Error('Native folder dialog unavailable in explicit browser test mode');},
+  async ExportComparisonSnapshots(panels){if(errors.snapshot)throw Error(errors.snapshot);(window as any).__testComparisonSnapshot=structuredClone(panels);return panels.map(panel=>`${snapshotDirectory}/${new Date(panel.baselineTime*1000).toISOString().slice(0,10)}_w${panel.weeks}.txt`);},
   async GetComparisonView(){calls.view++;const value=copyComparisonView(view);if(viewGate)await viewGate;if(errors.view)throw Error(errors.view);return value;},
   async SaveComparisonView(value){calls.save++;validate(value);const next=copyComparisonView(value);if(saveGate)await saveGate;if(errors.save)throw Error(errors.save);view=next;writes.push(copyComparisonView(next));sessionStorage.setItem(key,JSON.stringify(view));return copyComparisonView(view);},
   async GetComparisonCatalog(){calls.catalog++;if(errors.catalog)throw Error(errors.catalog);return structuredClone(catalog);},

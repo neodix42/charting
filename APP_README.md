@@ -598,6 +598,12 @@ Statistics selections and results remain in memory for the session and do not cr
 
 ## Comparison
 
+**Snapshot**, beside Refresh, saves the loaded charts as tab-separated `.txt` files. **Four charts** writes four files; **Single chart** writes its selected period. Names use each period's **UTC starting date**, for example `2026-11-13_w2.txt`. Prev/Next shift that date and the exported rows. Repeating a snapshot preserves existing files and adds `_2`, `_3`, etc.
+
+Each file has a `Date` column followed by all selected assets, including hidden ones. Rows contain every UTC daily date from the starting close through the final completed day, including the **0% baseline**. Values are the chart's percentage change from that starting close, without a `%` suffix; unavailable observations are `NA`. Same-symbol markets have source-qualified column names. Snapshot uses the displayed data without fetching quotes or converting currencies.
+
+Set the destination under **Settings → Comparison → Snapshot folder**, then **Apply**. The default is `<profile>/snapshots`, alongside the other profile data folders. Clearing the field and applying restores the default. Changing the folder leaves earlier files in place. Snapshot is enabled only after the selected charts finish loading; write errors are displayed and can be retried.
+
 Open the fixed **Comparison** tab beside Screener and Predictions, then **Daily change**. **Four charts** is the default: **2w / 4w** on the first row and **8w / 12w** on the second. Narrow windows below 800px stack them into one column. The defaults are **BTC, ETH, TON, HYPE, ZEN, APT and NEAR**; existing saved assets are restored. Add or remove assets, up to 20, using the shared controls. Removing every asset keeps an empty selection and an **Add asset** state. This screen does not count toward the chart-tab limit.
 
 The four charts fill the available window width and remaining height below the controls. Resizing expands or contracts the plots while preserving each chart's zoom. Small windows and long legends keep readable plots and allow scrolling.

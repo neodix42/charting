@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"cryptodesk/internal/comparison"
 	"cryptodesk/internal/domain"
@@ -108,4 +111,40 @@ func (a *App) CancelComparisonRequest(requestID string) {
 	if manager != nil {
 		manager.Cancel(requestID)
 	}
+}
+
+func (a *App) GetComparisonSnapshotDirectory() (string, error) {
+	manager, _, err := a.comparisonService()
+	if err != nil {
+		return "", err
+	}
+	return manager.SnapshotDirectory()
+}
+func (a *App) ConfigureComparisonSnapshotDirectory(directory string) (string, error) {
+	manager, _, err := a.comparisonService()
+	if err != nil {
+		return "", err
+	}
+	return manager.ConfigureSnapshotDirectory(directory)
+}
+func (a *App) ExportComparisonSnapshots(panels []comparison.Result) ([]string, error) {
+	manager, _, err := a.comparisonService()
+	if err != nil {
+		return nil, err
+	}
+	return manager.ExportSnapshots(panels)
+}
+func (a *App) ChooseComparisonSnapshotDirectory() (string, error) {
+	manager, _, err := a.comparisonService()
+	if err != nil {
+		return "", err
+	}
+	directory, err := manager.SnapshotDirectory()
+	if err != nil {
+		return "", err
+	}
+	if st, e := os.Stat(directory); e != nil || !st.IsDir() {
+		directory = a.store.Directory()
+	}
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose Comparison snapshot folder", DefaultDirectory: directory, CanCreateDirectories: true})
 }

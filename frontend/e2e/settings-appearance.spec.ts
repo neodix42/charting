@@ -40,7 +40,7 @@ test('font size reaches chart controls, both status bars and actual canvas label
 test('the largest font keeps settings and toolbar controls usable on a compact desktop',async({page})=>{
  await page.setViewportSize({width:1000,height:800});await page.goto('/');await page.getByRole('button',{name:'Open settings',exact:true}).click();const dialog=settings(page);
  await dialog.getByLabel('Font size',{exact:true}).selectOption('24');await expect.poll(()=>saved(page)).toMatchObject({fontSize:24});
- for(const name of ['Appearance','Storage','Screener','Export','Debug'])await expect(dialog.getByRole('tab',{name,exact:true})).toBeVisible();
+ for(const name of ['Appearance','Storage','Screener','Comparison','Export','Debug'])await expect(dialog.getByRole('tab',{name,exact:true})).toBeVisible();
  await expect(dialog.getByLabel('Font size',{exact:true})).toBeInViewport();await dialog.getByRole('button',{name:'Close settings',exact:true}).click();
  const geometry=await page.locator('.app-header').evaluate(header=>{const rect=(selector:string)=>{const r=header.querySelector(selector)!.getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom};};return{brand:rect('.brand'),periods:rect('.tab-chart-controls'),actions:rect('.header-actions'),windowWidth:innerWidth};});
  expect(geometry.brand.right).toBeLessThanOrEqual(geometry.actions.left);expect(geometry.periods.top).toBeGreaterThanOrEqual(geometry.brand.bottom);expect(geometry.actions.right).toBeLessThanOrEqual(geometry.windowWidth);

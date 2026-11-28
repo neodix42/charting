@@ -1,5 +1,12 @@
 # Release checklist — observed 2026-10-19
 
+## Comparison text snapshots — 2026-11-28
+
+- [x] Add Snapshot beside Refresh for Single or 2/4/8/12-week exports, including hidden assets and genuine gaps, with shifted UTC start dates and no provider requests.
+- [x] Add Settings → Comparison → Snapshot folder, profile/snapshots default, explicit Apply/reset and safe persistence; preserve existing files on repeated exports and failures.
+- [x] Verify backend/facade filesystem behavior, all 47 Comparison/settings browser cases, 401 frontend units, full deterministic/native/production Go checks, isolated Wails binding generation and overview layout screenshot.
+- [ ] Verify full browser suite, production packages and hosted CI against the delivery commit. Native folder-dialog and Windows GUI interaction remain unverified.
+
 ## Comparison global cursor and third-rise stars — 2026-11-28
 
 - [x] Synchronize exact UTC crosshairs and native daily legend prices across all four charts without moving viewports, snapping missing dates or retaining stale ownership.

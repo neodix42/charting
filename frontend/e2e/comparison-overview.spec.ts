@@ -51,6 +51,37 @@ async function add(page:Page,symbol:string,exchange='Hyperliquid',market='Perpet
  await picker.getByRole('button',{name:`${symbol} ${exchange} ${market} ${quote}`,exact:true}).click();
 }
 
+test('Snapshot exports all loaded series in four periods including hidden assets, gaps and failures without fetching',async({page})=>{
+ await openTestApp(page);await page.evaluate(()=>(window as any).__testComparisonSeries({TON:{missingBaselineWeeks:[8,12]},BTC:{gaps:[80]}}));await enter(page);await loaded(page,[7,7,6,6]);
+ await legend(page,2,'BTC').click();const before=await groupCalls(page),dataCalls=await calls(page),shown=await overview(page);
+ const snapshot=panel(page).getByRole('button',{name:'Snapshot',exact:true});await expect(snapshot).toBeEnabled();await snapshot.click();
+ await expect(panel(page).getByRole('status').filter({hasText:'Saved 4 snapshot files:'})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__testComparisonSnapshot)).toEqual(shown.panels);expect(await groupCalls(page)).toBe(before);expect(await calls(page)).toEqual(dataCalls);
+ for(const item of shown.panels)await expect(panel(page)).toContainText(`${new Date(item.baselineTime*1000).toISOString().slice(0,10)}_w${item.weeks}.txt`);
+ await page.evaluate(()=>(window as any).__testComparisonHoldNextOverview());await navigate(page,'Prev').click();await expect(snapshot).toBeDisabled();
+ await page.evaluate(()=>(window as any).__testComparisonReleaseOverview((window as any).__testComparisonPendingOverview()[0]));await through(page,shown.panels[0].lastClosedTime-day);await loaded(page);await snapshot.click();
+ const shifted=await page.evaluate(()=>(window as any).__testComparisonSnapshot);expect(shifted.map((item:any)=>item.baselineTime)).toEqual(shown.panels.map((item:any)=>item.baselineTime-day));
+ await layout(page,'Single chart').click();await expect(page.getByTestId('comparison-chart')).toHaveCount(1);await expect(snapshot).toBeEnabled();await snapshot.click();await expect(panel(page)).toContainText('Saved 1 snapshot file:');
+ expect((await page.evaluate(()=>(window as any).__testComparisonSnapshot)).map((item:any)=>[item.weeks,item.lastClosedTime])).toEqual([[4,shown.panels[0].lastClosedTime-day]]);
+});
+
+test('Snapshot failures remain retryable and empty selections cannot export',async({page})=>{
+ await saved(page,4,['BTC']);await openTestApp(page);await enter(page);await loaded(page,[1,1,1,1]);const snapshot=panel(page).getByRole('button',{name:'Snapshot',exact:true});
+ await page.evaluate(()=>(window as any).__testComparisonErrors({snapshot:'Folder is read-only'}));await snapshot.click();await expect(panel(page).getByRole('alert')).toHaveText('Snapshot failed: Folder is read-only');await expect(snapshot).toBeEnabled();
+ await page.evaluate(()=>(window as any).__testComparisonErrors({}));await snapshot.click();await expect(panel(page).getByRole('alert')).toHaveCount(0);await expect(panel(page)).toContainText('Saved 4 snapshot files:');
+ await page.getByRole('button',{name:'Remove BTC from comparison',exact:true}).click();await expect(snapshot).toBeDisabled();
+});
+
+test('Settings Comparison persists an applied Snapshot folder and exports there, with default reset',async({page})=>{
+ await openTestApp(page);await enter(page);await loaded(page);
+ await page.getByRole('button',{name:'Open settings',exact:true}).click();const settings=page.getByRole('dialog',{name:'Workspace settings',exact:true});await settings.getByRole('tab',{name:'Comparison',exact:true}).click();
+ const input=settings.getByRole('textbox',{name:'Comparison snapshot folder',exact:true}),apply=settings.getByRole('button',{name:'Apply Comparison snapshot folder',exact:true});
+ await expect(input).toHaveValue('/explicit-test/snapshots');await input.fill('/chosen/snapshots');await apply.click();await expect(settings.getByLabel('Applied Comparison folder',{exact:true})).toContainText('/chosen/snapshots');await expect(apply).toBeDisabled();
+ await settings.getByRole('button',{name:'Close settings',exact:true}).click();await loaded(page);await panel(page).getByRole('button',{name:'Snapshot',exact:true}).click();await expect(panel(page)).toContainText('/chosen/snapshots/');
+ await reloadTestApp(page);await page.getByRole('button',{name:'Open settings',exact:true}).click();await settings.getByRole('tab',{name:'Comparison',exact:true}).click();await expect(input).toHaveValue('/chosen/snapshots');
+ await input.fill('');await apply.click();await expect(input).toHaveValue('/explicit-test/snapshots');await settings.getByRole('button',{name:'Choose Comparison snapshot folder',exact:true}).click();await expect(settings.getByRole('alert')).toContainText('Native folder dialog unavailable');await expect(input).toBeEnabled();
+});
+
 test('default overview uses one shared close history for ordered 2/4/8/12-week charts in a responsive 2x2 grid',async({page},testInfo)=>{
  await page.setViewportSize({width:1566,height:1080});await openTestApp(page);expect(await groupCalls(page)).toBe(0);await enter(page);await loaded(page);
  await expect(layout(page,'Four charts')).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('spinbutton',{name:'Comparison weeks',exact:true})).toHaveCount(0);await expect(page.getByLabel('Common comparison periods',{exact:true})).toHaveCount(0);

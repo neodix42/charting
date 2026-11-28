@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +16,44 @@ import (
 	"cryptodesk/internal/market"
 	"cryptodesk/internal/storage"
 )
+
+func TestComparisonSnapshotFacadeExportsWithoutStartingProviders(t *testing.T) {
+	store, err := storage.Open(filepath.Join(t.TempDir(), "workspace.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var factoryCalls atomic.Int32
+	service := market.New(market.Options{Factory: func(string) (exchange.Adapter, error) {
+		factoryCalls.Add(1)
+		return nil, errors.New("snapshot must not request an adapter")
+	}})
+	defer service.Close()
+	app := &App{store: store, market: service, ctx: context.Background()}
+	directory, err := app.GetComparisonSnapshotDirectory()
+	if err != nil || directory != filepath.Join(store.Directory(), "snapshots") {
+		t.Fatal(directory, err)
+	}
+	defer app.comparison.Close()
+	directory = filepath.Join(t.TempDir(), "chosen")
+	if _, err = app.ConfigureComparisonSnapshotDirectory(directory); err != nil {
+		t.Fatal(err)
+	}
+	last := time.Now().UTC().Unix()/86400*86400 - 86400
+	zero := 0.0
+	panel := comparison.Result{Weeks: 2, BaselineTime: last - 14*86400, LastClosedTime: last, Series: []comparison.Series{{Asset: comparison.Asset{ID: "BTC", Symbol: "BTC"}, Points: []comparison.Point{{Time: last - 14*86400, Pct: &zero}}}}}
+	paths, err := app.ExportComparisonSnapshots([]comparison.Result{panel})
+	if err != nil || len(paths) != 1 || filepath.Dir(paths[0]) != directory {
+		t.Fatal(paths, err)
+	}
+	data, err := os.ReadFile(paths[0])
+	if err != nil || !strings.HasPrefix(string(data), "Date\tBTC\n") || !strings.HasSuffix(string(data), "\tNA\n") {
+		t.Fatal(string(data), err)
+	}
+	if factoryCalls.Load() != 0 || service.Diagnostics().HistoryRequests != 0 {
+		t.Fatal("snapshot accessed provider services")
+	}
+}
 
 type comparisonDCRAdapter struct {
 	provider         string

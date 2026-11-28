@@ -256,3 +256,11 @@ export function GetComparisonOverviewAt(arg1:string,arg2:comparison.View,arg3:nu
 export function GetComparisonView():Promise<comparison.View>;
 
 export function SaveComparisonView(arg1:comparison.View):Promise<comparison.View>;
+
+export function GetComparisonSnapshotDirectory():Promise<string>;
+
+export function ConfigureComparisonSnapshotDirectory(arg1:string):Promise<string>;
+
+export function ChooseComparisonSnapshotDirectory():Promise<string>;
+
+export function ExportComparisonSnapshots(arg1:Array<comparison.Result>):Promise<Array<string>>;

@@ -6,6 +6,7 @@ import {DEFAULT_FONT_SIZE,MIN_FONT_SIZE,MAX_FONT_SIZE} from '../workspace/appear
 import {THEME_OPTIONS} from '../workspace/themes';
 import {ChartGapSetting} from './ChartGapSetting';
 import {CandleStorageSetting} from './CandleStorageSetting';
+import {ComparisonSnapshotSetting} from './ComparisonSnapshotSetting';
 import {ScreenerDirectorySetting} from './ScreenerDirectorySetting';
 import {ScreenerConcurrencySetting,type ScreenerConcurrencySettingHandle} from './ScreenerConcurrencySetting';
 import {TelegramBotSetting,type TelegramBotSettingHandle} from './TelegramBotSetting';
@@ -13,7 +14,7 @@ import {PredictionSettings,type PredictionSettingsHandle} from './PredictionSett
 import {HyperliquidSetting,type HyperliquidSettingHandle} from './HyperliquidSetting';
 import {DucascopySetting,type DucascopySettingHandle} from './DucascopySetting';
 
-const pages=['Appearance','Storage','Screener','Predictions','Dukascopy','Hyperliquid','Telegram Bot','Export','Debug'] as const;
+const pages=['Appearance','Storage','Screener','Comparison','Predictions','Dukascopy','Hyperliquid','Telegram Bot','Export','Debug'] as const;
 type SettingsPage=typeof pages[number];
 const pageID=(page:SettingsPage)=>page.toLowerCase().replaceAll(' ','-');
 export interface WorkspaceSettingsHandle {flush():Promise<void>}
@@ -45,6 +46,7 @@ export const WorkspaceSettings=forwardRef<WorkspaceSettingsHandle,Props>(functio
     <div className="setting-row"><span><strong>Display timezone</strong><small>Candle boundaries always use UTC.</small></span><div className="timezone-controls"><input aria-label="Display timezone" value={zone} list="timezones" onChange={event=>setZone(event.target.value)}/><datalist id="timezones">{timezones.map(value=><option key={value} value={value}/>)}</datalist><button onClick={()=>{try{if(zone!=='system')new Intl.DateTimeFormat('en',{timeZone:zone}).format();const displayTimezone=zone==='system'?Intl.DateTimeFormat().resolvedOptions().timeZone:zone;onChange({type:'settings',displayTimezone});setZone(displayTimezone);}catch{onError('Enter a valid IANA timezone, UTC or system');}}}>Apply</button></div></div>
     <ChartGapSetting value={workspace.chartRightGap??DEFAULT_CHART_RIGHT_GAP} onApply={onChartGap}/>
    </>}
+   {page==='Comparison'&&<ComparisonSnapshotSetting api={api}/>}
    {page==='Storage'&&<CandleStorageSetting api={api}/>}
    {page==='Screener'&&<ScreenerDirectorySetting api={api}/>}
    {page==='Export'&&<div className="settings-section"><h3>Portable workspace</h3><p>Export chart settings, appearance and layout as JSON. Import replaces the workspace after validation and confirmation, with a backup of the current state.</p><div className="button-row"><button onClick={()=>void onNative('export')}>Export JSON…</button><button onClick={()=>void onNative('import')}>Import JSON…</button><button className="danger" onClick={onReset}>Reset workspace…</button></div></div>}
